@@ -12,6 +12,7 @@ from flask import Flask, render_template
 from callback.crypto import WXBizMsgCrypt
 from callback.server import callback_bp, init_callback
 from web.api import api_bp, init_api
+from core.contacts import ContactsManager
 from core.decryptor import MessageDecryptor
 from core.fetcher import MessageFetcher
 from core.parser import MessageParser
@@ -40,8 +41,32 @@ def create_app(config: dict) -> Flask:
     # 初始化数据库
     db = Database(config["storage"]["db_path"])
 
-    # 注册前端 API 蓝图（fetcher 在SDK初始化后补充传入）
-    init_api(db)
+    # 初始化通讯录模块
+    contacts = ContactsManager(
+        corpid=config["wecom"]["corpid"],
+        secret=config["wecom"]["secret"],
+        db=db,
+    )
+    logger.info("通讯录模块初始化完成")
+
+    # 初始化COS存储（可选）
+    cos_storage = None
+    cos_config = config.get("cos")
+    if cos_config and cos_config.get("secret_id"):
+        try:
+            from core.cos_storage import CosStorage
+            cos_storage = CosStorage(
+                secret_id=cos_config["secret_id"],
+                secret_key=cos_config["secret_key"],
+                region=cos_config["region"],
+                bucket=cos_config["bucket"],
+                prefix=cos_config.get("prefix", "wxbot/media/"),
+            )
+        except Exception as e:
+            logger.warning("COS初始化失败（%s），媒体文件将保存到本地", e)
+
+    # 注册前端 API 蓝图
+    init_api(db, contacts=contacts, cos_storage=cos_storage)
     app.register_blueprint(api_bp)
 
     # 前端首页
@@ -92,8 +117,8 @@ def create_app(config: dict) -> Flask:
         init_callback(crypto, on_message_callback=on_message_notify)
         app.register_blueprint(callback_bp)
 
-        # 把 fetcher 和 SDK 传给 API，支持手动拉取和媒体文件下载
-        init_api(db, fetcher, finance_sdk, sdk_config)
+        # 把 fetcher 和 SDK 传给 API
+        init_api(db, fetcher, finance_sdk, sdk_config, contacts, cos_storage)
 
         # 保存引用，方便清理
         app.extensions["wxbot"] = {

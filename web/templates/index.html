@@ -533,17 +533,18 @@ function renderMessages(data) {
         const hasMedia = MEDIA_TYPES.includes(msg.msgtype);
         let actions = `<button class="btn btn-default" style="height:28px;font-size:12px;padding:0 10px;" onclick="showDetail(${idx})">详情</button>`;
         if (hasMedia) {
+            const mUrl = msg.media_url ? `'${msg.media_url}'` : "''";
             if (msg.msgtype === "image" || msg.msgtype === "emotion") {
-                actions += ` <button class="btn btn-default" style="height:28px;font-size:12px;padding:0 10px;" onclick="previewMedia(${msg.seq}, '${msg.msgtype}')">预览</button>`;
+                actions += ` <button class="btn btn-default" style="height:28px;font-size:12px;padding:0 10px;" onclick="previewMedia(${msg.seq}, '${msg.msgtype}', ${mUrl})">预览</button>`;
             } else {
-                actions += ` <button class="btn btn-default" style="height:28px;font-size:12px;padding:0 10px;" onclick="downloadMedia(${msg.seq})">下载</button>`;
+                actions += ` <button class="btn btn-default" style="height:28px;font-size:12px;padding:0 10px;" onclick="downloadMedia(${msg.seq}, ${mUrl})">下载</button>`;
             }
         }
         return `<tr>
             <td class="msg-time">${formatTime(msg.msgtime)}</td>
             <td><span class="msg-type ${typeClass}">${typeCn}</span></td>
-            <td class="msg-sender" title="${msg.sender || ''}">${msg.sender || "-"}</td>
-            <td class="msg-room" title="${msg.roomid || ''}">${msg.roomid || "-"}</td>
+            <td class="msg-sender" title="${msg.sender || ''}">${msg.sender_name || msg.sender || "-"}</td>
+            <td class="msg-room" title="${msg.roomid || ''}">${msg.room_name || msg.roomid || "-"}</td>
             <td class="msg-summary" title="${(msg.summary || '').replace(/"/g, '&quot;')}">${msg.summary || "-"}</td>
             <td>${actions}</td>
         </tr>`;
@@ -591,31 +592,43 @@ function showDetail(idx) {
 
     const typeCn = MSG_TYPE_CN[msg.msgtype] || msg.msgtype;
     const MEDIA_TYPES = ["image", "voice", "video", "file", "emotion"];
+    const mediaUrl = msg.media_url || `/api/media/${msg.seq}`;
     let mediaHtml = "";
     if (MEDIA_TYPES.includes(msg.msgtype)) {
         if (msg.msgtype === "image" || msg.msgtype === "emotion") {
             mediaHtml = `
                 <div style="margin-top:16px;font-size:13px;font-weight:600;color:#666;">媒体预览</div>
-                <div style="margin-top:8px;"><img src="/api/media/${msg.seq}" style="max-width:100%;max-height:400px;border-radius:8px;border:1px solid #e8e8e8;" onerror="this.outerHTML='<span style=color:#999>加载失败</span>'"></div>
+                <div style="margin-top:8px;"><img src="${mediaUrl}" style="max-width:100%;max-height:400px;border-radius:8px;border:1px solid #e8e8e8;" onerror="this.outerHTML='<span style=color:#999>加载失败</span>'"></div>
+            `;
+        } else if (msg.msgtype === "video") {
+            mediaHtml = `
+                <div style="margin-top:16px;font-size:13px;font-weight:600;color:#666;">视频预览</div>
+                <div style="margin-top:8px;"><video src="${mediaUrl}" controls style="max-width:100%;max-height:400px;border-radius:8px;"></video></div>
+            `;
+        } else if (msg.msgtype === "voice") {
+            mediaHtml = `
+                <div style="margin-top:16px;font-size:13px;font-weight:600;color:#666;">语音播放</div>
+                <div style="margin-top:8px;"><audio src="${mediaUrl}" controls></audio></div>
             `;
         } else {
-            const label = msg.msgtype === "voice" ? "播放语音" : msg.msgtype === "video" ? "播放视频" : "下载文件";
             mediaHtml = `
                 <div style="margin-top:16px;">
-                    <a href="/api/media/${msg.seq}" target="_blank" class="btn btn-primary" style="display:inline-block;text-decoration:none;line-height:36px;">${label}</a>
+                    <a href="${mediaUrl}" target="_blank" class="btn btn-primary" style="display:inline-block;text-decoration:none;line-height:36px;">下载文件</a>
                 </div>
             `;
         }
     }
+    const senderName = msg.sender_name || msg.sender || "-";
+    const roomName = msg.room_name || msg.roomid || "-";
     const html = `
         <div class="detail-row"><div class="detail-label">消息ID</div><div class="detail-value">${msg.msgid || "-"}</div></div>
         <div class="detail-row"><div class="detail-label">SEQ</div><div class="detail-value">${msg.seq || "-"}</div></div>
         <div class="detail-row"><div class="detail-label">时间</div><div class="detail-value">${formatTime(msg.msgtime)}</div></div>
         <div class="detail-row"><div class="detail-label">类型</div><div class="detail-value">${typeCn} (${msg.msgtype})</div></div>
         <div class="detail-row"><div class="detail-label">动作</div><div class="detail-value">${msg.action || "-"}</div></div>
-        <div class="detail-row"><div class="detail-label">发送人</div><div class="detail-value">${msg.sender || "-"}</div></div>
+        <div class="detail-row"><div class="detail-label">发送人</div><div class="detail-value">${senderName} <span style="color:#999;font-size:11px;">(${msg.sender || ""})</span></div></div>
         <div class="detail-row"><div class="detail-label">接收人</div><div class="detail-value">${msg.tolist || "-"}</div></div>
-        <div class="detail-row"><div class="detail-label">群ID</div><div class="detail-value">${msg.roomid || "-"}</div></div>
+        <div class="detail-row"><div class="detail-label">群</div><div class="detail-value">${roomName} <span style="color:#999;font-size:11px;">(${msg.roomid || ""})</span></div></div>
         <div class="detail-row"><div class="detail-label">摘要</div><div class="detail-value">${msg.summary || "-"}</div></div>
         ${mediaHtml}
         <div style="margin-top:16px;font-size:13px;font-weight:600;color:#666;">解析内容</div>
@@ -677,8 +690,8 @@ document.querySelectorAll(".filter-bar input").forEach(input => {
 });
 
 // 预览媒体（图片/表情）
-function previewMedia(seq, msgtype) {
-    const url = `/api/media/${seq}`;
+function previewMedia(seq, msgtype, cosUrl) {
+    const url = cosUrl || `/api/media/${seq}`;
     const overlay = document.getElementById("modalOverlay");
     const body = document.getElementById("modalBody");
     body.innerHTML = `<div style="text-align:center;padding:20px;"><img src="${url}" style="max-width:100%;max-height:70vh;border-radius:8px;" onerror="this.outerHTML='<span style=color:#999>加载失败，媒体文件可能已过期</span>'"></div>`;
@@ -686,8 +699,8 @@ function previewMedia(seq, msgtype) {
 }
 
 // 下载媒体（文件/语音/视频）
-function downloadMedia(seq) {
-    window.open(`/api/media/${seq}`, "_blank");
+function downloadMedia(seq, cosUrl) {
+    window.open(cosUrl || `/api/media/${seq}`, "_blank");
 }
 
 // 手动拉取消息

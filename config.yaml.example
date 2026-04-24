@@ -32,3 +32,10 @@ storage:
 fetch:
   # 单次拉取消息上限（最大1000）
   limit: 1000
+
+cos:
+  secret_id: "your_cos_secret_id"
+  secret_key: "your_cos_secret_key"
+  region: "ap-guangzhou"
+  bucket: "your-bucket-name"
+  prefix: "wxbot/media/"

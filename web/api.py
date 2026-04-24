@@ -7,7 +7,7 @@ import json
 import os
 import threading
 
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, jsonify, redirect, request, send_file
 
 from storage.db import Database
 
@@ -17,20 +17,25 @@ _db: Database = None
 _fetcher = None
 _finance_sdk = None
 _sdk_config = {}
+_contacts = None
+_cos = None
 _fetch_lock = threading.Lock()
 _fetching = False
 
-# 媒体文件保存目录
+# 媒体文件本地临时目录
 MEDIA_DIR = "./data/media"
 
 
-def init_api(db: Database, fetcher=None, finance_sdk=None, sdk_config: dict = None):
+def init_api(db: Database, fetcher=None, finance_sdk=None, sdk_config: dict = None,
+             contacts=None, cos_storage=None):
     """初始化 API 模块"""
-    global _db, _fetcher, _finance_sdk, _sdk_config
+    global _db, _fetcher, _finance_sdk, _sdk_config, _contacts, _cos
     _db = db
     _fetcher = fetcher
     _finance_sdk = finance_sdk
     _sdk_config = sdk_config or {}
+    _contacts = contacts
+    _cos = cos_storage
 
 
 @api_bp.route("/messages")
@@ -53,6 +58,20 @@ def get_messages():
         msgtype=msgtype, sender=sender,
         roomid=roomid, keyword=keyword,
     )
+
+    # 批量解析昵称
+    if _contacts and result["messages"]:
+        user_ids = [m["sender"] for m in result["messages"]]
+        room_ids = [m["roomid"] for m in result["messages"]]
+        names = _contacts.batch_resolve(user_ids, room_ids)
+        for msg in result["messages"]:
+            msg["sender_name"] = names["users"].get(msg["sender"], msg["sender"])
+            msg["room_name"] = names["rooms"].get(msg["roomid"], msg["roomid"])
+
+            # 检查是否有 COS URL
+            parsed = json.loads(msg.get("parsed_content") or "{}")
+            msg["media_url"] = parsed.get("cos_url", "")
+
     return jsonify(result)
 
 
@@ -99,7 +118,8 @@ MEDIA_EXT = {
 def get_media(msg_seq):
     """
     下载/预览媒体文件
-    根据消息seq获取sdkfileid，下载并返回文件
+    如果COS上已有，直接302重定向到COS URL
+    否则从SDK下载 → 上传COS → 重定向
     """
     if _finance_sdk is None:
         return jsonify({"error": "SDK未初始化"}), 503
@@ -113,7 +133,11 @@ def get_media(msg_seq):
 
     msgtype = row["msgtype"]
     parsed = json.loads(row["parsed_content"] or "{}")
-    raw = json.loads(row["raw_data"] or "{}")
+
+    # 如果已有COS URL，直接重定向
+    cos_url = parsed.get("cos_url", "")
+    if cos_url:
+        return redirect(cos_url)
 
     # 获取 sdkfileid
     sdkfileid = parsed.get("sdkfileid", "")
@@ -121,18 +145,19 @@ def get_media(msg_seq):
         return jsonify({"error": "该消息无媒体文件"}), 404
 
     # 文件名和扩展名
-    filename = parsed.get("filename", "")
-    if filename:
-        ext = os.path.splitext(filename)[1] or MEDIA_EXT.get(msgtype, "")
+    orig_filename = parsed.get("filename", "")
+    if orig_filename:
+        ext = os.path.splitext(orig_filename)[1] or MEDIA_EXT.get(msgtype, "")
     else:
         ext = MEDIA_EXT.get(msgtype, "")
-        filename = f"{msg_seq}{ext}"
+        orig_filename = f"{msg_seq}{ext}"
 
-    # 用 sdkfileid 的 hash 作为本地文件名，避免重复下载
+    # 用 sdkfileid 的 hash 作为文件名
     file_hash = hashlib.md5(sdkfileid.encode()).hexdigest()
-    save_path = os.path.join(MEDIA_DIR, f"{file_hash}{ext}")
+    cos_filename = f"{file_hash}{ext}"
+    save_path = os.path.join(MEDIA_DIR, cos_filename)
 
-    # 如果已下载过，直接返回
+    # 下载媒体文件到本地
     if not os.path.exists(save_path):
         os.makedirs(MEDIA_DIR, exist_ok=True)
         ret, _ = _finance_sdk.get_media_data(
@@ -145,7 +170,25 @@ def get_media(msg_seq):
         if ret != 0:
             return jsonify({"error": f"下载失败，错误码: {ret}"}), 500
 
-    # 设置MIME类型
+    # 上传到 COS
+    if _cos:
+        cos_url = _cos.upload_file(save_path, cos_filename)
+        if cos_url:
+            # 把 COS URL 写回数据库
+            parsed["cos_url"] = cos_url
+            cursor.execute(
+                "UPDATE messages SET parsed_content = ? WHERE seq = ?",
+                (json.dumps(parsed, ensure_ascii=False), msg_seq)
+            )
+            _db.conn.commit()
+            # 删除本地临时文件
+            try:
+                os.remove(save_path)
+            except OSError:
+                pass
+            return redirect(cos_url)
+
+    # 没有COS时直接返回本地文件
     mime_map = {
         "image": "image/jpeg",
         "voice": "audio/amr",
@@ -154,13 +197,18 @@ def get_media(msg_seq):
         "file": "application/octet-stream",
     }
     mimetype = mime_map.get(msgtype, "application/octet-stream")
-
-    # 图片和表情直接预览，文件作为附件下载
     as_attachment = msgtype == "file"
+    return send_file(save_path, mimetype=mimetype, as_attachment=as_attachment, download_name=orig_filename)
 
-    return send_file(
-        save_path,
-        mimetype=mimetype,
-        as_attachment=as_attachment,
-        download_name=filename,
-    )
+
+@api_bp.route("/contacts/resolve", methods=["POST"])
+def resolve_contacts():
+    """批量解析昵称"""
+    if _contacts is None:
+        return jsonify({"error": "通讯录模块未初始化"}), 503
+
+    data = request.get_json() or {}
+    user_ids = data.get("user_ids", [])
+    room_ids = data.get("room_ids", [])
+    result = _contacts.batch_resolve(user_ids, room_ids)
+    return jsonify(result)
