@@ -116,7 +116,7 @@ def main():
     app = create_app(config)
     port = config["callback"].get("port", 5000)
     logger.info("启动回调服务, 端口: %d", port)
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=True)
 
 
 if __name__ == "__main__":
