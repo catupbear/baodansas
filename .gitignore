@@ -1,0 +1,10 @@
+*.pyc
+__pycache__/
+data/
+*.db
+*.pem
+.env
+.DS_Store
+.idea/
+config.yaml
+

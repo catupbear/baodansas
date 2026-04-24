@@ -1,0 +1,34 @@
+# 企业微信会话内容存档配置
+
+wecom:
+  # 企业ID
+  corpid: "your_corp_id"
+  # 会话内容存档的Secret
+  secret: "your_secret"
+
+callback:
+  # 回调服务监听端口
+  port: 8090
+  # 回调URL验证用的Token
+  token: "your_callback_token"
+  # 回调消息加解密用的EncodingAESKey（43位字符）
+  encoding_aes_key: "your_encoding_aes_key"
+
+sdk:
+  # C SDK库文件路径
+  lib_path: "./sdk/libWeWorkFinanceSdk_C.so"
+  # RSA私钥文件路径
+  private_key_path: "./private_key.pem"
+  # 代理设置（无代理留空）
+  proxy: ""
+  proxy_passwd: ""
+  # SDK超时时间（秒）
+  timeout: 10
+
+storage:
+  # SQLite数据库路径
+  db_path: "./data/wxbot.db"
+
+fetch:
+  # 单次拉取消息上限（最大1000）
+  limit: 1000

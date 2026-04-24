@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>企业微信消息监控</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: #f0f2f5;
+            color: #1a1a1a;
+        }
+
+        /* 顶部导航 */
+        .header {
+            background: #fff;
+            border-bottom: 1px solid #e8e8e8;
+            padding: 0 24px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1a73e8;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .auto-refresh input { cursor: pointer; }
+
+        /* 统计栏 */
+        .stats-bar {
+            display: flex;
+            gap: 16px;
+            padding: 16px 24px;
+        }
+
+        .stat-card {
+            background: #fff;
+            border-radius: 8px;
+            padding: 16px 20px;
+            flex: 1;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+
+        .stat-card .label {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 4px;
+        }
+
+        .stat-card .value {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1a73e8;
+        }
+
+        /* 主体 */
+        .main {
+            padding: 0 24px 24px;
+        }
+
+        /* 筛选栏 */
+        .filter-bar {
+            background: #fff;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 16px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+
+        .filter-bar input,
+        .filter-bar select {
+            height: 36px;
+            padding: 0 12px;
+            border: 1px solid #d9d9d9;
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .filter-bar input:focus,
+        .filter-bar select:focus {
+            border-color: #1a73e8;
+        }
+
+        .filter-bar input { width: 160px; }
+
+        .btn {
+            height: 36px;
+            padding: 0 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #1a73e8;
+            color: #fff;
+        }
+
+        .btn-primary:hover { background: #1557b0; }
+
+        .btn-default {
+            background: #fff;
+            color: #333;
+            border: 1px solid #d9d9d9;
+        }
+
+        .btn-default:hover { border-color: #1a73e8; color: #1a73e8; }
+
+        /* 消息列表 */
+        .msg-table-wrap {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead th {
+            background: #fafafa;
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 13px;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 1px solid #e8e8e8;
+            white-space: nowrap;
+        }
+
+        tbody td {
+            padding: 12px 16px;
+            font-size: 13px;
+            border-bottom: 1px solid #f0f0f0;
+            vertical-align: top;
+        }
+
+        tbody tr:hover { background: #f5f8ff; }
+
+        /* 消息类型标签 */
+        .msg-type {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .msg-type-text { background: #e6f7ff; color: #0050b3; }
+        .msg-type-image { background: #f6ffed; color: #389e0d; }
+        .msg-type-voice { background: #fff7e6; color: #d46b08; }
+        .msg-type-video { background: #fff1f0; color: #cf1322; }
+        .msg-type-file { background: #f9f0ff; color: #722ed1; }
+        .msg-type-link { background: #e6fffb; color: #08979c; }
+        .msg-type-revoke { background: #fff2e8; color: #ad4e00; }
+        .msg-type-default { background: #f5f5f5; color: #666; }
+
+        .msg-summary {
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .msg-time {
+            color: #999;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .msg-sender {
+            color: #1a73e8;
+            font-size: 12px;
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .msg-room {
+            color: #52c41a;
+            font-size: 12px;
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* 分页 */
+        .pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-top: 1px solid #f0f0f0;
+        }
+
+        .pagination .info {
+            font-size: 13px;
+            color: #999;
+        }
+
+        .pagination .pages {
+            display: flex;
+            gap: 4px;
+        }
+
+        .pagination .pages button {
+            min-width: 32px;
+            height: 32px;
+            border: 1px solid #d9d9d9;
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .pagination .pages button:hover { border-color: #1a73e8; color: #1a73e8; }
+        .pagination .pages button.active { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+        .pagination .pages button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* 空状态 */
+        .empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty .icon { font-size: 48px; margin-bottom: 12px; }
+
+        /* 加载动画 */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #e8e8e8;
+            border-top-color: #1a73e8;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* 详情弹窗 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.show { display: flex; }
+
+        .modal {
+            background: #fff;
+            border-radius: 12px;
+            width: 640px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.15);
+        }
+
+        .modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #e8e8e8;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 { font-size: 16px; }
+
+        .modal-close {
+            width: 28px; height: 28px;
+            border: none; background: none;
+            font-size: 18px; cursor: pointer;
+            color: #999; border-radius: 4px;
+        }
+
+        .modal-close:hover { background: #f5f5f5; }
+
+        .modal-body { padding: 20px; }
+
+        .detail-row {
+            display: flex;
+            padding: 8px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .detail-label {
+            width: 80px;
+            color: #999;
+            font-size: 13px;
+            flex-shrink: 0;
+        }
+
+        .detail-value {
+            flex: 1;
+            font-size: 13px;
+            word-break: break-all;
+        }
+
+        .detail-json {
+            background: #f5f5f5;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>企业微信消息监控</h1>
+    <div class="header-right">
+        <label class="auto-refresh">
+            <input type="checkbox" id="autoRefresh" checked>
+            自动刷新 (30秒)
+        </label>
+        <span id="lastUpdate"></span>
+    </div>
+</div>
+
+<div class="stats-bar">
+    <div class="stat-card">
+        <div class="label">消息总数</div>
+        <div class="value" id="statTotal">-</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">当前 SEQ</div>
+        <div class="value" id="statSeq">-</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">消息类型</div>
+        <div class="value" id="statTypes">-</div>
+    </div>
+</div>
+
+<div class="main">
+    <div class="filter-bar">
+        <select id="filterType">
+            <option value="">全部类型</option>
+            <option value="text">文本</option>
+            <option value="image">图片</option>
+            <option value="voice">语音</option>
+            <option value="video">视频</option>
+            <option value="file">文件</option>
+            <option value="link">链接</option>
+            <option value="weapp">小程序</option>
+            <option value="emotion">表情</option>
+            <option value="revoke">撤回</option>
+            <option value="card">名片</option>
+            <option value="location">位置</option>
+            <option value="redpacket">红包</option>
+            <option value="docmsg">文档</option>
+            <option value="mixed">混合消息</option>
+        </select>
+        <input type="text" id="filterSender" placeholder="发送人">
+        <input type="text" id="filterRoom" placeholder="群ID">
+        <input type="text" id="filterKeyword" placeholder="关键词搜索">
+        <button class="btn btn-primary" onclick="search()">查询</button>
+        <button class="btn btn-default" onclick="resetFilter()">重置</button>
+    </div>
+
+    <div class="msg-table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>时间</th>
+                    <th>类型</th>
+                    <th>发送人</th>
+                    <th>群</th>
+                    <th>内容摘要</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="msgBody"></tbody>
+        </table>
+        <div id="pagination" class="pagination" style="display:none;">
+            <span class="info" id="pageInfo"></span>
+            <div class="pages" id="pageButtons"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 详情弹窗 -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3>消息详情</h3>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
+    </div>
+</div>
+
+<script>
+const MSG_TYPE_CN = {
+    text: "文本", image: "图片", voice: "语音", video: "视频",
+    file: "文件", link: "链接", weapp: "小程序", emotion: "表情",
+    revoke: "撤回", card: "名片", location: "位置", redpacket: "红包",
+    docmsg: "文档", mixed: "混合", chatrecord: "聊天记录",
+    todo: "待办", vote: "投票", collect: "填表", meeting: "会议",
+    markdown: "Markdown", news: "图文", calendar: "日程",
+    sphfeed: "视频号"
+};
+
+const TYPE_CLASS = {
+    text: "msg-type-text", image: "msg-type-image", voice: "msg-type-voice",
+    video: "msg-type-video", file: "msg-type-file", link: "msg-type-link",
+    revoke: "msg-type-revoke"
+};
+
+let currentPage = 1;
+let refreshTimer = null;
+let allMessages = [];
+
+// 格式化时间戳（毫秒）
+function formatTime(ts) {
+    if (!ts) return "-";
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+// 加载统计
+async function loadStats() {
+    try {
+        const res = await fetch("/api/stats");
+        const data = await res.json();
+        document.getElementById("statTotal").textContent = data.total_messages.toLocaleString();
+        document.getElementById("statSeq").textContent = data.current_seq.toLocaleString();
+        document.getElementById("statTypes").textContent = data.type_stats.length;
+    } catch(e) {
+        console.error("加载统计失败:", e);
+    }
+}
+
+// 加载消息
+async function loadMessages(page) {
+    currentPage = page || 1;
+    const params = new URLSearchParams({
+        page: currentPage,
+        page_size: 50,
+        msgtype: document.getElementById("filterType").value,
+        sender: document.getElementById("filterSender").value,
+        roomid: document.getElementById("filterRoom").value,
+        keyword: document.getElementById("filterKeyword").value,
+    });
+
+    const tbody = document.getElementById("msgBody");
+    tbody.innerHTML = '<tr><td colspan="6" class="loading"><span class="spinner"></span>加载中...</td></tr>';
+
+    try {
+        const res = await fetch(`/api/messages?${params}`);
+        const data = await res.json();
+        allMessages = data.messages;
+        renderMessages(data);
+        renderPagination(data);
+        document.getElementById("lastUpdate").textContent = "更新于 " + new Date().toLocaleTimeString();
+    } catch(e) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty"><div class="icon">&#9888;</div>加载失败，请检查服务是否正常</td></tr>';
+    }
+}
+
+// 渲染消息列表
+function renderMessages(data) {
+    const tbody = document.getElementById("msgBody");
+    if (!data.messages.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty"><div class="icon">&#128172;</div>暂无消息数据</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = data.messages.map((msg, idx) => {
+        const typeClass = TYPE_CLASS[msg.msgtype] || "msg-type-default";
+        const typeCn = MSG_TYPE_CN[msg.msgtype] || msg.msgtype;
+        return `<tr>
+            <td class="msg-time">${formatTime(msg.msgtime)}</td>
+            <td><span class="msg-type ${typeClass}">${typeCn}</span></td>
+            <td class="msg-sender" title="${msg.sender || ''}">${msg.sender || "-"}</td>
+            <td class="msg-room" title="${msg.roomid || ''}">${msg.roomid || "-"}</td>
+            <td class="msg-summary" title="${(msg.summary || '').replace(/"/g, '&quot;')}">${msg.summary || "-"}</td>
+            <td><button class="btn btn-default" style="height:28px;font-size:12px;padding:0 10px;" onclick="showDetail(${idx})">详情</button></td>
+        </tr>`;
+    }).join("");
+}
+
+// 渲染分页
+function renderPagination(data) {
+    const pag = document.getElementById("pagination");
+    if (data.total <= 50) {
+        pag.style.display = "none";
+        return;
+    }
+    pag.style.display = "flex";
+    document.getElementById("pageInfo").textContent = `共 ${data.total} 条，第 ${data.page}/${data.pages} 页`;
+
+    const btns = document.getElementById("pageButtons");
+    let html = "";
+    html += `<button ${data.page <= 1 ? "disabled" : ""} onclick="loadMessages(${data.page - 1})">上一页</button>`;
+
+    // 显示页码
+    const start = Math.max(1, data.page - 2);
+    const end = Math.min(data.pages, data.page + 2);
+    if (start > 1) html += `<button onclick="loadMessages(1)">1</button>`;
+    if (start > 2) html += `<button disabled>...</button>`;
+    for (let i = start; i <= end; i++) {
+        html += `<button class="${i === data.page ? 'active' : ''}" onclick="loadMessages(${i})">${i}</button>`;
+    }
+    if (end < data.pages - 1) html += `<button disabled>...</button>`;
+    if (end < data.pages) html += `<button onclick="loadMessages(${data.pages})">${data.pages}</button>`;
+
+    html += `<button ${data.page >= data.pages ? "disabled" : ""} onclick="loadMessages(${data.page + 1})">下一页</button>`;
+    btns.innerHTML = html;
+}
+
+// 显示详情
+function showDetail(idx) {
+    const msg = allMessages[idx];
+    if (!msg) return;
+
+    let rawData = {};
+    let parsedContent = {};
+    try { rawData = JSON.parse(msg.raw_data || "{}"); } catch(e) {}
+    try { parsedContent = JSON.parse(msg.parsed_content || "{}"); } catch(e) {}
+
+    const typeCn = MSG_TYPE_CN[msg.msgtype] || msg.msgtype;
+    const html = `
+        <div class="detail-row"><div class="detail-label">消息ID</div><div class="detail-value">${msg.msgid || "-"}</div></div>
+        <div class="detail-row"><div class="detail-label">SEQ</div><div class="detail-value">${msg.seq || "-"}</div></div>
+        <div class="detail-row"><div class="detail-label">时间</div><div class="detail-value">${formatTime(msg.msgtime)}</div></div>
+        <div class="detail-row"><div class="detail-label">类型</div><div class="detail-value">${typeCn} (${msg.msgtype})</div></div>
+        <div class="detail-row"><div class="detail-label">动作</div><div class="detail-value">${msg.action || "-"}</div></div>
+        <div class="detail-row"><div class="detail-label">发送人</div><div class="detail-value">${msg.sender || "-"}</div></div>
+        <div class="detail-row"><div class="detail-label">接收人</div><div class="detail-value">${msg.tolist || "-"}</div></div>
+        <div class="detail-row"><div class="detail-label">群ID</div><div class="detail-value">${msg.roomid || "-"}</div></div>
+        <div class="detail-row"><div class="detail-label">摘要</div><div class="detail-value">${msg.summary || "-"}</div></div>
+        <div style="margin-top:16px;font-size:13px;font-weight:600;color:#666;">解析内容</div>
+        <div class="detail-json">${JSON.stringify(parsedContent, null, 2)}</div>
+        <div style="margin-top:16px;font-size:13px;font-weight:600;color:#666;">原始数据</div>
+        <div class="detail-json">${JSON.stringify(rawData, null, 2)}</div>
+    `;
+    document.getElementById("modalBody").innerHTML = html;
+    document.getElementById("modalOverlay").classList.add("show");
+}
+
+function closeModal(e) {
+    if (e && e.target !== e.currentTarget) return;
+    document.getElementById("modalOverlay").classList.remove("show");
+}
+
+// ESC 关闭弹窗
+document.addEventListener("keydown", e => {
+    if (e.key === "Escape") closeModal();
+});
+
+function search() {
+    loadMessages(1);
+}
+
+function resetFilter() {
+    document.getElementById("filterType").value = "";
+    document.getElementById("filterSender").value = "";
+    document.getElementById("filterRoom").value = "";
+    document.getElementById("filterKeyword").value = "";
+    loadMessages(1);
+}
+
+// 自动刷新
+function setupAutoRefresh() {
+    const checkbox = document.getElementById("autoRefresh");
+    checkbox.addEventListener("change", () => {
+        if (checkbox.checked) {
+            refreshTimer = setInterval(() => {
+                loadMessages(currentPage);
+                loadStats();
+            }, 30000);
+        } else {
+            clearInterval(refreshTimer);
+        }
+    });
+    // 默认开启
+    refreshTimer = setInterval(() => {
+        loadMessages(currentPage);
+        loadStats();
+    }, 30000);
+}
+
+// 回车搜索
+document.querySelectorAll(".filter-bar input").forEach(input => {
+    input.addEventListener("keydown", e => {
+        if (e.key === "Enter") search();
+    });
+});
+
+// 初始化
+loadStats();
+loadMessages(1);
+setupAutoRefresh();
+</script>
+</body>
+</html>
