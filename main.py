@@ -92,8 +92,8 @@ def create_app(config: dict) -> Flask:
         init_callback(crypto, on_message_callback=on_message_notify)
         app.register_blueprint(callback_bp)
 
-        # 把 fetcher 传给 API，支持手动拉取
-        init_api(db, fetcher)
+        # 把 fetcher 和 SDK 传给 API，支持手动拉取和媒体文件下载
+        init_api(db, fetcher, finance_sdk, sdk_config)
 
         # 保存引用，方便清理
         app.extensions["wxbot"] = {

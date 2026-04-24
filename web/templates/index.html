@@ -526,16 +526,26 @@ function renderMessages(data) {
         return;
     }
 
+    const MEDIA_TYPES = ["image", "voice", "video", "file", "emotion"];
     tbody.innerHTML = data.messages.map((msg, idx) => {
         const typeClass = TYPE_CLASS[msg.msgtype] || "msg-type-default";
         const typeCn = MSG_TYPE_CN[msg.msgtype] || msg.msgtype;
+        const hasMedia = MEDIA_TYPES.includes(msg.msgtype);
+        let actions = `<button class="btn btn-default" style="height:28px;font-size:12px;padding:0 10px;" onclick="showDetail(${idx})">详情</button>`;
+        if (hasMedia) {
+            if (msg.msgtype === "image" || msg.msgtype === "emotion") {
+                actions += ` <button class="btn btn-default" style="height:28px;font-size:12px;padding:0 10px;" onclick="previewMedia(${msg.seq}, '${msg.msgtype}')">预览</button>`;
+            } else {
+                actions += ` <button class="btn btn-default" style="height:28px;font-size:12px;padding:0 10px;" onclick="downloadMedia(${msg.seq})">下载</button>`;
+            }
+        }
         return `<tr>
             <td class="msg-time">${formatTime(msg.msgtime)}</td>
             <td><span class="msg-type ${typeClass}">${typeCn}</span></td>
             <td class="msg-sender" title="${msg.sender || ''}">${msg.sender || "-"}</td>
             <td class="msg-room" title="${msg.roomid || ''}">${msg.roomid || "-"}</td>
             <td class="msg-summary" title="${(msg.summary || '').replace(/"/g, '&quot;')}">${msg.summary || "-"}</td>
-            <td><button class="btn btn-default" style="height:28px;font-size:12px;padding:0 10px;" onclick="showDetail(${idx})">详情</button></td>
+            <td>${actions}</td>
         </tr>`;
     }).join("");
 }
@@ -580,6 +590,23 @@ function showDetail(idx) {
     try { parsedContent = JSON.parse(msg.parsed_content || "{}"); } catch(e) {}
 
     const typeCn = MSG_TYPE_CN[msg.msgtype] || msg.msgtype;
+    const MEDIA_TYPES = ["image", "voice", "video", "file", "emotion"];
+    let mediaHtml = "";
+    if (MEDIA_TYPES.includes(msg.msgtype)) {
+        if (msg.msgtype === "image" || msg.msgtype === "emotion") {
+            mediaHtml = `
+                <div style="margin-top:16px;font-size:13px;font-weight:600;color:#666;">媒体预览</div>
+                <div style="margin-top:8px;"><img src="/api/media/${msg.seq}" style="max-width:100%;max-height:400px;border-radius:8px;border:1px solid #e8e8e8;" onerror="this.outerHTML='<span style=color:#999>加载失败</span>'"></div>
+            `;
+        } else {
+            const label = msg.msgtype === "voice" ? "播放语音" : msg.msgtype === "video" ? "播放视频" : "下载文件";
+            mediaHtml = `
+                <div style="margin-top:16px;">
+                    <a href="/api/media/${msg.seq}" target="_blank" class="btn btn-primary" style="display:inline-block;text-decoration:none;line-height:36px;">${label}</a>
+                </div>
+            `;
+        }
+    }
     const html = `
         <div class="detail-row"><div class="detail-label">消息ID</div><div class="detail-value">${msg.msgid || "-"}</div></div>
         <div class="detail-row"><div class="detail-label">SEQ</div><div class="detail-value">${msg.seq || "-"}</div></div>
@@ -590,6 +617,7 @@ function showDetail(idx) {
         <div class="detail-row"><div class="detail-label">接收人</div><div class="detail-value">${msg.tolist || "-"}</div></div>
         <div class="detail-row"><div class="detail-label">群ID</div><div class="detail-value">${msg.roomid || "-"}</div></div>
         <div class="detail-row"><div class="detail-label">摘要</div><div class="detail-value">${msg.summary || "-"}</div></div>
+        ${mediaHtml}
         <div style="margin-top:16px;font-size:13px;font-weight:600;color:#666;">解析内容</div>
         <div class="detail-json">${JSON.stringify(parsedContent, null, 2)}</div>
         <div style="margin-top:16px;font-size:13px;font-weight:600;color:#666;">原始数据</div>
@@ -647,6 +675,20 @@ document.querySelectorAll(".filter-bar input").forEach(input => {
         if (e.key === "Enter") search();
     });
 });
+
+// 预览媒体（图片/表情）
+function previewMedia(seq, msgtype) {
+    const url = `/api/media/${seq}`;
+    const overlay = document.getElementById("modalOverlay");
+    const body = document.getElementById("modalBody");
+    body.innerHTML = `<div style="text-align:center;padding:20px;"><img src="${url}" style="max-width:100%;max-height:70vh;border-radius:8px;" onerror="this.outerHTML='<span style=color:#999>加载失败，媒体文件可能已过期</span>'"></div>`;
+    overlay.classList.add("show");
+}
+
+// 下载媒体（文件/语音/视频）
+function downloadMedia(seq) {
+    window.open(`/api/media/${seq}`, "_blank");
+}
 
 // 手动拉取消息
 async function manualFetch() {

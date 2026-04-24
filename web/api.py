@@ -2,9 +2,12 @@
 前端数据查询 API
 """
 
+import hashlib
+import json
+import os
 import threading
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 
 from storage.db import Database
 
@@ -12,15 +15,22 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 _db: Database = None
 _fetcher = None
+_finance_sdk = None
+_sdk_config = {}
 _fetch_lock = threading.Lock()
 _fetching = False
 
+# 媒体文件保存目录
+MEDIA_DIR = "./data/media"
 
-def init_api(db: Database, fetcher=None):
+
+def init_api(db: Database, fetcher=None, finance_sdk=None, sdk_config: dict = None):
     """初始化 API 模块"""
-    global _db, _fetcher
+    global _db, _fetcher, _finance_sdk, _sdk_config
     _db = db
     _fetcher = fetcher
+    _finance_sdk = finance_sdk
+    _sdk_config = sdk_config or {}
 
 
 @api_bp.route("/messages")
@@ -74,3 +84,83 @@ def manual_fetch():
     thread = threading.Thread(target=do_fetch, daemon=True)
     thread.start()
     return jsonify({"message": "开始拉取消息"})
+
+
+# 媒体文件类型对应的扩展名
+MEDIA_EXT = {
+    "image": ".jpg",
+    "voice": ".amr",
+    "video": ".mp4",
+    "emotion": ".gif",
+}
+
+
+@api_bp.route("/media/<int:msg_seq>")
+def get_media(msg_seq):
+    """
+    下载/预览媒体文件
+    根据消息seq获取sdkfileid，下载并返回文件
+    """
+    if _finance_sdk is None:
+        return jsonify({"error": "SDK未初始化"}), 503
+
+    # 从数据库查消息
+    cursor = _db.conn.cursor()
+    cursor.execute("SELECT msgtype, parsed_content, raw_data FROM messages WHERE seq = ?", (msg_seq,))
+    row = cursor.fetchone()
+    if not row:
+        return jsonify({"error": "消息不存在"}), 404
+
+    msgtype = row["msgtype"]
+    parsed = json.loads(row["parsed_content"] or "{}")
+    raw = json.loads(row["raw_data"] or "{}")
+
+    # 获取 sdkfileid
+    sdkfileid = parsed.get("sdkfileid", "")
+    if not sdkfileid:
+        return jsonify({"error": "该消息无媒体文件"}), 404
+
+    # 文件名和扩展名
+    filename = parsed.get("filename", "")
+    if filename:
+        ext = os.path.splitext(filename)[1] or MEDIA_EXT.get(msgtype, "")
+    else:
+        ext = MEDIA_EXT.get(msgtype, "")
+        filename = f"{msg_seq}{ext}"
+
+    # 用 sdkfileid 的 hash 作为本地文件名，避免重复下载
+    file_hash = hashlib.md5(sdkfileid.encode()).hexdigest()
+    save_path = os.path.join(MEDIA_DIR, f"{file_hash}{ext}")
+
+    # 如果已下载过，直接返回
+    if not os.path.exists(save_path):
+        os.makedirs(MEDIA_DIR, exist_ok=True)
+        ret, _ = _finance_sdk.get_media_data(
+            sdk_file_id=sdkfileid,
+            proxy=_sdk_config.get("proxy", ""),
+            passwd=_sdk_config.get("proxy_passwd", ""),
+            timeout=_sdk_config.get("timeout", 10),
+            save_path=save_path,
+        )
+        if ret != 0:
+            return jsonify({"error": f"下载失败，错误码: {ret}"}), 500
+
+    # 设置MIME类型
+    mime_map = {
+        "image": "image/jpeg",
+        "voice": "audio/amr",
+        "video": "video/mp4",
+        "emotion": "image/gif",
+        "file": "application/octet-stream",
+    }
+    mimetype = mime_map.get(msgtype, "application/octet-stream")
+
+    # 图片和表情直接预览，文件作为附件下载
+    as_attachment = msgtype == "file"
+
+    return send_file(
+        save_path,
+        mimetype=mimetype,
+        as_attachment=as_attachment,
+        download_name=filename,
+    )
