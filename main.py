@@ -40,7 +40,7 @@ def create_app(config: dict) -> Flask:
     # 初始化数据库
     db = Database(config["storage"]["db_path"])
 
-    # 初始化前端 API（数据库就绪即可访问前端）
+    # 注册前端 API 蓝图（fetcher 在SDK初始化后补充传入）
     init_api(db)
     app.register_blueprint(api_bp)
 
@@ -91,6 +91,9 @@ def create_app(config: dict) -> Flask:
         # 初始化回调服务
         init_callback(crypto, on_message_callback=on_message_notify)
         app.register_blueprint(callback_bp)
+
+        # 把 fetcher 传给 API，支持手动拉取
+        init_api(db, fetcher)
 
         # 保存引用，方便清理
         app.extensions["wxbot"] = {

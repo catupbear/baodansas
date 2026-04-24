@@ -367,6 +367,7 @@
 <div class="header">
     <h1>企业微信消息监控</h1>
     <div class="header-right">
+        <button class="btn btn-primary" id="fetchBtn" onclick="manualFetch()" style="height:32px;font-size:13px;">拉取消息</button>
         <label class="auto-refresh">
             <input type="checkbox" id="autoRefresh" checked>
             自动刷新 (30秒)
@@ -646,6 +647,49 @@ document.querySelectorAll(".filter-bar input").forEach(input => {
         if (e.key === "Enter") search();
     });
 });
+
+// 手动拉取消息
+async function manualFetch() {
+    const btn = document.getElementById("fetchBtn");
+    btn.disabled = true;
+    btn.textContent = "拉取中...";
+
+    try {
+        const res = await fetch("/api/fetch", { method: "POST" });
+        const data = await res.json();
+        if (res.ok) {
+            btn.textContent = "拉取中...";
+            // 轮询等待拉取完成
+            const pollInterval = setInterval(async () => {
+                const statsRes = await fetch("/api/stats");
+                const stats = await statsRes.json();
+                if (!stats.fetching) {
+                    clearInterval(pollInterval);
+                    btn.disabled = false;
+                    btn.textContent = "拉取消息";
+                    loadMessages(1);
+                    loadStats();
+                }
+            }, 2000);
+            // 最多等60秒
+            setTimeout(() => {
+                clearInterval(pollInterval);
+                btn.disabled = false;
+                btn.textContent = "拉取消息";
+                loadMessages(1);
+                loadStats();
+            }, 60000);
+        } else {
+            alert(data.error || "拉取失败");
+            btn.disabled = false;
+            btn.textContent = "拉取消息";
+        }
+    } catch(e) {
+        alert("请求失败: " + e.message);
+        btn.disabled = false;
+        btn.textContent = "拉取消息";
+    }
+}
 
 // 初始化
 loadStats();

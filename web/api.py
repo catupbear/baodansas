@@ -2,6 +2,8 @@
 前端数据查询 API
 """
 
+import threading
+
 from flask import Blueprint, jsonify, request
 
 from storage.db import Database
@@ -9,12 +11,16 @@ from storage.db import Database
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 _db: Database = None
+_fetcher = None
+_fetch_lock = threading.Lock()
+_fetching = False
 
 
-def init_api(db: Database):
+def init_api(db: Database, fetcher=None):
     """初始化 API 模块"""
-    global _db
+    global _db, _fetcher
     _db = db
+    _fetcher = fetcher
 
 
 @api_bp.route("/messages")
@@ -43,4 +49,28 @@ def get_messages():
 @api_bp.route("/stats")
 def get_stats():
     """获取统计信息"""
-    return jsonify(_db.get_stats())
+    stats = _db.get_stats()
+    stats["fetching"] = _fetching
+    return jsonify(stats)
+
+
+@api_bp.route("/fetch", methods=["POST"])
+def manual_fetch():
+    """手动触发拉取消息"""
+    global _fetching
+    if _fetcher is None:
+        return jsonify({"error": "SDK未初始化，无法拉取"}), 503
+    if _fetching:
+        return jsonify({"error": "正在拉取中，请稍候"}), 429
+
+    def do_fetch():
+        global _fetching
+        _fetching = True
+        try:
+            _fetcher.fetch_new_messages()
+        finally:
+            _fetching = False
+
+    thread = threading.Thread(target=do_fetch, daemon=True)
+    thread.start()
+    return jsonify({"message": "开始拉取消息"})
