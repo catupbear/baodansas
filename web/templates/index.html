@@ -665,21 +665,56 @@ function resetFilter() {
 // 自动刷新
 function setupAutoRefresh() {
     const checkbox = document.getElementById("autoRefresh");
+
+    function startRefresh() {
+        if (refreshTimer) clearInterval(refreshTimer);
+        refreshTimer = setInterval(() => {
+            refreshNewMessages();
+            loadStats();
+        }, 30000);
+    }
+
+    function stopRefresh() {
+        if (refreshTimer) {
+            clearInterval(refreshTimer);
+            refreshTimer = null;
+        }
+    }
+
     checkbox.addEventListener("change", () => {
         if (checkbox.checked) {
-            refreshTimer = setInterval(() => {
-                loadMessages(currentPage);
-                loadStats();
-            }, 30000);
+            startRefresh();
         } else {
-            clearInterval(refreshTimer);
+            stopRefresh();
         }
     });
+
     // 默认开启
-    refreshTimer = setInterval(() => {
-        loadMessages(currentPage);
-        loadStats();
-    }, 30000);
+    if (checkbox.checked) {
+        startRefresh();
+    }
+}
+
+// 增量刷新：只在第1页且无筛选条件时，检查是否有新消息
+function refreshNewMessages() {
+    const hasFilter = document.getElementById("filterType").value
+        || document.getElementById("filterSender").value
+        || document.getElementById("filterRoom").value
+        || document.getElementById("filterKeyword").value;
+
+    if (currentPage !== 1 || hasFilter) {
+        // 有筛选或不在第一页，不自动刷新列表
+        return;
+    }
+
+    // 先检查统计数据是否变化
+    fetch("/api/stats").then(r => r.json()).then(stats => {
+        const curTotal = parseInt(document.getElementById("statTotal").textContent) || 0;
+        if (stats.total_messages > curTotal) {
+            // 有新消息，刷新列表
+            loadMessages(1);
+        }
+    }).catch(() => {});
 }
 
 // 回车搜索
