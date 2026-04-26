@@ -78,19 +78,23 @@ class ContactsManager:
         if not user_id:
             return ""
 
-        # 先查缓存
+        # 先查缓存（包括失败标记）
         cached = self._get_cache(user_id)
         if cached:
-            return cached
+            return cached if cached != "__unresolvable__" else user_id
 
-        # 判断是否是外部联系人（以 wm/wo/wb 开头）
-        if user_id.startswith(("wm", "wo", "wb")):
+        # 判断是否是外部联系人（wm/wo 开头）
+        # 注意：wb 前缀不是外部联系人，不走 externalcontact 接口
+        if user_id.startswith(("wm", "wo")):
             name = self._fetch_external_contact(user_id)
         else:
             name = self._fetch_user(user_id)
 
         if name:
             self._set_cache(user_id, "user", name)
+        else:
+            # 缓存失败标记，避免反复重试
+            self._set_cache(user_id, "user", "__unresolvable__")
 
         return name or user_id
 
@@ -101,11 +105,14 @@ class ContactsManager:
 
         cached = self._get_cache(room_id)
         if cached:
-            return cached
+            return cached if cached != "__unresolvable__" else room_id
 
         name = self._fetch_room_info(room_id)
         if name:
             self._set_cache(room_id, "room", name)
+        else:
+            # 缓存失败标记，避免反复重试
+            self._set_cache(room_id, "room", "__unresolvable__")
 
         return name or room_id
 
@@ -202,7 +209,7 @@ class ContactsManager:
             conn.close()
 
     def _batch_get_cache(self, ids: list) -> dict:
-        """批量从数据库读取昵称，一次 IN 查询"""
+        """批量从数据库读取昵称，一次 IN 查询。不可解析的返回原 ID。"""
         if not ids:
             return {}
         conn = self.db.pool.connection()
@@ -213,7 +220,13 @@ class ContactsManager:
                 f"SELECT id, name FROM contacts_cache WHERE id IN ({placeholders})",
                 ids
             )
-            return {row["id"]: row["name"] for row in cursor.fetchall()}
+            result = {}
+            for row in cursor.fetchall():
+                if row["name"] == "__unresolvable__":
+                    result[row["id"]] = row["id"]  # 返回原 ID
+                else:
+                    result[row["id"]] = row["name"]
+            return result
         finally:
             conn.close()
 
