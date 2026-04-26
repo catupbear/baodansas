@@ -170,55 +170,56 @@ class Database:
     def get_conversations(self, keyword: str = "") -> list:
         """
         获取会话列表，按最后消息时间倒序。
-        使用单条 SQL 完成分组统计 + 最后一条消息获取，避免 N+1 查询。
+        两步查询：1) 分组统计 2) 批量 IN 查最后一条消息（替代 N+1 逐个查）。
         """
         conn = self.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-            # 单条 SQL：通过子查询一次性获取会话列表和最后一条消息
+            # 第一步：分组获取会话列表 + 最后消息的 id
             params = []
             where_clause = ""
             if keyword:
-                where_clause = "WHERE (m.summary LIKE %s OR m.sender LIKE %s OR m.roomid LIKE %s)"
+                where_clause = "WHERE (summary LIKE %s OR sender LIKE %s OR roomid LIKE %s)"
                 params.extend([f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"])
 
             sql = f"""
                 SELECT
-                    t.conversation_id,
-                    t.roomid,
-                    t.last_time,
-                    t.msg_count,
-                    m2.sender AS last_sender,
-                    m2.msgtype AS last_msgtype,
-                    m2.summary AS last_summary
-                FROM (
-                    SELECT
-                        CASE WHEN m.roomid = '' OR m.roomid IS NULL THEN CONCAT('private_', m.sender) ELSE m.roomid END AS conversation_id,
-                        MAX(COALESCE(m.roomid, '')) AS roomid,
-                        MAX(m.msgtime) AS last_time,
-                        COUNT(*) AS msg_count
-                    FROM messages m
-                    {where_clause}
-                    GROUP BY conversation_id
-                ) t
-                LEFT JOIN messages m2 ON m2.msgtime = t.last_time
-                    AND (
-                        (t.roomid != '' AND m2.roomid = t.roomid)
-                        OR
-                        (t.roomid = '' AND m2.sender = SUBSTRING(t.conversation_id, 9))
-                    )
-                GROUP BY t.conversation_id, t.roomid, t.last_time, t.msg_count
-                ORDER BY t.last_time DESC
+                    CASE WHEN roomid = '' OR roomid IS NULL THEN CONCAT('private_', sender) ELSE roomid END AS conversation_id,
+                    MAX(COALESCE(roomid, '')) AS roomid,
+                    MAX(msgtime) AS last_time,
+                    COUNT(*) AS msg_count,
+                    MAX(id) AS last_msg_id
+                FROM messages
+                {where_clause}
+                GROUP BY conversation_id
+                ORDER BY last_time DESC
             """
             cursor.execute(sql, params)
             conversations = list(cursor.fetchall())
 
-            # 补全可能的空值
+            if not conversations:
+                return []
+
+            # 第二步：批量查最后一条消息的详情
+            last_ids = [conv["last_msg_id"] for conv in conversations if conv.get("last_msg_id")]
+            last_msg_map = {}
+            if last_ids:
+                placeholders = ",".join(["%s"] * len(last_ids))
+                cursor.execute(
+                    f"SELECT id, sender, msgtype, summary FROM messages WHERE id IN ({placeholders})",
+                    last_ids
+                )
+                for row in cursor.fetchall():
+                    last_msg_map[row["id"]] = row
+
+            # 合并结果
             for conv in conversations:
-                conv["last_sender"] = conv.get("last_sender") or ""
-                conv["last_msgtype"] = conv.get("last_msgtype") or ""
-                conv["last_summary"] = conv.get("last_summary") or ""
+                msg = last_msg_map.get(conv.get("last_msg_id"), {})
+                conv["last_sender"] = msg.get("sender", "")
+                conv["last_msgtype"] = msg.get("msgtype", "")
+                conv["last_summary"] = msg.get("summary", "")
+                del conv["last_msg_id"]  # 前端不需要
 
             return conversations
         finally:
