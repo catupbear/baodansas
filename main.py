@@ -49,6 +49,7 @@ def create_app(config: dict) -> Flask:
         corpid=config["wecom"]["corpid"],
         secret=config["wecom"]["secret"],
         db=db,
+        external_secret=config["wecom"].get("external_secret", ""),
     )
     logger.info("通讯录模块初始化完成")
 

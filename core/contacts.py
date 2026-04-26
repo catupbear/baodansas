@@ -19,15 +19,32 @@ logger = logging.getLogger(__name__)
 class ContactsManager:
     """通讯录管理器"""
 
-    def __init__(self, corpid: str, secret: str, db):
+    def __init__(self, corpid: str, secret: str, db, external_secret: str = ""):
         self.corpid = corpid
         self.secret = secret
+        self.external_secret = external_secret  # 外部联系人应用的 Secret
         self.db = db
         self._access_token = ""
         self._token_expires = 0
-        # 初始化缓存表（contacts_cache 已在 storage/db.py 的 _init_tables 中创建）
-        # 此处保留方法调用以兼容旧逻辑，实际建表在 _init_tables 中完成
+        self._external_access_token = ""
+        self._external_token_expires = 0
         self._init_cache_table()
+        # 有外部应用 Secret 时，清除之前标记为不可解析的外部联系人/群，重新尝试
+        if external_secret:
+            self._clear_unresolvable()
+
+    def _clear_unresolvable(self):
+        """清除所有 __unresolvable__ 标记，允许重新解析"""
+        conn = self.db.pool.connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM contacts_cache WHERE name = '__unresolvable__'")
+            deleted = cursor.rowcount
+            conn.commit()
+            if deleted:
+                logger.info("已清除 %d 条不可解析缓存，将重新尝试解析", deleted)
+        finally:
+            conn.close()
 
     def _init_cache_table(self):
         """确保昵称缓存表存在（MySQL 版本，通过连接池操作）"""
@@ -68,6 +85,30 @@ class ContactsManager:
                 return ""
         except Exception as e:
             logger.error("获取access_token异常: %s", e)
+            return ""
+
+    def _get_external_access_token(self) -> str:
+        """获取外部联系人应用的 access_token"""
+        if not self.external_secret:
+            return ""
+        now = int(time.time())
+        if self._external_access_token and now < self._external_token_expires:
+            return self._external_access_token
+
+        url = f"https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={self.corpid}&corpsecret={self.external_secret}"
+        try:
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            if data.get("errcode") == 0:
+                self._external_access_token = data["access_token"]
+                self._external_token_expires = now + data.get("expires_in", 7200) - 300
+                return self._external_access_token
+            else:
+                logger.error("获取外部应用access_token失败: %s", data.get("errmsg"))
+                return ""
+        except Exception as e:
+            logger.error("获取外部应用access_token异常: %s", e)
             return ""
 
     def get_name(self, user_id: str) -> str:
@@ -140,8 +181,8 @@ class ContactsManager:
             return ""
 
     def _fetch_external_contact(self, external_userid: str) -> str:
-        """调用外部联系人API获取昵称"""
-        token = self._get_access_token()
+        """调用外部联系人API获取昵称（优先用外部应用 token）"""
+        token = self._get_external_access_token() or self._get_access_token()
         if not token:
             logger.warning("获取外部联系人 %s 失败: access_token 为空", external_userid)
             return ""
@@ -165,33 +206,71 @@ class ContactsManager:
             return ""
 
     def _fetch_room_info(self, roomid: str) -> str:
-        """调用会话存档接口获取群信息"""
+        """
+        获取群信息：先用会话存档接口（内部群），
+        失败(301059)时降级到客户群接口（外部群）。
+        """
+        # 先尝试内部群接口
         token = self._get_access_token()
+        if token:
+            url = f"https://qyapi.weixin.qq.com/cgi-bin/msgaudit/groupchat/get?access_token={token}"
+            body = json.dumps({"roomid": roomid}).encode("utf-8")
+            try:
+                req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                if data.get("errcode") == 0:
+                    name = data.get("roomname", "")
+                    members = data.get("members", [])
+                    if not name and members:
+                        member_names = [m.get("memberid", "") for m in members[:3]]
+                        name = "、".join(member_names) + "..."
+                    logger.info("获取群信息(内部群): %s -> %s", roomid, name)
+                    return name
+                elif data.get("errcode") != 301059:
+                    # 非 301059 错误，不再尝试外部群接口
+                    logger.warning("获取群信息失败 %s: errcode=%s, errmsg=%s",
+                                   roomid, data.get("errcode"), data.get("errmsg"))
+                    return ""
+                # 301059 = only support inner room，继续尝试外部群接口
+            except Exception as e:
+                logger.error("获取群信息异常 %s: %s", roomid, e)
+                return ""
+
+        # 降级：用外部应用 token 调客户群接口
+        return self._fetch_external_room_info(roomid)
+
+    def _fetch_external_room_info(self, roomid: str) -> str:
+        """调用客户群接口获取外部群信息"""
+        token = self._get_external_access_token()
         if not token:
-            logger.warning("获取群信息 %s 失败: access_token 为空", roomid)
+            logger.warning("获取外部群信息 %s 失败: 外部应用 access_token 为空", roomid)
             return ""
 
-        url = f"https://qyapi.weixin.qq.com/cgi-bin/msgaudit/groupchat/get?access_token={token}"
-        body = json.dumps({"roomid": roomid}).encode("utf-8")
+        url = f"https://qyapi.weixin.qq.com/cgi-bin/externalcontact/groupchat/get?access_token={token}"
+        body = json.dumps({"chat_id": roomid, "need_name": 1}).encode("utf-8")
         try:
             req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
             if data.get("errcode") == 0:
-                name = data.get("roomname", "")
-                members = data.get("members", [])
-                if not name and members:
-                    # 群没有名称时，用前几个成员名拼接
-                    member_names = [m.get("memberid", "") for m in members[:3]]
-                    name = "、".join(member_names) + "..."
-                logger.info("获取群信息: %s -> %s", roomid, name)
+                chat = data.get("group_chat", {})
+                name = chat.get("name", "")
+                if not name:
+                    # 没有群名时用成员名拼接
+                    members = chat.get("member_list", [])
+                    member_names = [m.get("name", m.get("userid", "")) for m in members[:3]]
+                    name = "、".join(n for n in member_names if n)
+                    if name:
+                        name += "..."
+                logger.info("获取群信息(外部群): %s -> %s", roomid, name)
                 return name
             else:
-                logger.warning("获取群信息失败 %s: errcode=%s, errmsg=%s",
+                logger.warning("获取外部群信息失败 %s: errcode=%s, errmsg=%s",
                                roomid, data.get("errcode"), data.get("errmsg"))
                 return ""
         except Exception as e:
-            logger.error("获取群信息异常 %s: %s", roomid, e)
+            logger.error("获取外部群信息异常 %s: %s", roomid, e)
             return ""
 
     def _get_cache(self, contact_id: str) -> str:
