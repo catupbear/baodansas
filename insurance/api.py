@@ -179,10 +179,10 @@ def manual_ocr():
         # 图片文件直接走百度 OCR
         if file_type in ("jpg", "jpeg", "png", "bmp"):
             if not baidu_ocr_client:
-                return jsonify({"code": 0, "data": {
+                return jsonify({
                     "success": False, "file_name": file_name,
                     "error": "图片识别需要配置百度OCR", "invoices": [],
-                }})
+                })
             extract_result = baidu_ocr_client.recognize_image(file_data_b64)
             ocr_engine = "baidu"
         else:
@@ -201,10 +201,10 @@ def manual_ocr():
             error_msg = extract_result.get("error", "OCR 识别失败")
             if "无文本层" in error_msg and not baidu_ocr_client:
                 error_msg += "（提示：配置百度OCR可自动识别扫描件）"
-            return jsonify({"code": 0, "data": {
+            return jsonify({
                 "success": False, "file_name": file_name,
                 "error": error_msg, "invoices": [],
-            }})
+            })
 
         policy = parse_policy_text(extract_result["text"])
 
@@ -224,24 +224,24 @@ def manual_ocr():
                 policy = parse_policy_text(extract_result["text"])
 
         if not policy.get("fields") or policy.get("confidence", 0) == 0:
-            return jsonify({"code": 0, "data": {
+            return jsonify({
                 "success": False, "file_name": file_name,
                 "error": "未识别到任何保单关键字段", "invoices": [],
-            }})
+            })
 
-        return jsonify({"code": 0, "data": {
+        return jsonify({
             "success": True,
             "file_name": file_name,
             "invoices": [policy],
             "char_count": extract_result.get("char_count", 0),
             "ocr_engine": ocr_engine,
-        }})
+        })
     except Exception as e:
         logger.exception("手动上传识别失败")
-        return jsonify({"code": 0, "data": {
+        return jsonify({
             "success": False, "file_name": file_name,
             "error": str(e), "invoices": [],
-        }})
+        })
 
 
 # ============================================================
