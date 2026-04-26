@@ -1,0 +1,34 @@
+[
+  {
+    "id": "7a3335d2",
+    "name": "保险公司台账测试",
+    "doc_url": "https://alidocs.dingtalk.com/i/nodes/1zknDm0WRaNLMLvnCx5A44j58BQEx5rG?utm_scene=person_space&iframeQuery=viewId%3DqvGDAH2%26sheetId%3DhERWDMS",
+    "base_id": "1zknDm0WRaNLMLvnCx5A44j58BQEx5rG",
+    "sheet_id": "hERWDMS",
+    "fields": [
+      "保险公司",
+      "保单号",
+      "投保人",
+      "车牌号",
+      "发动机号",
+      "厂牌型号",
+      "使用性质",
+      "签单日期",
+      "不含税保费",
+      "中介机构",
+      "争议解决方式",
+      "保费合计",
+      "保险公司简称",
+      "保险期间",
+      "制单人",
+      "增值税额",
+      "投保确认码",
+      "收费确认时间",
+      "机动车种类",
+      "核定载客",
+      "核定载质量",
+      "经办人",
+      "险种类型"
+    ]
+  }
+]

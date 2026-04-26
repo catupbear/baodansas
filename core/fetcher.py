@@ -96,5 +96,49 @@ class MessageFetcher:
 
             # 存储消息
             self.db.save_message(msg_seq, msg_data, parsed)
+
+            # 检查是否需要触发保单识别
+            self._check_insurance_trigger(msg_seq, msg_data, parsed)
         except json.JSONDecodeError as e:
             logger.error("消息JSON解析失败, seq=%d: %s", msg_seq, e)
+
+    def _check_insurance_trigger(self, seq: int, msg_data: dict, parsed: dict):
+        """检查是否需要触发保单识别（支持群聊 + 私聊）"""
+        handler = getattr(self, "insurance_handler", None)
+        if not handler:
+            return
+
+        msgtype = parsed.get("msgtype", "")
+        roomid = parsed.get("roomid", "")
+        sender = parsed.get("from", "")
+        content = parsed.get("content", {})
+
+        # 条件1：文件类型 + PDF后缀
+        if msgtype != "file":
+            return
+
+        filename = content.get("filename", "")
+        if not filename.lower().endswith(".pdf"):
+            return
+
+        # 条件2：在监控列表中（群聊匹配 roomid，私聊匹配 sender）
+        watch = handler.get_watch_config()
+        is_watched = False
+        if roomid and roomid in watch.get("rooms", []):
+            is_watched = True
+        elif not roomid and sender and sender in watch.get("users", []):
+            is_watched = True
+
+        if not is_watched:
+            return
+
+        source_desc = f"room={roomid}" if roomid else f"user={sender}"
+        logger.info("触发保单识别: seq=%d, %s, file=%s", seq, source_desc, filename)
+        handler.enqueue({
+            "seq": seq,
+            "roomid": roomid,
+            "sender": sender,
+            "filename": filename,
+            "sdkfileid": content.get("sdkfileid", ""),
+            "filesize": content.get("filesize", 0),
+        })

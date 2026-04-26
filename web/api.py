@@ -7,6 +7,8 @@ import json
 import os
 import threading
 
+import pymysql
+import pymysql.cursors
 from flask import Blueprint, jsonify, redirect, request, send_file
 
 from storage.db import Database
@@ -124,69 +126,76 @@ def get_media(msg_seq):
     if _finance_sdk is None:
         return jsonify({"error": "SDK未初始化"}), 503
 
-    # 从数据库查消息
-    cursor = _db.conn.cursor()
-    cursor.execute("SELECT msgtype, parsed_content, raw_data FROM messages WHERE seq = ?", (msg_seq,))
-    row = cursor.fetchone()
-    if not row:
-        return jsonify({"error": "消息不存在"}), 404
-
-    msgtype = row["msgtype"]
-    parsed = json.loads(row["parsed_content"] or "{}")
-
-    # 如果已有COS URL，直接重定向
-    cos_url = parsed.get("cos_url", "")
-    if cos_url:
-        return redirect(cos_url)
-
-    # 获取 sdkfileid
-    sdkfileid = parsed.get("sdkfileid", "")
-    if not sdkfileid:
-        return jsonify({"error": "该消息无媒体文件"}), 404
-
-    # 文件名和扩展名
-    orig_filename = parsed.get("filename", "")
-    if orig_filename:
-        ext = os.path.splitext(orig_filename)[1] or MEDIA_EXT.get(msgtype, "")
-    else:
-        ext = MEDIA_EXT.get(msgtype, "")
-        orig_filename = f"{msg_seq}{ext}"
-
-    # 用 sdkfileid 的 hash 作为文件名
-    file_hash = hashlib.md5(sdkfileid.encode()).hexdigest()
-    cos_filename = f"{file_hash}{ext}"
-    save_path = os.path.join(MEDIA_DIR, cos_filename)
-
-    # 下载媒体文件到本地
-    if not os.path.exists(save_path):
-        os.makedirs(MEDIA_DIR, exist_ok=True)
-        ret, _ = _finance_sdk.get_media_data(
-            sdk_file_id=sdkfileid,
-            proxy=_sdk_config.get("proxy", ""),
-            passwd=_sdk_config.get("proxy_passwd", ""),
-            timeout=_sdk_config.get("timeout", 10),
-            save_path=save_path,
+    # 从数据库查消息（通过连接池获取连接）
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT msgtype, parsed_content, raw_data FROM messages WHERE seq = %s",
+            (msg_seq,)
         )
-        if ret != 0:
-            return jsonify({"error": f"下载失败，错误码: {ret}"}), 500
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"error": "消息不存在"}), 404
 
-    # 上传到 COS
-    if _cos:
-        cos_url = _cos.upload_file(save_path, cos_filename)
+        msgtype = row["msgtype"]
+        parsed = json.loads(row["parsed_content"] or "{}")
+
+        # 如果已有COS URL，直接重定向
+        cos_url = parsed.get("cos_url", "")
         if cos_url:
-            # 把 COS URL 写回数据库
-            parsed["cos_url"] = cos_url
-            cursor.execute(
-                "UPDATE messages SET parsed_content = ? WHERE seq = ?",
-                (json.dumps(parsed, ensure_ascii=False), msg_seq)
-            )
-            _db.conn.commit()
-            # 删除本地临时文件
-            try:
-                os.remove(save_path)
-            except OSError:
-                pass
             return redirect(cos_url)
+
+        # 获取 sdkfileid
+        sdkfileid = parsed.get("sdkfileid", "")
+        if not sdkfileid:
+            return jsonify({"error": "该消息无媒体文件"}), 404
+
+        # 文件名和扩展名
+        orig_filename = parsed.get("filename", "")
+        if orig_filename:
+            ext = os.path.splitext(orig_filename)[1] or MEDIA_EXT.get(msgtype, "")
+        else:
+            ext = MEDIA_EXT.get(msgtype, "")
+            orig_filename = f"{msg_seq}{ext}"
+
+        # 用 sdkfileid 的 hash 作为文件名
+        file_hash = hashlib.md5(sdkfileid.encode()).hexdigest()
+        cos_filename = f"{file_hash}{ext}"
+        save_path = os.path.join(MEDIA_DIR, cos_filename)
+
+        # 下载媒体文件到本地
+        if not os.path.exists(save_path):
+            os.makedirs(MEDIA_DIR, exist_ok=True)
+            ret, _ = _finance_sdk.get_media_data(
+                sdk_file_id=sdkfileid,
+                proxy=_sdk_config.get("proxy", ""),
+                passwd=_sdk_config.get("proxy_passwd", ""),
+                timeout=_sdk_config.get("timeout", 10),
+                save_path=save_path,
+            )
+            if ret != 0:
+                return jsonify({"error": f"下载失败，错误码: {ret}"}), 500
+
+        # 上传到 COS
+        if _cos:
+            cos_url = _cos.upload_file(save_path, cos_filename)
+            if cos_url:
+                # 把 COS URL 写回数据库
+                parsed["cos_url"] = cos_url
+                cursor.execute(
+                    "UPDATE messages SET parsed_content = %s WHERE seq = %s",
+                    (json.dumps(parsed, ensure_ascii=False), msg_seq)
+                )
+                conn.commit()
+                # 删除本地临时文件
+                try:
+                    os.remove(save_path)
+                except OSError:
+                    pass
+                return redirect(cos_url)
+    finally:
+        conn.close()
 
     # 没有COS时直接返回本地文件
     mime_map = {

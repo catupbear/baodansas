@@ -1,0 +1,2790 @@
+{% raw %}<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>保单识别系统</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #c2410c;
+            --primary-light: #ea580c;
+            --primary-bg: #fff7ed;
+            --surface: #ffffff;
+            --surface-secondary: #fffbf7;
+            --border: #e7e0d8;
+            --border-light: #f5f0eb;
+            --text-primary: #1c1410;
+            --text-secondary: #57534e;
+            --text-muted: #a8a29e;
+            --success: #059669;
+            --warning: #d97706;
+            --danger: #dc2626;
+        }
+        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        [v-cloak] { display: none; }
+
+        /* 上传拖拽区 */
+        .drop-zone {
+            border: 2px dashed var(--border);
+            transition: all 0.2s ease;
+            background: var(--surface-secondary);
+        }
+        .drop-zone:hover { border-color: var(--primary-light); background: var(--primary-bg); }
+        .drop-zone.dragover { border-color: var(--primary); background: var(--primary-bg); box-shadow: 0 0 0 4px rgba(234,88,12,0.1); }
+
+        /* 过渡动画 */
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+        /* 弹窗遮罩 */
+        .modal-mask { background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); }
+
+        /* 结果表格 */
+        .result-table { font-size: 13px; border-collapse: collapse; width: 100%; }
+        .result-table th, .result-table td {
+            white-space: nowrap;
+            border-bottom: 1px solid var(--border-light);
+        }
+        .result-table th {
+            position: sticky; top: 0; z-index: 2;
+            background: var(--surface-secondary);
+            font-weight: 600; color: var(--text-secondary);
+            text-transform: none; letter-spacing: 0;
+        }
+        .result-table tbody tr { background: var(--surface); transition: background 0.15s ease; }
+        .result-table tbody tr:hover { background: var(--primary-bg) !important; }
+        .result-table th:nth-child(even), .result-table td:nth-child(even) { background-color: rgba(248,250,252,0.5); }
+        .result-table tbody tr:hover td { background-color: transparent !important; }
+
+        /* 冻结前两列 */
+        .result-table .col-idx {
+            position: sticky; left: 0; z-index: 1; min-width: 44px; width: 44px;
+            background: var(--surface) !important; border-right: 2px solid var(--border);
+        }
+        .result-table .col-fname {
+            position: sticky; left: 44px; z-index: 1; min-width: 180px; max-width: 280px;
+            overflow: hidden; text-overflow: ellipsis;
+            background: var(--surface) !important; border-right: 2px solid var(--border);
+        }
+        .result-table thead .col-idx, .result-table thead .col-fname { z-index: 5; background: var(--surface-secondary) !important; }
+        .result-table tbody tr:hover .col-idx, .result-table tbody tr:hover .col-fname { background: var(--primary-bg) !important; }
+        .result-table td:not(.col-idx):not(.col-fname) { min-width: 90px; }
+
+        /* 置信度颜色 */
+        .confidence-high { color: var(--success); }
+        .confidence-mid { color: var(--warning); }
+        .confidence-low { color: var(--danger); }
+        .table-scroll-wrapper { max-height: 70vh; overflow: auto; }
+
+        /* 按钮基础样式 */
+        .btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 16px; border-radius: 8px;
+            font-size: 14px; font-weight: 500;
+            transition: all 0.2s ease; cursor: pointer;
+            border: none; outline: none;
+        }
+        .btn:focus-visible { box-shadow: 0 0 0 3px rgba(234,88,12,0.3); }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: #9a3412; }
+        .btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
+        .btn-success { background: var(--success); color: #fff; }
+        .btn-success:hover { background: #047857; }
+        .btn-warning { background: var(--warning); color: #fff; }
+        .btn-warning:hover { background: #b45309; }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-outline {
+            background: transparent; color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+        .btn-outline:hover { background: var(--surface-secondary); border-color: #cbd5e1; }
+
+        /* 状态徽标 */
+        .badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 8px; border-radius: 6px;
+            font-size: 12px; font-weight: 500;
+        }
+        .badge-success { background: #ecfdf5; color: #059669; }
+        .badge-warning { background: #fffbeb; color: #d97706; }
+        .badge-danger { background: #fef2f2; color: #dc2626; }
+        .badge-info { background: #fff7ed; color: #c2410c; }
+        .badge-gray { background: #f3f4f6; color: #6b7280; }
+
+        /* 卡片样式 */
+        .card {
+            background: var(--surface);
+            border-radius: 12px;
+            border: 1px solid var(--border-light);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+        }
+
+        /* 进度条 */
+        .progress-bar {
+            height: 6px; border-radius: 3px; background: #e2e8f0;
+            overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%; border-radius: 3px;
+            transition: width 0.3s ease;
+            background: linear-gradient(90deg, #c2410c, #f97316);
+        }
+        .progress-bar-fill.green {
+            background: linear-gradient(90deg, #059669, #34d399);
+        }
+
+        /* 顶部导航渐变 */
+        .nav-header {
+            background: linear-gradient(135deg, #7c2d12 0%, #c2410c 50%, #ea580c 100%);
+            color: #fff;
+        }
+
+        /* 保司标签 */
+        .company-tag {
+            padding: 4px 10px; border-radius: 6px;
+            font-size: 12px; font-weight: 500;
+            background: var(--primary-bg); color: var(--primary);
+            border: 1px solid rgba(234,88,12,0.15);
+            transition: all 0.15s ease;
+        }
+        .company-tag:hover { background: #ffedd5; border-color: rgba(234,88,12,0.3); }
+
+        /* Tab样式 */
+        .tab-btn {
+            padding: 10px 16px; font-size: 14px; font-weight: 500;
+            border-bottom: 2px solid transparent;
+            color: var(--text-muted);
+            transition: all 0.2s ease; cursor: pointer;
+            background: none; border-top: none; border-left: none; border-right: none;
+        }
+        .tab-btn:hover { color: var(--text-secondary); }
+        .tab-btn.active { color: #ea580c; border-bottom-color: #ea580c; }
+
+        /* 顶层页面 Tab */
+        .page-tab-btn {
+            padding: 8px 20px; font-size: 14px; font-weight: 600;
+            border-radius: 8px;
+            color: var(--text-muted);
+            transition: all 0.2s ease; cursor: pointer;
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
+        }
+        .page-tab-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
+        .page-tab-btn.active { background: rgba(255,255,255,0.25); color: #fff; border-color: rgba(255,255,255,0.4); }
+
+        /* 文件卡片 */
+        .file-card {
+            border: 1px solid var(--border-light); border-radius: 10px;
+            padding: 10px; text-align: center;
+            transition: all 0.2s ease; cursor: pointer;
+        }
+        .file-card:hover { border-color: var(--primary-light); box-shadow: 0 2px 8px rgba(234,88,12,0.1); }
+
+        /* 开关样式 */
+        .toggle-switch {
+            position: relative; display: inline-flex; align-items: center; cursor: pointer;
+        }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-track {
+            width: 44px; height: 24px; background: #cbd5e1; border-radius: 12px;
+            transition: background 0.2s ease; position: relative;
+        }
+        .toggle-track::after {
+            content: ''; position: absolute; top: 2px; left: 2px;
+            width: 20px; height: 20px; border-radius: 50%; background: #fff;
+            transition: transform 0.2s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        .toggle-switch input:checked + .toggle-track { background: var(--primary); }
+        .toggle-switch input:checked + .toggle-track::after { transform: translateX(20px); }
+
+        /* 自动识别记录表格 */
+        .records-table { font-size: 13px; border-collapse: collapse; width: 100%; }
+        .records-table th, .records-table td {
+            white-space: nowrap; border-bottom: 1px solid var(--border-light);
+            padding: 8px 12px;
+        }
+        .records-table th {
+            position: sticky; top: 0; z-index: 2;
+            background: var(--surface-secondary);
+            font-weight: 600; color: var(--text-secondary);
+        }
+        .records-table tbody tr { background: var(--surface); transition: background 0.15s ease; }
+        .records-table tbody tr:hover { background: var(--primary-bg) !important; }
+
+        /* 分页器 */
+        .pagination-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 32px; height: 32px; border-radius: 6px;
+            font-size: 13px; cursor: pointer; border: 1px solid var(--border);
+            background: var(--surface); color: var(--text-secondary);
+            transition: all 0.15s ease;
+        }
+        .pagination-btn:hover { border-color: var(--primary-light); color: var(--primary); }
+        .pagination-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .pagination-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* 设置弹窗分区 */
+        .settings-section {
+            border: 1px solid var(--border-light); border-radius: 10px;
+            padding: 16px; background: var(--surface);
+        }
+        .settings-section-title {
+            font-size: 14px; font-weight: 600; color: var(--text-primary);
+            margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
+        }
+
+        /* 监控群列表项 */
+        .room-item {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 12px; border-radius: 8px;
+            background: var(--primary-bg); border: 1px solid rgba(234,88,12,0.12);
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body class="min-h-screen" style="background:#faf5f0;">
+<div id="app" v-cloak>
+    <!-- 顶部导航 -->
+    <header class="nav-header shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <!-- 图标 + 标题 -->
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-white bg-opacity-20 flex items-center justify-center flex-shrink-0">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </div>
+                    <h1 class="text-lg font-bold text-white tracking-tight">保单识别系统</h1>
+                </div>
+                <!-- 页面级 Tab 切换 -->
+                <div class="flex items-center gap-1 ml-4">
+                    <button @click="pageTab = 'upload'" :class="pageTab === 'upload' ? 'active' : ''" class="page-tab-btn">
+                        手动上传
+                    </button>
+                    <button @click="pageTab = 'records'; loadRecords()" :class="pageTab === 'records' ? 'active' : ''" class="page-tab-btn">
+                        自动识别记录
+                    </button>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 sm:gap-3">
+                <!-- 字段映射按钮（仅手动上传页显示） -->
+                <button v-if="pageTab === 'upload'" @click="openMappingModal"
+                        class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 12px;font-size:12px;">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    字段映射
+                </button>
+                <!-- 设置按钮（齿轮图标） -->
+                <button @click="openSettingsModal"
+                        class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;"
+                        title="系统设置">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    设置
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ========== 手动上传 Tab ========== -->
+    <main v-if="pageTab === 'upload'" class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+        <!-- 支持保司列表 -->
+        <div class="card p-4">
+            <div class="flex items-start gap-3">
+                <div class="flex items-center gap-2 flex-shrink-0 mt-0.5">
+                    <svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                    </svg>
+                    <span class="text-sm font-medium text-gray-700">支持保司</span>
+                    <span class="badge badge-info font-semibold">{{ supportedCompanies.length }}家</span>
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                    <span v-for="c in supportedCompanies" :key="c" class="company-tag">{{ c }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 上传区域 -->
+        <div class="card p-6">
+            <div class="drop-zone rounded-xl p-10 text-center cursor-pointer"
+                 :class="{ dragover: isDragging }"
+                 @click="$refs.fileInput.click()"
+                 @dragover.prevent="isDragging = true"
+                 @dragleave="isDragging = false"
+                 @drop.prevent="handleDrop">
+                <input ref="fileInput" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.bmp" class="hidden"
+                       @change="handleFileSelect">
+                <div class="mb-3">
+                    <div class="w-16 h-16 mx-auto rounded-2xl bg-orange-50 flex items-center justify-center">
+                        <svg class="h-8 w-8 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                        </svg>
+                    </div>
+                </div>
+                <p class="text-gray-700 font-medium">拖拽保单文件到此处，或点击选择文件</p>
+                <p class="text-gray-400 text-sm mt-1.5">支持 PDF / JPG / PNG 格式，可批量上传，扫描件自动OCR识别</p>
+            </div>
+
+            <!-- 文件加载进度 -->
+            <div v-if="isLoadingFiles" class="mt-4">
+                <div class="flex justify-between text-sm text-gray-600 mb-2">
+                    <span class="font-medium">加载文件中...</span>
+                    <span class="text-gray-400">{{ loadingFileCount }} / {{ loadingFileTotal }}</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-bar-fill green" :style="{ width: loadingPercent + '%' }"></div>
+                </div>
+            </div>
+
+            <!-- 文件列表 -->
+            <div v-if="files.length" class="mt-5">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+                        </svg>
+                        <span class="text-sm font-medium text-gray-700">已选择 <strong class="text-orange-600">{{ files.length }}</strong> 个文件</span>
+                    </div>
+                    <button @click="clearFiles" class="btn btn-outline" style="padding:4px 10px;font-size:12px;color:#ef4444;border-color:#fecaca;">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                        清空
+                    </button>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3 overflow-auto" style="max-height: 240px;">
+                    <div v-for="(file, idx) in files" :key="idx"
+                         class="relative file-card group">
+                        <div class="w-12 h-12 mx-auto flex items-center justify-center rounded-lg cursor-pointer"
+                             :class="file.type === 'pdf' ? 'bg-red-50' : 'bg-green-50'"
+                             @click="previewFile(file)">
+                            <svg v-if="file.type === 'pdf'" class="w-6 h-6 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 8V3l5 5h-5zm-2.8 7.14c-.27 0-.76-.07-1.2-.14.62-.76 1.16-1.6 1.6-2.5.33.73.79 1.39 1.36 1.95-.3.06-.69.14-1.06.25-.35.09-.52.25-.7.44zM6.58 18c.32-.58 1.26-1.03 1.73-1.23.57.88 1.27 1.23 2.04 1.23.08 0 .17 0 .25-.01-1.05-.63-1.73-1.48-2.2-2.52-.13-.28-.2-.5-.2-.8 0-.15.01-.29.03-.44-.2.01-.4.01-.6.01-.62 0-1.2-.05-1.75-.14.45 1.38 1.17 2.59 2.14 3.5-.54.18-.97.45-1.44.4z"/>
+                            </svg>
+                            <svg v-else class="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                            </svg>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1.5 truncate" :title="file.name">{{ file.name }}</p>
+                        <button @click="removeFile(idx)"
+                                class="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs cursor-pointer"
+                                style="font-size:14px;line-height:1;">
+                            &times;
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div v-if="files.length" class="mt-5 flex gap-3">
+                <button @click="startRecognize" :disabled="isRecognizing" class="btn btn-primary">
+                    <svg v-if="!isRecognizing" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                    </svg>
+                    <svg v-else class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    {{ isRecognizing ? '识别中...' : '开始识别' }}
+                </button>
+            </div>
+
+            <!-- 进度条 -->
+            <div v-if="isRecognizing" class="mt-4">
+                <div class="flex justify-between text-sm mb-2">
+                    <span class="font-medium text-gray-700">识别进度</span>
+                    <span class="text-gray-400">{{ recognizedCount }} / {{ files.length }}</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-bar-fill" :style="{ width: progressPercent + '%' }"></div>
+                </div>
+                <p v-if="currentFileName" class="text-xs text-gray-400 mt-1.5 flex items-center gap-1">
+                    <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    正在识别: {{ currentFileName }}
+                </p>
+            </div>
+        </div>
+
+        <!-- 结果区域 -->
+        <div v-if="results.length" class="card">
+            <!-- Tab切换 -->
+            <div class="border-b flex px-2">
+                <button v-for="tab in tabs" :key="tab.key"
+                        @click="activeTab = tab.key"
+                        :class="activeTab === tab.key ? 'active' : ''"
+                        class="tab-btn">
+                    {{ tab.label }}
+                    <span class="ml-1.5 px-2 py-0.5 rounded-full text-xs font-semibold"
+                          :class="tab.key === 'failed' ? 'bg-red-50 text-red-600'
+                                : tab.key === 'success' ? 'bg-green-50 text-green-600'
+                                : tab.key === 'abnormal' ? 'bg-orange-50 text-orange-600'
+                                : 'bg-gray-100 text-gray-500'">
+                        {{ tab.count }}
+                    </span>
+                </button>
+            </div>
+
+            <!-- 操作栏 -->
+            <div class="px-4 py-3 border-b flex gap-2 flex-wrap items-center" style="background:#fafbfc;">
+                <button v-if="successResults.length" @click="exportExcel('success')" class="btn btn-success" style="padding:6px 14px;font-size:13px;">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    导出Excel
+                </button>
+                <button v-if="successResults.length && configStatus.dingtalk_base"
+                        @click="openSyncModal" :disabled="isSyncing"
+                        class="btn btn-warning" style="padding:6px 14px;font-size:13px;">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                    </svg>
+                    {{ isSyncing ? '同步中...' : '同步到钉钉' }}
+                </button>
+                <button v-if="abnormalResults.length" @click="exportExcel('abnormal')"
+                        class="btn" style="padding:6px 14px;font-size:13px;background:#fff7ed;color:#ea580c;border:1px solid #fed7aa;">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    导出提取异常
+                </button>
+                <button v-if="failedResults.length" @click="exportExcel('failed')"
+                        class="btn btn-danger" style="padding:6px 14px;font-size:13px;">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    导出失败清单
+                </button>
+                <!-- 筛选区域 -->
+                <div v-if="successResults.length" class="ml-auto flex items-center gap-3">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-xs text-gray-500 font-medium">保司:</span>
+                        <select v-model="companyFilter"
+                                class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
+                            <option value="all">全部</option>
+                            <option v-for="(count, company) in companyStats" :key="company" :value="company">
+                                {{ company }} ({{ count }})
+                            </option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-xs text-gray-500 font-medium">文档类型:</span>
+                        <select v-model="docCategoryFilter"
+                                class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
+                            <option value="all">全部 ({{ successResults.length }})</option>
+                            <option v-for="(count, cat) in docCategories" :key="cat" :value="cat">
+                                {{ cat }} ({{ count }})
+                            </option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 成功结果表格 -->
+            <div v-if="(activeTab === 'success' || activeTab === 'all') && successResults.length" class="table-scroll-wrapper">
+                <table class="result-table text-left">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-3 py-2 text-gray-600 font-medium col-idx">序号</th>
+                            <th class="px-3 py-2 text-gray-600 font-medium col-fname">文件名</th>
+                            <th class="px-3 py-2 text-gray-600 font-medium" style="min-width:70px;">文档类型</th>
+                            <th v-for="col in outputColumns" :key="col"
+                                class="px-3 py-2 text-gray-600 font-medium">{{ col }}</th>
+                            <th class="px-3 py-2 text-gray-600 font-medium" style="min-width:70px;">识别方式</th>
+                            <th class="px-3 py-2 text-gray-600 font-medium">置信度</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template v-for="(r, ri) in displayResults" :key="ri">
+                            <tr v-if="r.success && !isAbnormal(r)">
+                                <td class="px-3 py-2 text-gray-500 col-idx">{{ ri + 1 }}</td>
+                                <td class="px-3 py-2 text-gray-700 col-fname">
+                                    <span class="cursor-pointer text-orange-600 hover:underline"
+                                          @click="previewResultFile(r)" :title="r.file_name">{{ r.file_name }}</span>
+                                </td>
+                                <td class="px-3 py-2">
+                                    <span class="text-xs px-1.5 py-0.5 rounded font-medium"
+                                          :class="getDocCategory(r) === '保单' ? 'bg-green-100 text-green-700'
+                                                : getDocCategory(r) === '电子标志' ? 'bg-yellow-100 text-yellow-700'
+                                                : 'bg-gray-100 text-gray-500'">
+                                        {{ getDocCategory(r) }}
+                                    </span>
+                                </td>
+                                <td v-for="col in outputColumns" :key="col" class="px-3 py-2 text-gray-700">
+                                    {{ getMappedValue(r, col) }}
+                                </td>
+                                <td class="px-3 py-2">
+                                    <span class="badge text-xs"
+                                          :class="r.ocr_engine === 'baidu' ? 'badge-info' : 'badge-success'">
+                                        {{ r.ocr_engine === 'baidu' ? 'OCR识别' : 'PDF提取' }}
+                                    </span>
+                                </td>
+                                <td class="px-3 py-2">
+                                    <span v-if="r.invoices && r.invoices[0]"
+                                          class="badge text-xs"
+                                          :class="r.invoices[0].confidence >= 0.75 ? 'badge-success'
+                                                : r.invoices[0].confidence >= 0.5 ? 'badge-warning'
+                                                : 'badge-danger'">
+                                        {{ (r.invoices[0].confidence * 100).toFixed(0) }}%
+                                    </span>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 提取异常表格 -->
+            <div v-if="(activeTab === 'abnormal' || activeTab === 'all') && abnormalResults.length" class="table-scroll-wrapper">
+                <div v-if="activeTab === 'all'" class="px-4 pt-3 pb-1">
+                    <span class="text-xs font-semibold text-orange-600">提取异常 ({{ abnormalResults.length }})</span>
+                </div>
+                <table class="result-table text-left">
+                    <thead class="bg-orange-50">
+                        <tr>
+                            <th class="px-3 py-2 text-orange-700 font-medium col-idx">序号</th>
+                            <th class="px-3 py-2 text-orange-700 font-medium col-fname">文件名</th>
+                            <th class="px-3 py-2 text-orange-700 font-medium" style="min-width:70px;">文档类型</th>
+                            <th v-for="col in outputColumns" :key="col"
+                                class="px-3 py-2 text-orange-700 font-medium">{{ col }}</th>
+                            <th class="px-3 py-2 text-orange-700 font-medium" style="min-width:70px;">识别方式</th>
+                            <th class="px-3 py-2 text-orange-700 font-medium">置信度</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(r, ri) in abnormalResults" :key="ri">
+                            <td class="px-3 py-2 text-gray-500 col-idx">{{ ri + 1 }}</td>
+                            <td class="px-3 py-2 text-gray-700 col-fname">
+                                <span class="cursor-pointer text-orange-600 hover:underline"
+                                      @click="previewResultFile(r)" :title="r.file_name">{{ r.file_name }}</span>
+                            </td>
+                            <td class="px-3 py-2">
+                                <span class="text-xs px-1.5 py-0.5 rounded font-medium"
+                                      :class="getDocCategory(r) === '保单' ? 'bg-green-100 text-green-700'
+                                            : getDocCategory(r) === '电子标志' ? 'bg-yellow-100 text-yellow-700'
+                                            : 'bg-gray-100 text-gray-500'">
+                                    {{ getDocCategory(r) }}
+                                </span>
+                            </td>
+                            <td v-for="col in outputColumns" :key="col" class="px-3 py-2"
+                                :class="getMappedValue(r, col) ? 'text-gray-700' : 'text-red-400 bg-red-50'">
+                                {{ getMappedValue(r, col) || '—' }}
+                            </td>
+                            <td class="px-3 py-2">
+                                <span class="badge text-xs"
+                                      :class="r.ocr_engine === 'baidu' ? 'badge-info' : 'badge-success'">
+                                    {{ r.ocr_engine === 'baidu' ? 'OCR识别' : 'PDF提取' }}
+                                </span>
+                            </td>
+                            <td class="px-3 py-2">
+                                <span v-if="r.invoices && r.invoices[0]"
+                                      class="badge text-xs"
+                                      :class="r.invoices[0].confidence >= 0.75 ? 'badge-success'
+                                            : r.invoices[0].confidence >= 0.5 ? 'badge-warning'
+                                            : 'badge-danger'">
+                                    {{ (r.invoices[0].confidence * 100).toFixed(0) }}%
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 失败列表 -->
+            <div v-if="activeTab !== 'success' && failedResults.length" class="p-4 space-y-2">
+                <div v-for="(r, idx) in failedResults" :key="idx"
+                     class="border border-red-100 rounded-xl p-4 bg-red-50 flex items-center justify-between transition-colors hover:bg-red-100">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0">
+                            <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium text-gray-800 truncate">{{ r.file_name }}</p>
+                            <p class="text-xs text-red-500 mt-0.5 truncate">{{ r.error }}</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 flex-shrink-0 ml-3">
+                        <button @click="previewResultFile(r)" class="btn btn-outline" style="padding:4px 12px;font-size:12px;">预览</button>
+                        <button @click="retryFile(r)" :disabled="isRecognizing" class="btn btn-primary" style="padding:4px 12px;font-size:12px;">重试</button>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="activeTab === 'success' && !successResults.length" class="p-12 text-center">
+                <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <p class="text-gray-400 text-sm">暂无成功识别结果</p>
+            </div>
+            <div v-if="activeTab === 'abnormal' && !abnormalResults.length" class="p-12 text-center">
+                <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <p class="text-gray-400 text-sm">暂无提取异常记录</p>
+            </div>
+            <div v-if="activeTab === 'failed' && !failedResults.length" class="p-12 text-center">
+                <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <p class="text-gray-400 text-sm">暂无失败记录</p>
+            </div>
+        </div>
+
+        <!-- OCR原文弹窗 -->
+        <transition name="fade">
+            <div v-if="rawTextVisible" class="fixed inset-0 z-40 modal-mask flex items-center justify-center"
+                 @click.self="rawTextVisible = false">
+                <div class="bg-white rounded-xl shadow-2xl max-w-3xl w-full mx-4" style="max-height: 80vh;">
+                    <div class="flex items-center justify-between px-5 py-3 border-b">
+                        <h3 class="text-sm font-semibold text-gray-700">PDF提取原文 - {{ rawTextFileName }}</h3>
+                        <button @click="rawTextVisible = false" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">&times;</button>
+                    </div>
+                    <div class="p-5 overflow-auto" style="max-height: calc(80vh - 50px);">
+                        <pre class="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{{ rawTextContent }}</pre>
+                    </div>
+                </div>
+            </div>
+        </transition>
+    </main>
+
+    <!-- ========== 自动识别记录 Tab ========== -->
+    <main v-if="pageTab === 'records'" class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+        <!-- 筛选栏 -->
+        <div class="card p-4">
+            <div class="flex flex-wrap items-center gap-3">
+                <!-- 群名下拉框 -->
+                <div class="flex items-center gap-1.5">
+                    <span class="text-xs text-gray-500 font-medium whitespace-nowrap">群名:</span>
+                    <select v-model="recordFilter.roomid"
+                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
+                        <option value="">全部群</option>
+                        <option v-for="room in roomList" :key="room.roomid" :value="room.roomid">
+                            {{ room.room_name }}
+                        </option>
+                    </select>
+                </div>
+                <!-- 状态下拉框 -->
+                <div class="flex items-center gap-1.5">
+                    <span class="text-xs text-gray-500 font-medium">状态:</span>
+                    <select v-model="recordFilter.status"
+                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
+                        <option value="">全部</option>
+                        <option value="pending">pending</option>
+                        <option value="processing">processing</option>
+                        <option value="success">success</option>
+                        <option value="failed">failed</option>
+                    </select>
+                </div>
+                <!-- 关键词搜索 -->
+                <div class="flex items-center gap-1.5 flex-1" style="min-width:200px;">
+                    <span class="text-xs text-gray-500 font-medium">关键词:</span>
+                    <input v-model="recordFilter.keyword" type="text" placeholder="保单号/保险公司/文件名..."
+                           class="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                           @keyup.enter="loadRecords">
+                </div>
+                <!-- 查询按钮 -->
+                <button @click="loadRecords" :disabled="isLoadingRecords" class="btn btn-primary" style="padding:6px 16px;font-size:13px;">
+                    <svg v-if="isLoadingRecords" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                    查询
+                </button>
+            </div>
+        </div>
+
+        <!-- 记录表格 -->
+        <div class="card">
+            <div class="table-scroll-wrapper" style="max-height: 65vh;">
+                <table class="records-table text-left">
+                    <thead>
+                        <tr>
+                            <th style="min-width:100px;">群名</th>
+                            <th style="min-width:80px;">发送人</th>
+                            <th style="min-width:150px;">文件名</th>
+                            <th style="min-width:80px;">险种</th>
+                            <th style="min-width:100px;">保险公司</th>
+                            <th style="min-width:120px;">保单号</th>
+                            <th style="min-width:90px;">保费</th>
+                            <th style="min-width:80px;">状态</th>
+                            <th style="min-width:80px;">钉钉同步</th>
+                            <th style="min-width:150px;">时间</th>
+                            <th style="min-width:160px;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- 加载中占位 -->
+                        <tr v-if="isLoadingRecords">
+                            <td colspan="11" class="text-center py-12 text-gray-400">
+                                <svg class="w-6 h-6 animate-spin mx-auto mb-2 text-orange-400" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                </svg>
+                                加载中...
+                            </td>
+                        </tr>
+                        <!-- 空数据占位 -->
+                        <tr v-else-if="!records.length">
+                            <td colspan="11" class="text-center py-12 text-gray-400">
+                                <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                                暂无识别记录
+                            </td>
+                        </tr>
+                        <!-- 数据行 -->
+                        <tr v-else v-for="record in records" :key="record.id">
+                            <!-- 群名 -->
+                            <td class="text-gray-700 text-sm">{{ record.room_name || '—' }}</td>
+                            <!-- 发送人 -->
+                            <td class="text-gray-600 text-sm">{{ record.sender_name || '—' }}</td>
+                            <!-- 文件名（可点击下载） -->
+                            <td>
+                                <a v-if="record.cos_url" :href="record.cos_url" target="_blank"
+                                   class="text-orange-600 hover:underline text-sm truncate block" style="max-width:180px;"
+                                   :title="record.filename">
+                                    {{ record.filename || '—' }}
+                                </a>
+                                <span v-else class="text-gray-600 text-sm truncate block" style="max-width:180px;" :title="record.filename">
+                                    {{ record.filename || '—' }}
+                                </span>
+                            </td>
+                            <!-- 险种 -->
+                            <td>
+                                <span v-if="record.doc_category" class="text-xs px-1.5 py-0.5 rounded font-medium"
+                                      :class="record.doc_category === '保单' ? 'bg-green-100 text-green-700'
+                                            : record.doc_category === '电子标志' ? 'bg-yellow-100 text-yellow-700'
+                                            : 'bg-gray-100 text-gray-500'">
+                                    {{ record.doc_category }}
+                                </span>
+                                <span v-else class="text-gray-400 text-sm">—</span>
+                            </td>
+                            <!-- 保险公司（从 parsed_fields JSON 取） -->
+                            <td class="text-gray-700 text-sm">{{ getParsedField(record, '保险公司') || '—' }}</td>
+                            <!-- 保单号 -->
+                            <td class="text-gray-700 text-sm font-mono text-xs">{{ getParsedField(record, '保单号') || '—' }}</td>
+                            <!-- 保费 -->
+                            <td class="text-gray-700 text-sm">{{ getParsedField(record, '保费合计') || '—' }}</td>
+                            <!-- 状态 -->
+                            <td>
+                                <span class="badge text-xs"
+                                      :class="record.status === 'success' ? 'badge-success'
+                                            : record.status === 'failed' ? 'badge-danger'
+                                            : record.status === 'processing' ? 'badge-warning'
+                                            : 'badge-gray'">
+                                    {{ record.status }}
+                                </span>
+                            </td>
+                            <!-- 钉钉同步 -->
+                            <td>
+                                <span class="badge text-xs"
+                                      :class="record.dingtalk_synced ? 'badge-success' : 'badge-gray'">
+                                    {{ record.dingtalk_synced ? '已同步' : '未同步' }}
+                                </span>
+                            </td>
+                            <!-- 时间 -->
+                            <td class="text-gray-500 text-xs">{{ formatTime(record.created_at) }}</td>
+                            <!-- 操作 -->
+                            <td>
+                                <div class="flex items-center gap-1.5">
+                                    <!-- 查看详情 -->
+                                    <button @click="openRecordDetail(record)"
+                                            class="btn btn-outline" style="padding:3px 8px;font-size:11px;">
+                                        详情
+                                    </button>
+                                    <!-- 重试（failed状态） -->
+                                    <button v-if="record.status === 'failed'"
+                                            @click="retryRecord(record)"
+                                            :disabled="record._retrying"
+                                            class="btn btn-primary" style="padding:3px 8px;font-size:11px;">
+                                        {{ record._retrying ? '重试中...' : '重试' }}
+                                    </button>
+                                    <!-- 同步钉钉（success且未同步） -->
+                                    <button v-if="record.status === 'success' && !record.dingtalk_synced"
+                                            @click="syncRecordToDingtalk(record)"
+                                            :disabled="record._syncing"
+                                            class="btn btn-warning" style="padding:3px 8px;font-size:11px;">
+                                        {{ record._syncing ? '同步中...' : '同步' }}
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 分页器 -->
+            <div v-if="recordPagination.total > 0" class="px-4 py-3 border-t flex items-center justify-between">
+                <span class="text-xs text-gray-400">
+                    共 {{ recordPagination.total }} 条，第 {{ recordPagination.page }} / {{ recordPagination.totalPages }} 页
+                </span>
+                <div class="flex items-center gap-1">
+                    <button class="pagination-btn" :disabled="recordPagination.page <= 1"
+                            @click="gotoRecordPage(recordPagination.page - 1)">
+                        &lsaquo;
+                    </button>
+                    <template v-for="n in visiblePages" :key="n">
+                        <span v-if="n === '...'" class="px-2 text-gray-400 text-sm">...</span>
+                        <button v-else class="pagination-btn"
+                                :class="n === recordPagination.page ? 'active' : ''"
+                                @click="gotoRecordPage(n)">{{ n }}</button>
+                    </template>
+                    <button class="pagination-btn" :disabled="recordPagination.page >= recordPagination.totalPages"
+                            @click="gotoRecordPage(recordPagination.page + 1)">
+                        &rsaquo;
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 消息提示（全局，两个Tab共用） -->
+    <transition name="fade">
+        <div v-if="syncMessage" class="fixed bottom-6 right-6 flex items-center gap-2 px-5 py-3.5 rounded-xl shadow-xl text-sm text-white"
+             :class="syncSuccess ? 'bg-green-600' : 'bg-red-600'" style="backdrop-filter:blur(8px);">
+            <svg v-if="syncSuccess" class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+            </svg>
+            <svg v-else class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+            </svg>
+            {{ syncMessage }}
+        </div>
+    </transition>
+
+    <!-- ========== 字段映射配置弹窗 ========== -->
+    <transition name="fade">
+        <div v-if="mappingModalVisible" class="fixed inset-0 z-50 modal-mask flex items-center justify-center"
+             @click.self="mappingModalVisible = false">
+            <div class="bg-white rounded-xl shadow-2xl max-w-3xl w-full mx-4" style="max-height: 90vh;">
+                <div class="px-5 py-4 border-b flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center">
+                            <svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-base font-semibold text-gray-800">字段映射配置</h3>
+                    </div>
+                    <button @click="mappingModalVisible = false" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">&times;</button>
+                </div>
+                <div class="px-5 py-4 overflow-auto" style="max-height: calc(90vh - 130px);">
+                    <!-- 保司选择 -->
+                    <div class="mb-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <label class="text-sm font-medium text-gray-700">当前编辑：</label>
+                            <select v-model="mappingEditCompany" @change="loadCompanyMapping"
+                                    class="px-3 py-1.5 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+                                <option value="">默认映射（所有保司）</option>
+                                <option v-for="c in availableCompanies" :key="c" :value="c">{{ c }}</option>
+                            </select>
+                            <button v-if="mappingEditCompany" @click="deleteCompanyMapping"
+                                    class="px-2 py-1 text-xs text-red-500 border border-red-300 rounded hover:bg-red-50">
+                                删除此保司映射
+                            </button>
+                        </div>
+                        <!-- 新增保司 -->
+                        <div class="flex items-center gap-2">
+                            <input v-model="newCompanyName" type="text" placeholder="输入保司简称（如：人保PICC）"
+                                   class="px-3 py-1.5 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-orange-400 w-60"
+                                   @keyup.enter="addCompanyMapping">
+                            <button @click="addCompanyMapping" :disabled="!newCompanyName.trim()"
+                                    class="px-3 py-1.5 bg-orange-600 text-white rounded text-sm hover:bg-orange-700 disabled:bg-gray-400">
+                                新增保司映射
+                            </button>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-1">
+                            不同保司可设置不同的映射规则。未单独配置的保司将使用"默认映射"。
+                        </p>
+                    </div>
+
+                    <!-- 映射表格 -->
+                    <div class="border rounded overflow-hidden">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-3 py-2 text-left text-gray-600 font-medium" style="width:40%">
+                                        导出列名
+                                        <span class="font-normal text-gray-400">（点击可编辑）</span>
+                                    </th>
+                                    <th class="px-3 py-2 text-left text-gray-600 font-medium" style="width:50%">
+                                        对应 PDF提取字段
+                                        <span class="font-normal text-gray-400">（保单中的数据）</span>
+                                    </th>
+                                    <th class="px-3 py-2 text-center text-gray-600 font-medium" style="width:10%">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(col, idx) in editingColumns" :key="idx" class="border-t hover:bg-gray-50">
+                                    <td class="px-3 py-2">
+                                        <input v-if="renamingColIdx === idx"
+                                               v-model="renamingColName"
+                                               @blur="finishRenameCol(idx)"
+                                               @keyup.enter="finishRenameCol(idx)"
+                                               @keyup.escape="renamingColIdx = -1"
+                                               class="w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-orange-400"
+                                               ref="renameInput">
+                                        <span v-else @click="startRenameCol(idx)"
+                                              class="text-gray-800 font-medium cursor-pointer hover:text-orange-600"
+                                              title="点击修改列名">{{ col }}</span>
+                                    </td>
+                                    <td class="px-3 py-2">
+                                        <select v-model="editingMapping[col]"
+                                                class="w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-orange-400 bg-white">
+                                            <option value="">（留空 - 不自动填充）</option>
+                                            <option v-for="f in availableOcrFields" :key="f" :value="f">{{ f }}</option>
+                                        </select>
+                                    </td>
+                                    <td class="px-3 py-2 text-center">
+                                        <button @click="removeColumn(idx)"
+                                                class="text-red-400 hover:text-red-600 text-xs"
+                                                title="删除此列">✕</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tfoot>
+                                <tr class="border-t bg-gray-50">
+                                    <td class="px-3 py-2">
+                                        <input v-model="newColName" type="text" placeholder="输入新列名..."
+                                               class="w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-orange-400"
+                                               @keyup.enter="addColumn">
+                                    </td>
+                                    <td class="px-3 py-2">
+                                        <select v-model="newColOcrField" @change="onNewColFieldChange"
+                                                class="w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-orange-400 bg-white">
+                                            <option value="">选择PDF提取字段...</option>
+                                            <option v-for="f in unmappedOcrFields" :key="f" :value="f">{{ f }}</option>
+                                        </select>
+                                    </td>
+                                    <td class="px-3 py-2 text-center">
+                                        <button @click="addColumn" :disabled="!newColName.trim()"
+                                                class="px-2 py-1 text-xs bg-orange-600 text-white rounded hover:bg-orange-700 disabled:bg-gray-400">
+                                            添加
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+                <div class="px-5 py-3 border-t bg-gray-50 rounded-b-xl flex justify-between">
+                    <button @click="resetMapping" class="btn btn-outline" style="font-size:13px;">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        重置为默认
+                    </button>
+                    <div class="flex gap-2">
+                        <button @click="mappingModalVisible = false" class="btn btn-outline" style="font-size:13px;">取消</button>
+                        <button @click="saveCurrentMapping" class="btn btn-primary" style="font-size:13px;">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            保存配置
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </transition>
+
+    <!-- ========== 钉钉文档管理弹窗 ========== -->
+    <transition name="fade">
+        <div v-if="targetModalVisible" class="fixed inset-0 z-50 modal-mask flex items-center justify-center"
+             @click.self="targetModalVisible = false">
+            <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4">
+                <div class="px-5 py-4 border-b flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-yellow-50 flex items-center justify-center">
+                            <svg class="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-base font-semibold text-gray-800">同步到钉钉</h3>
+                    </div>
+                    <button @click="targetModalVisible = false" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">&times;</button>
+                </div>
+                <div class="px-5 py-4 space-y-4">
+                    <div v-if="targets.length">
+                        <p class="text-sm text-gray-600 mb-2">选择目标文档：</p>
+                        <div class="max-h-48 overflow-y-auto border rounded divide-y">
+                            <label v-for="t in targets" :key="t.id"
+                                   class="flex items-center justify-between px-3 py-2.5 hover:bg-orange-50 cursor-pointer"
+                                   :class="selectedTargetId === t.id ? 'bg-orange-50' : ''">
+                                <div class="flex items-center gap-2 min-w-0 flex-1">
+                                    <input type="radio" :value="t.id" v-model="selectedTargetId" class="text-orange-600">
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-medium text-gray-800 truncate">{{ t.name }}</p>
+                                        <p class="text-xs text-gray-400 truncate">{{ t.doc_url || `${t.base_id} / ${t.sheet_id}` }}</p>
+                                    </div>
+                                </div>
+                                <div class="flex-shrink-0 ml-2 flex gap-1">
+                                    <a v-if="t.doc_url" :href="t.doc_url" target="_blank" @click.stop
+                                       class="px-2 py-1 text-xs text-orange-600 rounded hover:bg-orange-50">预览</a>
+                                    <button @click.prevent="removeTarget(t.id)"
+                                            class="px-2 py-1 text-xs text-red-400 rounded hover:bg-red-50 hover:text-red-600">删除</button>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    <div v-else class="text-center text-gray-400 text-sm py-3">暂无文档，请先添加</div>
+
+                    <!-- 同步字段选择 -->
+                    <div v-if="selectedTargetId" class="border-t pt-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <p class="text-sm text-gray-600">选择同步字段：</p>
+                            <label class="flex items-center gap-1 text-xs text-orange-600 cursor-pointer">
+                                <input type="checkbox" :checked="isAllFieldsSelected" @change="toggleAllFields">
+                                全选
+                            </label>
+                        </div>
+                        <div class="max-h-40 overflow-y-auto border rounded p-2 grid grid-cols-3 gap-1">
+                            <label v-for="f in outputColumns" :key="f"
+                                   class="flex items-center gap-1.5 text-sm text-gray-700 px-1.5 py-1 rounded hover:bg-gray-50 cursor-pointer">
+                                <input type="checkbox" :value="f" v-model="selectedFields" class="text-orange-600 rounded">
+                                <span class="truncate" :title="f">{{ f }}</span>
+                            </label>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-1">已选 {{ selectedFields.length }} / {{ outputColumns.length }} 个字段</p>
+                    </div>
+
+                    <!-- 添加新文档 -->
+                    <div class="border-t pt-4">
+                        <p class="text-sm text-gray-600 mb-2">添加新文档：</p>
+                        <div class="space-y-2">
+                            <input v-model="newTargetUrl" type="text" placeholder="粘贴钉钉多维表链接..."
+                                   class="w-full px-3 py-2 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+                            <div class="flex gap-2">
+                                <input v-model="newTargetName" type="text" placeholder="文档名称"
+                                       class="flex-1 px-3 py-2 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-orange-400"
+                                       @keyup.enter="addTarget">
+                                <button @click="addTarget" :disabled="!newTargetUrl || !newTargetName || addingTarget"
+                                        class="px-3 py-2 bg-gray-600 text-white rounded text-sm hover:bg-gray-700 disabled:bg-gray-400 whitespace-nowrap">
+                                    {{ addingTarget ? '添加中...' : '添加' }}
+                                </button>
+                            </div>
+                        </div>
+                        <p v-if="targetError" class="text-xs text-red-500 mt-1">{{ targetError }}</p>
+                    </div>
+                </div>
+                <div class="px-5 py-3 border-t bg-gray-50 rounded-b-xl flex justify-end gap-2">
+                    <button @click="targetModalVisible = false" class="btn btn-outline" style="font-size:13px;">取消</button>
+                    <button @click="confirmSync" :disabled="!selectedTargetId || !selectedFields.length"
+                            class="btn btn-warning" style="font-size:13px;">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        开始同步（{{ selectedFields.length }}个字段）
+                    </button>
+                </div>
+            </div>
+        </div>
+    </transition>
+
+    <!-- ========== 重复保单确认弹窗 ========== -->
+    <transition name="fade">
+        <div v-if="duplicateVisible" class="fixed inset-0 z-50 modal-mask flex items-center justify-center"
+             @click.self="cancelSync">
+            <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4">
+                <div class="px-5 py-4 border-b flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-yellow-50 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-base font-semibold text-gray-800">发现重复保单</h3>
+                </div>
+                <div class="px-5 py-4">
+                    <p class="text-sm text-gray-600 mb-3">
+                        以下 <span class="font-bold text-yellow-600">{{ duplicateList.length }}</span> 张保单在钉钉表格中已存在：
+                    </p>
+                    <div class="max-h-60 overflow-y-auto border border-gray-200 rounded-lg bg-gray-50">
+                        <div v-for="(item, idx) in duplicateList" :key="idx"
+                             class="flex items-center px-3 py-2.5 text-sm border-b last:border-b-0 hover:bg-gray-100">
+                            <svg class="w-4 h-4 text-yellow-500 flex-shrink-0 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                            </svg>
+                            <div class="min-w-0">
+                                <p class="text-gray-800 truncate">{{ item.file_name }}</p>
+                                <p class="text-gray-400 text-xs font-mono">{{ item.policy_no }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="px-5 py-3 border-t bg-gray-50 rounded-b-xl flex justify-end gap-2">
+                    <button @click="cancelSync" class="btn btn-outline" style="font-size:13px;">取消</button>
+                    <button @click="confirmSyncSkipDuplicates" class="btn btn-primary" style="font-size:13px;">
+                        跳过重复，同步其余
+                    </button>
+                </div>
+            </div>
+        </div>
+    </transition>
+
+    <!-- ========== 预览弹窗（左PDF + 右原文） ========== -->
+    <transition name="fade">
+        <div v-if="previewVisible" class="fixed inset-0 z-50 modal-mask flex items-center justify-center"
+             @click.self="previewVisible = false">
+            <div class="bg-white flex flex-col" style="height: 100vh; width: 100vw;">
+                <div class="flex items-center justify-between px-5 py-3 border-b flex-shrink-0" style="background:#fafbfc;">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                        </svg>
+                        <h3 class="text-sm font-semibold text-gray-700">{{ previewFileName }}</h3>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button @click="previewShowFields = !previewShowFields; if(previewShowFields) { previewShowRaw = false; previewShowRules = false; }"
+                                class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;"
+                                :class="previewShowFields ? 'btn-success' : 'btn-outline'">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                            </svg>
+                            {{ previewShowFields ? '隐藏列表' : '查看列表信息' }}
+                        </button>
+                        <button v-if="previewHasRawText"
+                                @click="previewShowRaw = !previewShowRaw; if(previewShowRaw) { previewShowFields = false; previewShowRules = false; }"
+                                class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;"
+                                :class="previewShowRaw ? 'btn-primary' : 'btn-outline'">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                            {{ previewShowRaw ? '隐藏原文' : '查看原文' }}
+                        </button>
+                        <button @click="previewShowRules = !previewShowRules; if(previewShowRules) { previewShowFields = false; previewShowRaw = false; loadExtractionRules(previewFileName); }"
+                                class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;"
+                                :class="previewShowRules ? 'btn-warning' : 'btn-outline'">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                            {{ previewShowRules ? '隐藏规则' : '查看规则' }}
+                        </button>
+                        <button @click="previewVisible = false" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer" style="font-size:18px;">&times;</button>
+                    </div>
+                </div>
+                <div class="flex-1 flex min-h-0">
+                    <!-- 左侧：文件预览 -->
+                    <div class="flex-1 overflow-auto bg-gray-100 min-w-0">
+                        <iframe v-if="previewIsImage === false" :src="previewSrc" class="w-full h-full border-0"></iframe>
+                        <img v-else :src="previewSrc" class="max-w-full max-h-full mx-auto p-4" style="object-fit: contain;">
+                    </div>
+                    <!-- 右侧：列表信息 -->
+                    <div v-if="previewShowFields" class="border-l flex flex-col" style="width: 420px; min-width: 320px;">
+                        <div class="px-3 py-2 bg-gray-50 border-b text-xs text-gray-500 font-medium flex-shrink-0">
+                            列表信息（导出字段）
+                        </div>
+                        <div class="flex-1 overflow-auto p-3">
+                            <div v-for="item in previewFieldsList" :key="item.label"
+                                 class="flex border-b border-gray-100 py-1.5 text-sm">
+                                <span class="text-gray-500 w-24 flex-shrink-0 font-medium">{{ item.label }}</span>
+                                <span class="text-gray-800 ml-2" :class="item.value ? '' : 'text-gray-300'">{{ item.value || '—' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 右侧：提取原文 -->
+                    <div v-if="previewShowRaw && previewRawText" class="border-l flex flex-col" style="width: 420px; min-width: 320px;">
+                        <div class="px-3 py-2 bg-gray-50 border-b text-xs text-gray-500 font-medium flex-shrink-0">
+                            PDF提取原文
+                        </div>
+                        <div class="flex-1 overflow-auto p-3">
+                            <div class="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed font-mono"
+                                 v-html="formattedRawText"></div>
+                        </div>
+                    </div>
+                    <!-- 右侧：提取规则 -->
+                    <div v-if="previewShowRules" class="border-l flex flex-col" style="width: 480px; min-width: 380px;">
+                        <div class="px-3 py-2 bg-orange-50 border-b text-xs text-orange-600 font-medium flex-shrink-0">
+                            提取规则（{{ previewFieldsList.length ? previewFieldsList.find(f => f.label === '承保公司')?.value || '通用' : '通用' }}）
+                        </div>
+                        <div class="flex-1 overflow-auto p-3 space-y-2">
+                            <div v-for="col in outputColumns" :key="col"
+                                 class="border rounded-lg p-2.5 text-sm"
+                                 :class="extractionRules[col]?.rules?.includes('非OCR提取') ? 'border-gray-100 bg-gray-50' : 'border-orange-100 bg-white'">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="font-semibold text-gray-800">{{ col }}</span>
+                                    <span v-if="extractionRules[col]?.ocr_field && extractionRules[col]?.ocr_field !== col"
+                                          class="text-xs text-gray-400">← {{ extractionRules[col]?.ocr_field }}</span>
+                                    <span v-if="getMappedValue(results.find(x => x.file_name === previewFileName && x.success), col)"
+                                          class="ml-auto text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700">已提取</span>
+                                    <span v-else-if="!extractionRules[col]?.rules?.includes('非OCR提取')"
+                                          class="ml-auto text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-600">未提取</span>
+                                </div>
+                                <p class="text-xs text-gray-500 leading-relaxed">{{ extractionRules[col]?.rules || '' }}</p>
+                                <p v-if="extractionRules[col]?.special"
+                                   class="text-xs text-orange-600 mt-1 leading-relaxed">
+                                    <span class="font-medium">保司特殊：</span>{{ extractionRules[col]?.special }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </transition>
+
+    <!-- ========== 记录详情弹窗 ========== -->
+    <transition name="fade">
+        <div v-if="recordDetailVisible" class="fixed inset-0 z-50 modal-mask flex items-center justify-center"
+             @click.self="recordDetailVisible = false">
+            <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full mx-4" style="max-height: 90vh;">
+                <div class="px-5 py-4 border-b flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-base font-semibold text-gray-800">识别记录详情</h3>
+                        <span class="badge text-xs"
+                              :class="currentRecord?.status === 'success' ? 'badge-success'
+                                    : currentRecord?.status === 'failed' ? 'badge-danger'
+                                    : currentRecord?.status === 'processing' ? 'badge-warning'
+                                    : 'badge-gray'">
+                            {{ currentRecord?.status }}
+                        </span>
+                    </div>
+                    <button @click="recordDetailVisible = false" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">&times;</button>
+                </div>
+                <div class="px-5 py-4 overflow-auto space-y-4" style="max-height: calc(90vh - 130px);">
+                    <!-- 基本信息 -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="col-span-2">
+                            <label class="text-xs text-gray-500 font-medium">文件名</label>
+                            <p class="text-sm text-gray-800 mt-0.5">
+                                <a v-if="currentRecord?.cos_url" :href="currentRecord.cos_url" target="_blank"
+                                   class="text-orange-600 hover:underline">{{ currentRecord?.filename }}</a>
+                                <span v-else>{{ currentRecord?.filename || '—' }}</span>
+                            </p>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500 font-medium">群名</label>
+                            <p class="text-sm text-gray-800 mt-0.5">{{ currentRecord?.room_name || '—' }}</p>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500 font-medium">发送人</label>
+                            <p class="text-sm text-gray-800 mt-0.5">{{ currentRecord?.sender_name || '—' }}</p>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500 font-medium">险种</label>
+                            <p class="text-sm text-gray-800 mt-0.5">{{ currentRecord?.doc_category || '—' }}</p>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500 font-medium">钉钉同步</label>
+                            <p class="text-sm text-gray-800 mt-0.5">{{ currentRecord?.dingtalk_synced ? '已同步' : '未同步' }}</p>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500 font-medium">创建时间</label>
+                            <p class="text-sm text-gray-800 mt-0.5">{{ formatTime(currentRecord?.created_at) }}</p>
+                        </div>
+                        <div v-if="currentRecord?.error_message">
+                            <label class="text-xs text-gray-500 font-medium">错误信息</label>
+                            <p class="text-sm text-red-600 mt-0.5">{{ currentRecord.error_message }}</p>
+                        </div>
+                    </div>
+                    <!-- 解析字段 -->
+                    <div v-if="currentRecord?.parsed_fields && Object.keys(currentRecord.parsed_fields).length > 0">
+                        <h4 class="text-sm font-semibold text-gray-700 mb-2">解析字段</h4>
+                        <div class="border rounded-lg overflow-hidden">
+                            <div v-for="(val, key) in currentRecord.parsed_fields" :key="key"
+                                 class="flex border-b last:border-b-0 hover:bg-gray-50 text-sm px-3 py-2">
+                                <span class="text-gray-500 w-32 flex-shrink-0 font-medium">{{ key }}</span>
+                                <span class="text-gray-800 ml-2">{{ val || '—' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else-if="currentRecord?.status === 'success'">
+                        <p class="text-sm text-gray-400">无解析字段数据</p>
+                    </div>
+                </div>
+                <div class="px-5 py-3 border-t bg-gray-50 rounded-b-xl flex justify-end gap-2">
+                    <button @click="recordDetailVisible = false" class="btn btn-outline" style="font-size:13px;">关闭</button>
+                </div>
+            </div>
+        </div>
+    </transition>
+
+    <!-- ========== 设置弹窗 ========== -->
+    <transition name="fade">
+        <div v-if="settingsModalVisible" class="fixed inset-0 z-50 modal-mask flex items-center justify-center"
+             @click.self="settingsModalVisible = false">
+            <div class="bg-white rounded-xl shadow-2xl w-full mx-4" style="max-width: 680px; max-height: 92vh;">
+                <div class="px-5 py-4 border-b flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center">
+                            <svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-base font-semibold text-gray-800">系统设置</h3>
+                    </div>
+                    <button @click="settingsModalVisible = false" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">&times;</button>
+                </div>
+
+                <div class="px-5 py-4 overflow-auto space-y-4" style="max-height: calc(92vh - 130px);">
+                    <!-- 同步通讯录 -->
+                    <div class="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg border">
+                        <span class="text-sm text-gray-600">下拉列表显示 ID？点击同步获取名称</span>
+                        <button @click="syncContacts" :disabled="syncingContacts"
+                                class="btn btn-primary" style="padding:5px 12px;font-size:12px;">
+                            <svg v-if="syncingContacts" class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                            {{ syncingContacts ? '同步中...' : '同步通讯录' }}
+                        </button>
+                    </div>
+                    <!-- 1. 群聊监控 -->
+                    <div class="settings-section">
+                        <div class="settings-section-title">
+                            <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                            群聊监控
+                        </div>
+                        <div class="space-y-2 mb-3">
+                            <div v-if="!watchRooms.length" class="text-sm text-gray-400 py-2">暂未配置监控群</div>
+                            <div v-for="(item, idx) in watchRooms" :key="item.id" class="border rounded-lg p-2.5 bg-white">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm font-medium text-gray-700">{{ item.name }}</span>
+                                    <button @click="removeWatchItem('room', idx)" class="text-red-400 hover:text-red-600 text-xs">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                                <div class="flex flex-wrap gap-1">
+                                    <span v-for="tid in (item.target_ids || [])" :key="tid"
+                                          class="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-700 rounded text-xs">
+                                        {{ getTargetName(tid) }}
+                                        <button @click="unbindTarget(item, tid)" class="text-orange-400 hover:text-orange-600">&times;</button>
+                                    </span>
+                                    <select @change="bindTarget(item, $event)" class="text-xs border rounded px-1.5 py-0.5 text-gray-500 bg-white cursor-pointer" style="max-width:140px;">
+                                        <option value="">+ 绑定文档</option>
+                                        <option v-for="t in unboundTargets(item)" :key="t.id" :value="t.id">{{ t.name }}</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <select v-model="watchRoomSelection"
+                                    class="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400">
+                                <option value="">选择要监控的群聊...</option>
+                                <option v-for="r in addableItems.rooms" :key="r.id" :value="r.id">{{ r.name }}</option>
+                            </select>
+                            <button @click="addWatchItem('room')" :disabled="!watchRoomSelection"
+                                    class="btn btn-primary" style="padding:6px 14px;font-size:13px;">添加</button>
+                        </div>
+                        <div class="mt-3 flex justify-end">
+                            <button @click="saveSettingsSection('watch_list')" :disabled="settingsSaving.watch_list"
+                                    class="btn btn-success" style="padding:6px 14px;font-size:13px;">
+                                {{ settingsSaving.watch_list ? '保存中...' : '保存' }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 2. 私聊监控 -->
+                    <div class="settings-section">
+                        <div class="settings-section-title">
+                            <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                            </svg>
+                            私聊监控
+                        </div>
+                        <div class="space-y-2 mb-3">
+                            <div v-if="!watchUsers.length" class="text-sm text-gray-400 py-2">暂未配置私聊监控</div>
+                            <div v-for="(item, idx) in watchUsers" :key="item.id" class="border rounded-lg p-2.5 bg-white">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm font-medium text-gray-700">{{ item.name }}</span>
+                                    <button @click="removeWatchItem('user', idx)" class="text-red-400 hover:text-red-600 text-xs">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                                <div class="flex flex-wrap gap-1">
+                                    <span v-for="tid in (item.target_ids || [])" :key="tid"
+                                          class="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-700 rounded text-xs">
+                                        {{ getTargetName(tid) }}
+                                        <button @click="unbindTarget(item, tid)" class="text-orange-400 hover:text-orange-600">&times;</button>
+                                    </span>
+                                    <select @change="bindTarget(item, $event)" class="text-xs border rounded px-1.5 py-0.5 text-gray-500 bg-white cursor-pointer" style="max-width:140px;">
+                                        <option value="">+ 绑定文档</option>
+                                        <option v-for="t in unboundTargets(item)" :key="t.id" :value="t.id">{{ t.name }}</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <select v-model="watchUserSelection"
+                                    class="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400">
+                                <option value="">选择要监控的私聊联系人...</option>
+                                <option v-for="u in addableItems.users" :key="u.id" :value="u.id">{{ u.name }}</option>
+                            </select>
+                            <button @click="addWatchItem('user')" :disabled="!watchUserSelection"
+                                    class="btn btn-primary" style="padding:6px 14px;font-size:13px;">添加</button>
+                        </div>
+                        <div class="mt-3 flex justify-end">
+                            <button @click="saveSettingsSection('watch_list')" :disabled="settingsSaving.watch_list"
+                                    class="btn btn-success" style="padding:6px 14px;font-size:13px;">
+                                {{ settingsSaving.watch_list ? '保存中...' : '保存' }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 2. 自动同步开关 -->
+                    <div class="settings-section">
+                        <div class="settings-section-title">
+                            <svg class="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                            自动同步设置
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-700 font-medium">识别后自动同步钉钉</p>
+                                <p class="text-xs text-gray-400 mt-0.5">开启后，自动识别成功的保单将自动同步到钉钉表格</p>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" v-model="settingsForm.auto_sync_enabled">
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+                        <div class="mt-3 flex justify-end">
+                            <button @click="saveSettingsSection('auto_sync')" :disabled="settingsSaving.auto_sync"
+                                    class="btn btn-success" style="padding:6px 14px;font-size:13px;">
+                                {{ settingsSaving.auto_sync ? '保存中...' : '保存' }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 3. 钉钉同步目标 -->
+                    <div class="settings-section">
+                        <div class="settings-section-title">
+                            <svg class="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                            </svg>
+                            钉钉同步目标文档
+                        </div>
+                        <!-- 已有文档列表 -->
+                        <div v-if="targets.length" class="max-h-48 overflow-y-auto border rounded divide-y mb-3">
+                            <div v-for="t in targets" :key="t.id"
+                                 class="flex items-center justify-between px-3 py-2.5 hover:bg-orange-50">
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-sm font-medium text-gray-800 truncate">{{ t.name }}</p>
+                                    <p class="text-xs text-gray-400 truncate">{{ t.doc_url || `${t.base_id} / ${t.sheet_id}` }}</p>
+                                </div>
+                                <div class="flex-shrink-0 ml-2 flex gap-1">
+                                    <a v-if="t.doc_url" :href="t.doc_url" target="_blank"
+                                       class="px-2 py-1 text-xs text-orange-600 rounded hover:bg-orange-50">预览</a>
+                                    <button @click="removeTarget(t.id)"
+                                            class="px-2 py-1 text-xs text-red-400 rounded hover:bg-red-50 hover:text-red-600">删除</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-else class="text-sm text-gray-400 py-2 mb-3">暂无文档，请先添加</div>
+                        <!-- 添加新文档 -->
+                        <div class="space-y-2">
+                            <input v-model="newTargetUrl" type="text" placeholder="粘贴钉钉多维表链接..."
+                                   class="w-full px-3 py-2 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-orange-400">
+                            <div class="flex gap-2">
+                                <input v-model="newTargetName" type="text" placeholder="文档名称"
+                                       class="flex-1 px-3 py-2 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-orange-400"
+                                       @keyup.enter="addTarget">
+                                <button @click="addTarget" :disabled="!newTargetUrl || !newTargetName || addingTarget"
+                                        class="px-3 py-2 bg-gray-600 text-white rounded text-sm hover:bg-gray-700 disabled:bg-gray-400 whitespace-nowrap">
+                                    {{ addingTarget ? '添加中...' : '添加' }}
+                                </button>
+                            </div>
+                        </div>
+                        <p v-if="targetError" class="text-xs text-red-500 mt-1">{{ targetError }}</p>
+                    </div>
+                </div>
+
+                <div class="px-5 py-3 border-t bg-gray-50 rounded-b-xl flex justify-end">
+                    <button @click="settingsModalVisible = false" class="btn btn-outline" style="font-size:13px;">关闭</button>
+                </div>
+            </div>
+        </div>
+    </transition>
+
+    <!-- ========== 群选择器弹窗（用于设置弹窗中添加监控群） ========== -->
+    <!-- 此功能已通过内嵌 select 实现，无需独立弹窗 -->
+
+</div>
+
+<script>
+const { createApp, ref, computed, reactive, onMounted } = Vue;
+
+createApp({
+    setup() {
+        // ========== 页面级 Tab ==========
+        const pageTab = ref('upload');  // 'upload' | 'records'
+
+        // ========== 配置状态 ==========
+        const configStatus = ref({ pdf_extract: true, dingtalk: false });
+
+        // ========== 手动上传相关状态 ==========
+        const files = ref([]);
+        const results = ref([]);
+        const isDragging = ref(false);
+        const isRecognizing = ref(false);
+        const recognizedCount = ref(0);
+        const currentFileName = ref('');
+        const activeTab = ref('all');
+        const docCategoryFilter = ref('all');
+        const companyFilter = ref('all');
+
+        // 支持的保司列表
+        const supportedCompanies = [
+            '人保PICC', '平安', '太平洋', '大家财险', '阳光', '太平',
+            '国寿财产', '紫金', '申能', '浙商', '中华联合',
+            '华泰', '永诚', '前海联合', '京东安联', '安盛天平',
+            '众安', '亚太', '都邦', '渤海', '锦泰',
+            '天安', '华安', '永安',
+        ];
+
+        const isSyncing = ref(false);
+        const syncMessage = ref('');
+        const syncSuccess = ref(false);
+        const previewVisible = ref(false);
+        const previewSrc = ref('');
+        const previewType = ref('pdf');
+        const previewFileName = ref('');
+        const previewHasRawText = ref(false);
+        const previewShowRaw = ref(false);
+        const previewShowFields = ref(false);
+        const previewShowRules = ref(false);
+        const previewRawText = ref('');
+        const extractionRules = ref({});
+
+        // 字段标签列表，用于原文自动换行和高亮
+        const RAW_TEXT_LABELS = [
+            '保险单号', '保单号', '投保确认码', '收费确认时间', '投保确认时间', '生成保单时间',
+            '被保险人', '投保人', '车主', '行驶证车主',
+            '号牌号码', '车牌号', 'VIN码', '车架号', '发动机号', '厂牌型号', '品牌型号',
+            '核定载客', '核定载质量', '使用性质', '机动车种类', '机动车使用性质', '初次登记日期',
+            '保险期间', '保险期', '争议解决方式', '签单日期',
+            '保费合计', '保险费合计', '不含税保费', '增值税额', '实收保费',
+            '承保险种', '投保险别', '保险金额', '责任限额', '绝对免赔',
+            '死亡伤残赔偿限额', '医疗费用赔偿限额', '财产损失赔偿限额',
+            '公司名称', '公司地址', '邮政编码', '服务电话',
+            '销售渠道', '中介机构', '经纪公司',
+            '证件类型', '证件号码', '联系电话', '通讯地址', '地址',
+            '当年应缴', '往年补缴', '滞纳金', '完税凭证号',
+            '特别约定', '特别提示', '重要提示',
+        ];
+
+        // 当前预览文件是否为图片
+        const previewIsImage = computed(() => ['jpg', 'jpeg', 'png', 'bmp'].includes(previewType.value));
+
+        // 当前预览文件的映射后字段列表
+        const previewFieldsList = computed(() => {
+            const r = results.value.find(x => x.file_name === previewFileName.value && x.success);
+            if (!r || !r.invoices || !r.invoices[0]) return [];
+            const fields = r.invoices[0].fields;
+            const companyShort = fields['保险公司简称'] || '';
+            let mapping;
+            if (companyShort && mappingConfig.value.company_mappings[companyShort]) {
+                mapping = mappingConfig.value.company_mappings[companyShort];
+            } else {
+                mapping = mappingConfig.value.default_mapping || {};
+            }
+            return outputColumns.value.map(col => {
+                let value = '';
+                for (const [ocrField, outCol] of Object.entries(mapping)) {
+                    if (outCol === col && fields[ocrField]) { value = fields[ocrField]; break; }
+                }
+                return { label: col, value };
+            });
+        });
+
+        // 格式化原文：换行 + 高亮字段标签
+        const formattedRawText = computed(() => {
+            if (!previewRawText.value) return '';
+            let text = previewRawText.value
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            // 在字段标签前插入换行（如果前面不是行首）
+            for (const label of RAW_TEXT_LABELS) {
+                const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                text = text.replace(new RegExp('(?<!^)(?<!\\n)(' + escaped + '[：:]?)', 'g'), '\n$1');
+            }
+            // 高亮字段标签
+            for (const label of RAW_TEXT_LABELS) {
+                const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                text = text.replace(new RegExp('(' + escaped + '[：:]?)', 'g'),
+                    '<span style="color:#2563eb;font-weight:600;">$1</span>');
+            }
+            // 清理连续空行
+            text = text.replace(/\n{3,}/g, '\n\n');
+            return text;
+        });
+
+        const rawTextVisible = ref(false);
+        const rawTextContent = ref('');
+        const rawTextFileName = ref('');
+
+        // ========== 字段映射 ==========
+        const outputColumns = ref([
+            '承保公司', '保单号', '险种', '车牌', '投保人', '被保人',
+            '签单日期', '起保日期', '终保日期', '保费',
+            '佣金率', '佣金', '业务员', '采购费率', '公司利润',
+            '跟单人', '跟单人利润', '出单渠道', '车船税',
+        ]);
+        const mappingConfig = ref({ default_mapping: {}, company_mappings: {} });
+        const availableOcrFields = ref([]);
+        const mappingModalVisible = ref(false);
+        const mappingEditCompany = ref('');
+        const editingMapping = reactive({});   // 导出列 → OCR字段
+        const editingColumns = ref([]);        // 当前编辑的导出列列表
+        const newCompanyName = ref('');
+        const newColName = ref('');
+        const newColOcrField = ref('');
+        const renamingColIdx = ref(-1);
+        const renamingColName = ref('');
+
+        // 已配置的保司列表
+        const availableCompanies = computed(() =>
+            Object.keys(mappingConfig.value.company_mappings || {})
+        );
+
+        // 未被映射的OCR字段
+        const unmappedOcrFields = computed(() => {
+            const mapped = new Set(Object.values(editingMapping));
+            return availableOcrFields.value.filter(f => !mapped.has(f));
+        });
+
+        // 加载字段映射配置
+        async function loadMappingConfig() {
+            try {
+                const resp = await fetch('/api/insurance/mapping/config');
+                const data = await resp.json();
+                mappingConfig.value = data;
+                outputColumns.value = data.output_columns || outputColumns.value;
+                availableOcrFields.value = data.available_ocr_fields || [];
+            } catch (e) {
+                console.error('加载映射配置失败', e);
+            }
+        }
+
+        // 将后端存储的 {ocr字段: 导出列} 转换为编辑用的 {导出列: ocr字段}
+        function buildReverseMapping(mapping) {
+            const cols = editingColumns.value.length ? editingColumns.value : outputColumns.value;
+            const reverse = {};
+            for (const col of cols) {
+                reverse[col] = '';
+            }
+            for (const [ocrField, outCol] of Object.entries(mapping || {})) {
+                if (outCol && reverse.hasOwnProperty(outCol)) {
+                    reverse[outCol] = ocrField;
+                }
+            }
+            return reverse;
+        }
+
+        // 将编辑用的 {导出列: ocr字段} 转换回 {ocr字段: 导出列}
+        function buildForwardMapping(reverse) {
+            const forward = {};
+            for (const [outCol, ocrField] of Object.entries(reverse)) {
+                if (ocrField) {
+                    forward[ocrField] = outCol;
+                }
+            }
+            return forward;
+        }
+
+        function loadCompanyMapping() {
+            const company = mappingEditCompany.value;
+            let mapping;
+            if (company && mappingConfig.value.company_mappings[company]) {
+                mapping = mappingConfig.value.company_mappings[company];
+            } else {
+                mapping = mappingConfig.value.default_mapping || {};
+            }
+            editingColumns.value = [...outputColumns.value];
+            const reverse = buildReverseMapping(mapping);
+            Object.keys(editingMapping).forEach(k => delete editingMapping[k]);
+            Object.assign(editingMapping, reverse);
+        }
+
+        function openMappingModal() {
+            mappingEditCompany.value = '';
+            loadCompanyMapping();
+            newColName.value = '';
+            newColOcrField.value = '';
+            renamingColIdx.value = -1;
+            mappingModalVisible.value = true;
+        }
+
+        async function saveCurrentMapping() {
+            const forward = buildForwardMapping(editingMapping);
+            try {
+                const resp = await fetch('/api/insurance/mapping/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        company: mappingEditCompany.value,
+                        mapping: forward,
+                        output_columns: editingColumns.value,
+                    }),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    await loadMappingConfig();
+                    showMessage(`映射配置已保存: ${data.company}`, true);
+                }
+            } catch (e) {
+                showMessage('保存失败: ' + e.message, false);
+            }
+        }
+
+        // 选择PDF字段时自动填入列名
+        let prevNewColField = '';
+        function onNewColFieldChange() {
+            if (newColOcrField.value && (!newColName.value || newColName.value === prevNewColField)) {
+                newColName.value = newColOcrField.value;
+            }
+            prevNewColField = newColOcrField.value;
+        }
+
+        // 新增导出列
+        function addColumn() {
+            const name = newColName.value.trim();
+            if (!name) return;
+            if (editingColumns.value.includes(name)) {
+                showMessage(`列名"${name}"已存在`, false);
+                return;
+            }
+            editingColumns.value.push(name);
+            editingMapping[name] = newColOcrField.value || '';
+            newColName.value = '';
+            newColOcrField.value = '';
+        }
+
+        // 删除导出列
+        function removeColumn(idx) {
+            const col = editingColumns.value[idx];
+            editingColumns.value.splice(idx, 1);
+            delete editingMapping[col];
+        }
+
+        // 重命名导出列 - 开始
+        function startRenameCol(idx) {
+            renamingColIdx.value = idx;
+            renamingColName.value = editingColumns.value[idx];
+        }
+
+        // 重命名导出列 - 完成
+        function finishRenameCol(idx) {
+            const oldName = editingColumns.value[idx];
+            const newName = renamingColName.value.trim();
+            renamingColIdx.value = -1;
+            if (!newName || newName === oldName) return;
+            if (editingColumns.value.includes(newName)) {
+                showMessage(`列名"${newName}"已存在`, false);
+                return;
+            }
+            editingColumns.value[idx] = newName;
+            const ocrField = editingMapping[oldName] || '';
+            delete editingMapping[oldName];
+            editingMapping[newName] = ocrField;
+        }
+
+        // 新增保司映射
+        function addCompanyMapping() {
+            const name = newCompanyName.value.trim();
+            if (!name) return;
+            mappingEditCompany.value = name;
+            editingColumns.value = [...outputColumns.value];
+            const reverse = buildReverseMapping(mappingConfig.value.default_mapping || {});
+            Object.keys(editingMapping).forEach(k => delete editingMapping[k]);
+            Object.assign(editingMapping, reverse);
+            newCompanyName.value = '';
+        }
+
+        // 删除保司映射
+        async function deleteCompanyMapping() {
+            const company = mappingEditCompany.value;
+            if (!company) return;
+            try {
+                await fetch(`/api/insurance/mapping/company/${encodeURIComponent(company)}`, { method: 'DELETE' });
+                await loadMappingConfig();
+                mappingEditCompany.value = '';
+                loadCompanyMapping();
+                showMessage(`已删除 ${company} 的映射配置`, true);
+            } catch (e) {
+                showMessage('删除失败', false);
+            }
+        }
+
+        // 重置为默认映射
+        function resetMapping() {
+            const defaultCols = [
+                '承保公司', '保单号', '险种', '车牌', '投保人', '被保人',
+                '签单日期', '起保日期', '终保日期', '保费',
+                '佣金率', '佣金', '业务员', '采购费率', '公司利润',
+                '跟单人', '跟单人利润', '出单渠道', '车船税',
+            ];
+            const defaultReverse = {
+                '承保公司': '保险公司', '保单号': '保单号', '险种': '险种类型',
+                '车牌': '车牌号', '投保人': '投保人', '被保人': '被保险人',
+                '签单日期': '签单日期', '起保日期': '保险起期', '终保日期': '保险止期',
+                '保费': '保费合计', '车船税': '车船税',
+            };
+            editingColumns.value = [...defaultCols];
+            Object.keys(editingMapping).forEach(k => delete editingMapping[k]);
+            for (const col of defaultCols) {
+                editingMapping[col] = defaultReverse[col] || '';
+            }
+        }
+
+        // 根据映射获取某条结果某个导出列的值
+        function getMappedValue(r, outCol) {
+            if (!r || !r.invoices || !r.invoices[0] || !r.invoices[0].fields) return '';
+            const fields = r.invoices[0].fields;
+            const companyShort = fields['保险公司简称'] || '';
+            let mapping;
+            if (companyShort && mappingConfig.value.company_mappings[companyShort]) {
+                mapping = mappingConfig.value.company_mappings[companyShort];
+            } else {
+                mapping = mappingConfig.value.default_mapping || {};
+            }
+            for (const [ocrField, col] of Object.entries(mapping)) {
+                if (col === outCol) {
+                    const val = fields[ocrField];
+                    if (val) return val;
+                }
+            }
+            return '';
+        }
+
+        // 构建映射后的导出数据
+        function buildMappedInvoices() {
+            return successResults.value.map(r => {
+                const fields = r.invoices && r.invoices[0] ? r.invoices[0].fields : {};
+                const companyShort = fields['保险公司简称'] || '';
+                let mapping;
+                if (companyShort && mappingConfig.value.company_mappings[companyShort]) {
+                    mapping = mappingConfig.value.company_mappings[companyShort];
+                } else {
+                    mapping = mappingConfig.value.default_mapping || {};
+                }
+                const mapped = {};
+                for (const col of outputColumns.value) {
+                    mapped[col] = '';
+                    for (const [ocrField, outCol] of Object.entries(mapping)) {
+                        if (outCol === col && fields[ocrField]) {
+                            mapped[col] = fields[ocrField];
+                            break;
+                        }
+                    }
+                }
+                return { file_name: r.file_name, fields: mapped };
+            });
+        }
+
+        // ========== IndexedDB ==========
+        let db = null;
+        const DB_NAME = 'PolicyOCR';
+        const STORE_NAME = 'files';
+
+        function openDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, 1);
+                request.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: 'name' });
+                    }
+                };
+                request.onsuccess = (e) => { db = e.target.result; resolve(db); };
+                request.onerror = (e) => reject(e);
+            });
+        }
+        function saveFileToIDB(name, data, type) {
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                tx.objectStore(STORE_NAME).put({ name, data, type });
+                tx.oncomplete = () => resolve();
+                tx.onerror = (e) => reject(e);
+            });
+        }
+        function getFileFromIDB(name) {
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readonly');
+                const req = tx.objectStore(STORE_NAME).get(name);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = (e) => reject(e);
+            });
+        }
+
+        // 提取异常必检字段
+        const REQUIRED_FIELDS = ['承保公司', '保单号', '险种', '车牌', '投保人', '被保人', '签单日期', '起保日期', '终保日期', '保费'];
+
+        // 判断是否提取异常（成功识别但关键字段缺失）
+        function isAbnormal(r) {
+            if (!r.success) return false;
+            return REQUIRED_FIELDS.some(col => !getMappedValue(r, col));
+        }
+
+        // 计算属性：分类结果
+        const successResults = computed(() => results.value.filter(r => r.success && !isAbnormal(r)));
+        const abnormalResults = computed(() => results.value.filter(r => isAbnormal(r)));
+        const failedResults = computed(() => results.value.filter(r => !r.success));
+
+        // 获取识别结果的文档类型
+        function getDocCategory(r) {
+            if (!r.success || !r.invoices || !r.invoices[0]) return '';
+            let cat = r.invoices[0].doc_category || r.invoices[0].fields?.['文档类型'] || '保单';
+            if (cat === '条款') cat = '保单';
+            return cat;
+        }
+
+        // 获取识别结果的保险公司简称
+        function getCompanyShort(r) {
+            if (!r.success || !r.invoices || !r.invoices[0]) return '';
+            return r.invoices[0].fields?.['保险公司简称'] || r.invoices[0].fields?.['保险公司'] || '';
+        }
+
+        // 保司统计（用于筛选下拉框）
+        const companyStats = computed(() => {
+            const counts = {};
+            for (const r of successResults.value) {
+                const company = getCompanyShort(r);
+                if (company) counts[company] = (counts[company] || 0) + 1;
+            }
+            return counts;
+        });
+
+        // 文档类型统计
+        const docCategories = computed(() => {
+            const counts = {};
+            for (const r of successResults.value) {
+                const cat = getDocCategory(r);
+                counts[cat] = (counts[cat] || 0) + 1;
+            }
+            return counts;
+        });
+
+        // 按文档类型和保司筛选后的成功结果
+        const filteredSuccessResults = computed(() => {
+            return successResults.value.filter(r => {
+                if (docCategoryFilter.value !== 'all' && getDocCategory(r) !== docCategoryFilter.value) return false;
+                if (companyFilter.value !== 'all' && getCompanyShort(r) !== companyFilter.value) return false;
+                return true;
+            });
+        });
+
+        const displayResults = computed(() => {
+            if (activeTab.value === 'success') return filteredSuccessResults.value;
+            if (activeTab.value === 'abnormal') return abnormalResults.value;
+            if (activeTab.value === 'failed') return failedResults.value;
+            const hasFilter = docCategoryFilter.value !== 'all' || companyFilter.value !== 'all';
+            if (!hasFilter) return results.value;
+            return results.value.filter(r => {
+                if (!r.success) return true;
+                if (docCategoryFilter.value !== 'all' && getDocCategory(r) !== docCategoryFilter.value) return false;
+                if (companyFilter.value !== 'all' && getCompanyShort(r) !== companyFilter.value) return false;
+                return true;
+            });
+        });
+
+        const tabs = computed(() => [
+            { key: 'all', label: '全部', count: (docCategoryFilter.value === 'all' && companyFilter.value === 'all') ? results.value.length : displayResults.value.length },
+            { key: 'success', label: '成功', count: filteredSuccessResults.value.length },
+            { key: 'abnormal', label: '提取异常', count: abnormalResults.value.length },
+            { key: 'failed', label: '失败', count: failedResults.value.length },
+        ]);
+
+        const progressPercent = computed(() =>
+            files.value.length ? (recognizedCount.value / files.value.length * 100) : 0
+        );
+
+        // ========== 文件操作 ==========
+        const isLoadingFiles = ref(false);
+        const loadingFileCount = ref(0);
+        const loadingFileTotal = ref(0);
+        const loadingPercent = computed(() =>
+            loadingFileTotal.value ? (loadingFileCount.value / loadingFileTotal.value * 100) : 0
+        );
+
+        async function processFiles(fileList) {
+            const existingNames = new Set(files.value.map(f => f.name));
+            const validFiles = [];
+            for (const file of fileList) {
+                const ext = file.name.split('.').pop().toLowerCase();
+                const allowedExts = ['pdf', 'jpg', 'jpeg', 'png', 'bmp'];
+                if (!allowedExts.includes(ext)) continue;
+                if (existingNames.has(file.name)) continue;
+                validFiles.push(file);
+            }
+            if (!validFiles.length) return;
+
+            isLoadingFiles.value = true;
+            loadingFileCount.value = 0;
+            loadingFileTotal.value = validFiles.length;
+
+            for (const file of validFiles) {
+                const base64 = await readFileAsBase64(file);
+                const fileType = file.name.split('.').pop().toLowerCase();
+                files.value.push({ name: file.name, base64, type: fileType, thumbUrl: null, rawFile: file });
+                if (db) await saveFileToIDB(file.name, base64, fileType);
+                loadingFileCount.value++;
+            }
+            isLoadingFiles.value = false;
+        }
+
+        function readFileAsBase64(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function handleFileSelect(e) { processFiles(e.target.files); e.target.value = ''; }
+        function handleDrop(e) { isDragging.value = false; processFiles(e.dataTransfer.files); }
+        function removeFile(idx) { files.value.splice(idx, 1); }
+        function clearFiles() { files.value = []; results.value = []; }
+
+        // ========== 预览 ==========
+        async function loadExtractionRules(fileName) {
+            const r = results.value.find(x => x.file_name === fileName && x.success);
+            const companyShort = r?.invoices?.[0]?.fields?.['保险公司简称'] || '';
+            try {
+                const resp = await fetch(`/api/insurance/extraction-rules?company_short=${encodeURIComponent(companyShort)}`);
+                if (resp.ok) extractionRules.value = await resp.json();
+            } catch (e) { extractionRules.value = {}; }
+        }
+
+        function loadPreviewRawText(fileName) {
+            const r = results.value.find(x => x.file_name === fileName && x.success);
+            if (r && r.invoices && r.invoices[0] && r.invoices[0].raw_text) {
+                previewHasRawText.value = true;
+                previewRawText.value = r.invoices[0].raw_text;
+            } else {
+                previewHasRawText.value = false;
+                previewRawText.value = '';
+            }
+        }
+
+        async function previewFile(file) {
+            previewFileName.value = file.name;
+            loadPreviewRawText(file.name);
+            previewShowRaw.value = false; previewShowFields.value = false; previewShowRules.value = false;
+            previewType.value = file.type;
+            if (file.type === 'pdf') {
+                const blob = await fetch(`data:application/pdf;base64,${file.base64}`).then(r => r.blob());
+                previewSrc.value = URL.createObjectURL(blob);
+            } else {
+                const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', bmp: 'image/bmp' };
+                previewSrc.value = `data:${mimeMap[file.type] || 'image/jpeg'};base64,${file.base64}`;
+            }
+            previewVisible.value = true;
+        }
+
+        async function previewResultFile(r) {
+            const file = files.value.find(f => f.name === r.file_name);
+            if (file) { previewFile(file); return; }
+            if (db) {
+                const stored = await getFileFromIDB(r.file_name);
+                if (stored) {
+                    previewFileName.value = r.file_name;
+                    loadPreviewRawText(r.file_name);
+                    previewShowRaw.value = false; previewShowFields.value = false; previewShowRules.value = false;
+                    const blob = await fetch(`data:application/pdf;base64,${stored.data}`).then(r => r.blob());
+                    previewSrc.value = URL.createObjectURL(blob);
+                    previewVisible.value = true;
+                }
+            }
+        }
+
+        function hasRawText(fileName) {
+            const r = results.value.find(x => x.file_name === fileName && x.success);
+            return !!(r && r.invoices && r.invoices[0] && r.invoices[0].raw_text);
+        }
+
+        function showRawText(fileName) {
+            const r = results.value.find(x => x.file_name === fileName && x.success);
+            if (r && r.invoices && r.invoices[0] && r.invoices[0].raw_text) {
+                rawTextFileName.value = fileName;
+                rawTextContent.value = r.invoices[0].raw_text;
+                rawTextVisible.value = true;
+            }
+        }
+
+        // ========== 识别 ==========
+        async function startRecognize() {
+            isRecognizing.value = true; recognizedCount.value = 0; results.value = [];
+            for (const file of files.value) {
+                currentFileName.value = file.name;
+                try {
+                    const resp = await fetch('/api/insurance/ocr', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ file_data: file.base64, file_type: file.type, file_name: file.name, pdf_page: 1 }),
+                    });
+                    const data = await resp.json();
+                    results.value.push(resp.ok ? data : { success: false, file_name: file.name, error: data.detail || '请求失败' });
+                } catch (e) {
+                    results.value.push({ success: false, file_name: file.name, error: `网络错误: ${e.message}` });
+                }
+                recognizedCount.value++;
+            }
+            currentFileName.value = ''; isRecognizing.value = false;
+            // 同车牌交叉填充缺失字段
+            crossFillByPlate();
+        }
+
+        // 同车牌保单之间互补缺失字段
+        function crossFillByPlate() {
+            const success = results.value.filter(r => r.success && r.invoices && r.invoices[0]);
+            const plateGroups = {};
+            for (const r of success) {
+                const plate = r.invoices[0].fields['车牌号'] || '';
+                if (!plate) continue;
+                if (!plateGroups[plate]) plateGroups[plate] = [];
+                plateGroups[plate].push(r);
+            }
+            const fillableFields = [
+                '保险公司', '保险公司简称', '投保人', '被保险人', '车主',
+                '车架号VIN', '发动机号', '厂牌型号', '使用性质', '机动车种类',
+                '核定载客', '核定载质量', '初次登记日期', '证件号码',
+            ];
+            let fillCount = 0;
+            for (const [plate, group] of Object.entries(plateGroups)) {
+                if (group.length < 2) continue;
+                const pool = {};
+                for (const r of group) {
+                    for (const key of fillableFields) {
+                        const val = r.invoices[0].fields[key];
+                        if (val && !pool[key]) pool[key] = val;
+                    }
+                }
+                for (const r of group) {
+                    for (const key of fillableFields) {
+                        if (!r.invoices[0].fields[key] && pool[key]) {
+                            r.invoices[0].fields[key] = pool[key];
+                            fillCount++;
+                        }
+                    }
+                }
+            }
+            if (fillCount > 0) {
+                showMessage(`已从同车牌保单互补 ${fillCount} 个缺失字段`, true);
+            }
+        }
+
+        // 重试单个失败文件
+        async function retryFile(r) {
+            const file = files.value.find(f => f.name === r.file_name);
+            if (!file) { showMessage('原始文件已丢失', false); return; }
+            isRecognizing.value = true; currentFileName.value = file.name;
+            try {
+                const resp = await fetch('/api/insurance/ocr', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_data: file.base64, file_type: file.type, file_name: file.name, pdf_page: 1 }),
+                });
+                const data = await resp.json();
+                const idx = results.value.findIndex(x => x.file_name === r.file_name);
+                if (idx >= 0) results.value[idx] = resp.ok ? data : { success: false, file_name: file.name, error: data.detail || '请求失败' };
+            } catch (e) { showMessage(`重试失败: ${e.message}`, false); }
+            currentFileName.value = ''; isRecognizing.value = false;
+        }
+
+        // 构建提取异常的导出数据
+        function buildAbnormalInvoices() {
+            return abnormalResults.value.map(r => {
+                const fields = r.invoices && r.invoices[0] ? r.invoices[0].fields : {};
+                const companyShort = fields['保险公司简称'] || '';
+                let mapping;
+                if (companyShort && mappingConfig.value.company_mappings[companyShort]) {
+                    mapping = mappingConfig.value.company_mappings[companyShort];
+                } else {
+                    mapping = mappingConfig.value.default_mapping || {};
+                }
+                const mapped = {};
+                for (const col of outputColumns.value) {
+                    mapped[col] = '';
+                    for (const [ocrField, outCol] of Object.entries(mapping)) {
+                        if (outCol === col && fields[ocrField]) {
+                            mapped[col] = fields[ocrField];
+                            break;
+                        }
+                    }
+                }
+                return { file_name: r.file_name, fields: mapped };
+            });
+        }
+
+        // 导出Excel
+        async function exportExcel(type) {
+            let data, fieldNamesToUse, fileName;
+            if (type === 'success') {
+                data = buildMappedInvoices();
+                fieldNamesToUse = outputColumns.value;
+                fileName = '保单识别结果.xlsx';
+            } else if (type === 'abnormal') {
+                data = buildAbnormalInvoices();
+                fieldNamesToUse = outputColumns.value;
+                fileName = '提取异常清单.xlsx';
+            } else {
+                data = failedResults.value;
+                fieldNamesToUse = ['文件名', '失败原因'];
+                fileName = '识别失败清单.xlsx';
+            }
+            try {
+                const resp = await fetch('/api/insurance/export/excel', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ invoices: data, field_names: fieldNamesToUse, export_type: type }),
+                });
+                if (!resp.ok) { const err = await resp.json(); showMessage(err.detail || '导出失败', false); return; }
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = fileName;
+                a.click(); URL.revokeObjectURL(url);
+            } catch (e) { showMessage(`导出失败: ${e.message}`, false); }
+        }
+
+        // ========== 钉钉同步（手动上传Tab） ==========
+        const targets = ref([]);
+        const selectedTargetId = ref('');
+        const targetModalVisible = ref(false);
+        const newTargetUrl = ref('');
+        const newTargetName = ref('');
+        const targetError = ref('');
+        const addingTarget = ref(false);
+        const selectedFields = ref([]);
+
+        const isAllFieldsSelected = computed(() =>
+            outputColumns.value.length > 0 && selectedFields.value.length === outputColumns.value.length
+        );
+
+        function toggleAllFields(e) {
+            selectedFields.value = e.target.checked ? [...outputColumns.value] : [];
+        }
+
+        // 加载钉钉同步目标列表
+        async function loadTargets() {
+            try {
+                const resp = await fetch('/api/insurance/dingtalk/targets');
+                const data = await resp.json();
+                targets.value = data.targets || [];
+                if (targets.value.length && !selectedTargetId.value) selectedTargetId.value = targets.value[0].id;
+            } catch (e) { console.error('加载目标失败', e); }
+        }
+
+        // 添加钉钉同步目标
+        async function addTarget() {
+            targetError.value = ''; addingTarget.value = true;
+            try {
+                const resp = await fetch('/api/insurance/dingtalk/targets', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ doc_url: newTargetUrl.value, name: newTargetName.value }),
+                });
+                const data = await resp.json();
+                if (!resp.ok) { targetError.value = data.detail || '添加失败'; return; }
+                newTargetUrl.value = ''; newTargetName.value = '';
+                await loadTargets(); selectedTargetId.value = data.target.id;
+                showMessage(`已添加: ${data.target.name}`, true);
+            } catch (e) { targetError.value = e.message; }
+            finally { addingTarget.value = false; }
+        }
+
+        // 删除钉钉同步目标
+        async function removeTarget(id) {
+            try {
+                await fetch(`/api/insurance/dingtalk/targets/${id}`, { method: 'DELETE' });
+                if (selectedTargetId.value === id) selectedTargetId.value = '';
+                await loadTargets();
+            } catch (e) { showMessage('删除失败', false); }
+        }
+
+        // 打开同步弹窗
+        async function openSyncModal() {
+            await loadTargets();
+            selectedFields.value = [...outputColumns.value];
+            targetModalVisible.value = true;
+        }
+
+        async function confirmSync() {
+            targetModalVisible.value = false;
+            syncToDingtalk();
+        }
+
+        const duplicateVisible = ref(false);
+        const duplicateList = ref([]);
+        let pendingSyncInvoices = null;
+
+        // 执行同步到钉钉
+        async function syncToDingtalk() {
+            if (!successResults.value.length) return;
+            isSyncing.value = true;
+            const invoicesWithName = buildMappedInvoices();
+            // 检查重复保单
+            try {
+                const checkResp = await fetch('/api/insurance/sync/check-duplicates', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ invoices: invoicesWithName, target_id: selectedTargetId.value }),
+                });
+                const checkData = await checkResp.json();
+                if (checkData.duplicates && checkData.duplicates.length) {
+                    const dupSet = new Set(checkData.duplicates);
+                    duplicateList.value = invoicesWithName
+                        .filter(inv => dupSet.has((inv.fields['保单号'] || '').trim()))
+                        .map(inv => ({ policy_no: (inv.fields['保单号'] || '').trim(), file_name: inv.file_name }));
+                    pendingSyncInvoices = invoicesWithName;
+                    duplicateVisible.value = true; isSyncing.value = false; return;
+                }
+            } catch (e) { console.warn('重复检查失败:', e); }
+            await doSync(invoicesWithName);
+        }
+
+        // 跳过重复保单继续同步
+        async function confirmSyncSkipDuplicates() {
+            duplicateVisible.value = false; isSyncing.value = true;
+            const dupSet = new Set(duplicateList.value.map(d => d.policy_no));
+            const filtered = pendingSyncInvoices.filter(inv => !dupSet.has((inv.fields['保单号'] || '').trim()));
+            pendingSyncInvoices = null;
+            if (!filtered.length) { showMessage('所有保单均已存在', false); isSyncing.value = false; return; }
+            await doSync(filtered);
+        }
+
+        function cancelSync() { duplicateVisible.value = false; pendingSyncInvoices = null; }
+
+        // 实际执行同步请求
+        async function doSync(invoices) {
+            try {
+                const resp = await fetch('/api/insurance/sync/dingtalk', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        invoices, field_names: selectedFields.value, target_id: selectedTargetId.value,
+                    }),
+                });
+                const data = await resp.json();
+                if (resp.ok && data.success) {
+                    let msg = `成功同步 ${data.synced_count} 条记录到钉钉表格`;
+                    if (data.skipped_fields && data.skipped_fields.length) msg += `（${data.skipped_fields.length}个字段未在表中）`;
+                    showMessage(msg, true);
+                } else { showMessage(data.detail || '同步失败', false); }
+            } catch (e) { showMessage(`同步失败: ${e.message}`, false); }
+            isSyncing.value = false;
+        }
+
+        // ========== 全局消息提示 ==========
+        function showMessage(msg, success) {
+            syncMessage.value = msg; syncSuccess.value = success;
+            setTimeout(() => { syncMessage.value = ''; }, 4000);
+        }
+
+        // ========== 自动识别记录 Tab ==========
+        const records = ref([]);
+        const isLoadingRecords = ref(false);
+        const roomList = ref([]);  // 群列表（用于筛选下拉）
+        const recordFilter = reactive({
+            roomid: '',
+            status: '',
+            keyword: '',
+        });
+        const recordPagination = reactive({
+            page: 1,
+            pageSize: 20,
+            total: 0,
+            totalPages: 0,
+        });
+
+        // 计算可见页码（最多显示7个页码，超出显示省略号）
+        const visiblePages = computed(() => {
+            const total = recordPagination.totalPages;
+            const cur = recordPagination.page;
+            if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+            const pages = [];
+            if (cur <= 4) {
+                for (let i = 1; i <= 5; i++) pages.push(i);
+                pages.push('...'); pages.push(total);
+            } else if (cur >= total - 3) {
+                pages.push(1); pages.push('...');
+                for (let i = total - 4; i <= total; i++) pages.push(i);
+            } else {
+                pages.push(1); pages.push('...');
+                for (let i = cur - 1; i <= cur + 1; i++) pages.push(i);
+                pages.push('...'); pages.push(total);
+            }
+            return pages;
+        });
+
+        // 加载群列表（用于筛选）
+        async function loadRoomList() {
+            try {
+                const resp = await fetch('/api/insurance/rooms');
+                const data = await resp.json();
+                const rooms = data.rooms || data || [];
+                roomList.value = Array.isArray(rooms) ? rooms : [];
+            } catch (e) {
+                console.error('加载群列表失败', e);
+                roomList.value = [];
+            }
+        }
+
+        // 加载自动识别记录
+        async function loadRecords(resetPage = true) {
+            if (resetPage) recordPagination.page = 1;
+            isLoadingRecords.value = true;
+            try {
+                const params = new URLSearchParams({
+                    page: recordPagination.page,
+                    page_size: recordPagination.pageSize,
+                });
+                if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
+                if (recordFilter.status) params.set('status', recordFilter.status);
+                if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
+                const resp = await fetch(`/api/insurance/records?${params.toString()}`);
+                const data = await resp.json();
+                records.value = (data.records || data.items || []).map(r => ({
+                    ...r,
+                    // 解析 parsed_fields（如果是字符串则转对象）
+                    parsed_fields: typeof r.parsed_fields === 'string'
+                        ? (() => { try { return JSON.parse(r.parsed_fields); } catch { return {}; } })()
+                        : (r.parsed_fields || {}),
+                    _retrying: false,
+                    _syncing: false,
+                }));
+                recordPagination.total = data.total || 0;
+                recordPagination.totalPages = Math.ceil(recordPagination.total / recordPagination.pageSize) || 1;
+            } catch (e) {
+                console.error('加载记录失败', e);
+                records.value = [];
+            } finally {
+                isLoadingRecords.value = false;
+            }
+        }
+
+        // 跳转分页
+        async function gotoRecordPage(page) {
+            if (page < 1 || page > recordPagination.totalPages) return;
+            recordPagination.page = page;
+            await loadRecords(false);
+        }
+
+        // 从 parsed_fields 中取指定字段值
+        function getParsedField(record, fieldName) {
+            const pf = record.parsed_fields;
+            if (!pf || typeof pf !== 'object') return '';
+            return pf[fieldName] || '';
+        }
+
+        // 格式化时间
+        function formatTime(ts) {
+            if (!ts) return '—';
+            const d = new Date(ts);
+            if (isNaN(d.getTime())) return ts;
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+
+        // 重试单条自动识别记录
+        async function retryRecord(record) {
+            record._retrying = true;
+            try {
+                const resp = await fetch(`/api/insurance/retry/${record.id}`, { method: 'POST' });
+                const data = await resp.json();
+                if (resp.ok && data.success) {
+                    showMessage('重试已提交', true);
+                    await loadRecords(false);
+                } else {
+                    showMessage(data.detail || '重试失败', false);
+                }
+            } catch (e) {
+                showMessage(`重试失败: ${e.message}`, false);
+            } finally {
+                record._retrying = false;
+            }
+        }
+
+        // 同步单条记录到钉钉
+        async function syncRecordToDingtalk(record) {
+            record._syncing = true;
+            try {
+                const resp = await fetch(`/api/insurance/sync/${record.id}`, { method: 'POST' });
+                const data = await resp.json();
+                if (resp.ok && data.success) {
+                    showMessage('同步成功', true);
+                    record.dingtalk_synced = true;
+                } else {
+                    showMessage(data.detail || '同步失败', false);
+                }
+            } catch (e) {
+                showMessage(`同步失败: ${e.message}`, false);
+            } finally {
+                record._syncing = false;
+            }
+        }
+
+        // 记录详情弹窗
+        const recordDetailVisible = ref(false);
+        const currentRecord = ref(null);
+
+        function openRecordDetail(record) {
+            currentRecord.value = record;
+            recordDetailVisible.value = true;
+        }
+
+        // ========== 设置弹窗 ==========
+        const settingsModalVisible = ref(false);
+        const watchRoomSelection = ref('');   // 群聊下拉选中
+        const watchUserSelection = ref('');   // 私聊下拉选中
+        const allRooms = ref([]);   // API 返回的群列表
+        const allUsers = ref([]);   // API 返回的私聊联系人列表
+
+        // 设置表单数据
+        const settingsForm = reactive({
+            watch_list: [],          // [{id, name, type: "room"|"user"}]
+            auto_sync_enabled: false,
+        });
+
+        // 分类 computed
+        const watchRooms = computed(() => (settingsForm.watch_list || []).filter(w => w.type === 'room'));
+        const watchUsers = computed(() => (settingsForm.watch_list || []).filter(w => w.type === 'user'));
+
+        // 各分区保存状态
+        const settingsSaving = reactive({
+            watch_list: false,
+            auto_sync: false,
+        });
+
+        // 可添加的对象（排除已添加的）
+        const addableItems = computed(() => {
+            const roomIds = new Set(watchRooms.value.map(w => w.id));
+            const userIds = new Set(watchUsers.value.map(w => w.id));
+            return {
+                rooms: (allRooms.value || []).filter(r => !roomIds.has(r.id)),
+                users: (allUsers.value || []).filter(u => !userIds.has(u.id)),
+            };
+        });
+
+        // 加载群和私聊列表
+        // 手动同步通讯录
+        const syncingContacts = ref(false);
+        async function syncContacts() {
+            syncingContacts.value = true;
+            try {
+                const resp = await fetch('/api/insurance/sync-contacts', { method: 'POST' });
+                const data = await resp.json();
+                if (data.success) {
+                    showMessage(data.message, true);
+                    // 刷新下拉列表
+                    await loadWatchOptions();
+                } else {
+                    showMessage(data.error || '同步失败', false);
+                }
+            } catch (e) {
+                showMessage(`同步失败: ${e.message}`, false);
+            } finally {
+                syncingContacts.value = false;
+            }
+        }
+
+        async function loadWatchOptions() {
+            try {
+                const resp = await fetch('/api/insurance/rooms');
+                const data = await resp.json();
+                allRooms.value = Array.isArray(data.rooms) ? data.rooms : [];
+                allUsers.value = Array.isArray(data.users) ? data.users : [];
+            } catch (e) {
+                console.error('加载监控对象列表失败', e);
+                allRooms.value = [];
+                allUsers.value = [];
+            }
+        }
+
+        // 打开设置弹窗：先加载当前配置
+        async function openSettingsModal() {
+            settingsModalVisible.value = true;
+            await loadWatchOptions();
+            await loadTargets();
+            try {
+                const resp = await fetch('/api/insurance/config');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    // 兼容旧格式 watch_rooms → watch_list
+                    settingsForm.watch_list = data.watch_list || (data.watch_rooms || []).map(r => ({id: r.roomid, name: r.room_name, type: 'room'}));
+                    settingsForm.auto_sync_enabled = !!data.auto_sync_enabled;
+                }
+            } catch (e) {
+                console.error('加载配置失败', e);
+            }
+        }
+
+        // 添加监控对象（分群聊/私聊）
+        function addWatchItem(type) {
+            const sel = type === 'room' ? watchRoomSelection : watchUserSelection;
+            const id = sel.value;
+            if (!id) return;
+            if (settingsForm.watch_list.find(w => w.id === id)) {
+                showMessage('已在监控列表中', false);
+                return;
+            }
+            const source = type === 'room' ? allRooms.value : allUsers.value;
+            const found = (source || []).find(s => s.id === id);
+            const name = found ? found.name : id;
+            settingsForm.watch_list.push({ id, name, type });
+            sel.value = '';
+        }
+
+        // 删除监控对象（按类型和在同类型中的索引）
+        function removeWatchItem(type, idxInType) {
+            let count = 0;
+            for (let i = 0; i < settingsForm.watch_list.length; i++) {
+                if (settingsForm.watch_list[i].type === type) {
+                    if (count === idxInType) {
+                        settingsForm.watch_list.splice(i, 1);
+                        return;
+                    }
+                    count++;
+                }
+            }
+        }
+
+        // 获取钉钉目标名称
+        function getTargetName(targetId) {
+            const t = targets.value.find(t => t.id === targetId);
+            return t ? t.name : targetId;
+        }
+
+        // 获取监控项未绑定的目标列表
+        function unboundTargets(item) {
+            const bound = new Set(item.target_ids || []);
+            return targets.value.filter(t => !bound.has(t.id));
+        }
+
+        // 绑定钉钉目标到监控项
+        function bindTarget(item, event) {
+            const tid = event.target.value;
+            if (!tid) return;
+            if (!item.target_ids) item.target_ids = [];
+            if (!item.target_ids.includes(tid)) {
+                item.target_ids.push(tid);
+            }
+            event.target.value = '';
+        }
+
+        // 解绑钉钉目标
+        function unbindTarget(item, tid) {
+            if (!item.target_ids) return;
+            const idx = item.target_ids.indexOf(tid);
+            if (idx >= 0) item.target_ids.splice(idx, 1);
+        }
+
+        // 保存设置各分区
+        async function saveSettingsSection(section) {
+            settingsSaving[section] = true;
+            try {
+                let body = {};
+                if (section === 'watch_list') {
+                    body = { watch_list: settingsForm.watch_list };
+                } else if (section === 'auto_sync') {
+                    body = { auto_sync_enabled: settingsForm.auto_sync_enabled };
+                }
+                const resp = await fetch('/api/insurance/config', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                if (resp.ok) {
+                    showMessage('保存成功', true);
+                } else {
+                    const err = await resp.json();
+                    showMessage(err.detail || '保存失败', false);
+                }
+            } catch (e) {
+                showMessage(`保存失败: ${e.message}`, false);
+            } finally {
+                settingsSaving[section] = false;
+            }
+        }
+
+        // ========== 初始化 ==========
+        onMounted(async () => {
+            // 加载配置状态
+            try {
+                const resp = await fetch('/api/insurance/config/status');
+                configStatus.value = await resp.json();
+            } catch (e) {}
+            // 加载钉钉目标
+            await loadTargets();
+            // 加载字段映射配置
+            await loadMappingConfig();
+            // 加载群列表
+            await loadRoomList();
+            // 初始化 IndexedDB
+            try { await openDB(); } catch (e) {}
+        });
+
+        return {
+            // 页面Tab
+            pageTab,
+            // 配置状态
+            configStatus,
+            // 手动上传
+            files, results, isDragging, isRecognizing,
+            recognizedCount, currentFileName, activeTab, docCategoryFilter, companyFilter, isSyncing,
+            supportedCompanies, companyStats,
+            syncMessage, syncSuccess,
+            previewVisible, previewSrc, previewIsImage,
+            previewType, previewFileName, previewHasRawText, previewShowRaw, previewShowFields, previewShowRules,
+            previewRawText, formattedRawText, previewFieldsList,
+            extractionRules, loadExtractionRules,
+            rawTextVisible, rawTextContent, rawTextFileName,
+            successResults, abnormalResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal,
+            outputColumns, getMappedValue, getDocCategory, docCategories,
+            isLoadingFiles, loadingFileCount, loadingFileTotal, loadingPercent,
+            handleFileSelect, handleDrop, removeFile, clearFiles,
+            previewFile, previewResultFile, showRawText,
+            startRecognize, retryFile, exportExcel,
+            // 字段映射配置
+            mappingModalVisible, mappingEditCompany, editingMapping, editingColumns,
+            availableOcrFields, unmappedOcrFields, availableCompanies, newCompanyName,
+            newColName, newColOcrField, renamingColIdx, renamingColName,
+            openMappingModal, loadCompanyMapping, saveCurrentMapping,
+            addCompanyMapping, deleteCompanyMapping, resetMapping,
+            addColumn, removeColumn, startRenameCol, finishRenameCol, onNewColFieldChange,
+            // 钉钉
+            targets, selectedTargetId, targetModalVisible,
+            newTargetUrl, newTargetName, targetError, addingTarget,
+            addTarget, removeTarget, openSyncModal, confirmSync,
+            selectedFields, isAllFieldsSelected, toggleAllFields,
+            // 重复保单
+            duplicateVisible, duplicateList, confirmSyncSkipDuplicates, cancelSync,
+            // 自动识别记录
+            records, isLoadingRecords, roomList, recordFilter,
+            recordPagination, visiblePages,
+            loadRecords, gotoRecordPage, getParsedField, formatTime,
+            retryRecord, syncRecordToDingtalk,
+            recordDetailVisible, currentRecord, openRecordDetail,
+            // 设置弹窗
+            settingsModalVisible, settingsForm, settingsSaving,
+            watchRoomSelection, watchUserSelection, watchRooms, watchUsers,
+            addableItems, openSettingsModal, addWatchItem, removeWatchItem, saveSettingsSection,
+            syncingContacts, syncContacts,
+            getTargetName, unboundTargets, bindTarget, unbindTarget,
+        };
+    },
+}).mount('#app');
+</script>
+</body>
+</html>{% endraw %}

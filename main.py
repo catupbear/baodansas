@@ -18,6 +18,9 @@ from core.fetcher import MessageFetcher
 from core.parser import MessageParser
 from sdk.finance_sdk import FinanceSDK
 from storage.db import Database
+from insurance.db import init_insurance_tables
+from insurance.handler import InsuranceHandler
+from insurance.api import insurance_bp, init_insurance_api
 
 # 日志配置
 logging.basicConfig(
@@ -38,8 +41,8 @@ def create_app(config: dict) -> Flask:
     """创建并配置 Flask 应用"""
     app = Flask(__name__, template_folder="web/templates")
 
-    # 初始化数据库
-    db = Database(config["storage"]["db_path"])
+    # 初始化数据库（MySQL 连接池）
+    db = Database(config["mysql"])
 
     # 初始化通讯录模块
     contacts = ContactsManager(
@@ -69,10 +72,24 @@ def create_app(config: dict) -> Flask:
     init_api(db, contacts=contacts, cos_storage=cos_storage)
     app.register_blueprint(api_bp)
 
+    # 初始化保单识别模块
+    init_insurance_tables(db)
+    insurance_handler = InsuranceHandler(
+        db=db, cos_storage=cos_storage, contacts=contacts,
+        app_config=config,
+    )
+    init_insurance_api(db, handler=insurance_handler, contacts=contacts)
+    app.register_blueprint(insurance_bp)
+
     # 前端首页
     @app.route("/")
     def index():
         return render_template("index.html")
+
+    # 保单识别独立页面
+    @app.route("/insurance")
+    def insurance_page():
+        return render_template("insurance.html")
 
     # 尝试初始化 SDK 和回调服务（SDK不可用时仅前端可用）
     sdk_config = config["sdk"]
@@ -120,11 +137,19 @@ def create_app(config: dict) -> Flask:
         # 把 fetcher 和 SDK 传给 API
         init_api(db, fetcher, finance_sdk, sdk_config, contacts, cos_storage)
 
+        # 更新保单识别的 SDK 引用
+        insurance_handler.finance_sdk = finance_sdk
+        insurance_handler.sdk_config = sdk_config
+
+        # 将 insurance_handler 绑定到 fetcher（用于自动触发）
+        fetcher.insurance_handler = insurance_handler
+
         # 保存引用，方便清理
         app.extensions["wxbot"] = {
             "db": db,
             "finance_sdk": finance_sdk,
             "fetcher": fetcher,
+            "insurance_handler": insurance_handler,
         }
 
         logger.info("应用初始化完成，回调地址: /callback，前端地址: /")

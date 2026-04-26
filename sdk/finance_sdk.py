@@ -220,6 +220,55 @@ class FinanceSDK:
         logger.info("媒体文件下载完成: %s", save_path)
         return 0, save_path
 
+    def get_media_data_bytes(self, sdk_file_id: str, proxy: str = "", passwd: str = "",
+                             timeout: int = 10) -> tuple[int, bytes]:
+        """
+        下载媒体文件到内存（分块下载拼接为bytes）
+        Args:
+            sdk_file_id: 媒体文件的sdkfileid
+            proxy: 代理地址
+            passwd: 代理密码
+            timeout: 超时秒数
+        返回: (错误码, 文件bytes)
+        """
+        index_buf = b""
+        chunks = []
+
+        while True:
+            media_data = self.dll.NewMediaData()
+            try:
+                ret = self.dll.GetMediaData(
+                    self.sdk,
+                    index_buf,
+                    sdk_file_id.encode("utf-8"),
+                    proxy.encode("utf-8"),
+                    passwd.encode("utf-8"),
+                    ctypes.c_int(timeout),
+                    media_data
+                )
+                if ret != 0:
+                    logger.error("下载媒体文件失败(内存), 错误码: %d", ret)
+                    return ret, b""
+
+                # 读取数据块
+                data_len = self.dll.GetDataLen(media_data)
+                data_ptr = self.dll.GetData(media_data)
+                chunks.append(ctypes.string_at(data_ptr, data_len))
+
+                # 检查是否下载完成
+                is_finish = self.dll.IsMediaDataFinish(media_data)
+                if is_finish == 1:
+                    break
+
+                # 获取下一块的索引
+                index_buf = self.dll.GetOutIndexBuf(media_data)
+            finally:
+                self.dll.FreeMediaData(media_data)
+
+        result = b"".join(chunks)
+        logger.info("媒体文件下载到内存完成, 大小: %d bytes", len(result))
+        return 0, result
+
     def destroy(self):
         """销毁SDK实例"""
         if self.sdk:

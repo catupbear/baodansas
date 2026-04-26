@@ -10,6 +10,9 @@ import time
 import urllib.request
 import urllib.error
 
+import pymysql
+import pymysql.cursors
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,23 +25,28 @@ class ContactsManager:
         self.db = db
         self._access_token = ""
         self._token_expires = 0
-        # 初始化缓存表
+        # 初始化缓存表（contacts_cache 已在 storage/db.py 的 _init_tables 中创建）
+        # 此处保留方法调用以兼容旧逻辑，实际建表在 _init_tables 中完成
         self._init_cache_table()
 
     def _init_cache_table(self):
-        """创建昵称缓存表"""
-        cursor = self.db.conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS contacts_cache (
-                id TEXT PRIMARY KEY,
-                type TEXT,
-                name TEXT,
-                avatar TEXT DEFAULT '',
-                extra TEXT DEFAULT '{}',
-                updated_at INTEGER
-            )
-        """)
-        self.db.conn.commit()
+        """确保昵称缓存表存在（MySQL 版本，通过连接池操作）"""
+        conn = self.db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS contacts_cache (
+                    id VARCHAR(128) PRIMARY KEY,
+                    type VARCHAR(32),
+                    name VARCHAR(128),
+                    avatar VARCHAR(512) DEFAULT '',
+                    extra TEXT,
+                    updated_at INT
+                )
+            """)
+            conn.commit()
+        finally:
+            conn.close()
 
     def _get_access_token(self) -> str:
         """获取access_token，带缓存"""
@@ -175,27 +183,35 @@ class ContactsManager:
             return ""
 
     def _get_cache(self, contact_id: str) -> str:
-        """从缓存读取昵称（24小时有效）"""
-        cursor = self.db.conn.cursor()
-        cursor.execute(
-            "SELECT name, updated_at FROM contacts_cache WHERE id = ?",
-            (contact_id,)
-        )
-        row = cursor.fetchone()
-        if row:
-            # 24小时缓存
-            if int(time.time()) - row["updated_at"] < 86400:
-                return row["name"]
-        return ""
+        """从缓存读取昵称（24小时有效），通过连接池获取连接"""
+        conn = self.db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor.execute(
+                "SELECT name, updated_at FROM contacts_cache WHERE id = %s",
+                (contact_id,)
+            )
+            row = cursor.fetchone()
+            if row:
+                # 24小时缓存
+                if int(time.time()) - row["updated_at"] < 86400:
+                    return row["name"]
+            return ""
+        finally:
+            conn.close()
 
     def _set_cache(self, contact_id: str, contact_type: str, name: str):
-        """写入缓存"""
-        cursor = self.db.conn.cursor()
-        cursor.execute("""
-            INSERT OR REPLACE INTO contacts_cache (id, type, name, updated_at)
-            VALUES (?, ?, ?, ?)
-        """, (contact_id, contact_type, name, int(time.time())))
-        self.db.conn.commit()
+        """写入缓存，使用 REPLACE INTO 实现插入或更新"""
+        conn = self.db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor.execute(
+                "REPLACE INTO contacts_cache (id, type, name, updated_at) VALUES (%s, %s, %s, %s)",
+                (contact_id, contact_type, name, int(time.time()))
+            )
+            conn.commit()
+        finally:
+            conn.close()
 
     def batch_resolve(self, user_ids: list, room_ids: list) -> dict:
         """

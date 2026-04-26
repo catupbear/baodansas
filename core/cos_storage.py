@@ -50,6 +50,28 @@ class CosStorage:
             logger.error("上传COS失败: %s", e)
             return ""
 
+    def upload_bytes(self, data: bytes, cos_key_suffix: str) -> str:
+        """
+        直接上传字节流到COS（不落盘）
+        Args:
+            data: 文件字节流
+            cos_key_suffix: COS 上的相对路径（如 insurance/roomid/sender/file.pdf）
+        返回: 文件的访问URL
+        """
+        cos_key = f"{self.prefix}{cos_key_suffix}"
+        try:
+            self.client.put_object(
+                Bucket=self.bucket,
+                Key=cos_key,
+                Body=data,
+            )
+            url = f"https://{self.bucket}.cos.{self.region}.myqcloud.com/{cos_key}"
+            logger.info("上传COS成功(bytes): %s", url)
+            return url
+        except Exception as e:
+            logger.error("上传COS失败(bytes): %s", e)
+            return ""
+
     def get_url(self, filename: str) -> str:
         """获取文件的COS URL"""
         cos_key = f"{self.prefix}{filename}"
