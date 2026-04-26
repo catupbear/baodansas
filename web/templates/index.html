@@ -380,6 +380,48 @@
 
         .msg-file-card:hover { border-color: #1a73e8; }
 
+        /* PDF 预览 */
+        .msg-pdf-preview {
+            margin-top: 4px;
+            max-width: 500px;
+        }
+
+        .msg-pdf-preview iframe {
+            width: 100%;
+            height: 400px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+
+        .msg-pdf-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .msg-pdf-name {
+            font-size: 13px;
+            font-weight: 500;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .msg-pdf-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .msg-pdf-actions a {
+            font-size: 12px;
+            color: #1a73e8;
+            text-decoration: none;
+        }
+
+        .msg-pdf-actions a:hover { text-decoration: underline; }
+
         .msg-file-icon {
             width: 36px;
             height: 36px;
@@ -970,9 +1012,22 @@ function renderMsgContent(msg, idx) {
         case "emotion":
             return `<img class="msg-image" src="${mediaUrl}" data-msg-idx="${idx}" loading="lazy" onerror="this.outerHTML='<span style=\\'color:#999\\'>[图片加载失败]</span>'" >`;
 
-        case "file":
+        case "file": {
             const fileName = parsed.filename || "文件";
             const fileSize = parsed.filesize ? formatFileSize(parsed.filesize) : "";
+            const isPdf = fileName.toLowerCase().endsWith(".pdf");
+            if (isPdf) {
+                return `<div class="msg-pdf-preview">
+                    <div class="msg-pdf-header">
+                        <span class="msg-pdf-name" title="${escapeHtml(fileName)}">&#128196; ${escapeHtml(fileName)} ${fileSize ? '(' + fileSize + ')' : ''}</span>
+                        <div class="msg-pdf-actions">
+                            <a href="${mediaUrl}" target="_blank">新窗口打开</a>
+                            <a href="${mediaUrl}" download="${escapeHtml(fileName)}">下载</a>
+                        </div>
+                    </div>
+                    <iframe src="${mediaUrl}" loading="lazy"></iframe>
+                </div>`;
+            }
             return `<div class="msg-file-card" onclick="window.open('${mediaUrl}','_blank')">
                 <div class="msg-file-icon">&#128196;</div>
                 <div class="msg-file-info">
@@ -980,6 +1035,7 @@ function renderMsgContent(msg, idx) {
                     <div class="msg-file-size">${fileSize}</div>
                 </div>
             </div>`;
+        }
 
         case "link":
         case "weapp":

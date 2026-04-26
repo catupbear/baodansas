@@ -183,25 +183,37 @@ class ContactsManager:
             return ""
 
     def _get_cache(self, contact_id: str) -> str:
-        """从缓存读取昵称（24小时有效），通过连接池获取连接"""
+        """从数据库永久缓存读取昵称"""
         conn = self.db.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
             cursor.execute(
-                "SELECT name, updated_at FROM contacts_cache WHERE id = %s",
+                "SELECT name FROM contacts_cache WHERE id = %s",
                 (contact_id,)
             )
             row = cursor.fetchone()
-            if row:
-                # 24小时缓存
-                if int(time.time()) - row["updated_at"] < 86400:
-                    return row["name"]
-            return ""
+            return row["name"] if row else ""
+        finally:
+            conn.close()
+
+    def _batch_get_cache(self, ids: list) -> dict:
+        """批量从数据库读取昵称，一次 IN 查询"""
+        if not ids:
+            return {}
+        conn = self.db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            placeholders = ",".join(["%s"] * len(ids))
+            cursor.execute(
+                f"SELECT id, name FROM contacts_cache WHERE id IN ({placeholders})",
+                ids
+            )
+            return {row["id"]: row["name"] for row in cursor.fetchall()}
         finally:
             conn.close()
 
     def _set_cache(self, contact_id: str, contact_type: str, name: str):
-        """写入缓存，使用 REPLACE INTO 实现插入或更新"""
+        """写入数据库永久缓存"""
         conn = self.db.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -215,34 +227,31 @@ class ContactsManager:
 
     def find_unresolved(self) -> dict:
         """
-        从 messages 表中查找所有未解析名称的 sender 和 roomid。
-        未解析：在 contacts_cache 中没有记录，或缓存已过期。
+        从 messages 表中查找所有未缓存的 sender 和 roomid。
         返回: {"users": [id, ...], "rooms": [id, ...]}
         """
         conn = self.db.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
-            now = int(time.time())
-            expire_time = now - 86400  # 24小时过期
 
-            # 查找未缓存或已过期的 sender
+            # 查找未缓存的 sender
             cursor.execute("""
                 SELECT DISTINCT m.sender
                 FROM messages m
-                LEFT JOIN contacts_cache c ON m.sender = c.id AND c.updated_at > %s
+                LEFT JOIN contacts_cache c ON m.sender = c.id
                 WHERE m.sender != '' AND m.sender IS NOT NULL AND c.id IS NULL
                 LIMIT 50
-            """, (expire_time,))
+            """)
             users = [row["sender"] for row in cursor.fetchall()]
 
-            # 查找未缓存或已过期的 roomid
+            # 查找未缓存的 roomid
             cursor.execute("""
                 SELECT DISTINCT m.roomid
                 FROM messages m
-                LEFT JOIN contacts_cache c ON m.roomid = c.id AND c.updated_at > %s
+                LEFT JOIN contacts_cache c ON m.roomid = c.id
                 WHERE m.roomid != '' AND m.roomid IS NOT NULL AND c.id IS NULL
                 LIMIT 50
-            """, (expire_time,))
+            """)
             rooms = [row["roomid"] for row in cursor.fetchall()]
 
             return {"users": users, "rooms": rooms}
@@ -325,15 +334,31 @@ class ContactsManager:
 
     def batch_resolve(self, user_ids: list, room_ids: list) -> dict:
         """
-        批量解析昵称
+        批量解析昵称（优化版：一次批量查缓存，只对未命中的逐个调 API）
         返回: {"users": {id: name}, "rooms": {id: name}}
         """
+        unique_users = [uid for uid in set(user_ids) if uid]
+        unique_rooms = [rid for rid in set(room_ids) if rid]
+
+        # 一次性批量查缓存
+        all_ids = unique_users + unique_rooms
+        cached = self._batch_get_cache(all_ids)
+
         users = {}
         rooms = {}
-        for uid in set(user_ids):
-            if uid:
+
+        # 用户：缓存命中直接用，未命中才调 API
+        for uid in unique_users:
+            if uid in cached:
+                users[uid] = cached[uid]
+            else:
                 users[uid] = self.get_name(uid)
-        for rid in set(room_ids):
-            if rid:
+
+        # 群：同上
+        for rid in unique_rooms:
+            if rid in cached:
+                rooms[rid] = cached[rid]
+            else:
                 rooms[rid] = self.get_room_name(rid)
+
         return {"users": users, "rooms": rooms}

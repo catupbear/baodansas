@@ -170,50 +170,55 @@ class Database:
     def get_conversations(self, keyword: str = "") -> list:
         """
         获取会话列表，按最后消息时间倒序。
-        每个会话包含：roomid、最后一条消息摘要、时间、消息数量。
-        私聊（roomid 为空）按 sender 分组。
+        使用单条 SQL 完成分组统计 + 最后一条消息获取，避免 N+1 查询。
         """
         conn = self.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-            # 使用子查询获取每个会话的最新消息
-            sql = """
-                SELECT
-                    CASE WHEN roomid = '' OR roomid IS NULL THEN CONCAT('private_', sender) ELSE roomid END AS conversation_id,
-                    roomid,
-                    MAX(msgtime) AS last_time,
-                    COUNT(*) AS msg_count
-                FROM messages
-            """
+            # 单条 SQL：通过子查询一次性获取会话列表和最后一条消息
             params = []
+            where_clause = ""
             if keyword:
-                sql += " WHERE (summary LIKE %s OR sender LIKE %s OR roomid LIKE %s)"
+                where_clause = "WHERE (m.summary LIKE %s OR m.sender LIKE %s OR m.roomid LIKE %s)"
                 params.extend([f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"])
-            sql += """
-                GROUP BY conversation_id, roomid
-                ORDER BY last_time DESC
+
+            sql = f"""
+                SELECT
+                    t.conversation_id,
+                    t.roomid,
+                    t.last_time,
+                    t.msg_count,
+                    m2.sender AS last_sender,
+                    m2.msgtype AS last_msgtype,
+                    m2.summary AS last_summary
+                FROM (
+                    SELECT
+                        CASE WHEN m.roomid = '' OR m.roomid IS NULL THEN CONCAT('private_', m.sender) ELSE m.roomid END AS conversation_id,
+                        m.roomid,
+                        MAX(m.msgtime) AS last_time,
+                        COUNT(*) AS msg_count
+                    FROM messages m
+                    {where_clause}
+                    GROUP BY conversation_id, m.roomid
+                ) t
+                LEFT JOIN messages m2 ON m2.msgtime = t.last_time
+                    AND (
+                        (t.roomid != '' AND t.roomid IS NOT NULL AND m2.roomid = t.roomid)
+                        OR
+                        (( t.roomid = '' OR t.roomid IS NULL) AND m2.sender = SUBSTRING(t.conversation_id, 9))
+                    )
+                GROUP BY t.conversation_id
+                ORDER BY t.last_time DESC
             """
             cursor.execute(sql, params)
             conversations = list(cursor.fetchall())
 
-            # 获取每个会话的最后一条消息
+            # 补全可能的空值
             for conv in conversations:
-                cond = "roomid = %s" if conv["roomid"] else "(roomid = '' OR roomid IS NULL) AND sender = %s"
-                val = conv["roomid"] if conv["roomid"] else conv["conversation_id"].replace("private_", "", 1)
-                cursor.execute(
-                    f"SELECT sender, msgtype, summary FROM messages WHERE {cond} ORDER BY msgtime DESC LIMIT 1",
-                    (val,)
-                )
-                last_msg = cursor.fetchone()
-                if last_msg:
-                    conv["last_sender"] = last_msg["sender"]
-                    conv["last_msgtype"] = last_msg["msgtype"]
-                    conv["last_summary"] = last_msg["summary"]
-                else:
-                    conv["last_sender"] = ""
-                    conv["last_msgtype"] = ""
-                    conv["last_summary"] = ""
+                conv["last_sender"] = conv.get("last_sender") or ""
+                conv["last_msgtype"] = conv.get("last_msgtype") or ""
+                conv["last_summary"] = conv.get("last_summary") or ""
 
             return conversations
         finally:
@@ -283,10 +288,12 @@ class Database:
             total = cursor.fetchone()["cnt"]
             pages = max(1, (total + page_size - 1) // page_size)
 
-            # 分页查询
+            # 分页查询（只查前端需要的字段，避免传输 raw_data 等大字段）
             offset = (page - 1) * page_size
             cursor.execute(
-                f"SELECT * FROM messages {where_clause} ORDER BY msgtime {order_dir} LIMIT %s OFFSET %s",
+                f"""SELECT seq, msgid, action, sender, tolist, roomid, msgtime, msgtype,
+                           summary, parsed_content
+                    FROM messages {where_clause} ORDER BY msgtime {order_dir} LIMIT %s OFFSET %s""",
                 params + [page_size, offset]
             )
             messages = list(cursor.fetchall())
@@ -295,8 +302,17 @@ class Database:
         finally:
             conn.close()
 
+    # 统计信息缓存（10秒 TTL，避免频繁 COUNT(*)）
+    _stats_cache = None
+    _stats_cache_time = 0
+
     def get_stats(self) -> dict:
-        """获取统计信息"""
+        """获取统计信息（带 10 秒内存缓存）"""
+        import time as _time
+        now = _time.time()
+        if self._stats_cache and now - self._stats_cache_time < 10:
+            return dict(self._stats_cache)
+
         conn = self.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -313,7 +329,10 @@ class Database:
             row = cursor.fetchone()
             seq = row["seq"] if row else 0
 
-            return {"total_messages": total, "current_seq": seq, "type_stats": type_stats}
+            result = {"total_messages": total, "current_seq": seq, "type_stats": type_stats}
+            Database._stats_cache = result
+            Database._stats_cache_time = now
+            return dict(result)
         finally:
             conn.close()
 
