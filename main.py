@@ -7,7 +7,7 @@ import logging
 import threading
 
 import yaml
-from flask import Flask, render_template
+from flask import Flask, redirect, render_template, request
 
 from callback.crypto import WXBizMsgCrypt
 from callback.server import callback_bp, init_callback
@@ -40,6 +40,7 @@ def load_config(config_path: str = "config.yaml") -> dict:
 def create_app(config: dict) -> Flask:
     """创建并配置 Flask 应用"""
     app = Flask(__name__, template_folder="web/templates")
+    app.secret_key = config.get("secret_key", "wxbot-monitor-secret-key")
 
     # 初始化数据库（MySQL 连接池）
     db = Database(config["mysql"])
@@ -85,15 +86,36 @@ def create_app(config: dict) -> Flask:
     init_insurance_api(db, handler=insurance_handler, contacts=contacts)
     app.register_blueprint(insurance_bp)
 
-    # 前端首页
+    # 首页 → 保单识别
     @app.route("/")
     def index():
-        return render_template("index.html")
+        return render_template("insurance.html")
 
-    # 保单识别独立页面
+    # 保单识别兼容旧路径
     @app.route("/insurance")
     def insurance_page():
-        return render_template("insurance.html")
+        return redirect("/")
+
+    # 消息监控（需要密码）
+    @app.route("/monitor")
+    def monitor_page():
+        return render_template("monitor_login.html")
+
+    @app.route("/monitor/chat")
+    def monitor_chat():
+        from flask import session
+        if not session.get("monitor_auth"):
+            return redirect("/monitor")
+        return render_template("index.html")
+
+    @app.route("/monitor/login", methods=["POST"])
+    def monitor_login():
+        from flask import session
+        password = request.form.get("password", "")
+        if password == config.get("monitor", {}).get("password", "wuhu2025"):
+            session["monitor_auth"] = True
+            return redirect("/monitor/chat")
+        return render_template("monitor_login.html", error="密码错误")
 
     # 尝试初始化 SDK 和回调服务（SDK不可用时仅前端可用）
     sdk_config = config["sdk"]
