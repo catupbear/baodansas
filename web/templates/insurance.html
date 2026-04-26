@@ -432,6 +432,7 @@
                           :class="tab.key === 'failed' ? 'bg-red-50 text-red-600'
                                 : tab.key === 'success' ? 'bg-green-50 text-green-600'
                                 : tab.key === 'abnormal' ? 'bg-orange-50 text-orange-600'
+                                : tab.key === 'nonpolicy' ? 'bg-yellow-50 text-yellow-600'
                                 : 'bg-gray-100 text-gray-500'">
                         {{ tab.count }}
                     </span>
@@ -469,7 +470,7 @@
                     导出失败清单
                 </button>
                 <!-- 筛选区域 -->
-                <div v-if="successResults.length" class="ml-auto flex items-center gap-3">
+                <div v-if="successResults.length && (activeTab === 'success' || activeTab === 'all')" class="ml-auto flex items-center gap-3">
                     <div class="flex items-center gap-1.5">
                         <span class="text-xs text-gray-500 font-medium">保司:</span>
                         <select v-model="companyFilter"
@@ -603,8 +604,34 @@
                 </table>
             </div>
 
+            <!-- 非保单列表 -->
+            <div v-if="(activeTab === 'nonpolicy' || activeTab === 'all') && nonPolicyResults.length" class="p-4 space-y-2">
+                <div v-if="activeTab === 'all'" class="pb-1">
+                    <span class="text-xs font-semibold text-yellow-600">非保单 ({{ nonPolicyResults.length }})</span>
+                </div>
+                <div v-for="(r, idx) in nonPolicyResults" :key="idx"
+                     class="border border-yellow-200 rounded-xl p-4 bg-yellow-50 flex items-center justify-between transition-colors hover:bg-yellow-100">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="w-10 h-10 rounded-lg bg-yellow-100 flex items-center justify-center flex-shrink-0">
+                            <svg class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium text-gray-800 truncate">{{ r.file_name }}</p>
+                            <p class="text-xs text-yellow-600 mt-0.5">
+                                <span class="px-1.5 py-0.5 rounded font-medium bg-yellow-200 text-yellow-700">{{ getDocCategory(r) }}</span>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 flex-shrink-0 ml-3">
+                        <button @click="previewResultFile(r)" class="btn btn-outline" style="padding:4px 12px;font-size:12px;">预览</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- 失败列表 -->
-            <div v-if="activeTab !== 'success' && failedResults.length" class="p-4 space-y-2">
+            <div v-if="(activeTab === 'failed' || activeTab === 'all') && failedResults.length" class="p-4 space-y-2">
                 <div v-for="(r, idx) in failedResults" :key="idx"
                      class="border border-red-100 rounded-xl p-4 bg-red-50 flex items-center justify-between transition-colors hover:bg-red-100">
                     <div class="flex items-center gap-3 min-w-0">
@@ -636,6 +663,12 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
                 <p class="text-gray-400 text-sm">暂无提取异常记录</p>
+            </div>
+            <div v-if="activeTab === 'nonpolicy' && !nonPolicyResults.length" class="p-12 text-center">
+                <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <p class="text-gray-400 text-sm">暂无非保单文档</p>
             </div>
             <div v-if="activeTab === 'failed' && !failedResults.length" class="p-12 text-center">
                 <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1737,15 +1770,23 @@ createApp({
         // 提取异常必检字段
         const REQUIRED_FIELDS = ['承保公司', '保单号', '险种', '车牌', '投保人', '被保人', '签单日期', '起保日期', '终保日期', '保费'];
 
-        // 判断是否提取异常（成功识别但关键字段缺失）
+        // 判断是否非保单文档（电子标志、发票、缴款通知、条款、其他等）
+        function isNonPolicy(r) {
+            if (!r.success || !r.invoices || !r.invoices[0]) return false;
+            const cat = r.invoices[0].doc_category || '';
+            return cat && cat !== '保单';
+        }
+
+        // 判断是否提取异常（成功识别的保单但关键字段缺失）
         function isAbnormal(r) {
-            if (!r.success) return false;
+            if (!r.success || isNonPolicy(r)) return false;
             return REQUIRED_FIELDS.some(col => !getMappedValue(r, col));
         }
 
         // 计算属性：分类结果
-        const successResults = computed(() => results.value.filter(r => r.success && !isAbnormal(r)));
+        const successResults = computed(() => results.value.filter(r => r.success && !isNonPolicy(r) && !isAbnormal(r)));
         const abnormalResults = computed(() => results.value.filter(r => isAbnormal(r)));
+        const nonPolicyResults = computed(() => results.value.filter(r => isNonPolicy(r)));
         const failedResults = computed(() => results.value.filter(r => !r.success));
 
         // 获取识别结果的文档类型
@@ -1794,6 +1835,7 @@ createApp({
         const displayResults = computed(() => {
             if (activeTab.value === 'success') return filteredSuccessResults.value;
             if (activeTab.value === 'abnormal') return abnormalResults.value;
+            if (activeTab.value === 'nonpolicy') return nonPolicyResults.value;
             if (activeTab.value === 'failed') return failedResults.value;
             const hasFilter = docCategoryFilter.value !== 'all' || companyFilter.value !== 'all';
             if (!hasFilter) return results.value;
@@ -1809,6 +1851,7 @@ createApp({
             { key: 'all', label: '全部', count: (docCategoryFilter.value === 'all' && companyFilter.value === 'all') ? results.value.length : displayResults.value.length },
             { key: 'success', label: '成功', count: filteredSuccessResults.value.length },
             { key: 'abnormal', label: '提取异常', count: abnormalResults.value.length },
+            { key: 'nonpolicy', label: '非保单', count: nonPolicyResults.value.length },
             { key: 'failed', label: '失败', count: failedResults.value.length },
         ]);
 
@@ -2381,7 +2424,7 @@ createApp({
             previewRawText, formattedRawText, previewFieldsList,
             extractionRules, loadExtractionRules,
             rawTextVisible, rawTextContent, rawTextFileName,
-            successResults, abnormalResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal,
+            successResults, abnormalResults, nonPolicyResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal,
             outputColumns, getMappedValue, getDocCategory, docCategories,
             isLoadingFiles, loadingFileCount, loadingFileTotal, loadingPercent,
             handleFileSelect, handleDrop, removeFile, clearFiles,
