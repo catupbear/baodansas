@@ -122,10 +122,11 @@ class ContactsManager:
                 data = json.loads(resp.read().decode("utf-8"))
             if data.get("errcode") == 0:
                 name = data.get("name", "")
-                logger.debug("获取员工信息: %s -> %s", userid, name)
+                logger.info("获取员工信息: %s -> %s", userid, name)
                 return name
             else:
-                logger.debug("获取员工信息失败 %s: %s", userid, data.get("errmsg"))
+                logger.warning("获取员工信息失败 %s: errcode=%s, errmsg=%s",
+                               userid, data.get("errcode"), data.get("errmsg"))
                 return ""
         except Exception as e:
             logger.error("获取员工信息异常 %s: %s", userid, e)
@@ -135,6 +136,7 @@ class ContactsManager:
         """调用外部联系人API获取昵称"""
         token = self._get_access_token()
         if not token:
+            logger.warning("获取外部联系人 %s 失败: access_token 为空", external_userid)
             return ""
 
         url = f"https://qyapi.weixin.qq.com/cgi-bin/externalcontact/get?access_token={token}&external_userid={external_userid}"
@@ -145,10 +147,11 @@ class ContactsManager:
             if data.get("errcode") == 0:
                 contact = data.get("external_contact", {})
                 name = contact.get("name", "")
-                logger.debug("获取外部联系人: %s -> %s", external_userid, name)
+                logger.info("获取外部联系人: %s -> %s", external_userid, name)
                 return name
             else:
-                logger.debug("获取外部联系人失败 %s: %s", external_userid, data.get("errmsg"))
+                logger.warning("获取外部联系人失败 %s: errcode=%s, errmsg=%s",
+                               external_userid, data.get("errcode"), data.get("errmsg"))
                 return ""
         except Exception as e:
             logger.error("获取外部联系人异常 %s: %s", external_userid, e)
@@ -158,6 +161,7 @@ class ContactsManager:
         """调用会话存档接口获取群信息"""
         token = self._get_access_token()
         if not token:
+            logger.warning("获取群信息 %s 失败: access_token 为空", roomid)
             return ""
 
         url = f"https://qyapi.weixin.qq.com/cgi-bin/msgaudit/groupchat/get?access_token={token}"
@@ -173,10 +177,11 @@ class ContactsManager:
                     # 群没有名称时，用前几个成员名拼接
                     member_names = [m.get("memberid", "") for m in members[:3]]
                     name = "、".join(member_names) + "..."
-                logger.debug("获取群信息: %s -> %s", roomid, name)
+                logger.info("获取群信息: %s -> %s", roomid, name)
                 return name
             else:
-                logger.debug("获取群信息失败 %s: %s", roomid, data.get("errmsg"))
+                logger.warning("获取群信息失败 %s: errcode=%s, errmsg=%s",
+                               roomid, data.get("errcode"), data.get("errmsg"))
                 return ""
         except Exception as e:
             logger.error("获取群信息异常 %s: %s", roomid, e)
