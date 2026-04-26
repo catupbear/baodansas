@@ -1005,14 +1005,20 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
     # 新车车牌特殊处理："粤B-*新"、"*-*" 等
     if "车牌号" not in fields:
         PROVINCE_CHARS = "京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁"
-        m = re.search(rf"号牌号码[：:\s]*([{PROVINCE_CHARS}][A-Z][-\s]*\*?\s*新)", plate_text)
-        if m:
-            fields["车牌号"] = m.group(1).replace(" ", "").replace("-", "")
-        # "*-*" 或 "*新" 或 "粤B-*新" 格式（新车未上牌）
-        elif re.search(r"号[1]?牌[1]?号[1]?码[：:\s]*\*[-\s]*\*", text) or re.search(r"车牌号[码]?[：:\s]*\*[-\s]*\*", text):
-            fields["车牌号"] = "新车"
-        elif re.search(r"车牌号码?[：:]\s*[{0}][A-Z][-\s]*\*\s*新".format(PROVINCE_CHARS), text):
-            fields["车牌号"] = "新车"
+        # "粤B-*新" / "粤B*新" 格式
+        for p in [
+            rf"(?:号\s*牌\s*号\s*码|号牌号码|车牌号码?)[：:\s]*([{PROVINCE_CHARS}][A-Z][-\s]*\*?\s*新)",
+        ]:
+            m = re.search(p, plate_text)
+            if not m:
+                m = re.search(p, plate_text_merged)
+            if m:
+                fields["车牌号"] = m.group(1).replace(" ", "").replace("-", "")
+                break
+        # "*-*" 格式（完全无车牌信息的新车）
+        if "车牌号" not in fields:
+            if re.search(r"(?:号[1]?牌[1]?号[1]?码|车牌号码?)[：:\s]*\*[-\s]*\*", text):
+                fields["车牌号"] = "新车"
 
     # 车架号/VIN
     for p in [
