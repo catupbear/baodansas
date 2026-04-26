@@ -24,6 +24,13 @@ from .db import (
     set_insurance_config,
     update_insurance_record,
 )
+from .monitor_config_db import (
+    list_monitor_configs,
+    get_monitor_config,
+    create_monitor_config,
+    update_monitor_config,
+    delete_monitor_config,
+)
 from .dingtalk_sync import DingTalkTableService, parse_dingtalk_doc_url
 from .field_mapping import (
     OUTPUT_COLUMNS,
@@ -1042,3 +1049,124 @@ def resolve_alert_api(alert_id):
     action = data.get('action', 'ignore')
     resolve_alert(_db, alert_id, action)
     return jsonify({"success": True})
+
+
+# ============================================================
+# 监控配置管理
+# ============================================================
+
+@insurance_bp.route("/api/monitor-configs", methods=["GET"])
+def list_monitor_configs_api():
+    """获取全部监控配置"""
+    try:
+        configs = list_monitor_configs(_db)
+        for c in configs:
+            for ts_field in ("created_at", "updated_at"):
+                if c.get(ts_field) and not isinstance(c[ts_field], str):
+                    c[ts_field] = str(c[ts_field])
+        return jsonify({"code": 0, "data": configs})
+    except Exception as e:
+        logger.exception("获取监控配置列表失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/monitor-configs", methods=["POST"])
+def create_monitor_config_api():
+    """新增监控配置"""
+    try:
+        body = request.get_json(force=True) or {}
+        name = body.get("name", "").strip()
+        if not name:
+            return jsonify({"code": 400, "msg": "监控名称不能为空"}), 400
+
+        doc_url = body.get("dingtalk_doc_url", "").strip()
+        base_id, sheet_id = "", ""
+        if doc_url:
+            base_id, sheet_id = parse_dingtalk_doc_url(doc_url)
+
+        config_id = create_monitor_config(_db, {
+            "name": name,
+            "enabled": 1 if body.get("enabled", True) else 0,
+            "rooms": body.get("rooms", []),
+            "users": body.get("users", []),
+            "dingtalk_doc_url": doc_url,
+            "dingtalk_base_id": base_id,
+            "dingtalk_sheet_id": sheet_id,
+            "field_mapping": body.get("field_mapping", {}),
+        })
+
+        config = get_monitor_config(_db, config_id)
+        return jsonify({"code": 0, "data": config, "msg": "监控配置已创建"})
+    except Exception as e:
+        logger.exception("创建监控配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/monitor-configs/<int:config_id>", methods=["PUT"])
+def update_monitor_config_api(config_id):
+    """更新监控配置"""
+    try:
+        body = request.get_json(force=True) or {}
+        if not body:
+            return jsonify({"code": 400, "msg": "请求体不能为空"}), 400
+
+        updates = {}
+        if "name" in body:
+            updates["name"] = body["name"].strip()
+        if "enabled" in body:
+            updates["enabled"] = 1 if body["enabled"] else 0
+        if "rooms" in body:
+            updates["rooms"] = body["rooms"]
+        if "users" in body:
+            updates["users"] = body["users"]
+        if "field_mapping" in body:
+            updates["field_mapping"] = body["field_mapping"]
+        if "dingtalk_doc_url" in body:
+            doc_url = body["dingtalk_doc_url"].strip()
+            updates["dingtalk_doc_url"] = doc_url
+            if doc_url:
+                base_id, sheet_id = parse_dingtalk_doc_url(doc_url)
+                updates["dingtalk_base_id"] = base_id
+                updates["dingtalk_sheet_id"] = sheet_id
+            else:
+                updates["dingtalk_base_id"] = ""
+                updates["dingtalk_sheet_id"] = ""
+
+        ok = update_monitor_config(_db, config_id, updates)
+        if not ok:
+            return jsonify({"code": 404, "msg": "监控配置不存在"}), 404
+
+        config = get_monitor_config(_db, config_id)
+        return jsonify({"code": 0, "data": config, "msg": "监控配置已更新"})
+    except Exception as e:
+        logger.exception("更新监控配置 %d 失败", config_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/monitor-configs/<int:config_id>", methods=["DELETE"])
+def delete_monitor_config_api(config_id):
+    """删除监控配置"""
+    try:
+        ok = delete_monitor_config(_db, config_id)
+        if not ok:
+            return jsonify({"code": 404, "msg": "监控配置不存在"}), 404
+        return jsonify({"code": 0, "msg": "监控配置已删除"})
+    except Exception as e:
+        logger.exception("删除监控配置 %d 失败", config_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/monitor-configs/<int:config_id>/toggle", methods=["PUT"])
+def toggle_monitor_config_api(config_id):
+    """启停监控配置"""
+    try:
+        config = get_monitor_config(_db, config_id)
+        if not config:
+            return jsonify({"code": 404, "msg": "监控配置不存在"}), 404
+
+        new_enabled = 0 if config["enabled"] else 1
+        update_monitor_config(_db, config_id, {"enabled": new_enabled})
+        return jsonify({"code": 0, "data": {"enabled": bool(new_enabled)}, "msg": "已更新"})
+    except Exception as e:
+        logger.exception("切换监控配置 %d 状态失败", config_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500

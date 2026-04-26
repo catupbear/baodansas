@@ -19,6 +19,7 @@ from core.parser import MessageParser
 from sdk.finance_sdk import FinanceSDK
 from storage.db import Database
 from insurance.db import init_insurance_tables
+from insurance.monitor_config_db import init_monitor_config_table
 from insurance.handler import InsuranceHandler
 from insurance.api import insurance_bp, init_insurance_api
 
@@ -79,6 +80,7 @@ def create_app(config: dict) -> Flask:
 
     # 初始化保单识别模块
     init_insurance_tables(db)
+    init_monitor_config_table(db)
     insurance_handler = InsuranceHandler(
         db=db, cos_storage=cos_storage, contacts=contacts,
         app_config=config,
@@ -95,6 +97,11 @@ def create_app(config: dict) -> Flask:
     @app.route("/insurance")
     def insurance_page():
         return redirect("/")
+
+    # 监控配置管理
+    @app.route("/monitor-config")
+    def monitor_config_page():
+        return render_template("monitor_config.html")
 
     # 模板训练管理
     @app.route("/training")
