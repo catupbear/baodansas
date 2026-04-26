@@ -634,6 +634,14 @@
 
             <!-- 失败列表 -->
             <div v-if="(activeTab === 'failed' || activeTab === 'all') && failedResults.length" class="p-4 space-y-2">
+                <div class="flex items-center justify-between pb-1">
+                    <span v-if="activeTab === 'all'" class="text-xs font-semibold text-red-600">失败 ({{ failedResults.length }})</span>
+                    <span v-else></span>
+                    <button @click="retryAllFailed" :disabled="isRecognizing"
+                            class="btn btn-primary" style="padding:4px 14px;font-size:12px;">
+                        {{ isRecognizing ? '重试中...' : '批量重试全部 (' + failedResults.length + ')' }}
+                    </button>
+                </div>
                 <div v-for="(r, idx) in failedResults" :key="idx"
                      class="border border-red-100 rounded-xl p-4 bg-red-50 flex items-center justify-between transition-colors hover:bg-red-100">
                     <div class="flex items-center gap-3 min-w-0">
@@ -2111,15 +2119,41 @@ createApp({
             if (!file) { showMessage('原始文件已丢失', false); return; }
             isRecognizing.value = true; currentFileName.value = file.name;
             try {
-                const resp = await fetch('/api/insurance/ocr', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ file_data: file.base64, file_type: file.type, file_name: file.name, pdf_page: 0 }),
-                });
-                const data = await resp.json();
+                const data = await recognizeFile(file);
                 const idx = results.value.findIndex(x => x.file_name === r.file_name);
-                if (idx >= 0) results.value[idx] = resp.ok ? data : { success: false, file_name: file.name, error: data.detail || '请求失败' };
+                if (idx >= 0) results.value[idx] = data;
             } catch (e) { showMessage(`重试失败: ${e.message}`, false); }
             currentFileName.value = ''; isRecognizing.value = false;
+        }
+
+        // 批量重试所有失败文件
+        async function retryAllFailed() {
+            const failedList = failedResults.value.slice();
+            if (!failedList.length) return;
+            isRecognizing.value = true;
+            currentFileName.value = '批量重试中...';
+
+            const CONCURRENCY = 5;
+            let idx = 0;
+
+            async function worker() {
+                while (idx < failedList.length) {
+                    const i = idx++;
+                    const r = failedList[i];
+                    const file = files.value.find(f => f.name === r.file_name);
+                    if (!file) continue;
+                    currentFileName.value = file.name;
+                    try {
+                        const data = await recognizeFile(file);
+                        const ri = results.value.findIndex(x => x.file_name === r.file_name);
+                        if (ri >= 0) results.value[ri] = data;
+                    } catch (e) { /* 保留原失败状态 */ }
+                }
+            }
+
+            await Promise.all(Array.from({ length: Math.min(CONCURRENCY, failedList.length) }, () => worker()));
+            currentFileName.value = ''; isRecognizing.value = false;
+            crossFillByPlate();
         }
 
         // 构建提取异常的导出数据
@@ -2499,7 +2533,7 @@ createApp({
             isLoadingFiles, loadingFileCount, loadingFileTotal, loadingPercent,
             handleFileSelect, handleDrop, removeFile, clearFiles,
             previewFile, previewResultFile, showRawText,
-            startRecognize, retryFile, exportExcel,
+            startRecognize, retryFile, retryAllFailed, exportExcel,
             // 字段映射配置
             mappingModalVisible, mappingEditCompany, editingMapping, editingColumns,
             availableOcrFields, unmappedOcrFields, availableCompanies, newCompanyName,
