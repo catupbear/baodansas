@@ -67,28 +67,28 @@ class InsuranceHandler:
         self._baidu_ocr = None
         self._init_baidu_ocr()
 
-        # 新识别引擎（渐进式启用）
+        # 新识别引擎（暂时禁用，使用旧 policy_parser 逻辑）
         self._pipeline = None
-        try:
-            from insurance.engine.pipeline import InsurancePipeline
-            from insurance.ocr.baidu_engine import BaiduOCREngine
-            ocr_engines = []
-            baidu_config = app_config.get("baidu_ocr", {})
-            if baidu_config.get("api_key"):
-                ocr_engines.append(BaiduOCREngine(
-                    baidu_config["api_key"], baidu_config["secret_key"]))
-            tencent_config = app_config.get("tencent_ocr", {})
-            if tencent_config.get("secret_id"):
-                from insurance.ocr.tencent_engine import TencentOCREngine
-                ocr_engines.append(TencentOCREngine(
-                    tencent_config["secret_id"], tencent_config["secret_key"]))
-            self._pipeline = InsurancePipeline(
-                db=db, ocr_engines=ocr_engines,
-                alert_webhook=app_config.get("dingtalk", {}).get("alert_webhook", ""))
-            logger.info("新识别引擎初始化成功")
-        except Exception as e:
-            logger.warning(f"新识别引擎初始化失败，使用旧逻辑: {e}")
-            self._pipeline = None
+        # try:
+        #     from insurance.engine.pipeline import InsurancePipeline
+        #     from insurance.ocr.baidu_engine import BaiduOCREngine
+        #     ocr_engines = []
+        #     baidu_config = app_config.get("baidu_ocr", {})
+        #     if baidu_config.get("api_key"):
+        #         ocr_engines.append(BaiduOCREngine(
+        #             baidu_config["api_key"], baidu_config["secret_key"]))
+        #     tencent_config = app_config.get("tencent_ocr", {})
+        #     if tencent_config.get("secret_id"):
+        #         from insurance.ocr.tencent_engine import TencentOCREngine
+        #         ocr_engines.append(TencentOCREngine(
+        #             tencent_config["secret_id"], tencent_config["secret_key"]))
+        #     self._pipeline = InsurancePipeline(
+        #         db=db, ocr_engines=ocr_engines,
+        #         alert_webhook=app_config.get("dingtalk", {}).get("alert_webhook", ""))
+        #     logger.info("新识别引擎初始化成功")
+        # except Exception as e:
+        #     logger.warning(f"新识别引擎初始化失败，使用旧逻辑: {e}")
+        #     self._pipeline = None
 
         # 启动消费者守护线程
         self._worker = threading.Thread(target=self._consume, daemon=True)
