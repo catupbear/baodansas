@@ -40,11 +40,44 @@ def init_api(db: Database, fetcher=None, finance_sdk=None, sdk_config: dict = No
     _cos = cos_storage
 
 
+@api_bp.route("/conversations")
+def get_conversations():
+    """
+    获取会话列表
+    参数: keyword（搜索关键词）
+    """
+    keyword = request.args.get("keyword", "")
+    conversations = _db.get_conversations(keyword=keyword)
+
+    # 批量解析昵称
+    if _contacts and conversations:
+        user_ids = []
+        room_ids = []
+        for conv in conversations:
+            if conv["roomid"]:
+                room_ids.append(conv["roomid"])
+            if conv.get("last_sender"):
+                user_ids.append(conv["last_sender"])
+            # 私聊会话需要解析对方昵称
+            if not conv["roomid"] and conv["conversation_id"].startswith("private_"):
+                user_ids.append(conv["conversation_id"].replace("private_", "", 1))
+        names = _contacts.batch_resolve(user_ids, room_ids)
+        for conv in conversations:
+            if conv["roomid"]:
+                conv["display_name"] = names["rooms"].get(conv["roomid"], conv["roomid"])
+            else:
+                uid = conv["conversation_id"].replace("private_", "", 1)
+                conv["display_name"] = names["users"].get(uid, uid)
+            conv["last_sender_name"] = names["users"].get(conv.get("last_sender", ""), conv.get("last_sender", ""))
+
+    return jsonify(conversations)
+
+
 @api_bp.route("/messages")
 def get_messages():
     """
     分页查询消息
-    参数: page, page_size, msgtype, sender, roomid, keyword
+    参数: page, page_size, msgtype, sender, roomid, keyword, order, conversation_id
     """
     page = request.args.get("page", 1, type=int)
     page_size = request.args.get("page_size", 50, type=int)
@@ -52,6 +85,8 @@ def get_messages():
     sender = request.args.get("sender", "")
     roomid = request.args.get("roomid", "")
     keyword = request.args.get("keyword", "")
+    order = request.args.get("order", "desc")
+    conversation_id = request.args.get("conversation_id", "")
 
     page_size = min(page_size, 200)
 
@@ -59,6 +94,7 @@ def get_messages():
         page=page, page_size=page_size,
         msgtype=msgtype, sender=sender,
         roomid=roomid, keyword=keyword,
+        order=order, conversation_id=conversation_id,
     )
 
     # 批量解析昵称

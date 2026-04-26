@@ -167,6 +167,58 @@ class Database:
         finally:
             conn.close()
 
+    def get_conversations(self, keyword: str = "") -> list:
+        """
+        获取会话列表，按最后消息时间倒序。
+        每个会话包含：roomid、最后一条消息摘要、时间、消息数量。
+        私聊（roomid 为空）按 sender 分组。
+        """
+        conn = self.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+            # 使用子查询获取每个会话的最新消息
+            sql = """
+                SELECT
+                    CASE WHEN roomid = '' OR roomid IS NULL THEN CONCAT('private_', sender) ELSE roomid END AS conversation_id,
+                    roomid,
+                    MAX(msgtime) AS last_time,
+                    COUNT(*) AS msg_count
+                FROM messages
+            """
+            params = []
+            if keyword:
+                sql += " WHERE (summary LIKE %s OR sender LIKE %s OR roomid LIKE %s)"
+                params.extend([f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"])
+            sql += """
+                GROUP BY conversation_id, roomid
+                ORDER BY last_time DESC
+            """
+            cursor.execute(sql, params)
+            conversations = list(cursor.fetchall())
+
+            # 获取每个会话的最后一条消息
+            for conv in conversations:
+                cond = "roomid = %s" if conv["roomid"] else "(roomid = '' OR roomid IS NULL) AND sender = %s"
+                val = conv["roomid"] if conv["roomid"] else conv["conversation_id"].replace("private_", "", 1)
+                cursor.execute(
+                    f"SELECT sender, msgtype, summary FROM messages WHERE {cond} ORDER BY msgtime DESC LIMIT 1",
+                    (val,)
+                )
+                last_msg = cursor.fetchone()
+                if last_msg:
+                    conv["last_sender"] = last_msg["sender"]
+                    conv["last_msgtype"] = last_msg["msgtype"]
+                    conv["last_summary"] = last_msg["summary"]
+                else:
+                    conv["last_sender"] = ""
+                    conv["last_msgtype"] = ""
+                    conv["last_summary"] = ""
+
+            return conversations
+        finally:
+            conn.close()
+
     def get_recent_messages(self, limit: int = 50) -> list:
         """获取最近的消息"""
         conn = self.pool.connection()
@@ -182,13 +234,27 @@ class Database:
 
     def query_messages(self, page: int = 1, page_size: int = 50,
                        msgtype: str = "", sender: str = "",
-                       roomid: str = "", keyword: str = "") -> dict:
+                       roomid: str = "", keyword: str = "",
+                       order: str = "desc",
+                       conversation_id: str = "") -> dict:
         """
         分页查询消息，支持筛选。
+        order: "asc" 按时间正序（聊天模式），"desc" 按时间倒序（默认）
+        conversation_id: 私聊会话ID（private_xxx 格式），优先于 roomid
         返回: {"total": 总数, "pages": 总页数, "page": 当前页, "messages": [...]}
         """
         conditions = []
         params = []
+
+        # 私聊会话：conversation_id 格式为 private_<sender>
+        if conversation_id and conversation_id.startswith("private_"):
+            private_sender = conversation_id.replace("private_", "", 1)
+            conditions.append("(roomid = '' OR roomid IS NULL)")
+            conditions.append("sender = %s")
+            params.append(private_sender)
+        elif roomid:
+            conditions.append("roomid = %s")
+            params.append(roomid)
 
         if msgtype:
             conditions.append("msgtype = %s")
@@ -196,15 +262,14 @@ class Database:
         if sender:
             conditions.append("sender LIKE %s")
             params.append(f"%{sender}%")
-        if roomid:
-            conditions.append("roomid LIKE %s")
-            params.append(f"%{roomid}%")
         if keyword:
             conditions.append("summary LIKE %s")
             params.append(f"%{keyword}%")
 
         where = " AND ".join(conditions)
         where_clause = f"WHERE {where}" if where else ""
+
+        order_dir = "ASC" if order == "asc" else "DESC"
 
         conn = self.pool.connection()
         try:
@@ -221,7 +286,7 @@ class Database:
             # 分页查询
             offset = (page - 1) * page_size
             cursor.execute(
-                f"SELECT * FROM messages {where_clause} ORDER BY msgtime DESC LIMIT %s OFFSET %s",
+                f"SELECT * FROM messages {where_clause} ORDER BY msgtime {order_dir} LIMIT %s OFFSET %s",
                 params + [page_size, offset]
             )
             messages = list(cursor.fetchall())

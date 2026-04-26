@@ -11,474 +11,740 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
             background: #f0f2f5;
             color: #1a1a1a;
+            height: 100vh;
+            overflow: hidden;
         }
 
-        /* 顶部导航 */
-        .header {
+        /* 顶部工具栏 */
+        .toolbar {
             background: #fff;
-            border-bottom: 1px solid #e8e8e8;
-            padding: 0 24px;
-            height: 56px;
+            border-bottom: 1px solid #e0e0e0;
+            height: 48px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            position: sticky;
-            top: 0;
+            padding: 0 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
             z-index: 100;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
         }
 
-        .header h1 {
-            font-size: 18px;
+        .toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .toolbar-left h1 {
+            font-size: 16px;
             font-weight: 600;
             color: #1a73e8;
         }
 
-        .header-right {
+        .toolbar-stats {
             display: flex;
-            align-items: center;
             gap: 16px;
-            font-size: 13px;
-            color: #666;
+            font-size: 12px;
+            color: #888;
         }
 
-        .auto-refresh {
+        .toolbar-stats span {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 4px;
+        }
+
+        .toolbar-stats .stat-val {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn {
+            height: 32px;
+            padding: 0 14px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn-primary { background: #1a73e8; color: #fff; }
+        .btn-primary:hover { background: #1557b0; }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .auto-refresh-label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            color: #888;
             cursor: pointer;
             user-select: none;
         }
 
-        .auto-refresh input { cursor: pointer; }
-
-        /* 统计栏 */
-        .stats-bar {
+        /* 主体布局 */
+        .app-body {
             display: flex;
-            gap: 16px;
-            padding: 16px 24px;
+            height: calc(100vh - 48px);
         }
 
-        .stat-card {
+        /* 左侧会话列表 */
+        .sidebar {
+            width: 280px;
+            min-width: 280px;
             background: #fff;
-            border-radius: 8px;
-            padding: 16px 20px;
-            flex: 1;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-        }
-
-        .stat-card .label {
-            font-size: 12px;
-            color: #999;
-            margin-bottom: 4px;
-        }
-
-        .stat-card .value {
-            font-size: 24px;
-            font-weight: 600;
-            color: #1a73e8;
-        }
-
-        /* 主体 */
-        .main {
-            padding: 0 24px 24px;
-        }
-
-        /* 筛选栏 */
-        .filter-bar {
-            background: #fff;
-            border-radius: 8px;
-            padding: 16px 20px;
-            margin-bottom: 16px;
+            border-right: 1px solid #e0e0e0;
             display: flex;
-            gap: 12px;
-            align-items: center;
-            flex-wrap: wrap;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            flex-direction: column;
         }
 
-        .filter-bar input,
-        .filter-bar select {
-            height: 36px;
+        .sidebar-search {
+            padding: 12px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .sidebar-search input {
+            width: 100%;
+            height: 34px;
             padding: 0 12px;
-            border: 1px solid #d9d9d9;
-            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+            border-radius: 17px;
             font-size: 13px;
             outline: none;
-            transition: border-color 0.2s;
+            background: #f5f5f5;
+            transition: all 0.2s;
         }
 
-        .filter-bar input:focus,
-        .filter-bar select:focus {
+        .sidebar-search input:focus {
+            background: #fff;
             border-color: #1a73e8;
         }
 
-        .filter-bar input { width: 160px; }
+        .conv-list {
+            flex: 1;
+            overflow-y: auto;
+        }
 
-        .btn {
-            height: 36px;
-            padding: 0 16px;
-            border: none;
-            border-radius: 6px;
-            font-size: 13px;
+        .conv-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: background 0.15s;
+            border-bottom: 1px solid #f5f5f5;
         }
 
-        .btn-primary {
-            background: #1a73e8;
+        .conv-item:hover { background: #f5f8ff; }
+        .conv-item.active { background: #e8f0fe; }
+
+        .conv-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             color: #fff;
-        }
-
-        .btn-primary:hover { background: #1557b0; }
-
-        .btn-default {
-            background: #fff;
-            color: #333;
-            border: 1px solid #d9d9d9;
-        }
-
-        .btn-default:hover { border-color: #1a73e8; color: #1a73e8; }
-
-        /* 消息列表 */
-        .msg-table-wrap {
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-            overflow: hidden;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        thead th {
-            background: #fafafa;
-            padding: 12px 16px;
-            text-align: left;
-            font-size: 13px;
+            font-size: 16px;
             font-weight: 600;
-            color: #666;
-            border-bottom: 1px solid #e8e8e8;
-            white-space: nowrap;
+            flex-shrink: 0;
+            margin-right: 12px;
         }
 
-        tbody td {
-            padding: 12px 16px;
-            font-size: 13px;
-            border-bottom: 1px solid #f0f0f0;
-            vertical-align: top;
+        .conv-info {
+            flex: 1;
+            min-width: 0;
         }
 
-        tbody tr:hover { background: #f5f8ff; }
-
-        /* 消息类型标签 */
-        .msg-type {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 500;
-        }
-
-        .msg-type-text { background: #e6f7ff; color: #0050b3; }
-        .msg-type-image { background: #f6ffed; color: #389e0d; }
-        .msg-type-voice { background: #fff7e6; color: #d46b08; }
-        .msg-type-video { background: #fff1f0; color: #cf1322; }
-        .msg-type-file { background: #f9f0ff; color: #722ed1; }
-        .msg-type-link { background: #e6fffb; color: #08979c; }
-        .msg-type-revoke { background: #fff2e8; color: #ad4e00; }
-        .msg-type-default { background: #f5f5f5; color: #666; }
-
-        .msg-summary {
-            max-width: 400px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .msg-time {
-            color: #999;
-            font-size: 12px;
-            white-space: nowrap;
-        }
-
-        .msg-sender {
-            color: #1a73e8;
-            font-size: 12px;
-            max-width: 120px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .msg-room {
-            color: #52c41a;
-            font-size: 12px;
-            max-width: 120px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        /* 分页 */
-        .pagination {
+        .conv-info-top {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 16px 20px;
-            border-top: 1px solid #f0f0f0;
+            margin-bottom: 4px;
         }
 
-        .pagination .info {
-            font-size: 13px;
+        .conv-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #1a1a1a;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 140px;
+        }
+
+        .conv-time {
+            font-size: 11px;
+            color: #bbb;
+            flex-shrink: 0;
+        }
+
+        .conv-last-msg {
+            font-size: 12px;
             color: #999;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
-        .pagination .pages {
+        .conv-badge {
+            background: #999;
+            color: #fff;
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 8px;
+            margin-left: 6px;
+            flex-shrink: 0;
+        }
+
+        /* 右侧聊天区 */
+        .chat-area {
+            flex: 1;
             display: flex;
-            gap: 4px;
+            flex-direction: column;
+            background: #f0f2f5;
         }
 
-        .pagination .pages button {
-            min-width: 32px;
-            height: 32px;
-            border: 1px solid #d9d9d9;
-            border-radius: 6px;
+        .chat-header {
             background: #fff;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-header-info h2 {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .chat-header-info .chat-meta {
+            font-size: 12px;
+            color: #999;
+            margin-top: 2px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 20px;
+        }
+
+        /* 加载更多 */
+        .load-more {
+            text-align: center;
+            padding: 12px;
+        }
+
+        .load-more-btn {
+            background: none;
+            border: 1px solid #d9d9d9;
+            border-radius: 16px;
+            padding: 6px 20px;
+            font-size: 12px;
+            color: #888;
             cursor: pointer;
-            font-size: 13px;
             transition: all 0.2s;
         }
 
-        .pagination .pages button:hover { border-color: #1a73e8; color: #1a73e8; }
-        .pagination .pages button.active { background: #1a73e8; color: #fff; border-color: #1a73e8; }
-        .pagination .pages button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .load-more-btn:hover {
+            border-color: #1a73e8;
+            color: #1a73e8;
+        }
+
+        /* 时间分割线 */
+        .time-divider {
+            text-align: center;
+            margin: 16px 0;
+            font-size: 11px;
+            color: #bbb;
+        }
+
+        .time-divider span {
+            background: #f0f2f5;
+            padding: 0 12px;
+        }
+
+        /* 消息项 — Slack 风格 */
+        .msg-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 6px 0;
+            margin-bottom: 2px;
+        }
+
+        .msg-item:hover { background: rgba(0,0,0,0.02); border-radius: 8px; margin: 0 -8px 2px; padding: 6px 8px; }
+
+        .msg-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            flex-shrink: 0;
+            margin-right: 10px;
+            margin-top: 2px;
+        }
+
+        .msg-body {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .msg-header {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            margin-bottom: 3px;
+        }
+
+        .msg-sender-name {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .msg-timestamp {
+            font-size: 11px;
+            color: #bbb;
+        }
+
+        .msg-type-tag {
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+
+        .tag-image { background: #e8f5e9; color: #2e7d32; }
+        .tag-file { background: #f3e5f5; color: #7b1fa2; }
+        .tag-voice { background: #fff3e0; color: #e65100; }
+        .tag-video { background: #fce4ec; color: #c62828; }
+        .tag-link { background: #e0f7fa; color: #00695c; }
+        .tag-revoke { background: #fff8e1; color: #f57f17; }
+        .tag-default { background: #f5f5f5; color: #757575; }
+
+        .msg-content {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #333;
+            word-break: break-word;
+        }
+
+        .msg-content a {
+            color: #1a73e8;
+            text-decoration: none;
+        }
+
+        .msg-content a:hover { text-decoration: underline; }
+
+        /* 图片缩略图 */
+        .msg-image {
+            max-width: 300px;
+            max-height: 200px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 4px;
+            transition: opacity 0.2s;
+        }
+
+        .msg-image:hover { opacity: 0.85; }
+
+        /* 文件卡片 */
+        .msg-file-card {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-top: 4px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+            max-width: 320px;
+        }
+
+        .msg-file-card:hover { border-color: #1a73e8; }
+
+        .msg-file-icon {
+            width: 36px;
+            height: 36px;
+            background: #f0f2f5;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .msg-file-info { min-width: 0; }
+
+        .msg-file-name {
+            font-size: 13px;
+            font-weight: 500;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .msg-file-size {
+            font-size: 11px;
+            color: #999;
+        }
+
+        /* 链接卡片 */
+        .msg-link-card {
+            display: block;
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-top: 4px;
+            text-decoration: none;
+            max-width: 400px;
+            transition: border-color 0.2s;
+        }
+
+        .msg-link-card:hover { border-color: #1a73e8; }
+
+        .msg-link-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: #1a73e8;
+            margin-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .msg-link-desc {
+            font-size: 12px;
+            color: #999;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* 撤回消息 */
+        .msg-revoke {
+            font-size: 12px;
+            color: #bbb;
+            font-style: italic;
+            padding: 4px 0;
+        }
 
         /* 空状态 */
-        .empty {
-            text-align: center;
-            padding: 60px 20px;
-            color: #999;
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #bbb;
         }
 
-        .empty .icon { font-size: 48px; margin-bottom: 12px; }
-
-        /* 加载动画 */
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #999;
+        .empty-state .empty-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            opacity: 0.4;
         }
 
+        .empty-state .empty-text {
+            font-size: 14px;
+        }
+
+        /* 图片预览灯箱 */
+        .lightbox {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .lightbox.show { display: flex; }
+
+        .lightbox img {
+            max-width: 90vw;
+            max-height: 90vh;
+            border-radius: 4px;
+            user-select: none;
+        }
+
+        .lightbox-close {
+            position: fixed;
+            top: 16px;
+            right: 20px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.15);
+            border: none;
+            color: #fff;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .lightbox-close:hover { background: rgba(255,255,255,0.3); }
+
+        .lightbox-nav {
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.15);
+            border: none;
+            color: #fff;
+            font-size: 22px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .lightbox-nav:hover { background: rgba(255,255,255,0.3); }
+        .lightbox-nav:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        .lightbox-prev { left: 16px; }
+        .lightbox-next { right: 16px; }
+
+        .lightbox-counter {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255,255,255,0.7);
+            font-size: 13px;
+        }
+
+        /* 滚动条美化 */
+        .conv-list::-webkit-scrollbar,
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .conv-list::-webkit-scrollbar-thumb,
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #d0d0d0;
+            border-radius: 3px;
+        }
+
+        .conv-list::-webkit-scrollbar-thumb:hover,
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #aaa;
+        }
+
+        /* 加载中 */
         .spinner {
             display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 2px solid #e8e8e8;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #e0e0e0;
             border-top-color: #1a73e8;
             border-radius: 50%;
             animation: spin 0.6s linear infinite;
-            margin-right: 8px;
             vertical-align: middle;
         }
 
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* 详情弹窗 */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.4);
-            z-index: 200;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .modal-overlay.show { display: flex; }
-
-        .modal {
-            background: #fff;
-            border-radius: 12px;
-            width: 640px;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: 0 8px 40px rgba(0,0,0,0.15);
-        }
-
-        .modal-header {
-            padding: 16px 20px;
-            border-bottom: 1px solid #e8e8e8;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .modal-header h3 { font-size: 16px; }
-
-        .modal-close {
-            width: 28px; height: 28px;
-            border: none; background: none;
-            font-size: 18px; cursor: pointer;
-            color: #999; border-radius: 4px;
-        }
-
-        .modal-close:hover { background: #f5f5f5; }
-
-        .modal-body { padding: 20px; }
-
-        .detail-row {
-            display: flex;
-            padding: 8px 0;
-            border-bottom: 1px solid #f5f5f5;
-        }
-
-        .detail-label {
-            width: 80px;
+        .loading-text {
+            font-size: 13px;
             color: #999;
-            font-size: 13px;
-            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+            padding: 20px;
         }
 
-        .detail-value {
-            flex: 1;
-            font-size: 13px;
-            word-break: break-all;
+        /* 导航链接 */
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
-        .detail-json {
-            background: #f5f5f5;
-            border-radius: 6px;
-            padding: 12px;
-            font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+        .nav-links a {
             font-size: 12px;
-            white-space: pre-wrap;
-            word-break: break-all;
-            max-height: 300px;
-            overflow-y: auto;
-            margin-top: 8px;
+            color: #666;
+            text-decoration: none;
+            transition: color 0.2s;
         }
+
+        .nav-links a:hover { color: #1a73e8; }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <h1>企业微信消息监控</h1>
-    <div class="header-right">
-        <button class="btn btn-primary" id="fetchBtn" onclick="manualFetch()" style="height:32px;font-size:13px;">拉取消息</button>
-        <label class="auto-refresh">
+<!-- 顶部工具栏 -->
+<div class="toolbar">
+    <div class="toolbar-left">
+        <h1>企业微信消息监控</h1>
+        <div class="toolbar-stats">
+            <span>消息 <b class="stat-val" id="statTotal">-</b></span>
+            <span>SEQ <b class="stat-val" id="statSeq">-</b></span>
+            <span>类型 <b class="stat-val" id="statTypes">-</b></span>
+        </div>
+    </div>
+    <div class="toolbar-right">
+        <div class="nav-links">
+            <a href="/insurance">保单识别</a>
+        </div>
+        <button class="btn btn-primary" id="fetchBtn" onclick="manualFetch()">拉取消息</button>
+        <label class="auto-refresh-label">
             <input type="checkbox" id="autoRefresh" checked>
-            自动刷新 (30秒)
+            自动刷新
         </label>
-        <span id="lastUpdate"></span>
     </div>
 </div>
 
-<div class="stats-bar">
-    <div class="stat-card">
-        <div class="label">消息总数</div>
-        <div class="value" id="statTotal">-</div>
-    </div>
-    <div class="stat-card">
-        <div class="label">当前 SEQ</div>
-        <div class="value" id="statSeq">-</div>
-    </div>
-    <div class="stat-card">
-        <div class="label">消息类型</div>
-        <div class="value" id="statTypes">-</div>
-    </div>
-</div>
-
-<div class="main">
-    <div class="filter-bar">
-        <select id="filterType">
-            <option value="">全部类型</option>
-            <option value="text">文本</option>
-            <option value="image">图片</option>
-            <option value="voice">语音</option>
-            <option value="video">视频</option>
-            <option value="file">文件</option>
-            <option value="link">链接</option>
-            <option value="weapp">小程序</option>
-            <option value="emotion">表情</option>
-            <option value="revoke">撤回</option>
-            <option value="card">名片</option>
-            <option value="location">位置</option>
-            <option value="redpacket">红包</option>
-            <option value="docmsg">文档</option>
-            <option value="mixed">混合消息</option>
-        </select>
-        <input type="text" id="filterSender" placeholder="发送人">
-        <input type="text" id="filterRoom" placeholder="群ID">
-        <input type="text" id="filterKeyword" placeholder="关键词搜索">
-        <button class="btn btn-primary" onclick="search()">查询</button>
-        <button class="btn btn-default" onclick="resetFilter()">重置</button>
+<!-- 主体 -->
+<div class="app-body">
+    <!-- 左侧会话列表 -->
+    <div class="sidebar">
+        <div class="sidebar-search">
+            <input type="text" id="convSearch" placeholder="搜索会话..." oninput="debounceSearchConv()">
+        </div>
+        <div class="conv-list" id="convList">
+            <div class="loading-text"><span class="spinner"></span>加载中...</div>
+        </div>
     </div>
 
-    <div class="msg-table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>时间</th>
-                    <th>类型</th>
-                    <th>发送人</th>
-                    <th>群</th>
-                    <th>内容摘要</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody id="msgBody"></tbody>
-        </table>
-        <div id="pagination" class="pagination" style="display:none;">
-            <span class="info" id="pageInfo"></span>
-            <div class="pages" id="pageButtons"></div>
+    <!-- 右侧聊天区 -->
+    <div class="chat-area">
+        <div id="chatPlaceholder" class="empty-state">
+            <div class="empty-icon">&#128172;</div>
+            <div class="empty-text">选择一个会话开始查看</div>
+        </div>
+        <div id="chatContainer" style="display:none;flex-direction:column;height:100%;">
+            <div class="chat-header">
+                <div class="chat-header-info">
+                    <h2 id="chatTitle">-</h2>
+                    <div class="chat-meta" id="chatMeta"></div>
+                </div>
+            </div>
+            <div class="chat-messages" id="chatMessages"></div>
         </div>
     </div>
 </div>
 
-<!-- 详情弹窗 -->
-<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
-    <div class="modal" onclick="event.stopPropagation()">
-        <div class="modal-header">
-            <h3>消息详情</h3>
-            <button class="modal-close" onclick="closeModal()">&times;</button>
-        </div>
-        <div class="modal-body" id="modalBody"></div>
-    </div>
+<!-- 图片预览灯箱 -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox(event)">
+    <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+    <button class="lightbox-nav lightbox-prev" id="lbPrev" onclick="navLightbox(-1, event)">&#8249;</button>
+    <img id="lbImage" src="" onclick="event.stopPropagation()">
+    <button class="lightbox-nav lightbox-next" id="lbNext" onclick="navLightbox(1, event)">&#8250;</button>
+    <div class="lightbox-counter" id="lbCounter"></div>
 </div>
 
 <script>
+// ===== 全局状态 =====
+let conversations = [];
+let currentConv = null;       // 当前选中的会话 conversation_id
+let currentConvName = "";
+let chatMessages = [];         // 当前聊天的所有消息
+let chatPage = 1;
+let chatTotal = 0;
+let chatPages = 0;
+let chatLoading = false;
+
+// 图片预览
+let lightboxImages = [];       // 当前会话中所有图片 URL
+let lightboxIndex = 0;
+
+// 发送人颜色分配
+const SENDER_COLORS = [
+    "#4285F4", "#EA4335", "#34A853", "#FBBC04", "#8E24AA",
+    "#00897B", "#E65100", "#1565C0", "#AD1457", "#00838F",
+    "#6A1B9A", "#2E7D32", "#D84315", "#283593", "#00695C",
+    "#4E342E", "#37474F", "#827717", "#880E4F", "#1B5E20",
+];
+const senderColorMap = {};
+let colorIndex = 0;
+
+function getSenderColor(senderId) {
+    if (!senderColorMap[senderId]) {
+        senderColorMap[senderId] = SENDER_COLORS[colorIndex % SENDER_COLORS.length];
+        colorIndex++;
+    }
+    return senderColorMap[senderId];
+}
+
+// 获取名字首字符（支持中文）
+function getInitial(name) {
+    if (!name) return "?";
+    return name.charAt(0).toUpperCase();
+}
+
+// 格式化时间
+function formatTime(ts) {
+    if (!ts) return "";
+    const d = new Date(ts);
+    const now = new Date();
+    const pad = n => String(n).padStart(2, "0");
+    const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const isToday = d.toDateString() === now.toDateString();
+    const isYesterday = new Date(now - 86400000).toDateString() === d.toDateString();
+    if (isToday) return time;
+    if (isYesterday) return `昨天 ${time}`;
+    return `${pad(d.getMonth()+1)}-${pad(d.getDate())} ${time}`;
+}
+
+function formatFullTime(ts) {
+    if (!ts) return "";
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+// 判断是否需要时间分隔（间隔超过5分钟）
+function needTimeDivider(prevTs, currTs) {
+    if (!prevTs) return true;
+    return (currTs - prevTs) > 5 * 60 * 1000;
+}
+
+// 消息类型中文
 const MSG_TYPE_CN = {
     text: "文本", image: "图片", voice: "语音", video: "视频",
     file: "文件", link: "链接", weapp: "小程序", emotion: "表情",
     revoke: "撤回", card: "名片", location: "位置", redpacket: "红包",
     docmsg: "文档", mixed: "混合", chatrecord: "聊天记录",
     todo: "待办", vote: "投票", collect: "填表", meeting: "会议",
-    markdown: "Markdown", news: "图文", calendar: "日程",
-    sphfeed: "视频号"
+    markdown: "Markdown", news: "图文", calendar: "日程", sphfeed: "视频号"
 };
 
-const TYPE_CLASS = {
-    text: "msg-type-text", image: "msg-type-image", voice: "msg-type-voice",
-    video: "msg-type-video", file: "msg-type-file", link: "msg-type-link",
-    revoke: "msg-type-revoke"
+const TAG_CLASS = {
+    image: "tag-image", file: "tag-file", voice: "tag-voice",
+    video: "tag-video", link: "tag-link", revoke: "tag-revoke"
 };
 
-let currentPage = 1;
-let refreshTimer = null;
-let allMessages = [];
-
-// 格式化时间戳（毫秒）
-function formatTime(ts) {
-    if (!ts) return "-";
-    const d = new Date(ts);
-    const pad = n => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-// 加载统计
+// ===== 统计 =====
 async function loadStats() {
     try {
         const res = await fetch("/api/stats");
@@ -486,259 +752,321 @@ async function loadStats() {
         document.getElementById("statTotal").textContent = data.total_messages.toLocaleString();
         document.getElementById("statSeq").textContent = data.current_seq.toLocaleString();
         document.getElementById("statTypes").textContent = data.type_stats.length;
+    } catch(e) {}
+}
+
+// ===== 会话列表 =====
+async function loadConversations(keyword) {
+    const params = keyword ? `?keyword=${encodeURIComponent(keyword)}` : "";
+    try {
+        const res = await fetch(`/api/conversations${params}`);
+        conversations = await res.json();
+        renderConversations();
     } catch(e) {
-        console.error("加载统计失败:", e);
+        document.getElementById("convList").innerHTML = '<div class="loading-text">加载失败</div>';
     }
 }
 
-// 加载消息
-async function loadMessages(page) {
-    currentPage = page || 1;
+function renderConversations() {
+    const el = document.getElementById("convList");
+    if (!conversations.length) {
+        el.innerHTML = '<div class="loading-text">暂无会话</div>';
+        return;
+    }
+    el.innerHTML = conversations.map(conv => {
+        const isActive = currentConv === conv.conversation_id;
+        const name = conv.display_name || conv.conversation_id;
+        const color = getSenderColor(conv.conversation_id);
+        const isGroup = !!conv.roomid;
+        const lastSummary = conv.last_summary || "";
+        const lastSender = conv.last_sender_name || "";
+        const prefix = isGroup && lastSender ? `${lastSender}: ` : "";
+        return `<div class="conv-item ${isActive ? 'active' : ''}" onclick="selectConv('${conv.conversation_id}', '${conv.roomid || ''}', '${escapeHtml(name)}')">
+            <div class="conv-avatar" style="background:${color}">${isGroup ? '群' : getInitial(name)}</div>
+            <div class="conv-info">
+                <div class="conv-info-top">
+                    <div class="conv-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+                    <span class="conv-time">${formatTime(conv.last_time)}</span>
+                </div>
+                <div class="conv-last-msg">${escapeHtml(prefix + lastSummary)}</div>
+            </div>
+            <span class="conv-badge">${conv.msg_count}</span>
+        </div>`;
+    }).join("");
+}
+
+// 选择会话
+function selectConv(convId, roomId, displayName) {
+    currentConv = convId;
+    currentConvName = displayName;
+    chatMessages = [];
+    chatPage = 0;
+    lightboxImages = [];
+
+    // 更新左侧高亮
+    renderConversations();
+
+    // 显示聊天区
+    document.getElementById("chatPlaceholder").style.display = "none";
+    const container = document.getElementById("chatContainer");
+    container.style.display = "flex";
+    document.getElementById("chatTitle").textContent = displayName;
+    document.getElementById("chatMeta").textContent = "";
+    document.getElementById("chatMessages").innerHTML = '<div class="loading-text"><span class="spinner"></span>加载消息...</div>';
+
+    // 加载最新消息（最后一页）
+    loadChatMessages(true);
+}
+
+// 加载聊天消息
+async function loadChatMessages(initial) {
+    if (chatLoading) return;
+    chatLoading = true;
+
     const params = new URLSearchParams({
-        page: currentPage,
         page_size: 50,
-        msgtype: document.getElementById("filterType").value,
-        sender: document.getElementById("filterSender").value,
-        roomid: document.getElementById("filterRoom").value,
-        keyword: document.getElementById("filterKeyword").value,
+        order: "desc",  // 先倒序拿最新的
     });
 
-    const tbody = document.getElementById("msgBody");
-    tbody.innerHTML = '<tr><td colspan="6" class="loading"><span class="spinner"></span>加载中...</td></tr>';
+    // 判断会话类型
+    if (currentConv.startsWith("private_")) {
+        params.set("conversation_id", currentConv);
+    } else {
+        params.set("roomid", currentConv);
+    }
+
+    if (initial) {
+        params.set("page", 1);
+    } else {
+        params.set("page", chatPage + 1);
+    }
 
     try {
         const res = await fetch(`/api/messages?${params}`);
         const data = await res.json();
-        allMessages = data.messages;
-        renderMessages(data);
-        renderPagination(data);
-        document.getElementById("lastUpdate").textContent = "更新于 " + new Date().toLocaleTimeString();
+        chatTotal = data.total;
+        chatPages = data.pages;
+
+        if (initial) {
+            chatPage = 1;
+            // 倒序返回的，需要反转为正序显示
+            chatMessages = (data.messages || []).reverse();
+            // 解析昵称后更新 meta
+            document.getElementById("chatMeta").textContent = `共 ${chatTotal} 条消息`;
+        } else {
+            chatPage = data.page;
+            // 加载更早的消息，prepend
+            const older = (data.messages || []).reverse();
+            chatMessages = older.concat(chatMessages);
+        }
+
+        renderChat(initial);
     } catch(e) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty"><div class="icon">&#9888;</div>加载失败，请检查服务是否正常</td></tr>';
+        document.getElementById("chatMessages").innerHTML = '<div class="loading-text">加载失败</div>';
+    } finally {
+        chatLoading = false;
     }
 }
 
-// 渲染消息列表
-function renderMessages(data) {
-    const tbody = document.getElementById("msgBody");
-    if (!data.messages.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty"><div class="icon">&#128172;</div>暂无消息数据</td></tr>';
-        return;
-    }
+// 渲染聊天消息
+function renderChat(scrollToBottom) {
+    const container = document.getElementById("chatMessages");
+    const prevScrollHeight = container.scrollHeight;
 
-    const MEDIA_TYPES = ["image", "voice", "video", "file", "emotion"];
-    tbody.innerHTML = data.messages.map((msg, idx) => {
-        const typeClass = TYPE_CLASS[msg.msgtype] || "msg-type-default";
-        const typeCn = MSG_TYPE_CN[msg.msgtype] || msg.msgtype;
-        const hasMedia = MEDIA_TYPES.includes(msg.msgtype);
-        let actions = `<button class="btn btn-default" style="height:28px;font-size:12px;padding:0 10px;" onclick="showDetail(${idx})">详情</button>`;
-        if (hasMedia) {
-            const mUrl = msg.media_url ? `'${msg.media_url}'` : "''";
-            if (msg.msgtype === "image" || msg.msgtype === "emotion") {
-                actions += ` <button class="btn btn-default" style="height:28px;font-size:12px;padding:0 10px;" onclick="previewMedia(${msg.seq}, '${msg.msgtype}', ${mUrl})">预览</button>`;
-            } else {
-                actions += ` <button class="btn btn-default" style="height:28px;font-size:12px;padding:0 10px;" onclick="downloadMedia(${msg.seq}, ${mUrl})">下载</button>`;
-            }
-        }
-        return `<tr>
-            <td class="msg-time">${formatTime(msg.msgtime)}</td>
-            <td><span class="msg-type ${typeClass}">${typeCn}</span></td>
-            <td class="msg-sender" title="${msg.sender || ''}">${msg.sender_name || msg.sender || "-"}</td>
-            <td class="msg-room" title="${msg.roomid || ''}">${msg.room_name || msg.roomid || "-"}</td>
-            <td class="msg-summary" title="${(msg.summary || '').replace(/"/g, '&quot;')}">${msg.summary || "-"}</td>
-            <td>${actions}</td>
-        </tr>`;
-    }).join("");
-}
+    // 收集图片 URL
+    lightboxImages = [];
+    const imageIndexMap = {};
 
-// 渲染分页
-function renderPagination(data) {
-    const pag = document.getElementById("pagination");
-    if (data.total <= 50) {
-        pag.style.display = "none";
-        return;
-    }
-    pag.style.display = "flex";
-    document.getElementById("pageInfo").textContent = `共 ${data.total} 条，第 ${data.page}/${data.pages} 页`;
-
-    const btns = document.getElementById("pageButtons");
     let html = "";
-    html += `<button ${data.page <= 1 ? "disabled" : ""} onclick="loadMessages(${data.page - 1})">上一页</button>`;
 
-    // 显示页码
-    const start = Math.max(1, data.page - 2);
-    const end = Math.min(data.pages, data.page + 2);
-    if (start > 1) html += `<button onclick="loadMessages(1)">1</button>`;
-    if (start > 2) html += `<button disabled>...</button>`;
-    for (let i = start; i <= end; i++) {
-        html += `<button class="${i === data.page ? 'active' : ''}" onclick="loadMessages(${i})">${i}</button>`;
+    // 加载更多按钮
+    if (chatPage < chatPages) {
+        html += '<div class="load-more"><button class="load-more-btn" onclick="loadChatMessages(false)">加载更早的消息</button></div>';
     }
-    if (end < data.pages - 1) html += `<button disabled>...</button>`;
-    if (end < data.pages) html += `<button onclick="loadMessages(${data.pages})">${data.pages}</button>`;
 
-    html += `<button ${data.page >= data.pages ? "disabled" : ""} onclick="loadMessages(${data.page + 1})">下一页</button>`;
-    btns.innerHTML = html;
-}
+    let prevTs = 0;
+    chatMessages.forEach((msg, idx) => {
+        const ts = msg.msgtime;
 
-// 显示详情
-function showDetail(idx) {
-    const msg = allMessages[idx];
-    if (!msg) return;
+        // 时间分隔线
+        if (needTimeDivider(prevTs, ts)) {
+            html += `<div class="time-divider"><span>${formatFullTime(ts)}</span></div>`;
+        }
+        prevTs = ts;
 
-    let rawData = {};
-    let parsedContent = {};
-    try { rawData = JSON.parse(msg.raw_data || "{}"); } catch(e) {}
-    try { parsedContent = JSON.parse(msg.parsed_content || "{}"); } catch(e) {}
+        const senderName = msg.sender_name || msg.sender || "未知";
+        const color = getSenderColor(msg.sender);
+        const typeCn = MSG_TYPE_CN[msg.msgtype] || msg.msgtype;
+        const tagClass = TAG_CLASS[msg.msgtype] || "tag-default";
 
-    const typeCn = MSG_TYPE_CN[msg.msgtype] || msg.msgtype;
-    const MEDIA_TYPES = ["image", "voice", "video", "file", "emotion"];
-    const mediaUrl = msg.media_url || `/api/media/${msg.seq}`;
-    let mediaHtml = "";
-    if (MEDIA_TYPES.includes(msg.msgtype)) {
+        // 非文本类型显示标签
+        const typeTag = msg.msgtype !== "text"
+            ? `<span class="msg-type-tag ${tagClass}">${typeCn}</span>`
+            : "";
+
+        // 消息内容
+        let contentHtml = renderMsgContent(msg, idx);
+
+        // 收集图片到灯箱
         if (msg.msgtype === "image" || msg.msgtype === "emotion") {
-            mediaHtml = `
-                <div style="margin-top:16px;font-size:13px;font-weight:600;color:#666;">媒体预览</div>
-                <div style="margin-top:8px;"><img src="${mediaUrl}" style="max-width:100%;max-height:400px;border-radius:8px;border:1px solid #e8e8e8;" onerror="this.outerHTML='<span style=color:#999>加载失败</span>'"></div>
-            `;
-        } else if (msg.msgtype === "video") {
-            mediaHtml = `
-                <div style="margin-top:16px;font-size:13px;font-weight:600;color:#666;">视频预览</div>
-                <div style="margin-top:8px;"><video src="${mediaUrl}" controls style="max-width:100%;max-height:400px;border-radius:8px;"></video></div>
-            `;
-        } else if (msg.msgtype === "voice") {
-            mediaHtml = `
-                <div style="margin-top:16px;font-size:13px;font-weight:600;color:#666;">语音播放</div>
-                <div style="margin-top:8px;"><audio src="${mediaUrl}" controls></audio></div>
-            `;
+            const imgUrl = msg.media_url || `/api/media/${msg.seq}`;
+            imageIndexMap[idx] = lightboxImages.length;
+            lightboxImages.push(imgUrl);
+        }
+
+        // 撤回消息特殊处理
+        if (msg.msgtype === "revoke") {
+            html += `<div class="msg-item">
+                <div class="msg-revoke">${escapeHtml(senderName)} 撤回了一条消息</div>
+            </div>`;
         } else {
-            mediaHtml = `
-                <div style="margin-top:16px;">
-                    <a href="${mediaUrl}" target="_blank" class="btn btn-primary" style="display:inline-block;text-decoration:none;line-height:36px;">下载文件</a>
+            html += `<div class="msg-item">
+                <div class="msg-avatar" style="background:${color}">${getInitial(senderName)}</div>
+                <div class="msg-body">
+                    <div class="msg-header">
+                        <span class="msg-sender-name" style="color:${color}">${escapeHtml(senderName)}</span>
+                        <span class="msg-timestamp">${formatTime(ts)}</span>
+                        ${typeTag}
+                    </div>
+                    <div class="msg-content">${contentHtml}</div>
                 </div>
-            `;
+            </div>`;
         }
+    });
+
+    container.innerHTML = html;
+
+    // 绑定图片点击事件（使用 imageIndexMap）
+    container.querySelectorAll(".msg-image").forEach(img => {
+        const msgIdx = parseInt(img.dataset.msgIdx);
+        if (imageIndexMap[msgIdx] !== undefined) {
+            img.onclick = () => openLightbox(imageIndexMap[msgIdx]);
+        }
+    });
+
+    if (scrollToBottom) {
+        container.scrollTop = container.scrollHeight;
+    } else {
+        // 加载更多后保持滚动位置
+        container.scrollTop = container.scrollHeight - prevScrollHeight;
     }
-    const senderName = msg.sender_name || msg.sender || "-";
-    const roomName = msg.room_name || msg.roomid || "-";
-    const html = `
-        <div class="detail-row"><div class="detail-label">消息ID</div><div class="detail-value">${msg.msgid || "-"}</div></div>
-        <div class="detail-row"><div class="detail-label">SEQ</div><div class="detail-value">${msg.seq || "-"}</div></div>
-        <div class="detail-row"><div class="detail-label">时间</div><div class="detail-value">${formatTime(msg.msgtime)}</div></div>
-        <div class="detail-row"><div class="detail-label">类型</div><div class="detail-value">${typeCn} (${msg.msgtype})</div></div>
-        <div class="detail-row"><div class="detail-label">动作</div><div class="detail-value">${msg.action || "-"}</div></div>
-        <div class="detail-row"><div class="detail-label">发送人</div><div class="detail-value">${senderName} <span style="color:#999;font-size:11px;">(${msg.sender || ""})</span></div></div>
-        <div class="detail-row"><div class="detail-label">接收人</div><div class="detail-value">${msg.tolist || "-"}</div></div>
-        <div class="detail-row"><div class="detail-label">群</div><div class="detail-value">${roomName} <span style="color:#999;font-size:11px;">(${msg.roomid || ""})</span></div></div>
-        <div class="detail-row"><div class="detail-label">摘要</div><div class="detail-value">${msg.summary || "-"}</div></div>
-        ${mediaHtml}
-        <div style="margin-top:16px;font-size:13px;font-weight:600;color:#666;">解析内容</div>
-        <div class="detail-json">${JSON.stringify(parsedContent, null, 2)}</div>
-        <div style="margin-top:16px;font-size:13px;font-weight:600;color:#666;">原始数据</div>
-        <div class="detail-json">${JSON.stringify(rawData, null, 2)}</div>
-    `;
-    document.getElementById("modalBody").innerHTML = html;
-    document.getElementById("modalOverlay").classList.add("show");
 }
 
-function closeModal(e) {
-    if (e && e.target !== e.currentTarget) return;
-    document.getElementById("modalOverlay").classList.remove("show");
+// 渲染消息内容
+function renderMsgContent(msg, idx) {
+    const parsed = (() => {
+        try { return JSON.parse(msg.parsed_content || "{}"); } catch(e) { return {}; }
+    })();
+    const mediaUrl = msg.media_url || `/api/media/${msg.seq}`;
+
+    switch(msg.msgtype) {
+        case "text":
+            return escapeHtml(msg.summary || "").replace(
+                /(https?:\/\/[^\s<]+)/g,
+                '<a href="$1" target="_blank">$1</a>'
+            );
+
+        case "image":
+        case "emotion":
+            return `<img class="msg-image" src="${mediaUrl}" data-msg-idx="${idx}" loading="lazy" onerror="this.outerHTML='<span style=\\'color:#999\\'>[图片加载失败]</span>'" >`;
+
+        case "file":
+            const fileName = parsed.filename || "文件";
+            const fileSize = parsed.filesize ? formatFileSize(parsed.filesize) : "";
+            return `<div class="msg-file-card" onclick="window.open('${mediaUrl}','_blank')">
+                <div class="msg-file-icon">&#128196;</div>
+                <div class="msg-file-info">
+                    <div class="msg-file-name" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</div>
+                    <div class="msg-file-size">${fileSize}</div>
+                </div>
+            </div>`;
+
+        case "link":
+        case "weapp":
+            const title = parsed.title || msg.summary || "链接";
+            const desc = parsed.description || "";
+            const linkUrl = parsed.link_url || parsed.url || "#";
+            return `<a class="msg-link-card" href="${escapeHtml(linkUrl)}" target="_blank">
+                <div class="msg-link-title">${escapeHtml(title)}</div>
+                <div class="msg-link-desc">${escapeHtml(desc)}</div>
+            </a>`;
+
+        case "voice":
+            return `<audio src="${mediaUrl}" controls style="max-width:240px;height:32px;"></audio>`;
+
+        case "video":
+            return `<video src="${mediaUrl}" controls style="max-width:320px;max-height:240px;border-radius:8px;"></video>`;
+
+        case "location":
+            const addr = parsed.address || msg.summary || "位置";
+            return `<div style="display:flex;align-items:center;gap:6px;">&#128205; ${escapeHtml(addr)}</div>`;
+
+        case "card":
+            const cardName = parsed.nickname || parsed.userid || msg.summary || "名片";
+            return `<div style="display:flex;align-items:center;gap:6px;">&#128188; ${escapeHtml(cardName)}</div>`;
+
+        case "redpacket":
+            return `<div style="display:flex;align-items:center;gap:6px;color:#cf1322;">&#129511; ${escapeHtml(msg.summary || "红包")}</div>`;
+
+        default:
+            return escapeHtml(msg.summary || "-");
+    }
 }
 
-// ESC 关闭弹窗
+function formatFileSize(bytes) {
+    if (!bytes) return "";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+// ===== 图片灯箱 =====
+function openLightbox(index) {
+    if (!lightboxImages.length) return;
+    lightboxIndex = index;
+    updateLightbox();
+    document.getElementById("lightbox").classList.add("show");
+}
+
+function closeLightbox(e) {
+    if (e && e.target !== e.currentTarget && e.target.tagName !== "BUTTON") return;
+    document.getElementById("lightbox").classList.remove("show");
+}
+
+function navLightbox(dir, e) {
+    if (e) e.stopPropagation();
+    lightboxIndex = Math.max(0, Math.min(lightboxImages.length - 1, lightboxIndex + dir));
+    updateLightbox();
+}
+
+function updateLightbox() {
+    document.getElementById("lbImage").src = lightboxImages[lightboxIndex];
+    document.getElementById("lbCounter").textContent = `${lightboxIndex + 1} / ${lightboxImages.length}`;
+    document.getElementById("lbPrev").disabled = lightboxIndex <= 0;
+    document.getElementById("lbNext").disabled = lightboxIndex >= lightboxImages.length - 1;
+}
+
+// 键盘快捷键
 document.addEventListener("keydown", e => {
-    if (e.key === "Escape") closeModal();
+    const lb = document.getElementById("lightbox");
+    if (lb.classList.contains("show")) {
+        if (e.key === "Escape") closeLightbox();
+        if (e.key === "ArrowLeft") navLightbox(-1);
+        if (e.key === "ArrowRight") navLightbox(1);
+    }
 });
 
-function search() {
-    loadMessages(1);
+// ===== 搜索防抖 =====
+let searchTimer = null;
+function debounceSearchConv() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+        const kw = document.getElementById("convSearch").value.trim();
+        loadConversations(kw);
+    }, 300);
 }
 
-function resetFilter() {
-    document.getElementById("filterType").value = "";
-    document.getElementById("filterSender").value = "";
-    document.getElementById("filterRoom").value = "";
-    document.getElementById("filterKeyword").value = "";
-    loadMessages(1);
-}
-
-// 自动刷新
-function setupAutoRefresh() {
-    const checkbox = document.getElementById("autoRefresh");
-
-    function startRefresh() {
-        if (refreshTimer) clearInterval(refreshTimer);
-        refreshTimer = setInterval(() => {
-            refreshNewMessages();
-            loadStats();
-        }, 30000);
-    }
-
-    function stopRefresh() {
-        if (refreshTimer) {
-            clearInterval(refreshTimer);
-            refreshTimer = null;
-        }
-    }
-
-    checkbox.addEventListener("change", () => {
-        if (checkbox.checked) {
-            startRefresh();
-        } else {
-            stopRefresh();
-        }
-    });
-
-    // 默认开启
-    if (checkbox.checked) {
-        startRefresh();
-    }
-}
-
-// 增量刷新：只在第1页且无筛选条件时，检查是否有新消息
-function refreshNewMessages() {
-    const hasFilter = document.getElementById("filterType").value
-        || document.getElementById("filterSender").value
-        || document.getElementById("filterRoom").value
-        || document.getElementById("filterKeyword").value;
-
-    if (currentPage !== 1 || hasFilter) {
-        // 有筛选或不在第一页，不自动刷新列表
-        return;
-    }
-
-    // 先检查统计数据是否变化
-    fetch("/api/stats").then(r => r.json()).then(stats => {
-        const curTotal = parseInt(document.getElementById("statTotal").textContent) || 0;
-        if (stats.total_messages > curTotal) {
-            // 有新消息，刷新列表
-            loadMessages(1);
-        }
-    }).catch(() => {});
-}
-
-// 回车搜索
-document.querySelectorAll(".filter-bar input").forEach(input => {
-    input.addEventListener("keydown", e => {
-        if (e.key === "Enter") search();
-    });
-});
-
-// 预览媒体（图片/表情）
-function previewMedia(seq, msgtype, cosUrl) {
-    const url = cosUrl || `/api/media/${seq}`;
-    const overlay = document.getElementById("modalOverlay");
-    const body = document.getElementById("modalBody");
-    body.innerHTML = `<div style="text-align:center;padding:20px;"><img src="${url}" style="max-width:100%;max-height:70vh;border-radius:8px;" onerror="this.outerHTML='<span style=color:#999>加载失败，媒体文件可能已过期</span>'"></div>`;
-    overlay.classList.add("show");
-}
-
-// 下载媒体（文件/语音/视频）
-function downloadMedia(seq, cosUrl) {
-    window.open(cosUrl || `/api/media/${seq}`, "_blank");
-}
-
-// 手动拉取消息
+// ===== 手动拉取消息 =====
 async function manualFetch() {
     const btn = document.getElementById("fetchBtn");
     btn.disabled = true;
@@ -748,42 +1076,102 @@ async function manualFetch() {
         const res = await fetch("/api/fetch", { method: "POST" });
         const data = await res.json();
         if (res.ok) {
-            btn.textContent = "拉取中...";
-            // 轮询等待拉取完成
             const pollInterval = setInterval(async () => {
-                const statsRes = await fetch("/api/stats");
-                const stats = await statsRes.json();
-                if (!stats.fetching) {
-                    clearInterval(pollInterval);
-                    btn.disabled = false;
-                    btn.textContent = "拉取消息";
-                    loadMessages(1);
-                    loadStats();
-                }
+                try {
+                    const statsRes = await fetch("/api/stats");
+                    const stats = await statsRes.json();
+                    if (!stats.fetching) {
+                        clearInterval(pollInterval);
+                        btn.disabled = false;
+                        btn.textContent = "拉取消息";
+                        loadStats();
+                        loadConversations();
+                        if (currentConv) loadChatMessages(true);
+                    }
+                } catch(e) {}
             }, 2000);
-            // 最多等60秒
             setTimeout(() => {
                 clearInterval(pollInterval);
                 btn.disabled = false;
                 btn.textContent = "拉取消息";
-                loadMessages(1);
-                loadStats();
             }, 60000);
         } else {
-            alert(data.error || "拉取失败");
             btn.disabled = false;
             btn.textContent = "拉取消息";
         }
     } catch(e) {
-        alert("请求失败: " + e.message);
         btn.disabled = false;
         btn.textContent = "拉取消息";
     }
 }
 
-// 初始化
+// ===== 自动刷新 =====
+let refreshTimer = null;
+
+function setupAutoRefresh() {
+    const checkbox = document.getElementById("autoRefresh");
+
+    function start() {
+        if (refreshTimer) clearInterval(refreshTimer);
+        refreshTimer = setInterval(() => {
+            loadStats();
+            loadConversations(document.getElementById("convSearch").value.trim());
+            // 如果有选中的会话，刷新聊天
+            if (currentConv) {
+                refreshChat();
+            }
+        }, 30000);
+    }
+
+    function stop() {
+        if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+    }
+
+    checkbox.addEventListener("change", () => {
+        checkbox.checked ? start() : stop();
+    });
+
+    if (checkbox.checked) start();
+}
+
+// 增量刷新聊天：检查是否有新消息
+async function refreshChat() {
+    if (!currentConv || chatLoading) return;
+    const params = new URLSearchParams({
+        page_size: 50,
+        page: 1,
+        order: "desc",
+    });
+    if (currentConv.startsWith("private_")) {
+        params.set("conversation_id", currentConv);
+    } else {
+        params.set("roomid", currentConv);
+    }
+
+    try {
+        const res = await fetch(`/api/messages?${params}`);
+        const data = await res.json();
+        if (data.total > chatTotal) {
+            // 有新消息，重新加载
+            chatTotal = data.total;
+            chatPages = data.pages;
+            chatPage = 1;
+            chatMessages = (data.messages || []).reverse();
+            document.getElementById("chatMeta").textContent = `共 ${chatTotal} 条消息`;
+            renderChat(true);
+        }
+    } catch(e) {}
+}
+
+// ===== 工具函数 =====
+function escapeHtml(str) {
+    if (!str) return "";
+    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// ===== 初始化 =====
 loadStats();
-loadMessages(1);
+loadConversations();
 setupAutoRefresh();
 </script>
 </body>

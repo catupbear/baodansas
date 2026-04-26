@@ -213,6 +213,116 @@ class ContactsManager:
         finally:
             conn.close()
 
+    def find_unresolved(self) -> dict:
+        """
+        从 messages 表中查找所有未解析名称的 sender 和 roomid。
+        未解析：在 contacts_cache 中没有记录，或缓存已过期。
+        返回: {"users": [id, ...], "rooms": [id, ...]}
+        """
+        conn = self.db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            now = int(time.time())
+            expire_time = now - 86400  # 24小时过期
+
+            # 查找未缓存或已过期的 sender
+            cursor.execute("""
+                SELECT DISTINCT m.sender
+                FROM messages m
+                LEFT JOIN contacts_cache c ON m.sender = c.id AND c.updated_at > %s
+                WHERE m.sender != '' AND m.sender IS NOT NULL AND c.id IS NULL
+                LIMIT 50
+            """, (expire_time,))
+            users = [row["sender"] for row in cursor.fetchall()]
+
+            # 查找未缓存或已过期的 roomid
+            cursor.execute("""
+                SELECT DISTINCT m.roomid
+                FROM messages m
+                LEFT JOIN contacts_cache c ON m.roomid = c.id AND c.updated_at > %s
+                WHERE m.roomid != '' AND m.roomid IS NOT NULL AND c.id IS NULL
+                LIMIT 50
+            """, (expire_time,))
+            rooms = [row["roomid"] for row in cursor.fetchall()]
+
+            return {"users": users, "rooms": rooms}
+        finally:
+            conn.close()
+
+    def resolve_unresolved(self) -> dict:
+        """
+        自动解析未缓存的联系人和群名称。
+        每次最多处理 50 个用户 + 50 个群，带间隔避免触发频率限制。
+        返回: {"resolved_users": 成功数, "resolved_rooms": 成功数, "failed_users": 失败数, "failed_rooms": 失败数}
+        """
+        unresolved = self.find_unresolved()
+        result = {"resolved_users": 0, "resolved_rooms": 0,
+                  "failed_users": 0, "failed_rooms": 0}
+
+        for uid in unresolved["users"]:
+            try:
+                name = ""
+                if uid.startswith(("wm", "wo", "wb")):
+                    name = self._fetch_external_contact(uid)
+                else:
+                    name = self._fetch_user(uid)
+
+                if name:
+                    self._set_cache(uid, "user", name)
+                    result["resolved_users"] += 1
+                    logger.info("自动解析联系人: %s -> %s", uid, name)
+                else:
+                    result["failed_users"] += 1
+                # 每次 API 调用间隔 0.5 秒，避免频率限制
+                time.sleep(0.5)
+            except Exception as e:
+                logger.error("自动解析联系人异常 %s: %s", uid, e)
+                result["failed_users"] += 1
+
+        for rid in unresolved["rooms"]:
+            try:
+                name = self._fetch_room_info(rid)
+                if name:
+                    self._set_cache(rid, "room", name)
+                    result["resolved_rooms"] += 1
+                    logger.info("自动解析群名: %s -> %s", rid, name)
+                else:
+                    result["failed_rooms"] += 1
+                time.sleep(0.5)
+            except Exception as e:
+                logger.error("自动解析群名异常 %s: %s", rid, e)
+                result["failed_rooms"] += 1
+
+        return result
+
+    def start_auto_resolve(self, interval: int = 300):
+        """
+        启动后台线程，定时自动解析未缓存的联系人/群名称。
+        interval: 检查间隔秒数，默认 5 分钟
+        """
+        import threading
+
+        def _worker():
+            logger.info("通讯录自动解析线程启动，间隔 %d 秒", interval)
+            while True:
+                try:
+                    unresolved = self.find_unresolved()
+                    total = len(unresolved["users"]) + len(unresolved["rooms"])
+                    if total > 0:
+                        logger.info("发现 %d 个未解析联系人，%d 个未解析群名，开始自动解析",
+                                    len(unresolved["users"]), len(unresolved["rooms"]))
+                        result = self.resolve_unresolved()
+                        logger.info("自动解析完成: 用户 %d 成功/%d 失败, 群 %d 成功/%d 失败",
+                                    result["resolved_users"], result["failed_users"],
+                                    result["resolved_rooms"], result["failed_rooms"])
+                except Exception as e:
+                    logger.error("自动解析异常: %s", e)
+                time.sleep(interval)
+
+        thread = threading.Thread(target=_worker, daemon=True, name="contacts-auto-resolve")
+        thread.start()
+        logger.info("通讯录自动解析线程已启动")
+
     def batch_resolve(self, user_ids: list, room_ids: list) -> dict:
         """
         批量解析昵称

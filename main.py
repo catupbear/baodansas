@@ -52,6 +52,9 @@ def create_app(config: dict) -> Flask:
     )
     logger.info("通讯录模块初始化完成")
 
+    # 启动通讯录自动解析（每5分钟检查一次未解析的联系人/群名）
+    contacts.start_auto_resolve(interval=300)
+
     # 初始化COS存储（可选）
     cos_storage = None
     cos_config = config.get("cos")
