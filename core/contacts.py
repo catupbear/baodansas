@@ -170,7 +170,7 @@ class ContactsManager:
                 data = json.loads(resp.read().decode("utf-8"))
             if data.get("errcode") == 0:
                 name = data.get("name", "")
-                logger.info("获取员工信息: %s -> %s", userid, name)
+                logger.debug("获取员工信息: %s -> %s", userid, name)
                 return name
             else:
                 logger.warning("获取员工信息失败 %s: errcode=%s, errmsg=%s",
@@ -195,7 +195,7 @@ class ContactsManager:
             if data.get("errcode") == 0:
                 contact = data.get("external_contact", {})
                 name = contact.get("name", "")
-                logger.info("获取外部联系人: %s -> %s", external_userid, name)
+                logger.debug("获取外部联系人: %s -> %s", external_userid, name)
                 return name
             else:
                 logger.warning("获取外部联系人失败 %s: errcode=%s, errmsg=%s",
@@ -225,7 +225,7 @@ class ContactsManager:
                     if not name and members:
                         member_names = [m.get("memberid", "") for m in members[:3]]
                         name = "、".join(member_names) + "..."
-                    logger.info("获取群信息(内部群): %s -> %s", roomid, name)
+                    logger.debug("获取群信息(内部群): %s -> %s", roomid, name)
                     return name
                 elif data.get("errcode") != 301059:
                     # 非 301059 错误，不再尝试外部群接口
@@ -263,7 +263,7 @@ class ContactsManager:
                     name = "、".join(n for n in member_names if n)
                     if name:
                         name += "..."
-                logger.info("获取群信息(外部群): %s -> %s", roomid, name)
+                logger.debug("获取群信息(外部群): %s -> %s", roomid, name)
                 return name
             else:
                 logger.warning("获取外部群信息失败 %s: errcode=%s, errmsg=%s",
