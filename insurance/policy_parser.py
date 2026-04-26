@@ -9,6 +9,10 @@
 import re
 from typing import Dict, Any, List, Optional
 
+import jieba.posseg as pseg
+# 预加载 jieba 词典，避免首次调用延迟
+pseg.cut("预加载")
+
 
 # ============================================================
 # 保司配置：名称、简称、保单号前缀、特征关键词
@@ -116,29 +120,25 @@ PERSON_BLACKLIST = {
 
 
 def _is_valid_person(val: str) -> bool:
-    """判断提取的人名是否有效"""
-    if not val or len(val) > 20 or len(val) < 2:
+    """
+    判断提取的值是否为有效的人名或公司名。
+    使用 jieba 词性标注（nr=人名, nt=机构名）+ 公司关键词兜底。
+    """
+    if not val or len(val) > 30 or len(val) < 2:
         return False
     if val in PERSON_BLACKLIST:
         return False
-    # 过滤明显不是人名的内容
-    if re.match(r'^[：:（(]', val):
-        return False
-    if re.search(r'保单|保险|交通|条款|验真|机动车|车辆|证件类型|证件号码|手机号|姓名|发动机|车架号|投保|信息序号|和受害人|个人信|个人隐私', val):
-        return False
-    # 过滤明显非人名（含冒号+数字序列的技术数据）
-    if re.search(r'[:：]\s*[A-Z0-9]', val):
-        return False
-    # 过滤"向本公司提出的申请"等长句
-    if re.search(r'本公司|提出|公章|有敬异|社会统一|出生日期|联系电话|手机电话|和受害人|信息序号|如实告知|另有约定|投保人的|保险人的', val):
-        return False
-    # 过滤"信息"开头或"个人信"等截断的标签
-    if val.startswith("信息") or val.startswith("个人信") or val.startswith("个人"):
-        return False
-    # 过滤纯英文非人名
-    if re.match(r'^[A-Za-z]+$', val) and val not in ("Policy",):
-        return False
-    return True
+
+    # 包含公司关键词 → 直接认为是公司名，有效
+    if re.search(r'公司|集团|企业|合伙|个体|工厂|商行|商贸|车行|车队|运输', val):
+        return True
+
+    # jieba 词性标注：包含人名(nr)或机构名(nt/nz)则有效
+    words = list(pseg.cut(val))
+    if any(w.flag in ('nr', 'nrt', 'nt', 'nz') for w in words):
+        return True
+
+    return False
 
 
 def _clean_person_name(val: str) -> str:
