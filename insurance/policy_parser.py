@@ -132,8 +132,8 @@ def _is_valid_person(val: str) -> bool:
     # 过滤"向本公司提出的申请"等长句
     if re.search(r'本公司|提出|公章|有敬异|社会统一|出生日期|联系电话|手机电话|和受害人|信息序号|如实告知|另有约定|投保人的|保险人的', val):
         return False
-    # 过滤"信息"开头（被保险人信息 → 信息）
-    if val.startswith("信息"):
+    # 过滤"信息"开头或"个人信"等截断的标签
+    if val.startswith("信息") or val.startswith("个人信") or val.startswith("个人"):
         return False
     # 过滤纯英文非人名
     if re.match(r'^[A-Za-z]+$', val) and val not in ("Policy",):
@@ -384,6 +384,21 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
     m = re.search(r"经办[：:\s]*(\S+?)(?:\s|$)", text)
     if m:
         fields["经办人"] = m.group(1)
+
+    # ===== 业务员 / 代理人 =====
+    for p in [
+        r"业务员[：:\s]*(\S+?)(?:\s|$)",
+        r"代理人名称[：:\s]*(\S+?)(?:\s|$)",
+        r"代理人[：:\s]*([\u4e00-\u9fff][\u4e00-\u9fff\w]{1,10})(?:\s|$)",
+        r"销售人员[：:\s]*(\S+?)(?:\s|$)",
+    ]:
+        m = re.search(p, text)
+        if m:
+            fields["业务员"] = m.group(1).strip()
+            break
+    # 经办人兜底为业务员
+    if "业务员" not in fields and "经办人" in fields:
+        fields["业务员"] = fields["经办人"]
 
     # ===== 兜底：互补投保人/被保险人 =====
     if "被保险人" not in fields and "投保人" in fields:
@@ -1617,7 +1632,7 @@ def get_extraction_rules(company_short: str = "") -> Dict[str, Dict[str, str]]:
         },
         "业务员": {
             "ocr_field": "业务员",
-            "rules": "非OCR提取字段，需手动填写",
+            "rules": "提取业务员/代理人名称/销售人员，经办人兜底",
             "special": "",
         },
         "采购费率": {
