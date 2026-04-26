@@ -2066,7 +2066,7 @@ createApp({
             isRecognizing.value = true; recognizedCount.value = 0; results.value = [];
             currentFileName.value = '识别中...';
 
-            const CONCURRENCY = 2;
+            const CONCURRENCY = 5;
             let idx = 0;
             const allFiles = files.value;
 
@@ -2149,7 +2149,7 @@ createApp({
             isRecognizing.value = true;
             currentFileName.value = '批量重试中...';
 
-            const CONCURRENCY = 2;
+            const CONCURRENCY = 5;
             let idx = 0;
 
             async function worker() {
