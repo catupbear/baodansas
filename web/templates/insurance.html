@@ -6,7 +6,11 @@
     <title>保单识别系统</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script>if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    <script>
+    if (window.pdfjsLib) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    </script>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -1985,16 +1989,20 @@ createApp({
         // ========== PDF.js 客户端文本提取 ==========
         async function extractTextFromPDF(base64Data) {
             if (!window.pdfjsLib) return '';
+            let pdf = null;
             try {
                 const binary = atob(base64Data);
                 const bytes = new Uint8Array(binary.length);
                 for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-                const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+                pdf = await pdfjsLib.getDocument({
+                    data: bytes,
+                    cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+                    cMapPacked: true,
+                }).promise;
                 const texts = [];
                 for (let i = 1; i <= pdf.numPages; i++) {
                     const page = await pdf.getPage(i);
                     const content = await page.getTextContent();
-                    // 按 y 坐标分行拼接
                     let lastY = null;
                     const lines = [];
                     let line = '';
@@ -2008,11 +2016,14 @@ createApp({
                     }
                     if (line) lines.push(line);
                     texts.push(lines.join('\n'));
+                    page.cleanup();
                 }
                 return texts.join('\n');
             } catch (e) {
                 console.warn('PDF.js 提取失败:', e);
                 return '';
+            } finally {
+                if (pdf) pdf.destroy();
             }
         }
 
@@ -2050,7 +2061,7 @@ createApp({
             isRecognizing.value = true; recognizedCount.value = 0; results.value = [];
             currentFileName.value = '识别中...';
 
-            const CONCURRENCY = 5;
+            const CONCURRENCY = 3;
             let idx = 0;
             const allFiles = files.value;
 
@@ -2133,7 +2144,7 @@ createApp({
             isRecognizing.value = true;
             currentFileName.value = '批量重试中...';
 
-            const CONCURRENCY = 5;
+            const CONCURRENCY = 3;
             let idx = 0;
 
             async function worker() {
