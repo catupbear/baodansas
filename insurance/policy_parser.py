@@ -129,8 +129,11 @@ def _is_valid_person(val: str) -> bool:
     if val in PERSON_BLACKLIST:
         return False
 
-    # 包含公司关键词 → 直接认为是公司名，有效
+    # 包含公司关键词 → 判断是公司名还是含"公司"的句子
     if re.search(r'公司|集团|企业|合伙|个体|工厂|商行|商贸|车行|车队|运输', val):
+        # "向本公司提出的申请"这类句子含助词/介词，公司名不会有
+        if re.search(r'的|了|向|本|被|把|让|给|对|与|及|或|且', val) and len(val) > 8:
+            return False
         return True
 
     # jieba 词性标注：包含人名(nr)或机构名(nt/nz)则有效
