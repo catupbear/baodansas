@@ -170,22 +170,31 @@ class Database:
     def get_conversations(self, keyword: str = "") -> list:
         """
         获取会话列表，按最后消息时间倒序。
-        两步查询：1) 分组统计 2) 批量 IN 查最后一条消息（替代 N+1 逐个查）。
+        私聊按双方 ID 排序组合分组（A→B 和 B→A 合并为一个会话）。
         """
         conn = self.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-            # 第一步：分组获取会话列表 + 最后消息的 id
             params = []
             where_clause = ""
             if keyword:
                 where_clause = "WHERE (summary LIKE %s OR sender LIKE %s OR roomid LIKE %s)"
                 params.extend([f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"])
 
+            # 私聊：用 LEAST/GREATEST 把双方 ID 排序组合，确保 A→B 和 B→A 归为同一个会话
+            # tolist 是 JSON 数组如 '["userid"]'，用 JSON_UNQUOTE(JSON_EXTRACT(...)) 提取第一个元素
             sql = f"""
                 SELECT
-                    CASE WHEN roomid = '' OR roomid IS NULL THEN CONCAT('private_', sender) ELSE roomid END AS conversation_id,
+                    CASE
+                        WHEN roomid = '' OR roomid IS NULL THEN
+                            CONCAT('private_',
+                                LEAST(sender, COALESCE(JSON_UNQUOTE(JSON_EXTRACT(tolist, '$[0]')), sender)),
+                                '_',
+                                GREATEST(sender, COALESCE(JSON_UNQUOTE(JSON_EXTRACT(tolist, '$[0]')), sender))
+                            )
+                        ELSE roomid
+                    END AS conversation_id,
                     MAX(COALESCE(roomid, '')) AS roomid,
                     MAX(msgtime) AS last_time,
                     COUNT(*) AS msg_count,
@@ -201,13 +210,13 @@ class Database:
             if not conversations:
                 return []
 
-            # 第二步：批量查最后一条消息的详情
+            # 批量查最后一条消息的详情
             last_ids = [conv["last_msg_id"] for conv in conversations if conv.get("last_msg_id")]
             last_msg_map = {}
             if last_ids:
                 placeholders = ",".join(["%s"] * len(last_ids))
                 cursor.execute(
-                    f"SELECT id, sender, msgtype, summary FROM messages WHERE id IN ({placeholders})",
+                    f"SELECT id, sender, msgtype, summary, tolist FROM messages WHERE id IN ({placeholders})",
                     last_ids
                 )
                 for row in cursor.fetchall():
@@ -219,7 +228,11 @@ class Database:
                 conv["last_sender"] = msg.get("sender", "")
                 conv["last_msgtype"] = msg.get("msgtype", "")
                 conv["last_summary"] = msg.get("summary", "")
-                del conv["last_msg_id"]  # 前端不需要
+                # 私聊会话提取双方 ID
+                if not conv["roomid"] and conv["conversation_id"].startswith("private_"):
+                    parts = conv["conversation_id"].replace("private_", "", 1).split("_", 1)
+                    conv["peer_ids"] = parts  # 前端用于显示双方名称
+                del conv["last_msg_id"]
 
             return conversations
         finally:
@@ -252,12 +265,18 @@ class Database:
         conditions = []
         params = []
 
-        # 私聊会话：conversation_id 格式为 private_<sender>
+        # 私聊会话：conversation_id 格式为 private_<idA>_<idB>
         if conversation_id and conversation_id.startswith("private_"):
-            private_sender = conversation_id.replace("private_", "", 1)
+            parts = conversation_id.replace("private_", "", 1).split("_", 1)
             conditions.append("(roomid = '' OR roomid IS NULL)")
-            conditions.append("sender = %s")
-            params.append(private_sender)
+            if len(parts) == 2:
+                # 双方对话：显示 A→B 和 B→A 的所有消息
+                conditions.append("(sender = %s OR sender = %s)")
+                params.extend(parts)
+            else:
+                # 兼容旧格式 private_<sender>
+                conditions.append("sender = %s")
+                params.append(parts[0])
         elif roomid:
             conditions.append("roomid = %s")
             params.append(roomid)

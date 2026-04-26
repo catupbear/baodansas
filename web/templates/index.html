@@ -823,8 +823,10 @@ function renderConversations() {
         const lastSummary = conv.last_summary || "";
         const lastSender = conv.last_sender_name || "";
         const prefix = isGroup && lastSender ? `${lastSender}: ` : "";
+        const isPrivate = !isGroup && conv.conversation_id.startsWith("private_");
+        const avatarLabel = isGroup ? '群' : (isPrivate ? '私' : getInitial(name));
         return `<div class="conv-item ${isActive ? 'active' : ''}" onclick="selectConv('${conv.conversation_id}', '${conv.roomid || ''}', '${escapeHtml(name)}')">
-            <div class="conv-avatar" style="background:${color}">${isGroup ? '群' : getInitial(name)}</div>
+            <div class="conv-avatar" style="background:${color}">${avatarLabel}</div>
             <div class="conv-info">
                 <div class="conv-info-top">
                     <div class="conv-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
@@ -946,6 +948,12 @@ function renderChat(scrollToBottom) {
             ? `<span class="msg-type-tag ${tagClass}">${typeCn}</span>`
             : "";
 
+        // 私聊显示接收人
+        const toNames = msg.tolist_names || [];
+        const toTag = (!msg.roomid && toNames.length)
+            ? `<span style="color:#999;font-size:11px;"> → ${escapeHtml(toNames.join(", "))}</span>`
+            : "";
+
         // 消息内容
         let contentHtml = renderMsgContent(msg, idx);
 
@@ -966,7 +974,7 @@ function renderChat(scrollToBottom) {
                 <div class="msg-avatar" style="background:${color}">${getInitial(senderName)}</div>
                 <div class="msg-body">
                     <div class="msg-header">
-                        <span class="msg-sender-name" style="color:${color}">${escapeHtml(senderName)}</span>
+                        <span class="msg-sender-name" style="color:${color}">${escapeHtml(senderName)}</span>${toTag}
                         <span class="msg-timestamp">${formatTime(ts)}</span>
                         ${typeTag}
                     </div>

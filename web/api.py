@@ -58,16 +58,20 @@ def get_conversations():
                 room_ids.append(conv["roomid"])
             if conv.get("last_sender"):
                 user_ids.append(conv["last_sender"])
-            # 私聊会话需要解析对方昵称
-            if not conv["roomid"] and conv["conversation_id"].startswith("private_"):
-                user_ids.append(conv["conversation_id"].replace("private_", "", 1))
+            # 私聊会话：收集双方 ID
+            for pid in conv.get("peer_ids", []):
+                if pid:
+                    user_ids.append(pid)
         names = _contacts.batch_resolve(user_ids, room_ids)
         for conv in conversations:
             if conv["roomid"]:
                 conv["display_name"] = names["rooms"].get(conv["roomid"], conv["roomid"])
+            elif conv.get("peer_ids"):
+                # 私聊：显示双方名称 "A ↔ B"
+                peer_names = [names["users"].get(pid, pid) for pid in conv["peer_ids"]]
+                conv["display_name"] = " ↔ ".join(peer_names)
             else:
-                uid = conv["conversation_id"].replace("private_", "", 1)
-                conv["display_name"] = names["users"].get(uid, uid)
+                conv["display_name"] = conv["conversation_id"]
             conv["last_sender_name"] = names["users"].get(conv.get("last_sender", ""), conv.get("last_sender", ""))
 
     return jsonify(conversations)
@@ -101,10 +105,23 @@ def get_messages():
     if _contacts and result["messages"]:
         user_ids = [m["sender"] for m in result["messages"]]
         room_ids = [m["roomid"] for m in result["messages"]]
+        # 收集 tolist 中的用户 ID
+        for m in result["messages"]:
+            try:
+                to_ids = json.loads(m.get("tolist") or "[]")
+                user_ids.extend(to_ids)
+            except (json.JSONDecodeError, TypeError):
+                pass
         names = _contacts.batch_resolve(user_ids, room_ids)
         for msg in result["messages"]:
             msg["sender_name"] = names["users"].get(msg["sender"], msg["sender"])
             msg["room_name"] = names["rooms"].get(msg["roomid"], msg["roomid"])
+            # 解析接收人名称
+            try:
+                to_ids = json.loads(msg.get("tolist") or "[]")
+                msg["tolist_names"] = [names["users"].get(tid, tid) for tid in to_ids if tid]
+            except (json.JSONDecodeError, TypeError):
+                msg["tolist_names"] = []
 
             # 检查是否有 COS URL
             parsed = json.loads(msg.get("parsed_content") or "{}")
