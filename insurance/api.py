@@ -370,6 +370,9 @@ def get_rooms():
         rooms = []
         for r in room_rows:
             name = r["cached_name"]
+            # 过滤不可解析标记
+            if name == "__unresolvable__":
+                name = None
             if not name and _contacts:
                 try:
                     name = _contacts.get_room_name(r["id"])
@@ -380,6 +383,8 @@ def get_rooms():
         users = []
         for u in user_rows:
             name = u["cached_name"]
+            if name == "__unresolvable__":
+                name = None
             if not name and _contacts:
                 try:
                     name = _contacts.get_name(u["id"])
