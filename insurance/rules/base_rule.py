@@ -225,12 +225,6 @@ class BaseRule:
         if val:
             fields["经办人"] = val
 
-        # 兜底：投保人/被保险人互填
-        if "被保险人" not in fields and "投保人" in fields:
-            fields["被保险人"] = fields["投保人"]
-        if "投保人" not in fields and "被保险人" in fields:
-            fields["投保人"] = fields["被保险人"]
-
         return fields
 
     # ----------------------------------------------------------

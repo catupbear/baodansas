@@ -438,23 +438,6 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
     if "业务员" not in fields and "经办人" in fields:
         fields["业务员"] = fields["经办人"]
 
-    # ===== 兜底：互补投保人/被保险人 =====
-    if "被保险人" not in fields and "投保人" in fields:
-        fields["被保险人"] = fields["投保人"]
-    if "投保人" not in fields and "被保险人" in fields:
-        fields["投保人"] = fields["被保险人"]
-
-    # ===== 兜底：行驶证车主 =====
-    if "被保险人" not in fields or "投保人" not in fields:
-        m = re.search(r"行驶证车主[：:\s]*(\S+)", text)
-        if m:
-            val = _clean_person_name(m.group(1))
-            if _is_valid_person(val):
-                if "被保险人" not in fields:
-                    fields["被保险人"] = val
-                if "投保人" not in fields:
-                    fields["投保人"] = val
-
     return fields
 
 
@@ -930,17 +913,22 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
                 return
 
     # 平安格式：投保人名字在"投保人:"行之前单独一行
-    # 例如："深圳市农丰达食品有限公司 保单验真码: xxx\n投保人:"
+    # 例1："深圳市农丰达食品有限公司 保单验真码: xxx\n投保人:"（投保人行为空）
+    # 例2："姚波\n投保人: 保单验真码: xxx"（投保人行后跟验真码）
     lines = text.split('\n')
     for i, line in enumerate(lines):
-        if re.match(r'^投保人[:：]\s*$', line.strip()) and i > 0:
-            prev = lines[i - 1].strip()
-            # 清除 "保单验真码" 等后缀
-            prev = re.sub(r'\s*保单验真码.*', '', prev).strip()
-            prev = re.sub(r'\s*企业宝.*', '', prev).strip()
-            if _is_valid_person(prev):
-                fields["投保人"] = prev
-                return
+        stripped = line.strip()
+        if re.match(r'^投保人[:：]', stripped) and i > 0:
+            # 检查"投保人:"后面是否为空或仅为非名字内容（如验真码）
+            after_colon = re.sub(r'^投保人[:：]\s*', '', stripped)
+            if not after_colon or re.match(r'保单验真码|企业宝|验真码', after_colon):
+                prev = lines[i - 1].strip()
+                # 清除 "保单验真码" 等后缀
+                prev = re.sub(r'\s*保单验真码.*', '', prev).strip()
+                prev = re.sub(r'\s*企业宝.*', '', prev).strip()
+                if _is_valid_person(prev):
+                    fields["投保人"] = prev
+                    return
 
     # 表格格式
     for i, line in enumerate(lines):
