@@ -1932,20 +1932,22 @@ createApp({
         // ========== 识别 ==========
         async function startRecognize() {
             isRecognizing.value = true; recognizedCount.value = 0; results.value = [];
-            for (const file of files.value) {
-                currentFileName.value = file.name;
-                try {
-                    const resp = await fetch('/api/insurance/ocr', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ file_data: file.base64, file_type: file.type, file_name: file.name, pdf_page: 1 }),
-                    });
-                    const data = await resp.json();
-                    results.value.push(resp.ok ? data : { success: false, file_name: file.name, error: data.detail || '请求失败' });
-                } catch (e) {
-                    results.value.push({ success: false, file_name: file.name, error: `网络错误: ${e.message}` });
-                }
-                recognizedCount.value++;
-            }
+            currentFileName.value = '识别中...';
+
+            // 并发发送所有识别请求
+            const promises = files.value.map(file =>
+                fetch('/api/insurance/ocr', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_data: file.base64, file_type: file.type, file_name: file.name, pdf_page: 1 }),
+                })
+                .then(resp => resp.json().then(data =>
+                    resp.ok ? data : { success: false, file_name: file.name, error: data.detail || '请求失败' }
+                ))
+                .catch(e => ({ success: false, file_name: file.name, error: `网络错误: ${e.message}` }))
+                .finally(() => { recognizedCount.value++; })
+            );
+
+            results.value = await Promise.all(promises);
             currentFileName.value = ''; isRecognizing.value = false;
             // 同车牌交叉填充缺失字段
             crossFillByPlate();

@@ -39,7 +39,8 @@ from .field_mapping import (
     load_mapping_config,
     save_mapping_config,
 )
-from .policy_parser import get_extraction_rules
+from .policy_parser import get_extraction_rules, parse_policy_text
+from .ocr_service import extract_text_from_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -156,10 +157,6 @@ def manual_ocr():
     采用 baoxianOcr 的轻量逻辑：pdfplumber → 质量不佳降级百度 OCR → parse_policy_text
     请求体: {file_data(base64), file_type, file_name, pdf_page}
     """
-    from .ocr_service import extract_text_from_pdf
-    from .policy_parser import parse_policy_text
-    from .baidu_ocr import BaiduOCR
-
     try:
         body = request.get_json(force=True) or {}
         file_data_b64 = body.get("file_data", "")
