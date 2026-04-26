@@ -1804,8 +1804,8 @@ createApp({
             });
         }
 
-        // 提取异常必检字段
-        const REQUIRED_FIELDS = ['承保公司', '保单号', '险种', '车牌', '投保人', '被保人', '签单日期', '起保日期', '终保日期', '保费'];
+        // 提取异常必检字段（核心字段全部缺失才算异常）
+        const REQUIRED_FIELDS = ['保单号', '承保公司', '车牌', '投保人'];
 
         // 判断是否非保单文档（电子标志、发票、缴款通知、条款、其他、无法识别关键字段等）
         function isNonPolicy(r) {
@@ -1821,15 +1821,17 @@ createApp({
             return false;
         }
 
-        // 判断是否提取异常（成功识别的保单但关键字段缺失）
+        // 判断是否提取异常（成功识别的保单但核心字段大部分缺失）
         function isAbnormal(r) {
             if (!r.success || isNonPolicy(r)) return false;
-            return REQUIRED_FIELDS.some(col => !getMappedValue(r, col));
+            const hitCount = REQUIRED_FIELDS.filter(col => getMappedValue(r, col)).length;
+            // 核心字段命中不足一半才算异常
+            return hitCount < Math.ceil(REQUIRED_FIELDS.length / 2);
         }
 
-        // 计算属性：分类结果
-        const successResults = computed(() => results.value.filter(r => r.success && !isNonPolicy(r) && !isAbnormal(r)));
-        const abnormalResults = computed(() => results.value.filter(r => isAbnormal(r)));
+        // 计算属性：分类结果（按车牌分组排列）
+        const successResults = computed(() => sortByPlate(results.value.filter(r => r.success && !isNonPolicy(r) && !isAbnormal(r))));
+        const abnormalResults = computed(() => sortByPlate(results.value.filter(r => isAbnormal(r))));
         const nonPolicyResults = computed(() => results.value.filter(r => isNonPolicy(r)));
         const failedResults = computed(() => results.value.filter(r => !r.success && !isNonPolicy(r)));
 
@@ -1876,19 +1878,28 @@ createApp({
             });
         });
 
+        // 按车牌排序函数
+        function sortByPlate(list) {
+            return [...list].sort((a, b) => {
+                const pa = getMappedValue(a, '车牌') || 'zzz';
+                const pb = getMappedValue(b, '车牌') || 'zzz';
+                return pa.localeCompare(pb, 'zh-CN');
+            });
+        }
+
         const displayResults = computed(() => {
             if (activeTab.value === 'success') return filteredSuccessResults.value;
             if (activeTab.value === 'abnormal') return abnormalResults.value;
             if (activeTab.value === 'nonpolicy') return nonPolicyResults.value;
             if (activeTab.value === 'failed') return failedResults.value;
             const hasFilter = docCategoryFilter.value !== 'all' || companyFilter.value !== 'all';
-            if (!hasFilter) return results.value;
-            return results.value.filter(r => {
+            if (!hasFilter) return sortByPlate(results.value);
+            return sortByPlate(results.value.filter(r => {
                 if (!r.success) return true;
                 if (docCategoryFilter.value !== 'all' && getDocCategory(r) !== docCategoryFilter.value) return false;
                 if (companyFilter.value !== 'all' && getCompanyShort(r) !== companyFilter.value) return false;
                 return true;
-            });
+            }));
         });
 
         const tabs = computed(() => [

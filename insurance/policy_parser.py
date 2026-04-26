@@ -107,7 +107,7 @@ COMPANY_FALLBACK_SIGNALS = [
 PERSON_BLACKLIST = {
     "地址", "手机号", "信息", "名称", "保单验真码", "保单验真码:",
     "行驶证车主", "行驶证", "为", "身份证", "证件",
-    "姓名", "证件类型", "证件号码", "申请", "投保申请",
+    "姓名", "证件类型", "证件号码", "申请", "投保申请", "个人信息",
     "手机号码", "联系人", "通讯地址", "电子邮箱",
     "法定", "法定受益人", "受益人", "主被保人",
     # 新增：各保司OCR常见误提取
@@ -122,60 +122,58 @@ PERSON_BLACKLIST = {
 def _is_valid_person(val: str) -> bool:
     """
     判断提取的值是否为有效的人名或公司名。
-    使用黑名单 + 关键词过滤（不依赖 jieba 词性标注，避免漏识别人名）。
+    采用白名单策略：只有明确符合人名/公司名特征的才通过。
+    宁可漏提取，不可错提取。
     """
-    if not val or len(val) > 30 or len(val) < 2:
+    if not val or len(val) < 2:
         return False
+
+    # 去掉首尾空白
+    val = val.strip()
+
+    # 黑名单精确匹配
     if val in PERSON_BLACKLIST:
         return False
 
-    # 以标点符号开头
-    if re.match(r'^[：:（(]', val):
+    # ====== 公司名判断（优先，允许较长） ======
+    if re.search(r'公司|集团|合伙|工厂|商行|商贸|车行|车队|事务所|经营部|经营店|经销商|专营店|服务部|加工厂|养殖场|合作社', val) or val.endswith('店'):
+        # 公司名允许长一些，但不能超过 30 字
+        # 排除含动词/条款用语的句子片段（如"向本公司提出的申请"）
+        if re.search(r'提出|提供|负责|承担|向.*公司|本公司.*的|申请|告知|声明', val):
+            return False
+        return len(val) <= 30
+
+    # ====== 以下是人名判断（严格白名单） ======
+
+    # 人名长度：2-6 个中文字符（含少数民族 4-6 字名）
+    # 允许中间有 · 分隔符（少数民族名如"阿卜杜拉·艾买提"）
+    if not re.match(r'^[\u4e00-\u9fff]{2,6}$', val) and \
+       not re.match(r'^[\u4e00-\u9fff]{1,4}[·・][\u4e00-\u9fff]{1,6}$', val):
         return False
 
-    # 以虚词/连词开头的长句片段
-    if re.match(r'^[和或与及被把向本对让给]', val) and len(val) > 4:
-        return False
-    if val.endswith('的') or val.endswith('了'):
-        return False
-
-    # 含保险/保单/条款等关键词的一定不是人名
+    # 含任何非人名词汇的直接拒绝
     if re.search(
-        r'保险|保单|保费|条款|申请|投保|理赔|赔偿|绑单|验真'
-        r'|交通|机动车|车辆|证件类型|证件号码|手机号|姓名|发动机|车架号|信息序号|和受害人',
+        # 保险术语
+        r'保险|保单|保费|条款|申请|投保|理赔|赔偿|责任|免责|免赔'
+        r'|绑单|验真|承保|退保|批改|核保|出险|报案'
+        # 法律/合同用语
+        r'|死亡|伤害|伤残|遭受|宣告|期间|约定|告知|声明|同意|签署'
+        r'|解除|终止|变更|转让|撤销|无效|违约|纠纷|诉讼|仲裁'
+        r'|民事|刑事|行为|能力|限制|法定|监护'
+        r'|主险|附加|合同|条件|生效|届满|届时'
+        # 车辆/证件相关
+        r'|交通|机动车|车辆|证件|身份证|手机|电话|姓名|号码|地址'
+        r'|发动机|车架号|车牌|行驶证'
+        # 文档结构词
+        r'|信息|个人信|序号|编号|日期|时间|金额|费用|合计|总计'
+        r'|本公司|该公司|受益人|被保人|投保人'
+        # 动词/介词/虚词
+        r'|提出|提供|负责|承担|享有|具有|应当|可以|不得'
+        r'|下列|上述|以下|以上|其中|根据|按照|依据',
         val
     ):
         return False
 
-    # 含冒号+数字序列的技术数据
-    if re.search(r'[:：]\s*[A-Z0-9]', val):
-        return False
-
-    # 过滤长句、条款文字
-    if re.search(
-        r'本公司|提出|公章|有敬异|社会统一|出生日期|联系电话|手机电话'
-        r'|如实告知|另有约定|投保人的|保险人的',
-        val
-    ):
-        return False
-
-    # "信息"开头
-    if val.startswith("信息"):
-        return False
-
-    # 纯英文非人名
-    if re.match(r'^[A-Za-z]+$', val) and val not in ("Policy",):
-        return False
-
-    # 包含公司后缀关键词 → 公司名，有效
-    if re.search(r'公司|集团|合伙|工厂|商行|商贸|车行|车队', val):
-        return True
-
-    # "企业"单独出现（如"企业宝"）不算公司名
-    if '企业' in val and not re.search(r'公司|集团|合伙', val):
-        return False
-
-    # 通过所有过滤规则的视为有效（中文人名、机构名等）
     return True
 
 
@@ -508,6 +506,17 @@ def _extract_policy_no(text: str, fields: dict, company_short: str):
                 fields["保单号"] = stripped
                 break
 
+    # 统一清理：保单号只保留字母、数字、横线，截断中文/标点及之后的内容
+    if "保单号" in fields:
+        val = fields["保单号"]
+        # 从第一个中文字符或中文标点处截断
+        m = re.match(r'^[A-Za-z0-9\-_/.]+', val)
+        if m:
+            fields["保单号"] = m.group(0).rstrip(".-_/")
+        else:
+            # 全是中文等异常情况，删除
+            del fields["保单号"]
+
 
 # ============================================================
 # 被保险人提取（按保司分策略）
@@ -651,8 +660,8 @@ def _extract_insured_huatai(text: str, text_merged: str, fields: dict):
             fields["被保险人"] = val
             return
 
-    # 兜底：姓名：后面的值
-    m = re.search(r"姓名[：:\s]*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|；|;|$)", text)
+    # 兜底：姓名：后面的值（排除"联系人姓名"等非被保险人标签）
+    m = re.search(r"(?<!联系人)(?<!联系)(?<!经办人)姓名[：:\s]*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|；|;|$)", text)
     if m:
         val = _clean_person_name(m.group(1))
         if _is_valid_person(val):
@@ -836,7 +845,8 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
             return
 
     # 安盛天平格式："姓名：何洪坤；身份证号"
-    m = re.search(r"姓名[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:[；;]|身份证|\s)", text)
+    # 排除"联系人姓名"等非被保险人标签
+    m = re.search(r"(?<!联系人)(?<!联系)(?<!经办人)姓名[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:[；;]|身份证|\s)", text)
     if m:
         val = _clean_person_name(m.group(1))
         if _is_valid_person(val):
@@ -885,6 +895,23 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
             if _is_valid_person(val):
                 fields["投保人"] = val
                 return
+
+    # "单位/团体名称：" 后面的值（太平驾乘险等，可能跨行）
+    lines = text.split('\n')
+    for i, line in enumerate(lines):
+        if re.search(r'单位[/／]团体名称[：:]', line):
+            # 同行取值
+            m = re.search(r'单位[/／]团体名称[：:]\s*(\S+)', line)
+            if m and _is_valid_person(m.group(1)):
+                fields["投保人"] = m.group(1)
+                return
+            # 下一行取值
+            if i + 1 < len(lines):
+                val = lines[i + 1].strip()
+                if val and _is_valid_person(val):
+                    fields["投保人"] = val
+                    return
+            break
 
     # 通用提取
     for p in [

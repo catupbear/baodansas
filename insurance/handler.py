@@ -319,11 +319,14 @@ class InsuranceHandler:
             doc_category = policy.get("doc_category", "")
             confidence = policy.get("confidence", 0.0)
 
-            # 6. 字段映射
+            # 6. 同车牌保单字段互补
+            self._cross_fill_by_plate(parsed_fields, record_id)
+
+            # 7. 字段映射
             company_short = parsed_fields.get("保险公司简称", "")
             mapped_fields = apply_mapping(parsed_fields, company_short)
 
-            # 7. 更新记录为 done
+            # 8. 更新记录为 done
             updates = {
                 "status": "done",
                 "cos_url": cos_url,
@@ -359,7 +362,7 @@ class InsuranceHandler:
 
             logger.info("保单处理完成, record_id=%d filename=%s", record_id, filename)
 
-            # 8. 自动同步钉钉（按监控配置决定）
+            # 9. 自动同步钉钉（按监控配置决定）
             try:
                 monitors = self._get_matched_monitors(roomid, sender)
                 for monitor in monitors:
@@ -470,6 +473,47 @@ class InsuranceHandler:
         except Exception as e:
             logger.error("下载媒体文件异常, sdkfileid=%s: %s", sdkfileid, e, exc_info=True)
             return b""
+
+    # ------------------------------------------------------------------ #
+    # 同车牌保单字段互补
+    # ------------------------------------------------------------------ #
+
+    # 可从同车牌历史保单互补的字段
+    CROSS_FILL_FIELDS = ["投保人", "被保险人", "车主"]
+
+    def _cross_fill_by_plate(self, parsed_fields: dict, record_id: int = None):
+        """
+        从同车牌的已有保单记录中补充当前保单缺失的关键字段。
+        仅补充空值字段，不覆盖已有值。
+        """
+        plate = parsed_fields.get("车牌号", "")
+        if not plate:
+            return
+
+        missing = [f for f in self.CROSS_FILL_FIELDS if not parsed_fields.get(f)]
+        if not missing:
+            return
+
+        from insurance.db import find_records_by_plate
+        history = find_records_by_plate(self.db, plate, exclude_id=record_id)
+        if not history:
+            return
+
+        filled = []
+        for field in missing:
+            for rec in history:
+                hist_fields = rec.get("parsed_fields", {})
+                val = hist_fields.get(field, "")
+                if val:
+                    parsed_fields[field] = val
+                    filled.append(f"{field}={val}")
+                    break
+
+        if filled:
+            logger.info(
+                "同车牌互补: plate=%s, record_id=%s, 补充=%s",
+                plate, record_id, ", ".join(filled),
+            )
 
     # ------------------------------------------------------------------ #
     # COS 上传

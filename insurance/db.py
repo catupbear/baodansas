@@ -200,6 +200,41 @@ def update_insurance_record(db, record_id: int, updates: dict):
         conn.close()
 
 
+def find_records_by_plate(db, plate: str, exclude_id: int = None) -> list:
+    """
+    查找同车牌的已完成保单记录，用于跨保单字段互补。
+    返回 parsed_fields 非空且 status=done 的记录列表（按时间倒序）。
+    """
+    if not plate:
+        return []
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        sql = (
+            "SELECT id, parsed_fields FROM insurance_records "
+            "WHERE status = 'done' AND parsed_fields IS NOT NULL "
+            "AND JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.车牌号')) = %s"
+        )
+        params = [plate]
+        if exclude_id:
+            sql += " AND id != %s"
+            params.append(exclude_id)
+        sql += " ORDER BY id DESC LIMIT 10"
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        for row in rows:
+            if isinstance(row.get("parsed_fields"), str):
+                try:
+                    row["parsed_fields"] = json.loads(row["parsed_fields"])
+                except (TypeError, json.JSONDecodeError):
+                    row["parsed_fields"] = {}
+        return rows
+    except Exception:
+        return []
+    finally:
+        conn.close()
+
+
 def query_insurance_records(
     db,
     page: int = 1,

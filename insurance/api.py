@@ -272,6 +272,10 @@ def manual_ocr():
                 "error": "未识别到任何保单关键字段", "invoices": [],
             })
 
+        # 同车牌保单字段互补
+        if _handler and policy.get("fields"):
+            _handler._cross_fill_by_plate(policy["fields"])
+
         return jsonify({
             "success": True,
             "file_name": file_name,
