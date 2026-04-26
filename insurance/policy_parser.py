@@ -129,12 +129,24 @@ def _is_valid_person(val: str) -> bool:
     if val in PERSON_BLACKLIST:
         return False
 
-    # 包含公司关键词 → 判断是公司名还是含"公司"的句子
-    if re.search(r'公司|集团|企业|合伙|个体|工厂|商行|商贸|车行|车队|运输', val):
-        # "向本公司提出的申请"这类句子含助词/介词，公司名不会有
-        if re.search(r'的|了|向|本|被|把|让|给|对|与|及|或|且', val) and len(val) > 8:
-            return False
+    # 快速过滤：以虚词/连词开头或以"的"结尾的句子片段
+    if re.match(r'^[和或与及被把向本对让给]', val) and len(val) > 4:
+        return False
+    if val.endswith('的') or val.endswith('了'):
+        return False
+
+    # 快速过滤：含保险/保单/条款等关键词的一定不是人名
+    if re.search(r'保险|保单|保费|条款|申请|投保|理赔|赔偿|绑单|验真', val):
+        return False
+
+    # 包含公司后缀关键词 → 公司名，有效
+    if re.search(r'公司|集团|合伙|工厂|商行|商贸|车行|车队', val):
         return True
+
+    # "企业"单独出现（如"企业宝"）不算公司名，需搭配地名或行业名
+    # 但 "XX企业" 或 "企业XX有限" 这类才算
+    if '企业' in val and not re.search(r'公司|集团|合伙', val):
+        return False
 
     # jieba 词性标注：包含人名(nr)或机构名(nt/nz)则有效
     words = list(pseg.cut(val))
