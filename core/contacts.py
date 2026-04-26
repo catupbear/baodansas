@@ -43,7 +43,7 @@ class ContactsManager:
             cursor.execute("""
                 DELETE FROM contacts_cache
                 WHERE name = '__unresolvable__'
-                  AND (id LIKE 'wm%%' OR id LIKE 'wo%%' OR id LIKE 'wr%%')
+                  AND (id LIKE 'wm%%' OR id LIKE 'wo%%' OR id LIKE 'wr%%' OR id LIKE 'wb%%')
             """)
             deleted = cursor.rowcount
             conn.commit()
@@ -131,9 +131,11 @@ class ContactsManager:
             return cached if cached != "__unresolvable__" else user_id
 
         # 判断是否是外部联系人（wm/wo 开头）
-        # 注意：wb 前缀不是外部联系人，不走 externalcontact 接口
         if user_id.startswith(("wm", "wo")):
             name = self._fetch_external_contact(user_id)
+        elif user_id.startswith("wb"):
+            # wb 前缀是外部群的微信成员，通过查找所在群的成员列表获取名称
+            name = self._resolve_wb_member(user_id)
         else:
             name = self._fetch_user(user_id)
 
@@ -211,6 +213,36 @@ class ContactsManager:
             logger.error("获取外部联系人异常 %s: %s", external_userid, e)
             return ""
 
+    def _resolve_wb_member(self, user_id: str) -> str:
+        """
+        wb 前缀是外部群的微信成员，无法通过通讯录 API 直接查询。
+        通过查找该用户所在的群，调用客户群接口获取群成员列表来间接获取名称。
+        _fetch_external_room_info 会自动缓存所有群成员名称。
+        """
+        conn = self.db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            # 找到该用户所在的群（取最近的一个）
+            cursor.execute(
+                "SELECT DISTINCT roomid FROM messages WHERE sender = %s AND roomid != '' AND roomid IS NOT NULL LIMIT 1",
+                (user_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return ""
+            roomid = row["roomid"]
+        finally:
+            conn.close()
+
+        # 调用外部群接口，会顺便缓存所有成员名称
+        self._fetch_external_room_info(roomid)
+
+        # 检查缓存是否已被填充
+        cached = self._get_cache(user_id)
+        if cached and cached != "__unresolvable__":
+            return cached
+        return ""
+
     def _fetch_room_info(self, roomid: str) -> str:
         """
         获取群信息：先用会话存档接口（内部群），
@@ -247,7 +279,10 @@ class ContactsManager:
         return self._fetch_external_room_info(roomid)
 
     def _fetch_external_room_info(self, roomid: str) -> str:
-        """调用客户群接口获取外部群信息"""
+        """
+        调用客户群接口获取外部群信息。
+        同时把群成员名称缓存下来（解决 wb 前缀成员无法通过通讯录 API 获取名称的问题）。
+        """
         token = self._get_external_access_token()
         if not token:
             logger.warning("获取外部群信息 %s 失败: 外部应用 access_token 为空", roomid)
@@ -262,9 +297,23 @@ class ContactsManager:
             if data.get("errcode") == 0:
                 chat = data.get("group_chat", {})
                 name = chat.get("name", "")
-                if not name:
-                    # 没有群名时用成员名拼接
-                    members = chat.get("member_list", [])
+
+                # 缓存群成员名称（包括 wb 前缀的微信用户）
+                members = chat.get("member_list", [])
+                cached_count = 0
+                for m in members:
+                    member_id = m.get("userid", "")
+                    member_name = m.get("name", "")
+                    if member_id and member_name:
+                        # 检查是否已缓存
+                        existing = self._get_cache(member_id)
+                        if not existing or existing == "__unresolvable__":
+                            self._set_cache(member_id, "user", member_name)
+                            cached_count += 1
+                if cached_count:
+                    logger.info("从外部群 %s 缓存了 %d 个成员名称", roomid, cached_count)
+
+                if not name and members:
                     member_names = [m.get("name", m.get("userid", "")) for m in members[:3]]
                     name = "、".join(n for n in member_names if n)
                     if name:
@@ -408,13 +457,29 @@ class ContactsManager:
                     result["failed_users"] += 1
                 time.sleep(0.3)
 
-        # 处理普通用户（含 wb 前缀等）
-        for uid in other_users:
+        # 分离 wb 前缀和普通用户
+        wb_users = [uid for uid in other_users if uid.startswith("wb")]
+        normal_users = [uid for uid in other_users if not uid.startswith("wb")]
+
+        # 处理普通用户
+        for uid in normal_users:
             name = self._fetch_user(uid)
             if name:
                 self._set_cache(uid, "user", name)
                 result["resolved_users"] += 1
                 logger.info("自动解析联系人: %s -> %s", uid, name)
+            else:
+                self._set_cache(uid, "user", "__unresolvable__")
+                result["failed_users"] += 1
+            time.sleep(0.3)
+
+        # 处理 wb 前缀（外部群微信成员）：通过查找所在群的成员列表获取
+        for uid in wb_users:
+            name = self._resolve_wb_member(uid)
+            if name:
+                # _resolve_wb_member 内部已写缓存
+                result["resolved_users"] += 1
+                logger.info("自动解析联系人(群成员): %s -> %s", uid, name)
             else:
                 self._set_cache(uid, "user", "__unresolvable__")
                 result["failed_users"] += 1
