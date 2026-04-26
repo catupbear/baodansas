@@ -953,7 +953,45 @@ def list_templates():
         return jsonify({"success": True, "data": []})
     with open(registry_path, "r", encoding="utf-8") as f:
         registry = json.load(f)
-    return jsonify({"success": True, "data": registry.get("templates", [])})
+    # registry 结构为 {template_id: {info...}, ...}，转为列表返回
+    result = []
+    for template_id, info in registry.items():
+        result.append({
+            "template_id": template_id,
+            **info,
+        })
+    return jsonify({"success": True, "data": result})
+
+
+@insurance_bp.route('/api/insurance/train_records', methods=['GET'])
+def list_train_records():
+    """获取训练记录列表"""
+    if not _db:
+        return jsonify({"success": False, "error": "数据库未初始化"})
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 20, type=int)
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) AS cnt FROM template_train_records")
+        total = cursor.fetchone()["cnt"]
+        offset = (page - 1) * page_size
+        cursor.execute("""
+            SELECT id, company_id, policy_type, version, sample_count,
+                   discovered_fields, overall_hit_rate, passed, unstable_fields,
+                   registered, trigger_source, created_at
+            FROM template_train_records
+            ORDER BY created_at DESC
+            LIMIT %s OFFSET %s
+        """, (page_size, offset))
+        records = cursor.fetchall()
+        # 转换 datetime 为字符串
+        for r in records:
+            if r.get("created_at"):
+                r["created_at"] = str(r["created_at"])
+        return jsonify({"success": True, "data": {"records": records, "total": total}})
+    finally:
+        conn.close()
 
 
 # ============================================================
@@ -982,17 +1020,9 @@ def train_template():
 
     trainer = TemplateTrainer()
     result = trainer.train(
-        pdf_bytes_list, company_id, policy_type, version,
-        company_name, company_short)
+        pdf_bytes_list, company_id, policy_type, version)
 
-    if result.success:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        templates_dir = os.path.join(base_dir, "templates")
-        rules_dir = os.path.join(base_dir, "rules")
-        save_training_result(templates_dir, rules_dir, result,
-                           company_id, policy_type, version)
-
-    # 保存训练记录
+    # 保存训练记录到数据库（不会触发 reloader）
     if _db:
         from insurance.db import save_train_record
         save_train_record(_db, {
@@ -1000,7 +1030,7 @@ def train_template():
             "policy_type": policy_type,
             "version": version,
             "sample_count": len(pdf_bytes_list),
-            "discovered_fields": len(result.needs_review) if result.needs_review else 0,
+            "discovered_fields": len(result.fields) if result.fields else 0,
             "overall_hit_rate": result.validation.overall_hit_rate if result.validation else 0,
             "passed": 1 if result.success else 0,
             "unstable_fields": result.needs_review,
@@ -1009,6 +1039,21 @@ def train_template():
             "registered": 1 if result.success else 0,
             "trigger_source": "manual",
         })
+
+    # 延迟保存模板和规则文件到磁盘，避免写入 .py 文件触发 Flask reloader 导致响应中断
+    if result.success:
+        import threading
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        templates_dir = os.path.join(base_dir, "templates")
+        rules_dir = os.path.join(base_dir, "rules")
+
+        def _deferred_save():
+            import time
+            time.sleep(1)  # 等响应发送完毕
+            save_training_result(templates_dir, rules_dir, result,
+                               company_id, policy_type, version)
+
+        threading.Thread(target=_deferred_save, daemon=True).start()
 
     return jsonify({
         "success": result.success,
@@ -1055,6 +1100,19 @@ def resolve_alert_api(alert_id):
 # 监控配置管理
 # ============================================================
 
+def _add_id_fields(config):
+    """将 rooms/users 对象数组转为前端期望的 room_ids/user_ids 纯ID数组"""
+    rooms = config.get("rooms") or []
+    users = config.get("users") or []
+    # rooms 可能是 [{"id":"wr...","name":"群名"}] 或 ["wr..."]
+    config["room_ids"] = [
+        r["id"] if isinstance(r, dict) else r for r in rooms
+    ]
+    config["user_ids"] = [
+        u["id"] if isinstance(u, dict) else u for u in users
+    ]
+
+
 @insurance_bp.route("/api/monitor-configs", methods=["GET"])
 def list_monitor_configs_api():
     """获取全部监控配置"""
@@ -1064,6 +1122,8 @@ def list_monitor_configs_api():
             for ts_field in ("created_at", "updated_at"):
                 if c.get(ts_field) and not isinstance(c[ts_field], str):
                     c[ts_field] = str(c[ts_field])
+            # 前端期望 room_ids/user_ids（纯ID数组）
+            _add_id_fields(c)
         return jsonify({"code": 0, "data": configs})
     except Exception as e:
         logger.exception("获取监控配置列表失败")
@@ -1087,8 +1147,8 @@ def create_monitor_config_api():
         config_id = create_monitor_config(_db, {
             "name": name,
             "enabled": 1 if body.get("enabled", True) else 0,
-            "rooms": body.get("rooms", []),
-            "users": body.get("users", []),
+            "rooms": body.get("room_ids", body.get("rooms", [])),
+            "users": body.get("user_ids", body.get("users", [])),
             "dingtalk_doc_url": doc_url,
             "dingtalk_base_id": base_id,
             "dingtalk_sheet_id": sheet_id,
@@ -1096,6 +1156,7 @@ def create_monitor_config_api():
         })
 
         config = get_monitor_config(_db, config_id)
+        _add_id_fields(config)
         return jsonify({"code": 0, "data": config, "msg": "监控配置已创建"})
     except Exception as e:
         logger.exception("创建监控配置失败")
@@ -1115,10 +1176,10 @@ def update_monitor_config_api(config_id):
             updates["name"] = body["name"].strip()
         if "enabled" in body:
             updates["enabled"] = 1 if body["enabled"] else 0
-        if "rooms" in body:
-            updates["rooms"] = body["rooms"]
-        if "users" in body:
-            updates["users"] = body["users"]
+        if "room_ids" in body or "rooms" in body:
+            updates["rooms"] = body.get("room_ids", body.get("rooms"))
+        if "user_ids" in body or "users" in body:
+            updates["users"] = body.get("user_ids", body.get("users"))
         if "field_mapping" in body:
             updates["field_mapping"] = body["field_mapping"]
         if "dingtalk_doc_url" in body:
@@ -1137,6 +1198,7 @@ def update_monitor_config_api(config_id):
             return jsonify({"code": 404, "msg": "监控配置不存在"}), 404
 
         config = get_monitor_config(_db, config_id)
+        _add_id_fields(config)
         return jsonify({"code": 0, "data": config, "msg": "监控配置已更新"})
     except Exception as e:
         logger.exception("更新监控配置 %d 失败", config_id)

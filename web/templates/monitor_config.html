@@ -336,15 +336,16 @@
                         <!-- 搜索输入 -->
                         <div style="position:relative;">
                             <input v-model="roomSearch" class="form-input" placeholder="搜索群聊..."
-                                   @focus="roomDropdownOpen = true">
+                                   @focus="roomDropdownOpen = true"
+                                   @blur="setTimeout(() => roomDropdownOpen = false, 200)">
                             <!-- 下拉列表 -->
                             <div v-if="roomDropdownOpen && filteredRooms.length > 0" class="multi-select-dropdown">
                                 <div v-for="room in filteredRooms" :key="room.id" class="option" @click="addRoom(room.id)">
                                     {{ room.name || room.id }}
                                 </div>
                             </div>
-                            <div v-if="roomDropdownOpen && filteredRooms.length === 0 && roomSearch" class="multi-select-dropdown" style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">
-                                未找到匹配的群聊
+                            <div v-if="roomDropdownOpen && filteredRooms.length === 0" class="multi-select-dropdown" style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">
+                                {{ roomSearch ? '未找到匹配的群聊' : '暂无群聊数据' }}
                             </div>
                         </div>
                     </div>
@@ -366,15 +367,16 @@
                         <!-- 搜索输入 -->
                         <div style="position:relative;">
                             <input v-model="userSearch" class="form-input" placeholder="搜索用户..."
-                                   @focus="userDropdownOpen = true">
+                                   @focus="userDropdownOpen = true"
+                                   @blur="setTimeout(() => userDropdownOpen = false, 200)">
                             <!-- 下拉列表 -->
                             <div v-if="userDropdownOpen && filteredUsers.length > 0" class="multi-select-dropdown">
                                 <div v-for="user in filteredUsers" :key="user.id" class="option" @click="addUser(user.id)">
                                     {{ user.name || user.id }}
                                 </div>
                             </div>
-                            <div v-if="userDropdownOpen && filteredUsers.length === 0 && userSearch" class="multi-select-dropdown" style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">
-                                未找到匹配的用户
+                            <div v-if="userDropdownOpen && filteredUsers.length === 0" class="multi-select-dropdown" style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">
+                                {{ userSearch ? '未找到匹配的用户' : '暂无用户数据' }}
                             </div>
                         </div>
                     </div>
@@ -541,10 +543,8 @@ createApp({
             try {
                 const res = await fetch('/api/insurance/rooms');
                 const data = await res.json();
-                if (data.code === 0) {
-                    roomOptions.value = (data.data?.rooms || []).filter(r => r.type === 'room');
-                    userOptions.value = (data.data?.users || data.data?.rooms || []).filter(r => r.type === 'user');
-                }
+                roomOptions.value = (data.rooms || []).filter(r => r.type === 'room');
+                userOptions.value = (data.users || []).filter(r => r.type === 'user');
             } catch (e) {
                 console.error('加载选项失败:', e);
             }
