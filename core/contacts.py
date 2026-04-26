@@ -134,8 +134,8 @@ class ContactsManager:
         if user_id.startswith(("wm", "wo")):
             name = self._fetch_external_contact(user_id)
         elif user_id.startswith("wb"):
-            # wb 前缀是外部群的微信成员，通过查找所在群的成员列表获取名称
-            name = self._resolve_wb_member(user_id)
+            # wb 前缀是群机器人，直接标记为通知机器人
+            name = "通知机器人"
         else:
             name = self._fetch_user(user_id)
 
@@ -473,17 +473,11 @@ class ContactsManager:
                 result["failed_users"] += 1
             time.sleep(0.3)
 
-        # 处理 wb 前缀（外部群微信成员）：通过查找所在群的成员列表获取
+        # wb 前缀是群机器人，直接标记为"通知机器人"
         for uid in wb_users:
-            name = self._resolve_wb_member(uid)
-            if name:
-                # _resolve_wb_member 内部已写缓存
-                result["resolved_users"] += 1
-                logger.info("自动解析联系人(群成员): %s -> %s", uid, name)
-            else:
-                self._set_cache(uid, "user", "__unresolvable__")
-                result["failed_users"] += 1
-            time.sleep(0.3)
+            self._set_cache(uid, "user", "通知机器人")
+            result["resolved_users"] += 1
+            logger.info("自动解析联系人(机器人): %s -> 通知机器人", uid)
 
         # 处理群：先试一个，判断是否普遍 301059
         room_api_forbidden = False
