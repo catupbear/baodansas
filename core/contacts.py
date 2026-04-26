@@ -279,46 +279,112 @@ class ContactsManager:
     def resolve_unresolved(self) -> dict:
         """
         自动解析未缓存的联系人和群名称。
-        每次最多处理 50 个用户 + 50 个群，带间隔避免触发频率限制。
-        返回: {"resolved_users": 成功数, "resolved_rooms": 成功数, "failed_users": 失败数, "failed_rooms": 失败数}
+        遇到权限错误（48002）时，批量标记同类 ID 为不可解析，不再逐个重试。
         """
         unresolved = self.find_unresolved()
         result = {"resolved_users": 0, "resolved_rooms": 0,
                   "failed_users": 0, "failed_rooms": 0}
 
-        for uid in unresolved["users"]:
-            try:
-                name = ""
-                if uid.startswith(("wm", "wo", "wb")):
-                    name = self._fetch_external_contact(uid)
-                else:
-                    name = self._fetch_user(uid)
+        # 按前缀分组用户
+        external_users = [uid for uid in unresolved["users"] if uid.startswith(("wm", "wo"))]
+        other_users = [uid for uid in unresolved["users"] if not uid.startswith(("wm", "wo"))]
 
+        # 先尝试一个外部联系人，检查是否有权限
+        external_api_forbidden = False
+        if external_users:
+            test_uid = external_users[0]
+            name = self._fetch_external_contact(test_uid)
+            if name:
+                self._set_cache(test_uid, "user", name)
+                result["resolved_users"] += 1
+                logger.info("自动解析联系人: %s -> %s", test_uid, name)
+                external_users = external_users[1:]
+            else:
+                # 检查是否是权限问题（48002），如果是则批量标记所有 wm/wo 前缀
+                external_api_forbidden = True
+                logger.warning("外部联系人 API 无权限(48002)，批量标记 %d 个 wm/wo 前缀 ID 为不可解析",
+                               len(external_users))
+                for uid in external_users:
+                    self._set_cache(uid, "user", "__unresolvable__")
+                    result["failed_users"] += 1
+                external_users = []
+            time.sleep(0.3)
+
+        # 继续处理剩余的外部联系人（如果有权限）
+        if not external_api_forbidden:
+            for uid in external_users:
+                name = self._fetch_external_contact(uid)
                 if name:
                     self._set_cache(uid, "user", name)
                     result["resolved_users"] += 1
                     logger.info("自动解析联系人: %s -> %s", uid, name)
                 else:
+                    self._set_cache(uid, "user", "__unresolvable__")
                     result["failed_users"] += 1
-                # 每次 API 调用间隔 0.5 秒，避免频率限制
-                time.sleep(0.5)
-            except Exception as e:
-                logger.error("自动解析联系人异常 %s: %s", uid, e)
-                result["failed_users"] += 1
+                time.sleep(0.3)
 
-        for rid in unresolved["rooms"]:
-            try:
+        # 处理普通用户（含 wb 前缀等）
+        for uid in other_users:
+            name = self._fetch_user(uid)
+            if name:
+                self._set_cache(uid, "user", name)
+                result["resolved_users"] += 1
+                logger.info("自动解析联系人: %s -> %s", uid, name)
+            else:
+                self._set_cache(uid, "user", "__unresolvable__")
+                result["failed_users"] += 1
+            time.sleep(0.3)
+
+        # 处理群：先试一个，判断是否普遍 301059
+        room_api_forbidden = False
+        rooms = unresolved["rooms"]
+        if rooms:
+            test_rid = rooms[0]
+            name = self._fetch_room_info(test_rid)
+            if name:
+                self._set_cache(test_rid, "room", name)
+                result["resolved_rooms"] += 1
+                logger.info("自动解析群名: %s -> %s", test_rid, name)
+                rooms = rooms[1:]
+            else:
+                # 第一个就失败，再试第二个确认是不是普遍问题
+                if len(rooms) > 1:
+                    time.sleep(0.3)
+                    name2 = self._fetch_room_info(rooms[1])
+                    if name2:
+                        # 第二个成功，说明不是普遍问题，只标记第一个
+                        self._set_cache(test_rid, "room", "__unresolvable__")
+                        self._set_cache(rooms[1], "room", name2)
+                        result["failed_rooms"] += 1
+                        result["resolved_rooms"] += 1
+                        logger.info("自动解析群名: %s -> %s", rooms[1], name2)
+                        rooms = rooms[2:]
+                    else:
+                        # 连续两个都失败，批量标记所有群
+                        room_api_forbidden = True
+                        logger.warning("群信息 API 连续失败，批量标记 %d 个群 ID 为不可解析", len(rooms))
+                        for rid in rooms:
+                            self._set_cache(rid, "room", "__unresolvable__")
+                            result["failed_rooms"] += 1
+                        rooms = []
+                else:
+                    self._set_cache(test_rid, "room", "__unresolvable__")
+                    result["failed_rooms"] += 1
+                    rooms = []
+            time.sleep(0.3)
+
+        # 继续处理剩余群
+        if not room_api_forbidden:
+            for rid in rooms:
                 name = self._fetch_room_info(rid)
                 if name:
                     self._set_cache(rid, "room", name)
                     result["resolved_rooms"] += 1
                     logger.info("自动解析群名: %s -> %s", rid, name)
                 else:
+                    self._set_cache(rid, "room", "__unresolvable__")
                     result["failed_rooms"] += 1
-                time.sleep(0.5)
-            except Exception as e:
-                logger.error("自动解析群名异常 %s: %s", rid, e)
-                result["failed_rooms"] += 1
+                time.sleep(0.3)
 
         return result
 
