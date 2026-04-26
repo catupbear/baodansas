@@ -124,7 +124,7 @@ def _is_valid_person(val: str) -> bool:
     # 过滤明显不是人名的内容
     if re.match(r'^[：:（(]', val):
         return False
-    if re.search(r'保单|保险|交通|条款|验真|机动车|车辆|证件类型|证件号码|手机号|姓名|发动机|车架号|投保|信息序号|和受害人', val):
+    if re.search(r'保单|保险|交通|条款|验真|机动车|车辆|证件类型|证件号码|手机号|姓名|发动机|车架号|投保|信息序号|和受害人|个人信|个人隐私', val):
         return False
     # 过滤明显非人名（含冒号+数字序列的技术数据）
     if re.search(r'[:：]\s*[A-Z0-9]', val):
