@@ -195,20 +195,20 @@ class Database:
                 FROM (
                     SELECT
                         CASE WHEN m.roomid = '' OR m.roomid IS NULL THEN CONCAT('private_', m.sender) ELSE m.roomid END AS conversation_id,
-                        m.roomid,
+                        MAX(COALESCE(m.roomid, '')) AS roomid,
                         MAX(m.msgtime) AS last_time,
                         COUNT(*) AS msg_count
                     FROM messages m
                     {where_clause}
-                    GROUP BY conversation_id, m.roomid
+                    GROUP BY conversation_id
                 ) t
                 LEFT JOIN messages m2 ON m2.msgtime = t.last_time
                     AND (
-                        (t.roomid != '' AND t.roomid IS NOT NULL AND m2.roomid = t.roomid)
+                        (t.roomid != '' AND m2.roomid = t.roomid)
                         OR
-                        (( t.roomid = '' OR t.roomid IS NULL) AND m2.sender = SUBSTRING(t.conversation_id, 9))
+                        (t.roomid = '' AND m2.sender = SUBSTRING(t.conversation_id, 9))
                     )
-                GROUP BY t.conversation_id
+                GROUP BY t.conversation_id, t.roomid, t.last_time, t.msg_count
                 ORDER BY t.last_time DESC
             """
             cursor.execute(sql, params)
