@@ -150,6 +150,48 @@ def get_stats():
 # 手动上传识别
 # ============================================================
 
+@insurance_bp.route("/api/insurance/parse", methods=["POST"])
+def parse_text_only():
+    """
+    纯文本解析（不做 OCR），接收前端提取的文本直接解析保单字段。
+    请求体: {text, file_name}
+    """
+    try:
+        body = request.get_json(force=True) or {}
+        text = body.get("text", "")
+        file_name = body.get("file_name", "upload")
+
+        if not text:
+            return jsonify({
+                "success": False, "file_name": file_name,
+                "error": "文本为空", "invoices": [],
+            })
+
+        from .ocr_service import clean_text
+        text = clean_text(text)
+        policy = parse_policy_text(text)
+
+        if not policy.get("fields") or policy.get("confidence", 0) == 0:
+            return jsonify({
+                "success": False, "file_name": file_name,
+                "error": "need_ocr", "invoices": [],
+            })
+
+        return jsonify({
+            "success": True,
+            "file_name": file_name,
+            "invoices": [policy],
+            "char_count": len(text),
+            "ocr_engine": "pdfjs",
+        })
+    except Exception as e:
+        logger.exception("文本解析失败")
+        return jsonify({
+            "success": False, "file_name": file_name,
+            "error": str(e), "invoices": [],
+        })
+
+
 @insurance_bp.route("/api/insurance/ocr", methods=["POST"])
 def manual_ocr():
     """

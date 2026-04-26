@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>保单识别系统</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -1972,7 +1974,70 @@ createApp({
             }
         }
 
-        // ========== 识别 ==========
+        // ========== PDF.js 客户端文本提取 ==========
+        async function extractTextFromPDF(base64Data) {
+            if (!window.pdfjsLib) return '';
+            try {
+                const binary = atob(base64Data);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+                const texts = [];
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    // 按 y 坐标分行拼接
+                    let lastY = null;
+                    const lines = [];
+                    let line = '';
+                    for (const item of content.items) {
+                        if (lastY !== null && Math.abs(item.transform[5] - lastY) > 3) {
+                            lines.push(line);
+                            line = '';
+                        }
+                        line += item.str;
+                        lastY = item.transform[5];
+                    }
+                    if (line) lines.push(line);
+                    texts.push(lines.join('\n'));
+                }
+                return texts.join('\n');
+            } catch (e) {
+                console.warn('PDF.js 提取失败:', e);
+                return '';
+            }
+        }
+
+        // ========== 识别单个文件 ==========
+        async function recognizeFile(file) {
+            // PDF 文件：先在浏览器端提取文本
+            if (file.type === 'pdf' && window.pdfjsLib) {
+                const text = await extractTextFromPDF(file.base64);
+                if (text && text.length > 50) {
+                    // 发送纯文本到后端解析（极快，不传文件）
+                    try {
+                        const resp = await fetch('/api/insurance/parse', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text, file_name: file.name }),
+                        });
+                        const data = await resp.json();
+                        // 解析成功直接返回；error=need_ocr 表示需要降级 OCR
+                        if (data.success) return data;
+                        if (data.error !== 'need_ocr') return data;
+                    } catch (e) { /* 降级到完整 OCR */ }
+                }
+            }
+
+            // 降级：发送完整文件到后端（图片或扫描件PDF）
+            const resp = await fetch('/api/insurance/ocr', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ file_data: file.base64, file_type: file.type, file_name: file.name, pdf_page: 0 }),
+            });
+            const data = await resp.json();
+            return resp.ok ? data : { success: false, file_name: file.name, error: data.detail || '请求失败' };
+        }
+
+        // ========== 批量识别 ==========
         async function startRecognize() {
             isRecognizing.value = true; recognizedCount.value = 0; results.value = [];
             currentFileName.value = '识别中...';
@@ -1987,12 +2052,8 @@ createApp({
                     const file = allFiles[i];
                     currentFileName.value = file.name;
                     try {
-                        const resp = await fetch('/api/insurance/ocr', {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ file_data: file.base64, file_type: file.type, file_name: file.name, pdf_page: 0 }),
-                        });
-                        const data = await resp.json();
-                        results.value.push(resp.ok ? data : { success: false, file_name: file.name, error: data.detail || '请求失败' });
+                        const result = await recognizeFile(file);
+                        results.value.push(result);
                     } catch (e) {
                         results.value.push({ success: false, file_name: file.name, error: `网络错误: ${e.message}` });
                     }
@@ -2002,7 +2063,6 @@ createApp({
 
             await Promise.all(Array.from({ length: Math.min(CONCURRENCY, allFiles.length) }, () => worker()));
             currentFileName.value = ''; isRecognizing.value = false;
-            // 同车牌交叉填充缺失字段
             crossFillByPlate();
         }
 
