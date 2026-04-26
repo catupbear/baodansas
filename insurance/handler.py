@@ -19,6 +19,7 @@ from insurance.db import (
     save_insurance_record,
     update_insurance_record,
 )
+from insurance.monitor_config_db import get_enabled_monitor_configs
 from insurance.field_mapping import apply_mapping
 from insurance.ocr_service import extract_text_from_pdf_bytes
 from insurance.policy_parser import parse_policy_text
@@ -132,25 +133,23 @@ class InsuranceHandler:
 
     def get_watch_config(self) -> dict:
         """
-        从数据库配置获取监控列表（群 + 私聊）。
+        从 monitor_configs 表获取所有启用的监控来源。
 
-        配置格式: [{"id": "xxx", "name": "xxx", "type": "room"|"user"}, ...]
         返回: {"rooms": [roomid, ...], "users": [userid, ...]}
+        兼容旧逻辑：所有监控配置的来源合并为一个扁平列表。
         """
         try:
-            watch_list = get_insurance_config(self.db, "watch_list", [])
-            if not isinstance(watch_list, list):
-                # 兼容旧格式 watch_rooms
-                watch_rooms = get_insurance_config(self.db, "watch_rooms", [])
-                if isinstance(watch_rooms, list):
-                    return {
-                        "rooms": [r.get("roomid", "") for r in watch_rooms if isinstance(r, dict) and r.get("roomid")],
-                        "users": [],
-                    }
-                return {"rooms": [], "users": []}
-            rooms = [w["id"] for w in watch_list if isinstance(w, dict) and w.get("type") == "room" and w.get("id")]
-            users = [w["id"] for w in watch_list if isinstance(w, dict) and w.get("type") == "user" and w.get("id")]
-            return {"rooms": rooms, "users": users}
+            configs = get_enabled_monitor_configs(self.db)
+            rooms = set()
+            users = set()
+            for cfg in configs:
+                for r in (cfg.get("rooms") or []):
+                    if isinstance(r, dict) and r.get("id"):
+                        rooms.add(r["id"])
+                for u in (cfg.get("users") or []):
+                    if isinstance(u, dict) and u.get("id"):
+                        users.add(u["id"])
+            return {"rooms": list(rooms), "users": list(users)}
         except Exception as e:
             logger.error("获取监控列表失败: %s", e)
             return {"rooms": [], "users": []}
@@ -158,6 +157,31 @@ class InsuranceHandler:
     def get_watch_rooms(self) -> list:
         """兼容方法，返回监控群 ID 列表"""
         return self.get_watch_config().get("rooms", [])
+
+    def _get_matched_monitors(self, roomid: str, sender: str) -> list:
+        """
+        根据 roomid / sender 查找匹配的监控配置。
+
+        返回匹配的监控配置列表（包含 dingtalk_base_id, dingtalk_sheet_id, field_mapping 等）。
+        一条消息可能匹配多个监控配置，各自独立同步。
+        """
+        try:
+            configs = get_enabled_monitor_configs(self.db)
+        except Exception as e:
+            logger.error("获取监控配置失败: %s", e)
+            return []
+
+        matched = []
+        for cfg in configs:
+            room_ids = {r["id"] for r in (cfg.get("rooms") or []) if isinstance(r, dict) and r.get("id")}
+            user_ids = {u["id"] for u in (cfg.get("users") or []) if isinstance(u, dict) and u.get("id")}
+
+            if roomid and roomid in room_ids:
+                matched.append(cfg)
+            elif not roomid and sender and sender in user_ids:
+                matched.append(cfg)
+
+        return matched
 
     # ------------------------------------------------------------------ #
     # 队列投递
@@ -323,13 +347,26 @@ class InsuranceHandler:
 
             logger.info("保单处理完成, record_id=%d filename=%s", record_id, filename)
 
-            # 8. 自动同步钉钉（按配置决定）
+            # 8. 自动同步钉钉（按监控配置决定）
             try:
-                auto_sync = get_insurance_config(self.db, "auto_sync_enabled", False)
-                if auto_sync:
-                    self._sync_to_dingtalk(
-                        record_id, mapped_fields, parsed_fields,
-                        sender_name=sender_name, roomid=roomid, sender=sender,
+                monitors = self._get_matched_monitors(roomid, sender)
+                for monitor in monitors:
+                    if not (monitor.get("dingtalk_base_id") and monitor.get("dingtalk_sheet_id")):
+                        continue
+                    # 使用监控配置自身的字段映射（如果有），否则用全局映射结果
+                    monitor_mapping = monitor.get("field_mapping") or {}
+                    if monitor_mapping:
+                        sync_fields = {}
+                        for ocr_field, target_col in monitor_mapping.items():
+                            if target_col and ocr_field in parsed_fields:
+                                sync_fields[target_col] = parsed_fields[ocr_field]
+                    else:
+                        sync_fields = mapped_fields
+
+                    self._sync_to_dingtalk_v2(
+                        record_id, sync_fields,
+                        sender_name=sender_name,
+                        monitor=monitor,
                     )
             except Exception as e:
                 logger.error("自动同步钉钉失败, record_id=%d: %s", record_id, e)
@@ -709,6 +746,69 @@ class InsuranceHandler:
 
         except Exception as e:
             logger.error("_sync_to_dingtalk 异常, record_id=%d: %s", record_id, e, exc_info=True)
+
+    def _sync_to_dingtalk_v2(
+        self, record_id: int, sync_fields: dict,
+        sender_name: str = "", monitor: dict = None,
+    ):
+        """
+        按监控配置同步到指定钉钉文档。
+
+        Args:
+            record_id:   数据库记录 ID
+            sync_fields: 经过字段映射后的导出字段
+            sender_name: 发送人姓名
+            monitor:     匹配的监控配置（含 dingtalk_base_id, dingtalk_sheet_id 等）
+        """
+        from insurance.dingtalk_sync import DingTalkTableService
+
+        if not monitor:
+            return
+
+        try:
+            # 读取钉钉应用凭证
+            app_cfg = self.app_config.get("dingtalk", {})
+            if not app_cfg or not app_cfg.get("app_key"):
+                app_cfg = get_insurance_config(self.db, "dingtalk_app", {})
+            if not isinstance(app_cfg, dict):
+                return
+
+            app_key = app_cfg.get("app_key", "")
+            app_secret = app_cfg.get("app_secret", "")
+            operator_id = app_cfg.get("operator_id", "")
+
+            if not (app_key and app_secret and operator_id):
+                logger.warning("钉钉应用凭证未完整配置")
+                return
+
+            base_id = monitor["dingtalk_base_id"]
+            sheet_id = monitor["dingtalk_sheet_id"]
+
+            invoice_fields = {k: v for k, v in sync_fields.items() if v}
+            if sender_name:
+                invoice_fields["发送人"] = sender_name
+            field_names = list(invoice_fields.keys())
+            invoice = {"fields": invoice_fields}
+
+            svc = DingTalkTableService(app_key, app_secret, base_id, sheet_id, operator_id)
+            result = svc.append_invoices(field_names, [invoice])
+
+            logger.info(
+                "同步钉钉成功(v2), record_id=%d monitor=%s inserted=%s",
+                record_id, monitor.get("name", monitor.get("id")),
+                result.get("inserted_count", 0),
+            )
+
+            update_insurance_record(self.db, record_id, {
+                "dingtalk_synced": 1,
+                "dingtalk_target_id": str(monitor.get("id", "")),
+            })
+
+        except Exception as e:
+            logger.error(
+                "同步钉钉失败(v2), record_id=%d monitor=%s: %s",
+                record_id, monitor.get("name", ""), e, exc_info=True,
+            )
 
     # ------------------------------------------------------------------ #
     # 手动上传接口（同步）
