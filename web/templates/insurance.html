@@ -1973,12 +1973,26 @@ createApp({
         }
 
         // ========== 识别 ==========
+        // 限流并发：同时最多 concurrency 个请求
+        async function runWithConcurrency(tasks, concurrency = 5) {
+            const results = new Array(tasks.length);
+            let idx = 0;
+            async function worker() {
+                while (idx < tasks.length) {
+                    const i = idx++;
+                    results[i] = await tasks[i]();
+                }
+            }
+            await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker()));
+            return results;
+        }
+
         async function startRecognize() {
             isRecognizing.value = true; recognizedCount.value = 0; results.value = [];
             currentFileName.value = '识别中...';
 
-            // 并发发送所有识别请求
-            const promises = files.value.map(file =>
+            // 构建任务列表，限制并发数为 5
+            const tasks = files.value.map(file => () =>
                 fetch('/api/insurance/ocr', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ file_data: file.base64, file_type: file.type, file_name: file.name, pdf_page: 1 }),
@@ -1990,7 +2004,7 @@ createApp({
                 .finally(() => { recognizedCount.value++; })
             );
 
-            results.value = await Promise.all(promises);
+            results.value = await runWithConcurrency(tasks, 5);
             currentFileName.value = ''; isRecognizing.value = false;
             // 同车牌交叉填充缺失字段
             crossFillByPlate();
