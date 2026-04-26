@@ -233,7 +233,7 @@ def manual_ocr():
             if not extract_result["success"] and baidu_ocr_client:
                 logger.info("[%s] pdfplumber 无文本层，降级使用百度OCR", file_name)
                 extract_result = baidu_ocr_client.recognize_pdf(
-                    file_data_b64, page_num=pdf_page)
+                    file_data_b64, page_num=max(pdf_page, 1))
                 ocr_engine = "baidu"
 
         if not extract_result["success"]:
@@ -257,7 +257,7 @@ def manual_ocr():
             logger.info("[%s] pdfplumber 效果不佳(类型=%s, 置信度=%s), 降级百度OCR",
                         file_name, policy.get("doc_category"), policy.get("confidence"))
             extract_result = baidu_ocr_client.recognize_pdf(
-                file_data_b64, page_num=pdf_page)
+                file_data_b64, page_num=max(pdf_page, 1))
             ocr_engine = "baidu"
             if extract_result["success"]:
                 policy = parse_policy_text(extract_result["text"])
