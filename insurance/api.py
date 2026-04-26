@@ -938,8 +938,8 @@ def export_excel():
             for inv in invoices:
                 fields = inv.get("fields", inv) if isinstance(inv, dict) else {}
                 ws.append([
-                    fields.get("文件名", inv.get("filename", "")),
-                    fields.get("失败原因", inv.get("error_message", inv.get("reason", ""))),
+                    inv.get("file_name", inv.get("filename", fields.get("文件名", ""))),
+                    inv.get("error", inv.get("error_message", fields.get("失败原因", ""))),
                 ])
         else:
             # 成功类型：文件名 + 各字段列
@@ -947,7 +947,7 @@ def export_excel():
             ws.append(headers)
             for inv in invoices:
                 fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
-                row = [fields.get("文件名", inv.get("filename", ""))]
+                row = [inv.get("file_name", inv.get("filename", fields.get("文件名", "")))]
                 for col in field_names:
                     row.append(fields.get(col, ""))
                 ws.append(row)
