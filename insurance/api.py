@@ -933,6 +933,23 @@ def get_extraction_rules_api():
 
 
 # ============================================================
+# 模板列表
+# ============================================================
+
+@insurance_bp.route('/api/insurance/templates', methods=['GET'])
+def list_templates():
+    """获取已注册的模板列表"""
+    import os
+    templates_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+    registry_path = os.path.join(templates_dir, "registry.json")
+    if not os.path.exists(registry_path):
+        return jsonify({"success": True, "data": []})
+    with open(registry_path, "r", encoding="utf-8") as f:
+        registry = json.load(f)
+    return jsonify({"success": True, "data": registry.get("templates", [])})
+
+
+# ============================================================
 # 模板训练
 # ============================================================
 

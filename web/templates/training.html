@@ -1,0 +1,731 @@
+{% raw %}<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模板训练管理</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #c2410c;
+            --primary-light: #ea580c;
+            --primary-bg: #fff7ed;
+            --surface: #ffffff;
+            --surface-secondary: #fffbf7;
+            --border: #e7e0d8;
+            --border-light: #f5f0eb;
+            --text-primary: #1c1410;
+            --text-secondary: #57534e;
+            --text-muted: #a8a29e;
+            --success: #059669;
+            --warning: #d97706;
+            --danger: #dc2626;
+        }
+        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        [v-cloak] { display: none; }
+
+        /* 上传拖拽区 */
+        .drop-zone {
+            border: 2px dashed var(--border);
+            transition: all 0.2s ease;
+            background: var(--surface-secondary);
+        }
+        .drop-zone:hover { border-color: var(--primary-light); background: var(--primary-bg); }
+        .drop-zone.dragover { border-color: var(--primary); background: var(--primary-bg); box-shadow: 0 0 0 4px rgba(234,88,12,0.1); }
+
+        /* 过渡动画 */
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+        /* 按钮基础样式 */
+        .btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 16px; border-radius: 8px;
+            font-size: 14px; font-weight: 500;
+            transition: all 0.2s ease; cursor: pointer;
+            border: none; outline: none;
+        }
+        .btn:focus-visible { box-shadow: 0 0 0 3px rgba(234,88,12,0.3); }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: #9a3412; }
+        .btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
+        .btn-success { background: var(--success); color: #fff; }
+        .btn-success:hover { background: #047857; }
+        .btn-warning { background: var(--warning); color: #fff; }
+        .btn-warning:hover { background: #b45309; }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-outline {
+            background: transparent; color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+        .btn-outline:hover { background: var(--surface-secondary); border-color: #cbd5e1; }
+
+        /* 状态徽标 */
+        .badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 8px; border-radius: 6px;
+            font-size: 12px; font-weight: 500;
+        }
+        .badge-success { background: #ecfdf5; color: #059669; }
+        .badge-warning { background: #fffbeb; color: #d97706; }
+        .badge-danger { background: #fef2f2; color: #dc2626; }
+        .badge-info { background: #fff7ed; color: #c2410c; }
+        .badge-gray { background: #f3f4f6; color: #6b7280; }
+
+        /* 卡片样式 */
+        .card {
+            background: var(--surface);
+            border-radius: 12px;
+            border: 1px solid var(--border-light);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+        }
+
+        /* 进度条 */
+        .progress-bar {
+            height: 6px; border-radius: 3px; background: #e2e8f0;
+            overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%; border-radius: 3px;
+            transition: width 0.3s ease;
+            background: linear-gradient(90deg, #c2410c, #f97316);
+        }
+        .progress-bar-fill.green {
+            background: linear-gradient(90deg, #059669, #34d399);
+        }
+
+        /* 顶部导航渐变 */
+        .nav-header {
+            background: linear-gradient(135deg, #7c2d12 0%, #c2410c 50%, #ea580c 100%);
+            color: #fff;
+        }
+
+        /* Tab 样式 */
+        .tab-btn {
+            padding: 10px 16px; font-size: 14px; font-weight: 500;
+            border-bottom: 2px solid transparent;
+            color: var(--text-muted);
+            transition: all 0.2s ease; cursor: pointer;
+            background: none; border-top: none; border-left: none; border-right: none;
+        }
+        .tab-btn:hover { color: var(--text-secondary); }
+        .tab-btn.active { color: #ea580c; border-bottom-color: #ea580c; }
+
+        /* 数据表格 */
+        .data-table { font-size: 13px; border-collapse: collapse; width: 100%; }
+        .data-table th, .data-table td {
+            white-space: nowrap; border-bottom: 1px solid var(--border-light);
+            padding: 8px 12px;
+        }
+        .data-table th {
+            position: sticky; top: 0; z-index: 2;
+            background: var(--surface-secondary);
+            font-weight: 600; color: var(--text-secondary);
+        }
+        .data-table tbody tr { background: var(--surface); transition: background 0.15s ease; }
+        .data-table tbody tr:hover { background: var(--primary-bg) !important; }
+
+        /* 分页器 */
+        .pagination-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 32px; height: 32px; border-radius: 6px;
+            font-size: 13px; cursor: pointer; border: 1px solid var(--border);
+            background: var(--surface); color: var(--text-secondary);
+            transition: all 0.15s ease;
+        }
+        .pagination-btn:hover { border-color: var(--primary-light); color: var(--primary); }
+        .pagination-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .pagination-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* 文件列表项 */
+        .file-item {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 12px; border-radius: 8px;
+            background: var(--surface-secondary); border: 1px solid var(--border-light);
+            font-size: 13px; transition: all 0.15s ease;
+        }
+        .file-item:hover { border-color: var(--border); }
+
+        /* 表单输入框 */
+        .form-input {
+            width: 100%; padding: 8px 12px; border-radius: 8px;
+            border: 1px solid var(--border); font-size: 14px;
+            background: var(--surface); color: var(--text-primary);
+            transition: border-color 0.2s ease;
+        }
+        .form-input:focus { outline: none; border-color: var(--primary-light); box-shadow: 0 0 0 3px rgba(234,88,12,0.1); }
+
+        /* 表单标签 */
+        .form-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; display: block; }
+
+        /* loading 动画 */
+        .spinner {
+            width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff; border-radius: 50%;
+            animation: spin 0.6s linear infinite; display: inline-block;
+        }
+        .spinner-dark {
+            border-color: rgba(0,0,0,0.1);
+            border-top-color: var(--primary);
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="min-h-screen" style="background:#faf5f0;">
+<div id="app" v-cloak>
+    <!-- 顶部导航 -->
+    <header class="nav-header shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <!-- 图标 + 标题 -->
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-white bg-opacity-20 flex items-center justify-center flex-shrink-0">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                        </svg>
+                    </div>
+                    <h1 class="text-lg font-bold text-white tracking-tight">模板训练管理</h1>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 sm:gap-3">
+                <a href="/"
+                   class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 12px;font-size:12px;text-decoration:none;">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                    </svg>
+                    返回保单识别
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主内容区域 -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <!-- Tab 导航 -->
+        <div class="card mb-4" style="padding: 0;">
+            <div class="flex border-b" style="border-color: var(--border-light);">
+                <button @click="activeTab = 'train'" :class="activeTab === 'train' ? 'active' : ''" class="tab-btn">
+                    模板训练
+                </button>
+                <button @click="activeTab = 'templates'; loadTemplates()" :class="activeTab === 'templates' ? 'active' : ''" class="tab-btn">
+                    模板管理
+                </button>
+                <button @click="activeTab = 'history'" :class="activeTab === 'history' ? 'active' : ''" class="tab-btn">
+                    训练记录
+                </button>
+                <button @click="activeTab = 'alerts'; loadAlerts()" :class="activeTab === 'alerts' ? 'active' : ''" class="tab-btn">
+                    告警中心
+                </button>
+            </div>
+        </div>
+
+        <!-- ========== Tab 1: 模板训练 ========== -->
+        <div v-if="activeTab === 'train'">
+            <div class="card p-6">
+                <h2 class="text-base font-bold mb-4" style="color: var(--text-primary);">上传样本训练新模板</h2>
+
+                <!-- 表单区域 -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+                    <!-- 保司选择 -->
+                    <div>
+                        <label class="form-label">保司选择</label>
+                        <select v-model="trainForm.companyShort" @change="onCompanyChange" class="form-input">
+                            <option value="">请选择保司</option>
+                            <option v-for="c in companyList" :key="c.id" :value="c.short">{{ c.short }}</option>
+                        </select>
+                    </div>
+                    <!-- 险种选择 -->
+                    <div>
+                        <label class="form-label">险种选择</label>
+                        <select v-model="trainForm.policyType" class="form-input">
+                            <option value="">请选择险种</option>
+                            <option value="交强险">交强险</option>
+                            <option value="商业险">商业险</option>
+                            <option value="驾意险">驾意险</option>
+                        </select>
+                    </div>
+                    <!-- 版本号 -->
+                    <div>
+                        <label class="form-label">版本号</label>
+                        <input v-model="trainForm.version" class="form-input" placeholder="v1" />
+                    </div>
+                </div>
+
+                <!-- 拖拽上传区 -->
+                <div class="drop-zone rounded-xl p-8 text-center mb-4"
+                     :class="{ dragover: isDragging }"
+                     @dragover.prevent="isDragging = true"
+                     @dragleave.prevent="isDragging = false"
+                     @drop.prevent="handleDrop"
+                     @click="$refs.fileInput.click()">
+                    <input ref="fileInput" type="file" accept=".pdf" multiple hidden @change="handleFileSelect" />
+                    <svg class="w-10 h-10 mx-auto mb-3" style="color: var(--text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                    </svg>
+                    <p class="text-sm font-medium" style="color: var(--text-secondary);">拖拽上传样本 PDF（3-5份同类保单）</p>
+                    <p class="text-xs mt-1" style="color: var(--text-muted);">支持批量选择，点击或拖拽均可</p>
+                </div>
+
+                <!-- 已选文件列表 -->
+                <div v-if="trainFiles.length > 0" class="mb-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium" style="color: var(--text-secondary);">已选文件 ({{ trainFiles.length }})</span>
+                        <button @click="trainFiles = []" class="text-xs" style="color: var(--danger); cursor: pointer; background: none; border: none;">清空全部</button>
+                    </div>
+                    <div class="space-y-2">
+                        <div v-for="(f, idx) in trainFiles" :key="idx" class="file-item">
+                            <div class="flex items-center gap-2">
+                                <svg class="w-4 h-4 flex-shrink-0" style="color: var(--primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                                <span class="truncate" style="max-width: 300px;">{{ f.name }}</span>
+                                <span class="text-xs" style="color: var(--text-muted);">({{ formatSize(f.size) }})</span>
+                            </div>
+                            <button @click="trainFiles.splice(idx, 1)" style="color: var(--text-muted); cursor: pointer; background: none; border: none; padding: 4px;">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 开始训练按钮 -->
+                <button @click="startTraining" :disabled="!canTrain || training" class="btn btn-primary">
+                    <span v-if="training" class="spinner"></span>
+                    <span v-else>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                    </span>
+                    {{ training ? '训练中...' : '开始训练' }}
+                </button>
+
+                <!-- 训练结果 -->
+                <div v-if="trainResult" class="mt-6">
+                    <div class="border-t pt-4" style="border-color: var(--border-light);">
+                        <h3 class="text-sm font-bold mb-3" style="color: var(--text-primary);">训练结果</h3>
+
+                        <!-- 错误提示 -->
+                        <div v-if="trainResult.error" class="p-3 rounded-lg mb-3" style="background: #fef2f2; border: 1px solid #fecaca;">
+                            <p class="text-sm" style="color: var(--danger);">{{ trainResult.error }}</p>
+                        </div>
+
+                        <!-- 成功结果 -->
+                        <div v-if="trainResult.success !== false">
+                            <div class="flex items-center gap-4 mb-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm" style="color: var(--text-secondary);">整体准确率:</span>
+                                    <span class="text-lg font-bold" :style="{ color: trainResult.validation.hit_rate >= 90 ? 'var(--success)' : 'var(--warning)' }">
+                                        {{ (trainResult.validation.hit_rate * 100).toFixed(1) }}%
+                                    </span>
+                                    <span v-if="trainResult.validation.passed" class="badge badge-success">通过</span>
+                                    <span v-else class="badge badge-warning">未通过</span>
+                                </div>
+                                <div class="text-sm" style="color: var(--text-muted);">
+                                    样本数量: {{ trainResult.validation.sample_count }}
+                                </div>
+                            </div>
+
+                            <!-- 不稳定字段 -->
+                            <div v-if="trainResult.validation.unstable_fields && trainResult.validation.unstable_fields.length > 0" class="mb-3">
+                                <p class="text-sm font-medium mb-2" style="color: var(--warning);">不稳定字段:</p>
+                                <div class="overflow-auto" style="max-height: 200px;">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>字段</th>
+                                                <th>失败数</th>
+                                                <th>总数</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="uf in trainResult.validation.unstable_fields" :key="uf.field || uf">
+                                                <td>{{ uf.field || uf }}</td>
+                                                <td>{{ uf.fail_count || '-' }}</td>
+                                                <td>{{ uf.total || '-' }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- 注册模板按钮（训练成功时显示） -->
+                            <div v-if="trainResult.success && trainResult.template_id" class="mt-3">
+                                <div class="p-3 rounded-lg" style="background: #ecfdf5; border: 1px solid #a7f3d0;">
+                                    <p class="text-sm" style="color: var(--success);">
+                                        模板已自动注册: <strong>{{ trainResult.template_id }}</strong>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== Tab 2: 模板管理 ========== -->
+        <div v-if="activeTab === 'templates'">
+            <div class="card p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-base font-bold" style="color: var(--text-primary);">已注册模板列表</h2>
+                    <button @click="loadTemplates" class="btn btn-outline" style="padding: 6px 12px; font-size: 12px;">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        刷新
+                    </button>
+                </div>
+
+                <!-- 加载中 -->
+                <div v-if="templatesLoading" class="text-center py-12">
+                    <div class="spinner spinner-dark mx-auto mb-3"></div>
+                    <p class="text-sm" style="color: var(--text-muted);">加载中...</p>
+                </div>
+
+                <!-- 空列表 -->
+                <div v-else-if="templateList.length === 0" class="text-center py-12">
+                    <svg class="w-12 h-12 mx-auto mb-3" style="color: var(--text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+                    </svg>
+                    <p class="text-sm" style="color: var(--text-muted);">暂无已注册模板</p>
+                    <p class="text-xs mt-1" style="color: var(--text-muted);">请先通过"模板训练"上传样本训练</p>
+                </div>
+
+                <!-- 模板列表表格 -->
+                <div v-else class="overflow-auto">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>保司</th>
+                                <th>险种</th>
+                                <th>版本</th>
+                                <th>状态</th>
+                                <th>模板 ID</th>
+                                <th>创建日期</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="tpl in templateList" :key="tpl.template_id || tpl.company_id + tpl.policy_type">
+                                <td>{{ tpl.company_short || tpl.company_name || tpl.company_id || '-' }}</td>
+                                <td>{{ tpl.policy_type || '-' }}</td>
+                                <td>{{ tpl.version || 'v1' }}</td>
+                                <td>
+                                    <span v-if="tpl.status === 'active'" class="badge badge-success">启用</span>
+                                    <span v-else-if="tpl.status === 'disabled'" class="badge badge-gray">禁用</span>
+                                    <span v-else class="badge badge-info">{{ tpl.status || '正常' }}</span>
+                                </td>
+                                <td class="text-xs" style="color: var(--text-muted);">{{ tpl.template_id || '-' }}</td>
+                                <td class="text-xs" style="color: var(--text-muted);">{{ tpl.created_at || '-' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== Tab 3: 训练记录 ========== -->
+        <div v-if="activeTab === 'history'">
+            <div class="card p-6">
+                <h2 class="text-base font-bold mb-4" style="color: var(--text-primary);">训练记录</h2>
+                <div class="text-center py-12">
+                    <svg class="w-12 h-12 mx-auto mb-3" style="color: var(--text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <p class="text-sm" style="color: var(--text-muted);">暂无训练记录</p>
+                    <p class="text-xs mt-1" style="color: var(--text-muted);">训练完成后将在此显示历史记录</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== Tab 4: 告警中心 ========== -->
+        <div v-if="activeTab === 'alerts'">
+            <div class="card p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-base font-bold" style="color: var(--text-primary);">告警中心</h2>
+                    <div class="flex items-center gap-2">
+                        <select v-model="alertFilter.resolved" @change="loadAlerts()" class="form-input" style="width: auto; padding: 4px 8px; font-size: 12px;">
+                            <option value="">全部</option>
+                            <option value="0">未处理</option>
+                            <option value="1">已处理</option>
+                        </select>
+                        <select v-model="alertFilter.level" @change="loadAlerts()" class="form-input" style="width: auto; padding: 4px 8px; font-size: 12px;">
+                            <option value="">全部级别</option>
+                            <option value="warning">警告</option>
+                            <option value="critical">严重</option>
+                            <option value="info">信息</option>
+                        </select>
+                        <button @click="loadAlerts()" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                            刷新
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 加载中 -->
+                <div v-if="alertsLoading" class="text-center py-12">
+                    <div class="spinner spinner-dark mx-auto mb-3"></div>
+                    <p class="text-sm" style="color: var(--text-muted);">加载中...</p>
+                </div>
+
+                <!-- 空列表 -->
+                <div v-else-if="alertList.length === 0" class="text-center py-12">
+                    <svg class="w-12 h-12 mx-auto mb-3" style="color: var(--success);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <p class="text-sm" style="color: var(--text-muted);">暂无告警信息</p>
+                </div>
+
+                <!-- 告警列表 -->
+                <div v-else class="overflow-auto">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>时间</th>
+                                <th>级别</th>
+                                <th>类型</th>
+                                <th>消息</th>
+                                <th>模板 ID</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="alert in alertList" :key="alert.id">
+                                <td class="text-xs" style="color: var(--text-muted);">{{ alert.created_at || '-' }}</td>
+                                <td>
+                                    <span v-if="alert.level === 'critical'" class="badge badge-danger">严重</span>
+                                    <span v-else-if="alert.level === 'warning'" class="badge badge-warning">警告</span>
+                                    <span v-else class="badge badge-info">信息</span>
+                                </td>
+                                <td>{{ alert.alert_type || alert.type || '-' }}</td>
+                                <td class="text-xs" style="max-width: 300px; white-space: normal; word-break: break-all;">{{ alert.message || '-' }}</td>
+                                <td class="text-xs" style="color: var(--text-muted);">{{ alert.template_id || '-' }}</td>
+                                <td>
+                                    <span v-if="alert.resolved" class="badge badge-gray">已处理</span>
+                                    <span v-else class="badge badge-warning">未处理</span>
+                                </td>
+                                <td>
+                                    <button v-if="!alert.resolved" @click="resolveAlert(alert.id)" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px;">
+                                        标记已处理
+                                    </button>
+                                    <span v-else class="text-xs" style="color: var(--text-muted);">{{ alert.action || '-' }}</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <!-- 分页 -->
+                    <div v-if="alertPagination.total > alertPagination.pageSize" class="flex items-center justify-center gap-2 mt-4">
+                        <button @click="alertPagination.page--; loadAlerts()" :disabled="alertPagination.page <= 1" class="pagination-btn">&lt;</button>
+                        <span class="text-xs" style="color: var(--text-muted);">{{ alertPagination.page }} / {{ Math.ceil(alertPagination.total / alertPagination.pageSize) }}</span>
+                        <button @click="alertPagination.page++; loadAlerts()" :disabled="alertPagination.page >= Math.ceil(alertPagination.total / alertPagination.pageSize)" class="pagination-btn">&gt;</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+const { createApp, ref, reactive, computed } = Vue;
+
+createApp({
+    setup() {
+        // 当前 Tab
+        const activeTab = ref('train');
+
+        // ========== 保司列表（硬编码，来自 COMPANY_ID_MAP） ==========
+        const companyList = [
+            { short: '人保PICC', id: 'picc' },
+            { short: '平安', id: 'pingan' },
+            { short: '太平洋', id: 'cpic' },
+            { short: '大家财险', id: 'dajia' },
+            { short: '阳光', id: 'sunshine' },
+            { short: '太平', id: 'taiping' },
+            { short: '国寿财产', id: 'clic' },
+            { short: '紫金', id: 'zijin' },
+            { short: '申能', id: 'shenneng' },
+            { short: '浙商', id: 'zheshang' },
+            { short: '中华联合', id: 'zhonghua' },
+            { short: '天安', id: 'tianan' },
+            { short: '华安', id: 'huaan' },
+            { short: '永安', id: 'yongan' },
+            { short: '华泰', id: 'huatai' },
+            { short: '众安', id: 'zhongan' },
+            { short: '亚太', id: 'yatai' },
+            { short: '都邦', id: 'dubang' },
+            { short: '渤海', id: 'bohai' },
+            { short: '锦泰', id: 'jintai' },
+            { short: '永诚', id: 'yongcheng' },
+            { short: '前海联合', id: 'qianhai' },
+            { short: '京东安联', id: 'jdallianz' },
+            { short: '安盛天平', id: 'axa' },
+        ];
+
+        // ========== 模板训练 ==========
+        const trainForm = reactive({
+            companyShort: '',
+            companyId: '',
+            policyType: '',
+            version: 'v1',
+        });
+        const trainFiles = ref([]);
+        const isDragging = ref(false);
+        const training = ref(false);
+        const trainResult = ref(null);
+
+        // 保司选择变化时自动填充 ID
+        function onCompanyChange() {
+            const found = companyList.find(c => c.short === trainForm.companyShort);
+            trainForm.companyId = found ? found.id : '';
+        }
+
+        // 是否可以开始训练
+        const canTrain = computed(() => {
+            return trainForm.companyShort && trainForm.policyType && trainFiles.value.length >= 2;
+        });
+
+        // 处理拖拽
+        function handleDrop(e) {
+            isDragging.value = false;
+            const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+            trainFiles.value.push(...files);
+        }
+
+        // 处理文件选择
+        function handleFileSelect(e) {
+            const files = Array.from(e.target.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+            trainFiles.value.push(...files);
+            e.target.value = '';
+        }
+
+        // 格式化文件大小
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // 开始训练
+        async function startTraining() {
+            if (!canTrain.value || training.value) return;
+            training.value = true;
+            trainResult.value = null;
+
+            try {
+                const formData = new FormData();
+                formData.append('company_id', trainForm.companyId);
+                formData.append('company_short', trainForm.companyShort);
+                formData.append('company_name', trainForm.companyShort);
+                formData.append('policy_type', trainForm.policyType);
+                formData.append('version', trainForm.version || 'v1');
+                for (const f of trainFiles.value) {
+                    formData.append('samples', f);
+                }
+
+                const resp = await fetch('/api/insurance/train', { method: 'POST', body: formData });
+                const data = await resp.json();
+                trainResult.value = data;
+            } catch (err) {
+                trainResult.value = { success: false, error: '请求失败: ' + err.message };
+            } finally {
+                training.value = false;
+            }
+        }
+
+        // ========== 模板管理 ==========
+        const templateList = ref([]);
+        const templatesLoading = ref(false);
+
+        async function loadTemplates() {
+            templatesLoading.value = true;
+            try {
+                const resp = await fetch('/api/insurance/templates');
+                const data = await resp.json();
+                templateList.value = data.success ? (data.data || []) : [];
+            } catch (err) {
+                console.error('加载模板列表失败', err);
+                templateList.value = [];
+            } finally {
+                templatesLoading.value = false;
+            }
+        }
+
+        // ========== 告警中心 ==========
+        const alertList = ref([]);
+        const alertsLoading = ref(false);
+        const alertFilter = reactive({ resolved: '', level: '' });
+        const alertPagination = reactive({ page: 1, pageSize: 20, total: 0 });
+
+        async function loadAlerts() {
+            alertsLoading.value = true;
+            try {
+                let url = `/api/insurance/alerts?page=${alertPagination.page}&page_size=${alertPagination.pageSize}`;
+                if (alertFilter.resolved !== '') url += `&resolved=${alertFilter.resolved}`;
+                if (alertFilter.level) url += `&level=${alertFilter.level}`;
+                const resp = await fetch(url);
+                const data = await resp.json();
+                if (data.success && data.data) {
+                    alertList.value = data.data.records || data.data.alerts || [];
+                    alertPagination.total = data.data.total || 0;
+                } else {
+                    alertList.value = [];
+                }
+            } catch (err) {
+                console.error('加载告警失败', err);
+                alertList.value = [];
+            } finally {
+                alertsLoading.value = false;
+            }
+        }
+
+        async function resolveAlert(alertId) {
+            try {
+                await fetch(`/api/insurance/alerts/${alertId}/resolve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'ignore' }),
+                });
+                loadAlerts();
+            } catch (err) {
+                console.error('标记告警失败', err);
+            }
+        }
+
+        return {
+            activeTab,
+            companyList,
+            trainForm,
+            trainFiles,
+            isDragging,
+            training,
+            trainResult,
+            canTrain,
+            onCompanyChange,
+            handleDrop,
+            handleFileSelect,
+            formatSize,
+            startTraining,
+            templateList,
+            templatesLoading,
+            loadTemplates,
+            alertList,
+            alertsLoading,
+            alertFilter,
+            alertPagination,
+            loadAlerts,
+            resolveAlert,
+        };
+    }
+}).mount('#app');
+</script>
+</body>
+</html>{% endraw %}

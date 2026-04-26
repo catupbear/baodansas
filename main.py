@@ -96,6 +96,11 @@ def create_app(config: dict) -> Flask:
     def insurance_page():
         return redirect("/")
 
+    # 模板训练管理
+    @app.route("/training")
+    def training_page():
+        return render_template("training.html")
+
     # 消息监控（需要密码）
     @app.route("/monitor")
     def monitor_page():
