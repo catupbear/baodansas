@@ -1468,7 +1468,9 @@ createApp({
         async function loadMappingConfig() {
             try {
                 const resp = await fetch('/api/insurance/mapping/config');
-                const data = await resp.json();
+                const raw = await resp.json();
+                // 兼容 {"code":0,"data":{...}} 和直接返回 {...} 两种格式
+                const data = raw.data || raw;
                 mappingConfig.value = {
                     default_mapping: data.default_mapping || {},
                     company_mappings: data.company_mappings || {},
