@@ -930,3 +930,98 @@ def get_extraction_rules_api():
     except Exception as e:
         logger.exception("获取字段提取规则失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+# ============================================================
+# 模板训练
+# ============================================================
+
+@insurance_bp.route('/api/insurance/train', methods=['POST'])
+def train_template():
+    """上传样本 PDF，自动训练模板"""
+    from insurance.learner.trainer import TemplateTrainer, save_training_result
+    import os
+
+    files = request.files.getlist('samples')
+    company_id = request.form.get('company_id', '')
+    policy_type = request.form.get('policy_type', '')
+    version = request.form.get('version', 'v1')
+    company_name = request.form.get('company_name', '')
+    company_short = request.form.get('company_short', '')
+
+    if not files or len(files) < 2:
+        return jsonify({"success": False, "error": "至少需要上传 2 份样本 PDF"})
+    if not company_id or not policy_type:
+        return jsonify({"success": False, "error": "必须指定 company_id 和 policy_type"})
+
+    pdf_bytes_list = [f.read() for f in files]
+
+    trainer = TemplateTrainer()
+    result = trainer.train(
+        pdf_bytes_list, company_id, policy_type, version,
+        company_name, company_short)
+
+    if result.success:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        templates_dir = os.path.join(base_dir, "templates")
+        rules_dir = os.path.join(base_dir, "rules")
+        save_training_result(templates_dir, rules_dir, result,
+                           company_id, policy_type, version)
+
+    # 保存训练记录
+    if _db:
+        from insurance.db import save_train_record
+        save_train_record(_db, {
+            "company_id": company_id,
+            "policy_type": policy_type,
+            "version": version,
+            "sample_count": len(pdf_bytes_list),
+            "discovered_fields": len(result.needs_review) if result.needs_review else 0,
+            "overall_hit_rate": result.validation.overall_hit_rate if result.validation else 0,
+            "passed": 1 if result.success else 0,
+            "unstable_fields": result.needs_review,
+            "template_json": json.dumps(result.template, ensure_ascii=False) if result.template else "",
+            "rule_code": result.rule_code,
+            "registered": 1 if result.success else 0,
+            "trigger_source": "manual",
+        })
+
+    return jsonify({
+        "success": result.success,
+        "error": result.error,
+        "template_id": f"{company_id}/{policy_type}/{version}" if result.success else "",
+        "validation": {
+            "hit_rate": result.validation.overall_hit_rate if result.validation else 0,
+            "sample_count": result.validation.sample_count if result.validation else 0,
+            "passed": result.validation.passed if result.validation else False,
+            "unstable_fields": result.needs_review or [],
+        }
+    })
+
+
+# ============================================================
+# 告警管理
+# ============================================================
+
+@insurance_bp.route('/api/insurance/alerts', methods=['GET'])
+def list_alerts():
+    """查询告警记录"""
+    from insurance.db import query_alerts
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 20, type=int)
+    resolved = request.args.get('resolved', None)
+    level = request.args.get('level', None)
+    if resolved is not None:
+        resolved = int(resolved)
+    result = query_alerts(_db, page, page_size, resolved, level)
+    return jsonify({"success": True, "data": result})
+
+
+@insurance_bp.route('/api/insurance/alerts/<int:alert_id>/resolve', methods=['POST'])
+def resolve_alert_api(alert_id):
+    """标记告警已处理"""
+    from insurance.db import resolve_alert
+    data = request.get_json(silent=True) or {}
+    action = data.get('action', 'ignore')
+    resolve_alert(_db, alert_id, action)
+    return jsonify({"success": True})

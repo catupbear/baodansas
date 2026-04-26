@@ -66,6 +66,29 @@ class InsuranceHandler:
         self._baidu_ocr = None
         self._init_baidu_ocr()
 
+        # 新识别引擎（渐进式启用）
+        self._pipeline = None
+        try:
+            from insurance.engine.pipeline import InsurancePipeline
+            from insurance.ocr.baidu_engine import BaiduOCREngine
+            ocr_engines = []
+            baidu_config = app_config.get("baidu_ocr", {})
+            if baidu_config.get("api_key"):
+                ocr_engines.append(BaiduOCREngine(
+                    baidu_config["api_key"], baidu_config["secret_key"]))
+            tencent_config = app_config.get("tencent_ocr", {})
+            if tencent_config.get("secret_id"):
+                from insurance.ocr.tencent_engine import TencentOCREngine
+                ocr_engines.append(TencentOCREngine(
+                    tencent_config["secret_id"], tencent_config["secret_key"]))
+            self._pipeline = InsurancePipeline(
+                db=db, ocr_engines=ocr_engines,
+                alert_webhook=app_config.get("dingtalk", {}).get("alert_webhook", ""))
+            logger.info("新识别引擎初始化成功")
+        except Exception as e:
+            logger.warning(f"新识别引擎初始化失败，使用旧逻辑: {e}")
+            self._pipeline = None
+
         # 启动消费者守护线程
         self._worker = threading.Thread(target=self._consume, daemon=True)
         self._worker.start()
@@ -275,6 +298,29 @@ class InsuranceHandler:
                 "mapped_fields": mapped_fields,
             }
             update_insurance_record(self.db, record_id, updates)
+
+            # 保存新引擎的额外信息
+            pipeline_result = ocr_result.get("pipeline_result")
+            if pipeline_result:
+                import json as _json
+                extra_updates = {
+                    "template_id": pipeline_result.template_id,
+                    "match_score": pipeline_result.match_score,
+                    "field_layer_data": _json.dumps({
+                        "common": pipeline_result.fields.get("common", {}),
+                        "type_specific": pipeline_result.fields.get("type_specific", {}),
+                        "company_specific": pipeline_result.fields.get("company_specific", {}),
+                    }, ensure_ascii=False),
+                    "ocr_engines": ",".join(pipeline_result.ocr_engines),
+                    "ocr_cross_validated": 1 if pipeline_result.ocr_diffs else 0,
+                    "ocr_diffs": _json.dumps([{
+                        "field": d.field_name, "values": d.values,
+                        "is_critical": d.is_critical, "resolved": d.resolved_value,
+                    } for d in pipeline_result.ocr_diffs], ensure_ascii=False) if pipeline_result.ocr_diffs else None,
+                    "has_critical_diff": 1 if any(d.is_critical for d in pipeline_result.ocr_diffs) else 0,
+                }
+                update_insurance_record(self.db, record_id, extra_updates)
+
             logger.info("保单处理完成, record_id=%d filename=%s", record_id, filename)
 
             # 8. 自动同步钉钉（按配置决定）
@@ -424,6 +470,39 @@ class InsuranceHandler:
                 "error":      str,
             }
         """
+        # 优先使用新引擎
+        if self._pipeline:
+            try:
+                result = self._pipeline.process_pdf(pdf_bytes, filename)
+                if result.confidence > 0:
+                    # 新引擎成功，转换为旧格式兼容
+                    flat_fields = {}
+                    flat_fields.update(result.fields.get("common", {}))
+                    flat_fields.update(result.fields.get("type_specific", {}))
+                    flat_fields.update(result.fields.get("company_specific", {}))
+                    flat_fields["保险公司"] = result.company.company_name
+                    flat_fields["保险公司简称"] = result.company.company_short
+                    flat_fields["险种类型"] = result.policy_type.type_name
+                    flat_fields["文档类型"] = result.doc_category
+
+                    policy = {
+                        "type": result.policy_type.type_name,
+                        "type_code": result.policy_type.type_code,
+                        "confidence": result.confidence,
+                        "doc_category": result.doc_category,
+                        "fields": flat_fields,
+                        "insurance_items": result.insurance_items,
+                        "raw_text": result.raw_text,
+                    }
+                    return {
+                        "success": True,
+                        "policy": policy,
+                        "ocr_engine": ",".join(result.ocr_engines),
+                        "pipeline_result": result,
+                    }
+            except Exception as e:
+                logger.warning(f"新引擎处理失败，降级到旧逻辑: {e}")
+
         text = ""
         ocr_engine = "pdfplumber"
 
