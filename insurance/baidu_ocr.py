@@ -12,6 +12,19 @@ import requests
 from typing import Dict, Any, Optional
 
 
+def _is_clause_page(text: str) -> bool:
+    """判断是否为保险条款页（非保单数据页），用于多页识别时提前终止"""
+    if not text or len(text) < 50:
+        return False
+    # 条款页特征：含"第X条"、"总则"、"��任免除"等法律条文关键词
+    import re
+    clause_keywords = ['总则', '第一条', '第二条', '责任免除', '保险责任', '释义',
+                        '理赔申请', '争议处理', '保险金申请', '条款', '注册号']
+    hit_count = sum(1 for kw in clause_keywords if kw in text)
+    # 命中3个以上特征词视为条款页
+    return hit_count >= 3
+
+
 class BaiduOCR:
     """百度OCR客户端"""
 
@@ -121,6 +134,56 @@ class BaiduOCR:
         """
         pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
         return self.recognize_pdf(pdf_base64, page_num)
+
+    def recognize_pdf_multi_pages(self, pdf_bytes: bytes, max_pages: int = 6) -> Dict[str, Any]:
+        """
+        识别 PDF 多页文字，逐页调用百度 OCR 并拼接结果。
+        遇到条款页（大段条款文本）时自动停止。
+
+        Args:
+            pdf_bytes: 原始 PDF 字节数据
+            max_pages: 最多识别的页数（默认3页，保单数据页通常不超过3页）
+
+        Returns:
+            包含识别文本的结果字典
+        """
+        import io
+        try:
+            import pdfplumber
+            with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                total_pages = len(pdf.pages)
+        except Exception:
+            total_pages = max_pages
+
+        pages_to_scan = min(max_pages, total_pages)
+        pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
+
+        all_texts = []
+        for page in range(1, pages_to_scan + 1):
+            try:
+                result = self.recognize_pdf(pdf_base64, page_num=page)
+                if result.get("success"):
+                    page_text = result.get("text", "")
+                    # 检测是否为条款页（含大量法律条文特征词），是则停止
+                    if page > 1 and _is_clause_page(page_text):
+                        break
+                    all_texts.append(page_text)
+            except Exception:
+                break
+
+        if not all_texts:
+            return {"success": False, "error": "百度OCR多页识别均失败", "text": ""}
+
+        combined = "\n".join(all_texts)
+        return {
+            "success": True,
+            "text": combined,
+            "lines": combined.split("\n"),
+            "words_count": combined.count("\n") + 1,
+            "char_count": len(combined),
+            "ocr_engine": "baidu",
+            "pages_scanned": len(all_texts),
+        }
 
     def recognize_image(self, image_base64: str) -> Dict[str, Any]:
         """

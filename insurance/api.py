@@ -233,11 +233,12 @@ def manual_ocr():
             extract_result = extract_text_from_pdf(
                 file_data_base64=file_data_b64, pdf_page=pdf_page)
 
-            # pdfplumber 失败（无文本层）→ 降级到百度 OCR
+            # pdfplumber 失败（无文本层）→ 降级到百度 OCR（多页识别）
             if not extract_result["success"] and baidu_ocr_client:
-                logger.info("[%s] pdfplumber 无文本层，降级使用百度OCR", file_name)
-                extract_result = baidu_ocr_client.recognize_pdf(
-                    file_data_b64, page_num=max(pdf_page, 1))
+                logger.info("[%s] pdfplumber 无文本层，降级使用百度OCR（多页）", file_name)
+                pdf_bytes = base64.b64decode(file_data_b64)
+                extract_result = baidu_ocr_client.recognize_pdf_multi_pages(
+                    pdf_bytes, max_pages=6)
                 ocr_engine = "baidu"
 
         if not extract_result["success"]:
@@ -258,10 +259,11 @@ def manual_ocr():
             or policy.get("confidence", 0) == 0
         )
         if need_fallback and ocr_engine == "pdfplumber" and baidu_ocr_client:
-            logger.info("[%s] pdfplumber 效果不佳(类型=%s, 置信度=%s), 降级百度OCR",
+            logger.info("[%s] pdfplumber 效果不佳(类型=%s, 置信度=%s), 降级百度OCR（多页）",
                         file_name, policy.get("doc_category"), policy.get("confidence"))
-            extract_result = baidu_ocr_client.recognize_pdf(
-                file_data_b64, page_num=max(pdf_page, 1))
+            pdf_bytes = base64.b64decode(file_data_b64)
+            extract_result = baidu_ocr_client.recognize_pdf_multi_pages(
+                pdf_bytes, max_pages=6)
             ocr_engine = "baidu"
             if extract_result["success"]:
                 policy = parse_policy_text(extract_result["text"])

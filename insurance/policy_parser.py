@@ -136,7 +136,7 @@ def _is_valid_person(val: str) -> bool:
         return False
 
     # ====== 公司名判断（优先，允许较长） ======
-    if re.search(r'公司|集团|合伙|工厂|商行|商贸|车行|车队|事务所|经营部|经营店|经销商|专营店|服务部|加工厂|养殖场|合作社', val) or val.endswith('店'):
+    if re.search(r'公司|集团|合伙|工厂|商行|商贸|车行|车队|事务所|经营部|经营店|经销商|专营店|服务部|加工厂|养殖场|合作社|研究院|研究所|���计院|分院|医院|学院|中心', val) or val.endswith('店'):
         # 公司名允许长一些，但不能超过 30 字
         # 排除含动词/条款用语的句子片段（如"向本公司提出的申请"）
         if re.search(r'提出|提供|负责|承担|向.*公司|本公司.*的|申请|告知|声明', val):
@@ -163,7 +163,7 @@ def _is_valid_person(val: str) -> bool:
         r'|主险|附加|合同|条件|生效|届满|届时'
         # 车辆/证件相关
         r'|交通|机动车|车辆|证件|身份证|手机|电话|姓名|号码|地址'
-        r'|发动机|车架号|车牌|行驶证'
+        r'|发动机|车架号|车牌|行驶证|户籍|证明|或者'
         # 文档结构词
         r'|信息|个人信|序号|编号|日期|时间|金额|费用|合计|总计'
         r'|本公司|该公司|受益人|被保人|投保人'
@@ -180,6 +180,9 @@ def _is_valid_person(val: str) -> bool:
 def _clean_person_name(val: str) -> str:
     """清理人名中的常见干扰字符"""
     val = val.strip()
+    # 清理中文字符间的OCR空格（如"沈 心诚" → "沈心诚"、"大 家财产" → "大家财产"）
+    val = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', val)
+    val = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', val)  # 二次清理
     val = re.sub(r'[：:（(].*', '', val)
     val = re.sub(r'车主.*', '', val)
     val = re.sub(r'名称.*', '', val)
@@ -412,29 +415,38 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
     if m:
         fields["争议解决方式"] = m.group(1)
 
-    # 匹配"制单："但排除"制单时间"
-    m = re.search(r"制单(?!时间)[：:\s]*(\S+?)(?:\s|$)", text)
+    # 匹配"制单："或"制单人："，排除"制单时间"
+    m = re.search(r"制单(?:人)?(?!时间)[：:\s]*(\S+?)(?:\s|$)", text)
     if m:
-        fields["制单人"] = m.group(1)
+        fields["制单人"] = m.group(1).lstrip("：:")
 
-    m = re.search(r"经办[：:\s]*(\S+?)(?:\s|$)", text)
+    m = re.search(r"经办(?:人)?[：:\s]*(\S+?)(?:\s|$)", text)
     if m:
-        fields["经办人"] = m.group(1)
+        fields["经办人"] = m.group(1).lstrip("：:")
 
     # ===== 业务员 / 代理人 =====
+    # 注意："代理人名称"是中介机构公司名，不是业务员
     for p in [
-        r"业务员[：:\s]*(\S+?)(?:\s|$)",
-        r"代理人名称[：:\s]*(\S+?)(?:\s|$)",
-        r"代理人[：:\s]*([\u4e00-\u9fff][\u4e00-\u9fff\w]{1,10})(?:\s|$)",
-        r"销售人员[：:\s]*(\S+?)(?:\s|$)",
+        r"业务员[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
+        r"销售人员[名称]*[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
+        r"销售渠道名称[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
+        r"代理人[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
     ]:
         m = re.search(p, text)
         if m:
-            fields["业务员"] = m.group(1).strip()
-            break
-    # 经办人兜底为业务员
-    if "业务员" not in fields and "经办人" in fields:
-        fields["业务员"] = fields["经办人"]
+            val = _clean_person_name(m.group(1))
+            if val and len(val) >= 2 and not re.search(r'公司|集团|保险|有限|机构', val):
+                fields["业务员"] = val
+                break
+    # 经办人兜底为业务员；经办人无效时用制单人兜底
+    if "业务员" not in fields:
+        for fallback_field in ["经办人", "制单人"]:
+            if fallback_field in fields:
+                val = _clean_person_name(fields[fallback_field])
+                if val and len(val) >= 2 and re.match(r'^[\u4e00-\u9fff]+$', val) \
+                        and not re.search(r'公司|集团|保险|有限|机构|自动', val):
+                    fields["业务员"] = val
+                    break
 
     return fields
 
@@ -446,8 +458,8 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
 def _extract_policy_no(text: str, fields: dict, company_short: str):
     """提取保单号"""
 
-    # 华泰驾乘险格式："保险单号Policy No.：CA06EA43422600004722"
-    m = re.search(r"保险单号\s*Policy\s*No\.?[：:\s]+(\S+)", text)
+    # 华泰/京东安联等格式："保险单号Policy No.：XXX" 或 "保单号码Policy No.:XXX"
+    m = re.search(r"保[险]?单号[码]?\s*Policy\s*No\.?[：:\s]+(\S+)", text)
     if m:
         val = m.group(1).strip().lstrip("：:")
         if val and len(val) > 3:
@@ -786,7 +798,7 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
         r"被保险人名称[：:]\s*(\S+)",
         r"被保险人[：:]\s*(\S+)",
         r"被保姓名[：:]\s*(\S+)",
-        r"(?<!被)被保险人\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]{1,9})(?:\s|$)",
+        r"(?<!被)被保险人\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]{1,29})(?:\s|$)",
     ]:
         m = re.search(p, text)
         if m:
@@ -913,11 +925,43 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
                     return
             break
 
+    # 华泰等表格格式："姓名\n付琴\n联系电话\n...\n投保人\n证件类型"
+    # "投保人"是区域标题，投保人姓名在前面"姓名"字段的下一行
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == '投保人' and i >= 2:
+            # 向前找"姓名"行（不含/名称，区别于浙商格式）
+            for j in range(max(0, i - 6), i):
+                if lines[j].strip() == '姓名' and j + 1 < i:
+                    val = lines[j + 1].strip()
+                    if val and _is_valid_person(val):
+                        fields["投保人"] = val
+                        return
+            break
+
+    # 永诚等格式："投保人信息\n姓名：李飞" 或 "投保人信息 姓名：李飞"
+    m = re.search(r"投保人信息[\s\n]*姓名[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|$)", text)
+    if m:
+        val = _clean_person_name(m.group(1))
+        if _is_valid_person(val):
+            fields["投保人"] = val
+            return
+
+    # 按行匹配"投保人为："（处理名字中有OCR空格的情况，如"沈 心诚"）
+    for line in lines:
+        m = re.search(r'投保人为[：:]\s*(.+)', line.strip())
+        if m:
+            # 取冒号后的内容，清理空格
+            val = _clean_person_name(m.group(1))
+            if _is_valid_person(val):
+                fields["投保人"] = val
+                return
+
     # 通用提取
     for p in [
         r"投保人\s*(?:姓名|名称)?[：:]\s*(\S+)",
-        r"本保单[的]?投保人为[：:]?\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:[，,。\s]|$)",
-        r"本保单投保人为[：:]?\s*(\S+)",
+        r"本保单\s*[的]?\s*投保人为[：:]?\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:[，,。\s\n]|$)",
+        r"本保单\s*投保人为[：:]?\s*(\S+)",
         r"投保人\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|$)",
     ]:
         m = re.search(p, text)
@@ -927,9 +971,10 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
                 fields["投保人"] = val
                 return
 
-    # 兜底：用合并文本
+    # 兜底：用合并文本（消除OCR字间空格干扰）
     for p in [
-        r"投保人为([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:[，,。\s]|$)",
+        r"本保单[的]?投保人为[：:]?\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]*?(?:有��公司|有限责任公司|集团|分院|���究院|研究所|设计院|中心))",
+        r"投保人为[：:]?\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:[，,。\s]|$)",
         r"投保人([\u4e00-\u9fff]{2,20}?)(?:，|,|。|证件|保单|$)",
     ]:
         m = re.search(p, text_merged)
@@ -1421,6 +1466,8 @@ def _extract_sign_date(text: str, fields: dict, company_short: str):
         r"保单生成时间[：:\s]*([\d]{4}[/\-]\d{1,2}[/\-]\d{1,2})",
         # 平安个意险格式
         r"出单日期[：:\s]*([\d]{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)",
+        # 华泰格式
+        r"签单时间[：:\s]*([\d]{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)",
     ]:
         m = re.search(p, text)
         if m:

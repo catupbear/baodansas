@@ -483,22 +483,23 @@ class InsuranceHandler:
 
     def _cross_fill_by_plate(self, parsed_fields: dict, record_id: int = None):
         """
-        从同车牌的已有保单记录中补充当前保单缺失的关键字段。
+        同车牌保单双向字段互补：
+        1. 正向：从历史记录补充当前保单的缺失字段
+        2. 反向：用当前保单的字段回填历史记录的缺失字段
         仅补充空值字段，不覆盖已有值。
         """
         plate = parsed_fields.get("车牌号", "")
         if not plate:
             return
 
-        missing = [f for f in self.CROSS_FILL_FIELDS if not parsed_fields.get(f)]
-        if not missing:
-            return
-
-        from insurance.db import find_records_by_plate
+        from insurance.db import find_records_by_plate, update_insurance_record
+        from insurance.field_mapping import apply_mapping
         history = find_records_by_plate(self.db, plate, exclude_id=record_id)
         if not history:
             return
 
+        # --- 正向互补：历史 → 当前 ---
+        missing = [f for f in self.CROSS_FILL_FIELDS if not parsed_fields.get(f)]
         filled = []
         for field in missing:
             for rec in history:
@@ -511,9 +512,41 @@ class InsuranceHandler:
 
         if filled:
             logger.info(
-                "同车牌互补: plate=%s, record_id=%s, 补充=%s",
+                "同车牌互补(正向): plate=%s, record_id=%s, 补充=%s",
                 plate, record_id, ", ".join(filled),
             )
+
+        # --- 反向互补：当前 → 历史缺失记录 ---
+        current_vals = {f: parsed_fields.get(f, "") for f in self.CROSS_FILL_FIELDS}
+        # 当前记录至少要有一个可供回填的字段
+        if not any(current_vals.values()):
+            return
+
+        for rec in history:
+            hist_fields = rec.get("parsed_fields", {})
+            if not hist_fields:
+                continue
+            back_filled = []
+            for field in self.CROSS_FILL_FIELDS:
+                if not hist_fields.get(field) and current_vals.get(field):
+                    hist_fields[field] = current_vals[field]
+                    back_filled.append(f"{field}={current_vals[field]}")
+
+            if back_filled:
+                # 重新计算 mapped_fields
+                company_short = hist_fields.get("保险公司简称", "")
+                mapped = apply_mapping(hist_fields, company_short)
+                try:
+                    update_insurance_record(self.db, rec["id"], {
+                        "parsed_fields": hist_fields,
+                        "mapped_fields": mapped,
+                    })
+                    logger.info(
+                        "同车牌互补(反向): plate=%s, 回填record_id=%s, 补充=%s",
+                        plate, rec["id"], ", ".join(back_filled),
+                    )
+                except Exception as e:
+                    logger.warning("同车牌反向互补失败: record_id=%s, %s", rec["id"], e)
 
     # ------------------------------------------------------------------ #
     # COS 上传
@@ -646,7 +679,7 @@ class InsuranceHandler:
         if needs_fallback:
             if self._baidu_ocr:
                 try:
-                    baidu_result = self._baidu_ocr.recognize_pdf_bytes(pdf_bytes, page_num=1)
+                    baidu_result = self._baidu_ocr.recognize_pdf_multi_pages(pdf_bytes, max_pages=6)
                     if baidu_result.get("success"):
                         text = baidu_result.get("text", "")
                         ocr_engine = "baidu"

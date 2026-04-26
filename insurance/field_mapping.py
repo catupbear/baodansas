@@ -59,13 +59,24 @@ def _default_config() -> Dict[str, Any]:
 
 
 def load_mapping_config() -> Dict[str, Any]:
-    """加载映射配置"""
+    """加载映射配置，自动补充新增的默认映射字段"""
     if not MAPPING_PATH.exists():
         config = _default_config()
         save_mapping_config(config)
         return config
     with open(MAPPING_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+        config = json.load(f)
+    # 自动补充 DEFAULT_MAPPING 中新增的字段（不覆盖已有配置）
+    saved_mapping = config.get("default_mapping", {})
+    updated = False
+    for ocr_field, out_col in DEFAULT_MAPPING.items():
+        if ocr_field not in saved_mapping:
+            saved_mapping[ocr_field] = out_col
+            updated = True
+    if updated:
+        config["default_mapping"] = saved_mapping
+        save_mapping_config(config)
+    return config
 
 
 def save_mapping_config(config: Dict[str, Any]):
