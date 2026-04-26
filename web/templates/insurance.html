@@ -273,6 +273,14 @@
                 </div>
             </div>
             <div class="flex items-center gap-2 sm:gap-3">
+                <!-- 监控配置入口 -->
+                <a href="/monitor-config"
+                   class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 12px;font-size:12px;text-decoration:none;">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7"/>
+                    </svg>
+                    监控配置
+                </a>
                 <!-- 字段映射按钮（仅手动上传页显示） -->
                 <button v-if="pageTab === 'upload'" @click="openMappingModal"
                         class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 12px;font-size:12px;">
