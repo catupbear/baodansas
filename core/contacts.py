@@ -34,15 +34,21 @@ class ContactsManager:
             self._clear_unresolvable()
 
     def _clear_unresolvable(self):
-        """清除所有 __unresolvable__ 标记，允许重新解析"""
+        """清除外部联系人和外部群的 __unresolvable__ 标记，用新 Secret 重试"""
         conn = self.db.pool.connection()
         try:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM contacts_cache WHERE name = '__unresolvable__'")
+            # 只清除可能受益于外部应用 Secret 的标记：
+            # wm/wo 前缀（外部联系人）和 wr 前缀（外部群）
+            cursor.execute("""
+                DELETE FROM contacts_cache
+                WHERE name = '__unresolvable__'
+                  AND (id LIKE 'wm%%' OR id LIKE 'wo%%' OR id LIKE 'wr%%')
+            """)
             deleted = cursor.rowcount
             conn.commit()
             if deleted:
-                logger.info("已清除 %d 条不可解析缓存，将重新尝试解析", deleted)
+                logger.info("已清除 %d 条外部联系人/群的不可解析缓存，将使用外部应用 Secret 重试", deleted)
         finally:
             conn.close()
 
