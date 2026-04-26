@@ -1779,11 +1779,18 @@ createApp({
         // 提取异常必检字段
         const REQUIRED_FIELDS = ['承保公司', '保单号', '险种', '车牌', '投保人', '被保人', '签单日期', '起保日期', '终保日期', '保费'];
 
-        // 判断是否非保单文档（电子标志、发票、缴款通知、条款、其他等）
+        // 判断是否非保单文档（电子标志、发票、缴款通知、条款、其他、无法识别关键字段等）
         function isNonPolicy(r) {
-            if (!r.success || !r.invoices || !r.invoices[0]) return false;
-            const cat = r.invoices[0].doc_category || '';
-            return cat && cat !== '保单';
+            // 识别成功但文档类型不是保单
+            if (r.success && r.invoices && r.invoices[0]) {
+                const cat = r.invoices[0].doc_category || '';
+                return cat && cat !== '保单';
+            }
+            // 识别失败且错误为"未识别到任何保单关键字段"
+            if (!r.success && r.error && r.error.includes('未识别到任何保单关键字段')) {
+                return true;
+            }
+            return false;
         }
 
         // 判断是否提取异常（成功识别的保单但关键字段缺失）
@@ -1796,7 +1803,7 @@ createApp({
         const successResults = computed(() => results.value.filter(r => r.success && !isNonPolicy(r) && !isAbnormal(r)));
         const abnormalResults = computed(() => results.value.filter(r => isAbnormal(r)));
         const nonPolicyResults = computed(() => results.value.filter(r => isNonPolicy(r)));
-        const failedResults = computed(() => results.value.filter(r => !r.success));
+        const failedResults = computed(() => results.value.filter(r => !r.success && !isNonPolicy(r)));
 
         // 获取识别结果的文档类型
         function getDocCategory(r) {
