@@ -19,7 +19,7 @@ from core.parser import MessageParser
 from sdk.finance_sdk import FinanceSDK
 from storage.db import Database
 from insurance.db import init_insurance_tables
-from insurance.monitor_config_db import init_monitor_config_table
+from insurance.monitor_config_db import init_monitor_config_table, migrate_from_watch_list
 from insurance.handler import InsuranceHandler
 from insurance.api import insurance_bp, init_insurance_api
 
@@ -81,6 +81,7 @@ def create_app(config: dict) -> Flask:
     # 初始化保单识别模块
     init_insurance_tables(db)
     init_monitor_config_table(db)
+    migrate_from_watch_list(db)
     insurance_handler = InsuranceHandler(
         db=db, cos_storage=cos_storage, contacts=contacts,
         app_config=config,

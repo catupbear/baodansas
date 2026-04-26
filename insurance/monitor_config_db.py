@@ -196,3 +196,84 @@ def get_enabled_monitor_configs(db) -> list:
         return [_deserialize_json(row) for row in rows]
     finally:
         conn.close()
+
+
+def migrate_from_watch_list(db):
+    """
+    一次性迁移：将旧 insurance_config 中的 watch_list + dingtalk_targets 迁移到 monitor_configs 表。
+    如果 monitor_configs 已有数据则跳过（说明已迁移过）。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT COUNT(*) as cnt FROM monitor_configs")
+        if cursor.fetchone()["cnt"] > 0:
+            return  # 已有数据，跳过迁移
+
+        # 读取旧配置
+        cursor.execute("SELECT config_value FROM insurance_config WHERE config_key = 'watch_list'")
+        row = cursor.fetchone()
+        if not row:
+            return
+        try:
+            watch_list = json.loads(row["config_value"])
+        except (TypeError, json.JSONDecodeError):
+            return
+        if not isinstance(watch_list, list) or not watch_list:
+            return
+
+        # 读取旧钉钉目标
+        cursor.execute("SELECT config_value FROM insurance_config WHERE config_key = 'dingtalk_targets'")
+        row2 = cursor.fetchone()
+        dingtalk_targets = []
+        if row2:
+            try:
+                dingtalk_targets = json.loads(row2["config_value"])
+            except (TypeError, json.JSONDecodeError):
+                pass
+
+        target_map = {t["id"]: t for t in dingtalk_targets if isinstance(t, dict) and t.get("id")}
+
+        # 按 target_ids 分组：相同 target_ids 组合的监控项合并为一条 monitor_config
+        from collections import defaultdict
+        groups = defaultdict(lambda: {"rooms": [], "users": []})
+
+        for w in watch_list:
+            if not isinstance(w, dict) or not w.get("id"):
+                continue
+            tids = tuple(sorted(w.get("target_ids", [])))
+            if w.get("type") == "room":
+                groups[tids]["rooms"].append({"id": w["id"], "name": w.get("name", w["id"])})
+            elif w.get("type") == "user":
+                groups[tids]["users"].append({"id": w["id"], "name": w.get("name", w["id"])})
+
+        # 为每个分组创建一条 monitor_config
+        idx = 0
+        for tids, sources in groups.items():
+            idx += 1
+            doc_url, base_id, sheet_id = "", "", ""
+            if tids and tids[0] in target_map:
+                t = target_map[tids[0]]
+                doc_url = t.get("doc_url", "")
+                base_id = t.get("base_id", "")
+                sheet_id = t.get("sheet_id", "")
+
+            cursor.execute("""
+                INSERT INTO monitor_configs (name, enabled, rooms, users,
+                    dingtalk_doc_url, dingtalk_base_id, dingtalk_sheet_id, field_mapping)
+                VALUES (%s, 1, %s, %s, %s, %s, %s, %s)
+            """, (
+                f"迁移配置{idx}",
+                json.dumps(sources["rooms"], ensure_ascii=False),
+                json.dumps(sources["users"], ensure_ascii=False),
+                doc_url, base_id, sheet_id,
+                json.dumps({}, ensure_ascii=False),
+            ))
+
+        conn.commit()
+        if idx > 0:
+            logger.info("已从旧 watch_list 迁移 %d 条监控配置到 monitor_configs", idx)
+    except Exception as e:
+        logger.warning("迁移旧监控配置失败（可忽略）: %s", e)
+    finally:
+        conn.close()
