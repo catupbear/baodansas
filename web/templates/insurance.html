@@ -1989,7 +1989,7 @@ createApp({
                     try {
                         const resp = await fetch('/api/insurance/ocr', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ file_data: file.base64, file_type: file.type, file_name: file.name, pdf_page: 1 }),
+                            body: JSON.stringify({ file_data: file.base64, file_type: file.type, file_name: file.name, pdf_page: 0 }),
                         });
                         const data = await resp.json();
                         results.value.push(resp.ok ? data : { success: false, file_name: file.name, error: data.detail || '请求失败' });
@@ -2053,7 +2053,7 @@ createApp({
             try {
                 const resp = await fetch('/api/insurance/ocr', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ file_data: file.base64, file_type: file.type, file_name: file.name, pdf_page: 1 }),
+                    body: JSON.stringify({ file_data: file.base64, file_type: file.type, file_name: file.name, pdf_page: 0 }),
                 });
                 const data = await resp.json();
                 const idx = results.value.findIndex(x => x.file_name === r.file_name);

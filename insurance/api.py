@@ -162,7 +162,7 @@ def manual_ocr():
         file_data_b64 = body.get("file_data", "")
         file_type = body.get("file_type", "pdf")
         file_name = body.get("file_name", "upload")
-        pdf_page = body.get("pdf_page", 1) or 1
+        pdf_page = body.get("pdf_page", 0) or 0  # 0=提取所有页
 
         if not file_data_b64:
             return jsonify({"code": 400, "msg": "缺少 file_data 参数"}), 400

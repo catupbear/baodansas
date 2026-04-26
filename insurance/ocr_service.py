@@ -24,13 +24,13 @@ def clean_text(text: str) -> str:
     return text
 
 
-def _extract_from_file_obj(pdf_file: io.BytesIO, pdf_page: int = 1) -> Dict[str, Any]:
+def _extract_from_file_obj(pdf_file: io.BytesIO, pdf_page: int = 0) -> Dict[str, Any]:
     """
-    内部方法：从 BytesIO 对象中提取指定页的文本
+    内部方法：从 BytesIO 对象中提取文本
 
     Args:
         pdf_file: 已封装为 BytesIO 的 PDF 数据
-        pdf_page: 要提取的页码（从1开始）
+        pdf_page: 要提取的页码（从1开始，0表示提取所有页）
 
     Returns:
         包含提取结果的字典
@@ -39,13 +39,22 @@ def _extract_from_file_obj(pdf_file: io.BytesIO, pdf_page: int = 1) -> Dict[str,
         if not pdf.pages:
             raise Exception("PDF文件没有任何页面")
 
-        # 页码越界时取最后一页
-        page_idx = min(pdf_page - 1, len(pdf.pages) - 1)
-        page = pdf.pages[page_idx]
-        raw_text = page.extract_text()
+        if pdf_page > 0:
+            # 提取指定页
+            page_idx = min(pdf_page - 1, len(pdf.pages) - 1)
+            pages_to_extract = [pdf.pages[page_idx]]
+        else:
+            # 提取所有页
+            pages_to_extract = pdf.pages
+
+        all_texts = []
+        for page in pages_to_extract:
+            raw_text = page.extract_text()
+            if raw_text:
+                all_texts.append(raw_text)
 
         # 无文本层（扫描件）时返回失败结果
-        if not raw_text:
+        if not all_texts:
             return {
                 "success": False,
                 "error": "无文本层（扫描件），暂不支持识别",
@@ -53,7 +62,8 @@ def _extract_from_file_obj(pdf_file: io.BytesIO, pdf_page: int = 1) -> Dict[str,
                 "page_count": len(pdf.pages),
             }
 
-        text = clean_text(raw_text)
+        combined = "\n".join(all_texts)
+        text = clean_text(combined)
         return {
             "success": True,
             "text": text,
@@ -63,13 +73,13 @@ def _extract_from_file_obj(pdf_file: io.BytesIO, pdf_page: int = 1) -> Dict[str,
         }
 
 
-def extract_text_from_pdf(file_data_base64: str, pdf_page: int = 1) -> Dict[str, Any]:
+def extract_text_from_pdf(file_data_base64: str, pdf_page: int = 0) -> Dict[str, Any]:
     """
     从 base64 编码的 PDF 中提取文本
 
     Args:
         file_data_base64: Base64 编码的 PDF 数据
-        pdf_page: 要提取的页码（从1开始）
+        pdf_page: 要提取的页码（从1开始，0=提取所有页）
 
     Returns:
         包含提取结果的字典
@@ -79,13 +89,13 @@ def extract_text_from_pdf(file_data_base64: str, pdf_page: int = 1) -> Dict[str,
     return _extract_from_file_obj(pdf_file, pdf_page)
 
 
-def extract_text_from_pdf_bytes(pdf_bytes: bytes, pdf_page: int = 1) -> Dict[str, Any]:
+def extract_text_from_pdf_bytes(pdf_bytes: bytes, pdf_page: int = 0) -> Dict[str, Any]:
     """
     直接从 bytes 数据中提取 PDF 文本（供内部调用，无需经过 base64 编解码）
 
     Args:
         pdf_bytes: 原始 PDF 字节数据
-        pdf_page: 要提取的页码（从1开始）
+        pdf_page: 要提取的页码（从1开始，0=提取所有页）
 
     Returns:
         包含提取结果的字典
