@@ -152,39 +152,96 @@ def get_stats():
 @insurance_bp.route("/api/insurance/ocr", methods=["POST"])
 def manual_ocr():
     """
-    手动上传文件进行保单识别。
+    手动上传文件进行保单识别（纯识别，不上传 COS、不保存记录）。
+    采用 baoxianOcr 的轻量逻辑：pdfplumber → 质量不佳降级百度 OCR → parse_policy_text
     请求体: {file_data(base64), file_type, file_name, pdf_page}
     """
-    if not _handler:
-        return jsonify({"code": 503, "msg": "识别服务未初始化"}), 503
+    from .ocr_service import extract_text_from_pdf
+    from .policy_parser import parse_policy_text
+    from .baidu_ocr import BaiduOCR
 
     try:
         body = request.get_json(force=True) or {}
         file_data_b64 = body.get("file_data", "")
-        file_type = body.get("file_type", "")
+        file_type = body.get("file_type", "pdf")
         file_name = body.get("file_name", "upload")
-        pdf_page = body.get("pdf_page", None)
+        pdf_page = body.get("pdf_page", 1) or 1
 
         if not file_data_b64:
             return jsonify({"code": 400, "msg": "缺少 file_data 参数"}), 400
 
-        # Base64 解码文件内容
-        try:
-            file_bytes = base64.b64decode(file_data_b64)
-        except Exception:
-            return jsonify({"code": 400, "msg": "file_data base64 解码失败"}), 400
+        # 初始化百度 OCR（从 handler 或配置中获取）
+        baidu_ocr_client = getattr(_handler, "_baidu_ocr", None) if _handler else None
 
-        # 调用 handler 处理手动上传
-        result = _handler.process_manual_upload(
-            pdf_bytes=file_bytes,
-            filename=file_name,
-            file_type=file_type,
-            pdf_page=pdf_page,
+        extract_result = None
+        ocr_engine = "pdfplumber"
+
+        # 图片文件直接走百度 OCR
+        if file_type in ("jpg", "jpeg", "png", "bmp"):
+            if not baidu_ocr_client:
+                return jsonify({"code": 0, "data": {
+                    "success": False, "file_name": file_name,
+                    "error": "图片识别需要配置百度OCR", "invoices": [],
+                }})
+            extract_result = baidu_ocr_client.recognize_image(file_data_b64)
+            ocr_engine = "baidu"
+        else:
+            # PDF：先用 pdfplumber 提取文本层
+            extract_result = extract_text_from_pdf(
+                file_data_base64=file_data_b64, pdf_page=pdf_page)
+
+            # pdfplumber 失败（无文本层）→ 降级到百度 OCR
+            if not extract_result["success"] and baidu_ocr_client:
+                logger.info("[%s] pdfplumber 无文本层，降级使用百度OCR", file_name)
+                extract_result = baidu_ocr_client.recognize_pdf(
+                    file_data_b64, page_num=pdf_page)
+                ocr_engine = "baidu"
+
+        if not extract_result["success"]:
+            error_msg = extract_result.get("error", "OCR 识别失败")
+            if "无文本层" in error_msg and not baidu_ocr_client:
+                error_msg += "（提示：配置百度OCR可自动识别扫描件）"
+            return jsonify({"code": 0, "data": {
+                "success": False, "file_name": file_name,
+                "error": error_msg, "invoices": [],
+            }})
+
+        policy = parse_policy_text(extract_result["text"])
+
+        # 质量不佳时降级百度 OCR
+        need_fallback = (
+            not policy.get("fields")
+            or policy.get("doc_category") == "其他"
+            or policy.get("confidence", 0) == 0
         )
-        return jsonify({"code": 0, "data": result})
+        if need_fallback and ocr_engine == "pdfplumber" and baidu_ocr_client:
+            logger.info("[%s] pdfplumber 效果不佳(类型=%s, 置信度=%s), 降级百度OCR",
+                        file_name, policy.get("doc_category"), policy.get("confidence"))
+            extract_result = baidu_ocr_client.recognize_pdf(
+                file_data_b64, page_num=pdf_page)
+            ocr_engine = "baidu"
+            if extract_result["success"]:
+                policy = parse_policy_text(extract_result["text"])
+
+        if not policy.get("fields") or policy.get("confidence", 0) == 0:
+            return jsonify({"code": 0, "data": {
+                "success": False, "file_name": file_name,
+                "error": "未识别到任何保单关键字段", "invoices": [],
+            }})
+
+        return jsonify({"code": 0, "data": {
+            "success": True,
+            "file_name": file_name,
+            "invoices": [policy],
+            "char_count": extract_result.get("char_count", 0),
+            "ocr_engine": ocr_engine,
+        }})
     except Exception as e:
         logger.exception("手动上传识别失败")
-        return jsonify({"code": 500, "msg": str(e)}), 500
+        return jsonify({"code": 0, "data": {
+            "success": False, "file_name": file_name,
+            "error": str(e), "invoices": [],
+        }})
 
 
 # ============================================================
