@@ -174,12 +174,17 @@ class {class_name}({base_class}):
 
     def _gen_single_field_method(self, method_name: str, field_info: DiscoveredField, pattern: InducedPattern) -> str:
         """生成单字段提取方法"""
+        label = field_info.original_label.rstrip("：: \t")
         return f'''    def {method_name}(self, text: str, text_merged: str) -> str:
         """提取{field_info.standard_name}（自动生成）"""
-        # 保司特有模式
-        m = re.search(r"{pattern.label_pattern}", text)
+        # 正则匹配（MULTILINE 使 .+ 在换行处停止）
+        m = re.search(r"{pattern.label_pattern}", text, re.MULTILINE)
         if m:
             return m.group(1).strip()
+        # 行切分兜底
+        val = self._extract_by_label(text, "{label}")
+        if val:
+            return val
         # 回退到基类通用逻辑
         return super().{method_name}(text, text_merged)'''
 
@@ -194,11 +199,16 @@ class {class_name}({base_class}):
             pat = patterns.get(f.standard_name)
             if not pat:
                 continue
+            label = f.original_label.rstrip("：: \t")
             lines.append(f'        # {f.standard_name}')
             lines.append(f'        if "{f.standard_name}" not in fields:')
-            lines.append(f'            m = re.search(r"{pat.label_pattern}", text)')
+            lines.append(f'            m = re.search(r"{pat.label_pattern}", text, re.MULTILINE)')
             lines.append(f'            if m:')
             lines.append(f'                fields["{f.standard_name}"] = m.group(1).strip()')
+            lines.append(f'            else:')
+            lines.append(f'                val = self._extract_by_label(text, "{label}")')
+            lines.append(f'                if val:')
+            lines.append(f'                    fields["{f.standard_name}"] = val')
 
         lines.append('        return fields')
         return "\n".join(lines)
@@ -214,22 +224,31 @@ class {class_name}({base_class}):
             pat = patterns.get(f.standard_name)
             if not pat:
                 continue
+            label = f.original_label.rstrip("：: \t")
             lines.append(f'        # {f.standard_name}')
             lines.append(f'        if "{f.standard_name}" not in fields:')
-            lines.append(f'            m = re.search(r"{pat.label_pattern}", text)')
+            lines.append(f'            m = re.search(r"{pat.label_pattern}", text, re.MULTILINE)')
             lines.append(f'            if m:')
             lines.append(f'                fields["{f.standard_name}"] = m.group(1).replace(",", "")')
+            lines.append(f'            else:')
+            lines.append(f'                val = self._extract_by_label(text, "{label}")')
+            lines.append(f'                if val:')
+            lines.append(f'                    fields["{f.standard_name}"] = val.replace(",", "")')
 
         lines.append('        return fields')
         return "\n".join(lines)
 
     def _gen_tax_method(self, field_info: DiscoveredField, pattern: InducedPattern) -> str:
         """生成 extract_tax 方法"""
+        label = field_info.original_label.rstrip("：: \t")
         return f'''    def extract_tax(self, text: str, text_merged: str) -> str:
         """提取车船税（自动生成）"""
-        m = re.search(r"{pattern.label_pattern}", text)
+        m = re.search(r"{pattern.label_pattern}", text, re.MULTILINE)
         if m:
             return m.group(1).strip().replace(",", "")
+        val = self._extract_by_label(text, "{label}")
+        if val:
+            return val.replace(",", "")
         return super().extract_tax(text, text_merged)'''
 
     def _gen_type_specific_method(self, fields: List[DiscoveredField], patterns: Dict[str, InducedPattern]) -> str:
@@ -243,11 +262,16 @@ class {class_name}({base_class}):
             pat = patterns.get(f.standard_name)
             if not pat:
                 continue
+            label = f.original_label.rstrip("：: \t")
             lines.append(f'        # {f.standard_name}')
             lines.append(f'        if "{f.standard_name}" not in fields:')
-            lines.append(f'            m = re.search(r"{pat.label_pattern}", text)')
+            lines.append(f'            m = re.search(r"{pat.label_pattern}", text, re.MULTILINE)')
             lines.append(f'            if m:')
             lines.append(f'                fields["{f.standard_name}"] = m.group(1).strip()')
+            lines.append(f'            else:')
+            lines.append(f'                val = self._extract_by_label(text, "{label}")')
+            lines.append(f'                if val:')
+            lines.append(f'                    fields["{f.standard_name}"] = val')
 
         lines.append('        return fields')
         return "\n".join(lines)
@@ -263,10 +287,15 @@ class {class_name}({base_class}):
             pat = patterns.get(f.standard_name)
             if not pat:
                 continue
-            lines.append(f'        # {f.standard_name}（原始标签: {f.original_label.rstrip("：: ")}）')
-            lines.append(f'        m = re.search(r"{pat.label_pattern}", text)')
+            label = f.original_label.rstrip("：: \t")
+            lines.append(f'        # {f.standard_name}（原始标签: {label}）')
+            lines.append(f'        m = re.search(r"{pat.label_pattern}", text, re.MULTILINE)')
             lines.append(f'        if m:')
             lines.append(f'            fields["{f.standard_name}"] = m.group(1).strip()')
+            lines.append(f'        else:')
+            lines.append(f'            val = self._extract_by_label(text, "{label}")')
+            lines.append(f'            if val:')
+            lines.append(f'                fields["{f.standard_name}"] = val')
 
         lines.append('        return fields')
         return "\n".join(lines)

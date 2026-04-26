@@ -79,6 +79,8 @@ def list_records():
     status = request.args.get("status", "")
     keyword = request.args.get("keyword", "")
     source = request.args.get("source", "")
+    source_type = request.args.get("source_type", "")
+    sender = request.args.get("sender", "")
 
     try:
         result = query_insurance_records(
@@ -89,6 +91,8 @@ def list_records():
             status=status,
             keyword=keyword,
             source=source,
+            source_type=source_type,
+            sender=sender,
         )
         # JSON 字段自动反序列化，避免前端收到字符串
         for record in result.get("records", []):

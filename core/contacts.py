@@ -144,6 +144,7 @@ class ContactsManager:
         else:
             # 缓存失败标记，避免反复重试
             self._set_cache(user_id, "user", "__unresolvable__")
+            logger.info("联系人 %s 已标记为不可解析，后续不再请求 API", user_id)
 
         return name or user_id
 
@@ -162,6 +163,7 @@ class ContactsManager:
         else:
             # 缓存失败标记，避免反复重试
             self._set_cache(room_id, "room", "__unresolvable__")
+            logger.info("群 %s 已标记为不可解析，后续不再请求 API", room_id)
 
         return name or room_id
 
@@ -206,8 +208,13 @@ class ContactsManager:
                 logger.debug("获取外部联系人: %s -> %s", external_userid, name)
                 return name
             else:
-                logger.warning("获取外部联系人失败 %s: errcode=%s, errmsg=%s",
-                               external_userid, data.get("errcode"), data.get("errmsg"))
+                errcode = data.get("errcode")
+                # 40096 = 无效的 external_userid（ID 截断或已失效），属于已知情况，降级为 DEBUG
+                if errcode == 40096:
+                    logger.debug("外部联系人 ID 无效(已截断或失效) %s，已跳过", external_userid)
+                else:
+                    logger.warning("获取外部联系人失败 %s: errcode=%s, errmsg=%s",
+                                   external_userid, errcode, data.get("errmsg"))
                 return ""
         except Exception as e:
             logger.error("获取外部联系人异常 %s: %s", external_userid, e)

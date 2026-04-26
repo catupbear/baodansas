@@ -96,6 +96,29 @@ class BaseRule:
     policy_type: str = ""     # 险种类型，如 "compulsory", "commercial", "accident"
     version: str = ""         # 规则版本号
 
+    def _extract_by_label(self, text: str, label: str) -> str:
+        """
+        通过标签行切分提取值（通用兜底方法）。
+        逐行扫描文本，找到包含标签的行，提取标签后的值部分。
+        能处理同一行有多个字段的情况（以 2+ 空格分隔）。
+        """
+        for line in text.split('\n'):
+            if label not in line:
+                continue
+            pos = line.find(label) + len(label)
+            rest = line[pos:].lstrip()
+            # 去掉分隔符
+            if rest and rest[0] in '：: \t':
+                rest = rest[1:].lstrip()
+            if not rest:
+                continue
+            # 截断到下一个标签（2+ 空格后跟中文字符，通常是下一个标签）
+            m = re.search(r'\s{2,}[\u4e00-\u9fff]', rest)
+            if m:
+                return rest[:m.start()].strip()
+            return rest.strip()
+        return ""
+
     def extract_all(self, text: str) -> dict:
         """
         主入口：从文本中提取所有字段
@@ -319,12 +342,16 @@ class BaseRule:
                         return parts[0]
                 break
 
-        # "被保 姓 名:" 格式（平安商业险）
-        m = re.search(r'被保\s*(?:险人)?\s*姓?\s*名[：:]\s*(\S+)', text)
-        if m:
-            val = re.sub(r'证件.*', '', m.group(1)).strip()
-            if is_valid_person(val):
-                return val
+        # "被保 姓 名:" / "被保 正式名称:" 格式（平安商业险）
+        for p in [
+            r'被保\s*(?:险人)?\s*姓?\s*名[：:]\s*(\S+)',
+            r'被保\s*正式名称[：:]\s*(\S+)',
+        ]:
+            m = re.search(p, text)
+            if m:
+                val = re.sub(r'证件.*', '', m.group(1)).strip()
+                if is_valid_person(val):
+                    return val
 
         # "姓名：XXX；身份证号" 格式
         m = re.search(r"姓名[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:[；;]|身份证|\s)", text)
@@ -553,9 +580,11 @@ class BaseRule:
     def extract_tax(self, text: str, text_merged: str) -> str:
         """提取车船税"""
         for p in [
-            r"车\s*船\s*税[\s\S]*?合计.*?[（(][￥¥][：:\s]*([\d,.]+)\s*(?:元)?[)）]",
+            r"车\s*船\s*税[\s\S]*?合计.*?[（(]\s*[￥¥][：:\s]*([\d,.]+)\s*(?:元)?[)）]",
             r"车\s*船\s*税[\s\S]*?合计.*?([\d,.]+)\s*元",
-            r"当年应缴\s*[￥¥][：:\s]*([\d,.]+)\s*元",
+            r"当年应缴\s*[（(\s]*[￥¥][：:\s]*([\d,.]+)\s*元",
+            # 平安格式：合计(人民币大写)：...( ￥ XXX 元)
+            r"合计\s*[（(]人民币大写[)）][：:\s]*.*?[（(\s]+[￥¥]\s*([\d,.]+)\s*元",
         ]:
             m = re.search(p, text)
             if m:

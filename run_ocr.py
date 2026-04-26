@@ -63,7 +63,7 @@ def main():
 
     port = 8878
     logging.info("保单识别服务启动: http://localhost:%d", port)
-    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+    app.run(host="0.0.0.0", port=port, debug=True, threaded=True)
 
 if __name__ == "__main__":
     main()

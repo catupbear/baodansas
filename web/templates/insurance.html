@@ -716,14 +716,35 @@
         <!-- 筛选栏 -->
         <div class="card p-4">
             <div class="flex flex-wrap items-center gap-3">
-                <!-- 群名下拉框 -->
+                <!-- 来源下拉框 -->
                 <div class="flex items-center gap-1.5">
+                    <span class="text-xs text-gray-500 font-medium whitespace-nowrap">来源:</span>
+                    <select v-model="recordFilter.source_type"
+                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer"
+                            @change="onSourceTypeChange">
+                        <option value="">全部</option>
+                        <option value="room">群聊</option>
+                        <option value="user">私聊</option>
+                    </select>
+                </div>
+                <!-- 群名/用户下拉框 -->
+                <div v-if="recordFilter.source_type !== 'user'" class="flex items-center gap-1.5">
                     <span class="text-xs text-gray-500 font-medium whitespace-nowrap">群名:</span>
                     <select v-model="recordFilter.roomid"
                             class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
                         <option value="">全部群</option>
-                        <option v-for="room in roomList" :key="room.roomid" :value="room.roomid">
-                            {{ room.room_name }}
+                        <option v-for="room in monitorRooms" :key="room.id" :value="room.id">
+                            {{ room.name }}
+                        </option>
+                    </select>
+                </div>
+                <div v-if="recordFilter.source_type === 'user'" class="flex items-center gap-1.5">
+                    <span class="text-xs text-gray-500 font-medium whitespace-nowrap">联系人:</span>
+                    <select v-model="recordFilter.userid"
+                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
+                        <option value="">全部</option>
+                        <option v-for="u in monitorUsers" :key="u.id" :value="u.id">
+                            {{ u.name }}
                         </option>
                     </select>
                 </div>
@@ -733,10 +754,10 @@
                     <select v-model="recordFilter.status"
                             class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
                         <option value="">全部</option>
-                        <option value="pending">pending</option>
-                        <option value="processing">processing</option>
-                        <option value="success">success</option>
-                        <option value="failed">failed</option>
+                        <option value="pending">待处理</option>
+                        <option value="processing">处理中</option>
+                        <option value="done">已完成</option>
+                        <option value="failed">失败</option>
                     </select>
                 </div>
                 <!-- 关键词搜索 -->
@@ -835,11 +856,11 @@
                             <!-- 状态 -->
                             <td>
                                 <span class="badge text-xs"
-                                      :class="record.status === 'success' ? 'badge-success'
+                                      :class="record.status === 'done' ? 'badge-success'
                                             : record.status === 'failed' ? 'badge-danger'
                                             : record.status === 'processing' ? 'badge-warning'
                                             : 'badge-gray'">
-                                    {{ record.status }}
+                                    {{ statusLabel(record.status) }}
                                 </span>
                             </td>
                             <!-- 钉钉同步 -->
@@ -866,8 +887,8 @@
                                             class="btn btn-primary" style="padding:3px 8px;font-size:11px;">
                                         {{ record._retrying ? '重试中...' : '重试' }}
                                     </button>
-                                    <!-- 同步钉钉（success且未同步） -->
-                                    <button v-if="record.status === 'success' && !record.dingtalk_synced"
+                                    <!-- 同步钉钉（已完成且未同步） -->
+                                    <button v-if="(record.status === 'done' || record.status === 'success') && !record.dingtalk_synced"
                                             @click="syncRecordToDingtalk(record)"
                                             :disabled="record._syncing"
                                             class="btn btn-warning" style="padding:3px 8px;font-size:11px;">
@@ -1301,11 +1322,11 @@
                     <div class="flex items-center gap-2">
                         <h3 class="text-base font-semibold text-gray-800">识别记录详情</h3>
                         <span class="badge text-xs"
-                              :class="currentRecord?.status === 'success' ? 'badge-success'
+                              :class="(currentRecord?.status === 'done' || currentRecord?.status === 'success') ? 'badge-success'
                                     : currentRecord?.status === 'failed' ? 'badge-danger'
                                     : currentRecord?.status === 'processing' ? 'badge-warning'
                                     : 'badge-gray'">
-                            {{ currentRecord?.status }}
+                            {{ statusLabel(currentRecord?.status) }}
                         </span>
                     </div>
                     <button @click="recordDetailVisible = false" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">&times;</button>
@@ -1357,7 +1378,7 @@
                             </div>
                         </div>
                     </div>
-                    <div v-else-if="currentRecord?.status === 'success'">
+                    <div v-else-if="currentRecord?.status === 'done' || currentRecord?.status === 'success'">
                         <p class="text-sm text-gray-400">无解析字段数据</p>
                     </div>
                 </div>
@@ -2383,11 +2404,18 @@ createApp({
         const records = ref([]);
         const isLoadingRecords = ref(false);
         const roomList = ref([]);  // 群列表（用于筛选下拉）
+        const monitorRooms = ref([]);  // 监控群列表
+        const monitorUsers = ref([]);  // 监控用户列表
         const recordFilter = reactive({
+            source_type: '',  // '': 全部, 'room': 群聊, 'user': 私聊
             roomid: '',
+            userid: '',
             status: '',
             keyword: '',
         });
+        // 状态中文映射
+        const STATUS_MAP = { pending: '待处理', processing: '处理中', done: '已完成', failed: '失败', success: '已完成' };
+        function statusLabel(s) { return STATUS_MAP[s] || s || '—'; }
         const recordPagination = reactive({
             page: 1,
             pageSize: 20,
@@ -2415,16 +2443,39 @@ createApp({
             return pages;
         });
 
-        // 加载群列表（用于筛选）
+        // 来源类型切换时清空子筛选
+        function onSourceTypeChange() {
+            recordFilter.roomid = '';
+            recordFilter.userid = '';
+        }
+
+        // 从监控配置加载群和用户列表（用于筛选）
         async function loadRoomList() {
             try {
-                const resp = await fetch('/api/insurance/rooms');
-                const data = await resp.json();
-                const rooms = data.rooms || data || [];
-                roomList.value = Array.isArray(rooms) ? rooms : [];
+                const resp = await fetch('/api/monitor-configs');
+                const json = await resp.json();
+                const configs = (json.data || json || []).filter(c => c.enabled !== 0);
+                const roomMap = {};
+                const userMap = {};
+                for (const cfg of configs) {
+                    // rooms 可能是 [{"id":"wr...","name":"群名"}] 或 ["wr..."]
+                    for (const r of (cfg.rooms || [])) {
+                        const id = typeof r === 'string' ? r : (r.id || '');
+                        const name = typeof r === 'string' ? r : (r.name || r.id || '');
+                        if (id) roomMap[id] = name;
+                    }
+                    for (const u of (cfg.users || [])) {
+                        const id = typeof u === 'string' ? u : (u.id || '');
+                        const name = typeof u === 'string' ? u : (u.name || u.id || '');
+                        if (id) userMap[id] = name;
+                    }
+                }
+                monitorRooms.value = Object.entries(roomMap).map(([id, name]) => ({ id, name }));
+                monitorUsers.value = Object.entries(userMap).map(([id, name]) => ({ id, name }));
             } catch (e) {
-                console.error('加载群列表失败', e);
-                roomList.value = [];
+                console.error('加载监控列表失败', e);
+                monitorRooms.value = [];
+                monitorUsers.value = [];
             }
         }
 
@@ -2437,11 +2488,21 @@ createApp({
                     page: recordPagination.page,
                     page_size: recordPagination.pageSize,
                 });
-                if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
+                if (recordFilter.source_type === 'user') {
+                    params.set('source_type', 'user');
+                    if (recordFilter.userid) params.set('sender', recordFilter.userid);
+                } else if (recordFilter.source_type === 'room') {
+                    params.set('source_type', 'room');
+                    if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
+                } else {
+                    if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
+                }
                 if (recordFilter.status) params.set('status', recordFilter.status);
                 if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
                 const resp = await fetch(`/api/insurance/records?${params.toString()}`);
-                const data = await resp.json();
+                const json = await resp.json();
+                // API 返回 {"code":0, "data": {"records":[], "total":N}}
+                const data = json.data || json;
                 records.value = (data.records || data.items || []).map(r => ({
                     ...r,
                     // 解析 parsed_fields（如果是字符串则转对象）
@@ -2586,7 +2647,8 @@ createApp({
             // 重复保单
             duplicateVisible, duplicateList, confirmSyncSkipDuplicates, cancelSync,
             // 自动识别记录
-            records, isLoadingRecords, roomList, recordFilter,
+            records, isLoadingRecords, roomList, monitorRooms, monitorUsers,
+            recordFilter, statusLabel, onSourceTypeChange,
             recordPagination, visiblePages,
             loadRecords, gotoRecordPage, getParsedField, formatTime,
             retryRecord, syncRecordToDingtalk,

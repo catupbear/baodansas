@@ -208,17 +208,33 @@ def query_insurance_records(
     status: str = "",
     keyword: str = "",
     source: str = "",
+    source_type: str = "",
+    sender: str = "",
 ) -> dict:
     """
     分页查询保单识别记录，支持按群、状态、关键词、来源筛选。
+    source_type: 'room' 仅群聊, 'user' 仅私聊（roomid 为空的记录）
+    sender: 按发送人 ID 筛选
     返回: {"total": 总数, "pages": 总页数, "page": 当前页, "records": [...]}
     """
     conditions = []
     params = []
 
-    if roomid:
-        conditions.append("roomid LIKE %s")
-        params.append(f"%{roomid}%")
+    # 来源类型筛选
+    if source_type == "room":
+        conditions.append("roomid IS NOT NULL AND roomid != ''")
+        if roomid:
+            conditions.append("roomid = %s")
+            params.append(roomid)
+    elif source_type == "user":
+        conditions.append("(roomid IS NULL OR roomid = '')")
+        if sender:
+            conditions.append("sender = %s")
+            params.append(sender)
+    else:
+        if roomid:
+            conditions.append("roomid LIKE %s")
+            params.append(f"%{roomid}%")
     if status:
         conditions.append("status = %s")
         params.append(status)

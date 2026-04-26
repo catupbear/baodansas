@@ -7,6 +7,7 @@
 
 import json
 import os
+import re
 import types
 import logging
 from dataclasses import dataclass, field
@@ -134,7 +135,8 @@ class TemplateTrainer:
             # Step 3: 字段自动发现
             logger.info("[训练] 开始字段发现...")
             fields = self.discoverer.discover(alignment)
-            logger.info(f"[训练] 发现 {len(fields)} 个字段")
+            sources = set(f.source for f in fields)
+            logger.info(f"[训练] 发现 {len(fields)} 个字段 (来源: {', '.join(sources) if sources else '无'})")
 
             if not fields:
                 return TrainResult(
@@ -150,42 +152,66 @@ class TemplateTrainer:
                 pat = self.inducer.induce(f)
                 patterns[f.standard_name] = pat
 
-            # Step 5: 生成模板 JSON + 规则代码
-            logger.info("[训练] 生成模板和规则代码...")
-            template = self.template_gen.generate(
-                company_id=company_id,
-                policy_type=policy_type,
-                version=version,
-                alignment=alignment,
-                fields=fields,
-                patterns=patterns,
-            )
-
-            rule_code = self.rule_gen.generate(
-                company_id=company_id,
-                policy_type=policy_type,
-                version=version,
-                fields=fields,
-                patterns=patterns,
-            )
-
-            # Step 6: 动态加载规则 → 自验证
-            logger.info("[训练] 开始自验证...")
+            # Step 5-6: 生成 → 验证 → 优化循环（最多 3 轮）
+            max_attempts = 3
+            template = None
+            rule_code = ""
             validation = None
             needs_review = False
 
-            try:
-                rule_instance = self._load_rule_from_code(rule_code, policy_type)
-                validation = self.validator.validate(rule_instance, texts, fields)
-                logger.info(f"[训练] 验证结果: {validation.summary}")
+            for attempt in range(max_attempts):
+                # Step 5: 生成模板 JSON + 规则代码
+                if attempt == 0:
+                    logger.info("[训练] 生成模板和规则代码...")
+                else:
+                    logger.info(f"[训练] 第 {attempt + 1} 轮优化，重新生成规则代码...")
 
-                if not validation.passed:
+                template = self.template_gen.generate(
+                    company_id=company_id,
+                    policy_type=policy_type,
+                    version=version,
+                    alignment=alignment,
+                    fields=fields,
+                    patterns=patterns,
+                )
+
+                rule_code = self.rule_gen.generate(
+                    company_id=company_id,
+                    policy_type=policy_type,
+                    version=version,
+                    fields=fields,
+                    patterns=patterns,
+                )
+
+                # Step 6: 动态加载规则 → 自验证
+                logger.info("[训练] 开始自验证...")
+                try:
+                    rule_instance = self._load_rule_from_code(rule_code, policy_type)
+                    validation = self.validator.validate(rule_instance, texts, fields)
+                    logger.info(f"[训练] 验证结果: {validation.summary}")
+
+                    if validation.passed:
+                        needs_review = False
+                        logger.info("[训练] 验证通过")
+                        break
+
+                    # 尝试自动优化
+                    if attempt < max_attempts - 1:
+                        refined = self._refine_patterns(
+                            validation, fields, patterns, texts
+                        )
+                        if not refined:
+                            logger.warning("[训练] 无法进一步优化，需要人工审核")
+                            needs_review = True
+                            break
+                    else:
+                        needs_review = True
+                        logger.warning(f"[训练] {max_attempts} 轮优化后仍未通过，需要人工审核")
+                except Exception as e:
+                    logger.warning(f"[训练] 自验证异常: {e}")
                     needs_review = True
-                    logger.warning(f"[训练] 验证未通过，需要人工审核")
-            except Exception as e:
-                logger.warning(f"[训练] 自验证异常: {e}")
-                needs_review = True
-                validation = None
+                    validation = None
+                    break
 
             return TrainResult(
                 success=True,
@@ -201,6 +227,83 @@ class TemplateTrainer:
         except Exception as e:
             logger.error(f"[训练] 训练异常: {e}", exc_info=True)
             return TrainResult(success=False, error=f"训练异常: {e}")
+
+    def _refine_patterns(
+        self,
+        validation,
+        fields: List,
+        patterns: dict,
+        texts: List[str],
+    ) -> bool:
+        """
+        根据验证失败的样本自动优化模式。
+
+        策略：
+        1. 对每个失败的 字段+样本，在原文中搜索期望值
+        2. 找到后提取前面的标签文本
+        3. 如果标签与已有的不同，添加为替代标签（OR 模式）
+        4. 返回是否有改进
+
+        Returns:
+            True 表示有优化，False 表示无法进一步优化
+        """
+        refined = False
+
+        for sample in validation.samples:
+            text = texts[sample.sample_index]
+            for fr in sample.field_results:
+                if fr.matched or not fr.expected:
+                    continue
+
+                expected = fr.expected.strip()
+                if not expected:
+                    continue
+
+                # 在文本中搜索期望值
+                idx = text.find(expected)
+                if idx < 0:
+                    # 尝试去空格搜索
+                    text_nospace = re.sub(r'\s+', '', text)
+                    expected_nospace = re.sub(r'\s+', '', expected)
+                    if expected_nospace and expected_nospace in text_nospace:
+                        # 值存在但有空格差异，标记需要处理合并文本
+                        logger.info(
+                            f"[优化] 字段 {fr.field_name} 样本 {sample.sample_index}: "
+                            f"值存在但有空格差异"
+                        )
+                    continue
+
+                # 提取该行的标签部分
+                line_start = text.rfind('\n', 0, idx)
+                line_start = line_start + 1 if line_start >= 0 else 0
+                prefix = text[line_start:idx].strip()
+
+                # 去掉尾部分隔符
+                prefix_clean = prefix.rstrip('：: \t')
+                if not prefix_clean or len(prefix_clean) < 2:
+                    continue
+
+                # 找到对应的字段和模式
+                field_info = next(
+                    (f for f in fields if f.standard_name == fr.field_name), None
+                )
+                pat = patterns.get(fr.field_name)
+                if not field_info or not pat:
+                    continue
+
+                current_label = field_info.original_label.rstrip('：: \t')
+                if prefix_clean != current_label:
+                    # 发现新标签变体，构建替代正则
+                    alt_label_pat = self.inducer._build_label_pattern(prefix_clean)
+                    # 合并为 OR 模式：(?:原模式|新模式)
+                    pat.label_pattern = f"(?:{pat.label_pattern}|{alt_label_pat})"
+                    refined = True
+                    logger.info(
+                        f"[优化] 字段 {fr.field_name}: "
+                        f"发现替代标签 [{prefix_clean}] (原: [{current_label}])"
+                    )
+
+        return refined
 
     def _load_rule_from_code(self, code: str, policy_type: str) -> BaseRule:
         """

@@ -186,12 +186,19 @@ class DiscoveredField:
 class FieldDiscoverer:
     """
     字段自动发现器
-    从对齐结果的 label_value 行中识别标准字段。
+    从对齐结果中识别标准字段。
+    支持两种模式：
+    1. 对齐模式：从 label_value 行中提取（适合结构一致的 PDF）
+    2. 独立扫描模式：逐份文本扫描已知标签（适合结构不一致的 PDF）
     """
+
+    # 标签分隔符（用于独立扫描时切分标签和值）
+    LABEL_SEPARATORS = ("：", ":", " ", "\t")
 
     def discover(self, alignment: AlignmentResult) -> List[DiscoveredField]:
         """
-        从对齐结果中发现字段
+        从对齐结果中发现字段。
+        先尝试对齐模式，若 label_value 行不足则降级为独立扫描模式。
 
         Args:
             alignment: TextAligner.align() 的输出
@@ -199,6 +206,19 @@ class FieldDiscoverer:
         Returns:
             发现的字段列表
         """
+        # 先用对齐模式
+        fields = self._discover_from_alignment(alignment)
+
+        # 如果对齐模式发现的字段太少，降级为独立扫描模式
+        if len(fields) < 3 and alignment.sample_count >= 2:
+            scan_fields = self._discover_by_scanning(alignment)
+            if len(scan_fields) > len(fields):
+                fields = scan_fields
+
+        return fields
+
+    def _discover_from_alignment(self, alignment: AlignmentResult) -> List[DiscoveredField]:
+        """从对齐结果的 label_value 行中提取字段（原有逻辑）"""
         fields: List[DiscoveredField] = []
 
         for line in alignment.lines:
@@ -239,6 +259,109 @@ class FieldDiscoverer:
             ))
 
         return fields
+
+    def _discover_by_scanning(self, alignment: AlignmentResult) -> List[DiscoveredField]:
+        """
+        独立扫描模式：对每份样本的每一行独立扫描已知标签。
+        不依赖行对齐，适合结构差异大的 PDF。
+        字段在 ≥50% 样本中出现即视为发现。
+        """
+        sample_count = alignment.sample_count
+        if sample_count < 2:
+            return []
+
+        # 重建每份样本的文本行
+        sample_lines: List[List[str]] = [[] for _ in range(sample_count)]
+        for line in alignment.lines:
+            for s_idx in range(sample_count):
+                if s_idx < len(line.variants):
+                    sample_lines[s_idx].append(line.variants[s_idx])
+                else:
+                    sample_lines[s_idx].append("")
+
+        # 对每份样本独立扫描，收集 {标准字段名: [值1, 值2, ...]}
+        # field_hits[std_name] = [(sample_idx, value, original_label), ...]
+        field_hits: Dict[str, List[tuple]] = {}
+
+        for s_idx, lines in enumerate(sample_lines):
+            for text_line in lines:
+                if not text_line.strip():
+                    continue
+                # 尝试从此行提取标签和值
+                label, value = self._split_label_value(text_line)
+                if not label:
+                    continue
+
+                # 精确匹配
+                std_name = KNOWN_LABELS.get(label)
+                if not std_name:
+                    # 模糊匹配
+                    std_name = self._fuzzy_lookup(label)
+
+                if std_name:
+                    if std_name not in field_hits:
+                        field_hits[std_name] = []
+                    field_hits[std_name].append((s_idx, value, label))
+
+        # 过滤：字段需在 ≥50% 样本中出现
+        min_hit = max(2, sample_count // 2)
+        fields: List[DiscoveredField] = []
+
+        for std_name, hits in field_hits.items():
+            # 去重同一样本多次命中（取第一个）
+            seen_samples = {}
+            for s_idx, value, orig_label in hits:
+                if s_idx not in seen_samples:
+                    seen_samples[s_idx] = (value, orig_label)
+
+            if len(seen_samples) < min_hit:
+                continue
+
+            sample_values = [
+                seen_samples[s_idx][0] if s_idx in seen_samples else ""
+                for s_idx in range(sample_count)
+            ]
+            # 取第一个命中的原始标签
+            first_label = next(iter(seen_samples.values()))[1]
+            layer = FIELD_LAYER.get(std_name, "company_specific")
+            confidence = len(seen_samples) / sample_count
+
+            fields.append(DiscoveredField(
+                standard_name=std_name,
+                layer=layer,
+                original_label=first_label,
+                line_index=-1,
+                sample_values=sample_values,
+                source="scan",
+                confidence=confidence,
+            ))
+
+        return fields
+
+    def _split_label_value(self, line: str) -> tuple:
+        """
+        尝试从一行文本中切分出标签和值。
+        返回 (label, value)，无法切分返回 ("", "")。
+        """
+        for sep in self.LABEL_SEPARATORS:
+            idx = line.find(sep)
+            if idx >= 2:  # 标签至少 2 个字符
+                label = line[:idx].strip()
+                value = line[idx + len(sep):].strip()
+                if label and value:
+                    return label, value
+        return "", ""
+
+    def _fuzzy_lookup(self, label: str) -> Optional[str]:
+        """在 KNOWN_LABELS 中模糊查找标签，返回标准字段名"""
+        best_match = None
+        best_len = 0
+        for known_label, std_name in KNOWN_LABELS.items():
+            if known_label in label or label in known_label:
+                if len(known_label) > best_len:
+                    best_len = len(known_label)
+                    best_match = std_name
+        return best_match
 
     def _extract_values(self, line: AlignedLine) -> List[str]:
         """从对齐行中提取各样本的值部分（去掉标签前缀）"""

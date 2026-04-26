@@ -123,6 +123,10 @@ class MessageFetcher:
 
         # 条件2：在监控列表中（群聊匹配 roomid，私聊匹配 sender）
         watch = handler.get_watch_config()
+        logger.info(
+            "保单触发检查: seq=%d, roomid=%r, sender=%r, watch_rooms=%s, watch_users=%s",
+            seq, roomid, sender, watch.get("rooms", []), watch.get("users", []),
+        )
         is_watched = False
         if roomid and roomid in watch.get("rooms", []):
             is_watched = True
@@ -130,6 +134,7 @@ class MessageFetcher:
             is_watched = True
 
         if not is_watched:
+            logger.info("保单触发检查: seq=%d 未匹配任何监控配置，跳过", seq)
             return
 
         source_desc = f"room={roomid}" if roomid else f"user={sender}"

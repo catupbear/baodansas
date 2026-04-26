@@ -122,38 +122,61 @@ PERSON_BLACKLIST = {
 def _is_valid_person(val: str) -> bool:
     """
     判断提取的值是否为有效的人名或公司名。
-    使用 jieba 词性标注（nr=人名, nt=机构名）+ 公司关键词兜底。
+    使用黑名单 + 关键词过滤（不依赖 jieba 词性标注，避免漏识别人名）。
     """
     if not val or len(val) > 30 or len(val) < 2:
         return False
     if val in PERSON_BLACKLIST:
         return False
 
-    # 快速过滤：以虚词/连词开头或以"的"结尾的句子片段
+    # 以标点符号开头
+    if re.match(r'^[：:（(]', val):
+        return False
+
+    # 以虚词/连词开头的长句片段
     if re.match(r'^[和或与及被把向本对让给]', val) and len(val) > 4:
         return False
     if val.endswith('的') or val.endswith('了'):
         return False
 
-    # 快速过滤：含保险/保单/条款等关键词的一定不是人名
-    if re.search(r'保险|保单|保费|条款|申请|投保|理赔|赔偿|绑单|验真', val):
+    # 含保险/保单/条款等关键词的一定不是人名
+    if re.search(
+        r'保险|保单|保费|条款|申请|投保|理赔|赔偿|绑单|验真'
+        r'|交通|机动车|车辆|证件类型|证件号码|手机号|姓名|发动机|车架号|信息序号|和受害人',
+        val
+    ):
+        return False
+
+    # 含冒号+数字序列的技术数据
+    if re.search(r'[:：]\s*[A-Z0-9]', val):
+        return False
+
+    # 过滤长句、条款文字
+    if re.search(
+        r'本公司|提出|公章|有敬异|社会统一|出生日期|联系电话|手机电话'
+        r'|如实告知|另有约定|投保人的|保险人的',
+        val
+    ):
+        return False
+
+    # "信息"开头
+    if val.startswith("信息"):
+        return False
+
+    # 纯英文非人名
+    if re.match(r'^[A-Za-z]+$', val) and val not in ("Policy",):
         return False
 
     # 包含公司后缀关键词 → 公司名，有效
     if re.search(r'公司|集团|合伙|工厂|商行|商贸|车行|车队', val):
         return True
 
-    # "企业"单独出现（如"企业宝"）不算公司名，需搭配地名或行业名
-    # 但 "XX企业" 或 "企业XX有限" 这类才算
+    # "企业"单独出现（如"企业宝"）不算公司名
     if '企业' in val and not re.search(r'公司|集团|合伙', val):
         return False
 
-    # jieba 词性标注：包含人名(nr)或机构名(nt/nz)则有效
-    words = list(pseg.cut(val))
-    if any(w.flag in ('nr', 'nrt', 'nt', 'nz') for w in words):
-        return True
-
-    return False
+    # 通过所有过滤规则的视为有效（中文人名、机构名等）
+    return True
 
 
 def _clean_person_name(val: str) -> str:
@@ -421,6 +444,17 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
     if "投保人" not in fields and "被保险人" in fields:
         fields["投保人"] = fields["被保险人"]
 
+    # ===== 兜底：行驶证车主 =====
+    if "被保险人" not in fields or "投保人" not in fields:
+        m = re.search(r"行驶证车主[：:\s]*(\S+)", text)
+        if m:
+            val = _clean_person_name(m.group(1))
+            if _is_valid_person(val):
+                if "被保险人" not in fields:
+                    fields["被保险人"] = val
+                if "投保人" not in fields:
+                    fields["投保人"] = val
+
     return fields
 
 
@@ -591,10 +625,11 @@ def _extract_insured_pingan(text: str, text_merged: str, fields: dict):
                     return
             break
 
-    # 平安标准格式：被保姓名
+    # 平安标准格式：被保姓名 / 被保 正式名称
     for p in [
         r"被保姓名[：:]\s*(\S+)",
         r"被保\s*(?:险人)?\s*姓?\s*名[：:]\s*(\S+)",
+        r"被保\s*正式名称[：:]\s*(\S+)",
         r"被保险人[：:]\s*(\S+)",
     ]:
         m = re.search(p, text)
@@ -895,10 +930,14 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
                 return
 
     # 平安格式：投保人名字在"投保人:"行之前单独一行
+    # 例如："深圳市农丰达食品有限公司 保单验真码: xxx\n投保人:"
     lines = text.split('\n')
     for i, line in enumerate(lines):
-        if re.match(r'^投保人[:：]', line.strip()) and i > 0:
+        if re.match(r'^投保人[:：]\s*$', line.strip()) and i > 0:
             prev = lines[i - 1].strip()
+            # 清除 "保单验真码" 等后缀
+            prev = re.sub(r'\s*保单验真码.*', '', prev).strip()
+            prev = re.sub(r'\s*企业宝.*', '', prev).strip()
             if _is_valid_person(prev):
                 fields["投保人"] = prev
                 return
@@ -1198,9 +1237,11 @@ def _extract_premium(text: str, fields: dict, company_short: str):
 def _extract_tax(text: str, fields: dict):
     """提取车船税"""
     for p in [
-        r"车\s*船\s*税[\s\S]*?合计.*?[（(][￥¥][：:\s]*([\d,.]+)\s*(?:元)?[)）]",
+        r"车\s*船\s*税[\s\S]*?合计.*?[（(]\s*[￥¥][：:\s]*([\d,.]+)\s*(?:元)?[)）]",
         r"车\s*船\s*税[\s\S]*?合计.*?([\d,.]+)\s*元",
-        r"当年应缴\s*[￥¥][：:\s]*([\d,.]+)\s*元",
+        r"当年应缴\s*[（(\s]*[￥¥][：:\s]*([\d,.]+)\s*元",
+        # 平安格式：合计(人民币大写)：...( ￥ XXX 元)
+        r"合计\s*[（(]人民币大写[)）][：:\s]*.*?[（(\s]+[￥¥]\s*([\d,.]+)\s*元",
     ]:
         m = re.search(p, text)
         if m:

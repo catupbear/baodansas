@@ -145,16 +145,19 @@ class PatternInducer:
         # 混合类型
         return r"\S+"
 
-    def _build_label_pattern(self, label: str, value_pattern: str) -> str:
+    def _build_label_pattern(self, label: str, value_pattern: str = "") -> str:
         """
         构建包含标签的完整正则（标签容错：中文字符间允许空格）
 
+        用 .+ 捕获到行尾（配合 re.MULTILINE 使用），不限定值格式。
+        标签是稳定锚点，值的格式千变万化，不应死板限定。
+
         Args:
             label: 原始标签，如 "保险单号："
-            value_pattern: 值部分的正则
+            value_pattern: 已弃用，保留参数兼容
 
         Returns:
-            完整正则，如 r"保\\s*险\\s*单\\s*号[：:\\s]*({value_pattern})"
+            完整正则，如 r"保\\s*险\\s*单\\s*号[：:\\s]*(.+)"
         """
         # 将标签中的中文字符间插入 \\s* 容错
         label_clean = label.rstrip("：: \t")
@@ -165,7 +168,8 @@ class PatternInducer:
             if i < len(label_clean) - 1 and '\u4e00' <= ch <= '\u9fff':
                 tolerant += r"\s*"
 
-        return rf"{tolerant}[：:\s]*({value_pattern})"
+        # 用 .+ 捕获到行尾，配合 re.MULTILINE 自然在换行处停止
+        return rf"{tolerant}[：:\s]*(.+)"
 
     def _calc_match_rate(self, pattern: str, values: List[str]) -> float:
         """计算模式在样本值上的匹配率"""

@@ -146,9 +146,13 @@ class InsuranceHandler:
                 for r in (cfg.get("rooms") or []):
                     if isinstance(r, dict) and r.get("id"):
                         rooms.add(r["id"])
+                    elif isinstance(r, str) and r:
+                        rooms.add(r)
                 for u in (cfg.get("users") or []):
                     if isinstance(u, dict) and u.get("id"):
                         users.add(u["id"])
+                    elif isinstance(u, str) and u:
+                        users.add(u)
             return {"rooms": list(rooms), "users": list(users)}
         except Exception as e:
             logger.error("获取监控列表失败: %s", e)
@@ -173,8 +177,16 @@ class InsuranceHandler:
 
         matched = []
         for cfg in configs:
-            room_ids = {r["id"] for r in (cfg.get("rooms") or []) if isinstance(r, dict) and r.get("id")}
-            user_ids = {u["id"] for u in (cfg.get("users") or []) if isinstance(u, dict) and u.get("id")}
+            room_ids = {
+                r["id"] if isinstance(r, dict) else r
+                for r in (cfg.get("rooms") or [])
+                if (isinstance(r, dict) and r.get("id")) or (isinstance(r, str) and r)
+            }
+            user_ids = {
+                u["id"] if isinstance(u, dict) else u
+                for u in (cfg.get("users") or [])
+                if (isinstance(u, dict) and u.get("id")) or (isinstance(u, str) and u)
+            }
 
             if roomid and roomid in room_ids:
                 matched.append(cfg)
@@ -356,16 +368,30 @@ class InsuranceHandler:
                     # 使用监控配置自身的字段映射（如果有），否则用全局映射结果
                     monitor_mapping = monitor.get("field_mapping") or {}
                     if monitor_mapping:
+                        # monitor_mapping 的 key 是导出列名（如"承保公司"），
+                        # value 是钉钉目标列名。需要先把导出列名反查为 OCR 字段名，
+                        # 再从 parsed_fields 中取值。
+                        from insurance.field_mapping import DEFAULT_MAPPING
+                        # 构建反向映射：导出列名 → OCR 字段名
+                        export_to_ocr = {v: k for k, v in DEFAULT_MAPPING.items() if v}
                         sync_fields = {}
-                        for ocr_field, target_col in monitor_mapping.items():
-                            if target_col and ocr_field in parsed_fields:
+                        for export_col, target_col in monitor_mapping.items():
+                            if not target_col:
+                                continue
+                            # 优先通过反向映射找 OCR 字段名
+                            ocr_field = export_to_ocr.get(export_col, export_col)
+                            if ocr_field in parsed_fields:
                                 sync_fields[target_col] = parsed_fields[ocr_field]
+                            elif export_col in parsed_fields:
+                                # 兜底：导出列名本身也可能是 OCR 字段名
+                                sync_fields[target_col] = parsed_fields[export_col]
                     else:
                         sync_fields = mapped_fields
 
                     self._sync_to_dingtalk_v2(
                         record_id, sync_fields,
                         sender_name=sender_name,
+                        cos_url=cos_url,
                         monitor=monitor,
                     )
             except Exception as e:
@@ -749,7 +775,8 @@ class InsuranceHandler:
 
     def _sync_to_dingtalk_v2(
         self, record_id: int, sync_fields: dict,
-        sender_name: str = "", monitor: dict = None,
+        sender_name: str = "", cos_url: str = "",
+        monitor: dict = None,
     ):
         """
         按监控配置同步到指定钉钉文档。
@@ -787,6 +814,8 @@ class InsuranceHandler:
             invoice_fields = {k: v for k, v in sync_fields.items() if v}
             if sender_name:
                 invoice_fields["发送人"] = sender_name
+            if cos_url:
+                invoice_fields["保单文件"] = cos_url
             field_names = list(invoice_fields.keys())
             invoice = {"fields": invoice_fields}
 
