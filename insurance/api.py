@@ -983,6 +983,15 @@ def export_excel():
                     inv.get("file_name", inv.get("filename", fields.get("文件名", ""))),
                     inv.get("error", inv.get("error_message", fields.get("失败原因", ""))),
                 ])
+        elif export_type == "nonpolicy":
+            # 非保单类型：文件名 + 文档类型
+            headers = ["文件名", "文档类型"]
+            ws.append(headers)
+            for inv in invoices:
+                ws.append([
+                    inv.get("file_name", ""),
+                    inv.get("doc_category", "非保单"),
+                ])
         else:
             # 成功类型：文件名 + 各字段列
             headers = ["文件名"] + list(field_names)

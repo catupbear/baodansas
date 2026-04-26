@@ -463,6 +463,13 @@
                     </svg>
                     导出提取异常
                 </button>
+                <button v-if="nonPolicyResults.length" @click="exportExcel('nonpolicy')"
+                        class="btn" style="padding:6px 14px;font-size:13px;background:#fefce8;color:#ca8a04;border:1px solid #fde68a;">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    导出非保单
+                </button>
                 <button v-if="failedResults.length" @click="exportExcel('failed')"
                         class="btn btn-danger" style="padding:6px 14px;font-size:13px;">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2215,6 +2222,13 @@ createApp({
                 data = buildAbnormalInvoices();
                 fieldNamesToUse = outputColumns.value;
                 fileName = '提取异常清单.xlsx';
+            } else if (type === 'nonpolicy') {
+                data = nonPolicyResults.value.map(r => ({
+                    file_name: r.file_name,
+                    doc_category: r.invoices?.[0]?.doc_category || r.error || '非保单',
+                }));
+                fieldNamesToUse = ['文件名', '文档类型'];
+                fileName = '非保单清单.xlsx';
             } else {
                 data = failedResults.value;
                 fieldNamesToUse = ['文件名', '失败原因'];
