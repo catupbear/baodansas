@@ -270,9 +270,12 @@ class Database:
             parts = conversation_id.replace("private_", "", 1).split("_", 1)
             conditions.append("(roomid = '' OR roomid IS NULL)")
             if len(parts) == 2:
-                # 双方对话：显示 A→B 和 B→A 的所有消息
-                conditions.append("(sender = %s OR sender = %s)")
-                params.extend(parts)
+                # 双方对话：A→B 或 B→A（同时校验 tolist 包含对方）
+                conditions.append(
+                    "((sender = %s AND JSON_CONTAINS(tolist, JSON_QUOTE(%s)))"
+                    " OR (sender = %s AND JSON_CONTAINS(tolist, JSON_QUOTE(%s))))"
+                )
+                params.extend([parts[0], parts[1], parts[1], parts[0]])
             else:
                 # 兼容旧格式 private_<sender>
                 conditions.append("sender = %s")
