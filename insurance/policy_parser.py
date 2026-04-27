@@ -506,6 +506,14 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
         else:
             del fields["业务员"]
 
+    # 平安：经办为代理公司名时作为业务员（如"经办:维客保险代理有限公司"）
+    if "业务员" not in fields and company_short == "平安":
+        m = re.search(r"经办[：:]\s*(\S+)", text)
+        if m:
+            val = m.group(1).strip()
+            if val and len(val) >= 2:
+                fields["业务员"] = val
+
     # 经办人兜底为业务员；经办人无效时用制单人兜底
     if "业务员" not in fields:
         for fallback_field in ["经办人", "制单人"]:
