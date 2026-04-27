@@ -268,7 +268,7 @@
                     <button @click="pageTab = 'upload'" :class="pageTab === 'upload' ? 'active' : ''" class="page-tab-btn">
                         手动上传
                     </button>
-                    <button @click="pageTab = 'records'; loadRecords()" :class="pageTab === 'records' ? 'active' : ''" class="page-tab-btn">
+                    <button @click="pageTab = 'records'; loadRecords(); loadRecordStats()" :class="pageTab === 'records' ? 'active' : ''" class="page-tab-btn">
                         自动识别记录
                     </button>
                 </div>
@@ -721,7 +721,7 @@
                     <span class="text-xs text-gray-500 font-medium whitespace-nowrap">来源:</span>
                     <select v-model="recordFilter.source_type"
                             class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer"
-                            @change="onSourceTypeChange">
+                            @change="onSourceTypeChange(); loadRecords()">
                         <option value="">全部</option>
                         <option value="room">群聊</option>
                         <option value="user">私聊</option>
@@ -731,7 +731,8 @@
                 <div v-if="recordFilter.source_type !== 'user'" class="flex items-center gap-1.5">
                     <span class="text-xs text-gray-500 font-medium whitespace-nowrap">群名:</span>
                     <select v-model="recordFilter.roomid"
-                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
+                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer"
+                            @change="loadRecords()">
                         <option value="">全部群</option>
                         <option v-for="room in monitorRooms" :key="room.id" :value="room.id">
                             {{ room.name }}
@@ -741,53 +742,78 @@
                 <div v-if="recordFilter.source_type === 'user'" class="flex items-center gap-1.5">
                     <span class="text-xs text-gray-500 font-medium whitespace-nowrap">联系人:</span>
                     <select v-model="recordFilter.userid"
-                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
+                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer"
+                            @change="loadRecords()">
                         <option value="">全部</option>
                         <option v-for="u in monitorUsers" :key="u.id" :value="u.id">
                             {{ u.name }}
                         </option>
                     </select>
                 </div>
-                <!-- 状态下拉框 -->
-                <div class="flex items-center gap-1.5">
-                    <span class="text-xs text-gray-500 font-medium">状态:</span>
-                    <select v-model="recordFilter.status"
-                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
-                        <option value="">全部</option>
-                        <option value="pending">待处理</option>
-                        <option value="processing">处理中</option>
-                        <option value="done">已完成</option>
-                        <option value="failed">失败</option>
-                    </select>
-                </div>
-                <!-- 识别方式下拉框 -->
-                <div class="flex items-center gap-1.5">
-                    <span class="text-xs text-gray-500 font-medium whitespace-nowrap">识别方式:</span>
-                    <select v-model="recordFilter.ocr_engine"
-                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
-                        <option value="">全部</option>
-                        <option value="pdfplumber">pdfplumber</option>
-                        <option value="baidu">百度OCR</option>
-                    </select>
-                </div>
-                <!-- 关键词搜索 -->
+                <!-- 关键词搜索（防抖自动筛选） -->
                 <div class="flex items-center gap-1.5 flex-1" style="min-width:200px;">
                     <span class="text-xs text-gray-500 font-medium">关键词:</span>
                     <input v-model="recordFilter.keyword" type="text" placeholder="保单号/保险公司/文件名..."
                            class="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
-                           @keyup.enter="loadRecords">
+                           @input="debounceLoadRecords()">
                 </div>
-                <!-- 查询按钮 -->
-                <button @click="loadRecords" :disabled="isLoadingRecords" class="btn btn-primary" style="padding:6px 16px;font-size:13px;">
-                    <svg v-if="isLoadingRecords" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                    </svg>
-                    <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                    </svg>
-                    查询
+            </div>
+        </div>
+
+        <!-- 状态 Tab + 导出 + 筛选 -->
+        <div v-if="recordStats.total > 0" class="card">
+            <!-- 状态 Tab 栏 -->
+            <div class="flex items-center border-b px-4" style="gap:0;">
+                <button v-for="tab in recordTabs" :key="tab.key"
+                        @click="recordActiveTab = tab.key; loadRecords()"
+                        class="px-4 py-2.5 text-sm font-medium transition-colors relative"
+                        :class="recordActiveTab === tab.key
+                            ? 'text-orange-600'
+                            : 'text-gray-500 hover:text-gray-700'"
+                        :style="recordActiveTab === tab.key ? 'box-shadow: inset 0 -2px 0 #ea580c;' : ''">
+                    {{ tab.label }}
+                    <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full font-semibold"
+                          :class="recordActiveTab === tab.key ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-500'">
+                        {{ tab.count }}
+                    </span>
                 </button>
+            </div>
+            <!-- 导出 + 保司/文档类型筛选 -->
+            <div class="flex items-center px-4 py-2.5 gap-3">
+                <button @click="exportRecordsExcel" class="btn btn-success" style="padding:6px 14px;font-size:13px;">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    导出Excel
+                </button>
+                <div class="ml-auto flex items-center gap-3">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-xs text-gray-500 font-medium">保司:</span>
+                        <select v-model="recordCompanyFilter" @change="loadRecords()"
+                                class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
+                            <option value="">全部</option>
+                            <option v-for="c in recordCompanyList" :key="c" :value="c">{{ c }}</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-xs text-gray-500 font-medium">文档类型:</span>
+                        <select v-model="recordDocTypeFilter" @change="loadRecords()"
+                                class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
+                            <option value="">全部 ({{ recordStats.total }})</option>
+                            <option v-for="dt in recordDocTypes" :key="dt.name" :value="dt.name">{{ dt.name }} ({{ dt.cnt }})</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-xs text-gray-500 font-medium">识别方式:</span>
+                        <select v-model="recordFilter.ocr_engine" @change="loadRecords()"
+                                class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
+                            <option value="">全部</option>
+                            <option v-for="eng in recordStats.engines" :key="eng.name" :value="eng.name">
+                                {{ eng.name === 'pdfplumber' ? 'PDF识别' : eng.name === 'baidu' ? '百度OCR' : eng.name }} ({{ eng.cnt }})
+                            </option>
+                        </select>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -800,10 +826,10 @@
                             <th style="min-width:100px;">群名</th>
                             <th style="min-width:80px;">发送人</th>
                             <th style="min-width:150px;">文件名</th>
-                            <th style="min-width:80px;">险种</th>
-                            <th style="min-width:100px;">保险公司</th>
-                            <th style="min-width:120px;">保单号</th>
-                            <th style="min-width:90px;">保费</th>
+                            <th style="min-width:70px;">文档类型</th>
+                            <th v-for="col in outputColumns" :key="col" class="text-gray-600 font-medium" style="min-width:80px;">{{ col }}</th>
+                            <th style="min-width:70px;">识别方式</th>
+                            <th style="min-width:60px;">置信度</th>
                             <th style="min-width:80px;">状态</th>
                             <th style="min-width:80px;">钉钉同步</th>
                             <th style="min-width:150px;">时间</th>
@@ -813,7 +839,7 @@
                     <tbody>
                         <!-- 加载中占位 -->
                         <tr v-if="isLoadingRecords">
-                            <td colspan="11" class="text-center py-12 text-gray-400">
+                            <td :colspan="outputColumns.length + 10" class="text-center py-12 text-gray-400">
                                 <svg class="w-6 h-6 animate-spin mx-auto mb-2 text-orange-400" fill="none" viewBox="0 0 24 24">
                                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
@@ -823,7 +849,7 @@
                         </tr>
                         <!-- 空数据占位 -->
                         <tr v-else-if="!records.length">
-                            <td colspan="11" class="text-center py-12 text-gray-400">
+                            <td :colspan="outputColumns.length + 10" class="text-center py-12 text-gray-400">
                                 <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                 </svg>
@@ -831,23 +857,34 @@
                             </td>
                         </tr>
                         <!-- 数据行 -->
-                        <tr v-else v-for="record in records" :key="record.id">
-                            <!-- 群名 -->
-                            <td class="text-gray-700 text-sm">{{ record.room_name || '—' }}</td>
-                            <!-- 发送人 -->
-                            <td class="text-gray-600 text-sm">{{ record.sender_name || '—' }}</td>
-                            <!-- 文件名（可点击下载） -->
+                        <tr v-else v-for="record in filteredRecords" :key="record.id">
+                            <!-- 群名（可点击编辑） -->
+                            <td class="text-gray-700 text-sm">
+                                <span v-if="record.roomid" class="cursor-pointer hover:text-orange-600 hover:underline"
+                                      @click="openContactEdit(record.roomid, record.room_name, 'room')"
+                                      title="点击编辑群名">{{ record.room_name || record.roomid || '—' }}</span>
+                                <span v-else>—</span>
+                            </td>
+                            <!-- 发送人（可点击编辑） -->
+                            <td class="text-gray-600 text-sm">
+                                <span v-if="record.sender" class="cursor-pointer hover:text-orange-600 hover:underline"
+                                      @click="openContactEdit(record.sender, record.sender_name, 'user')"
+                                      title="点击编辑发送人">{{ record.sender_name || record.sender || '—' }}</span>
+                                <span v-else>—</span>
+                            </td>
+                            <!-- 文件名（可点击预览） -->
                             <td>
-                                <a v-if="record.cos_url" :href="record.cos_url" target="_blank"
-                                   class="text-orange-600 hover:underline text-sm truncate block" style="max-width:180px;"
-                                   :title="record.filename">
+                                <span v-if="record.cos_url"
+                                      class="text-orange-600 hover:underline text-sm truncate block cursor-pointer" style="max-width:180px;"
+                                      :title="record.filename"
+                                      @click="previewRecord(record)">
                                     {{ record.filename || '—' }}
-                                </a>
+                                </span>
                                 <span v-else class="text-gray-600 text-sm truncate block" style="max-width:180px;" :title="record.filename">
                                     {{ record.filename || '—' }}
                                 </span>
                             </td>
-                            <!-- 险种 -->
+                            <!-- 文档类型 -->
                             <td>
                                 <span v-if="record.doc_category" class="text-xs px-1.5 py-0.5 rounded font-medium"
                                       :class="record.doc_category === '保单' ? 'bg-green-100 text-green-700'
@@ -857,12 +894,27 @@
                                 </span>
                                 <span v-else class="text-gray-400 text-sm">—</span>
                             </td>
-                            <!-- 保险公司（从 parsed_fields JSON 取） -->
-                            <td class="text-gray-700 text-sm">{{ getParsedField(record, '保险公司') || '—' }}</td>
-                            <!-- 保单号 -->
-                            <td class="text-gray-700 text-sm font-mono text-xs">{{ getParsedField(record, '保单号') || '—' }}</td>
-                            <!-- 保费 -->
-                            <td class="text-gray-700 text-sm">{{ getParsedField(record, '保费合计') || '—' }}</td>
+                            <!-- 动态字段列（与手动上传一致） -->
+                            <td v-for="col in outputColumns" :key="col" class="text-gray-700 text-sm">
+                                {{ getRecordMappedValue(record, col) || '—' }}
+                            </td>
+                            <!-- 识别方式 -->
+                            <td>
+                                <span v-if="record.ocr_engine" class="badge text-xs"
+                                      :class="record.ocr_engine === 'baidu' ? 'badge-info' : 'badge-success'">
+                                    {{ record.ocr_engine === 'baidu' ? 'OCR识别' : 'PDF提取' }}
+                                </span>
+                                <span v-else class="text-gray-400 text-sm">—</span>
+                            </td>
+                            <!-- 置信度 -->
+                            <td>
+                                <span v-if="record.confidence" class="badge text-xs"
+                                      :class="record.confidence >= 0.75 ? 'badge-success'
+                                            : record.confidence >= 0.5 ? 'badge-warning' : 'badge-danger'">
+                                    {{ (record.confidence * 100).toFixed(0) }}%
+                                </span>
+                                <span v-else class="text-gray-400 text-sm">—</span>
+                            </td>
                             <!-- 状态 -->
                             <td>
                                 <span class="badge text-xs"
@@ -885,24 +937,36 @@
                             <!-- 操作 -->
                             <td>
                                 <div class="flex items-center gap-1.5">
+                                    <!-- 预览文件 -->
+                                    <button v-if="record.cos_url" @click="previewRecord(record)"
+                                            class="btn btn-outline" style="padding:3px 8px;font-size:11px;">
+                                        预览
+                                    </button>
                                     <!-- 查看详情 -->
                                     <button @click="openRecordDetail(record)"
                                             class="btn btn-outline" style="padding:3px 8px;font-size:11px;">
                                         详情
                                     </button>
-                                    <!-- 重试（failed状态） -->
-                                    <button v-if="record.status === 'failed'"
+                                    <!-- 重新识别（有COS文件的记录） -->
+                                    <button v-if="record.cos_url && (record.status === 'done' || record.status === 'success' || record.status === 'failed')"
+                                            @click="reocrRecord(record)"
+                                            :disabled="record._reocring"
+                                            class="btn btn-primary" style="padding:3px 8px;font-size:11px;">
+                                        {{ record._reocring ? '识别中...' : '重新识别' }}
+                                    </button>
+                                    <!-- 重试（failed且无COS文件，需要从SDK重新下载） -->
+                                    <button v-if="record.status === 'failed' && !record.cos_url"
                                             @click="retryRecord(record)"
                                             :disabled="record._retrying"
                                             class="btn btn-primary" style="padding:3px 8px;font-size:11px;">
                                         {{ record._retrying ? '重试中...' : '重试' }}
                                     </button>
-                                    <!-- 同步钉钉（已完成且未同步） -->
-                                    <button v-if="(record.status === 'done' || record.status === 'success') && !record.dingtalk_synced"
+                                    <!-- 同步钉钉（已完成的记录，已同步的显示"更新同步"） -->
+                                    <button v-if="record.status === 'done' || record.status === 'success'"
                                             @click="syncRecordToDingtalk(record)"
                                             :disabled="record._syncing"
                                             class="btn btn-warning" style="padding:3px 8px;font-size:11px;">
-                                        {{ record._syncing ? '同步中...' : '同步' }}
+                                        {{ record._syncing ? '同步中...' : (record.dingtalk_synced ? '更新同步' : '同步') }}
                                     </button>
                                 </div>
                             </td>
@@ -935,6 +999,40 @@
             </div>
         </div>
     </main>
+
+    <!-- 联系人编辑弹窗 -->
+    <transition name="fade">
+        <div v-if="contactEditVisible" class="fixed inset-0 z-50 modal-mask flex items-center justify-center"
+             @click.self="contactEditVisible = false">
+            <div class="bg-white rounded-xl shadow-2xl" style="width:380px;max-width:90vw;" @click.stop>
+                <div class="px-5 py-4 border-b flex items-center justify-between">
+                    <h3 class="text-base font-semibold text-gray-800">
+                        {{ contactEditForm.type === 'room' ? '编辑群信息' : '编辑联系人' }}
+                    </h3>
+                    <button @click="contactEditVisible = false" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+                </div>
+                <div class="px-5 py-4 space-y-3">
+                    <div>
+                        <label class="text-xs font-semibold text-gray-500 block mb-1">ID</label>
+                        <input :value="contactEditForm.id" readonly
+                               class="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-500">
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-gray-500 block mb-1">名称</label>
+                        <input v-model="contactEditForm.name" ref="contactNameInput"
+                               class="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                               placeholder="输入名称..." @keyup.enter="saveContactEdit">
+                    </div>
+                </div>
+                <div class="px-5 py-3 border-t flex justify-end gap-2">
+                    <button @click="contactEditVisible = false" class="btn btn-outline" style="padding:6px 16px;font-size:13px;">取消</button>
+                    <button @click="saveContactEdit" :disabled="contactEditSaving" class="btn btn-primary" style="padding:6px 16px;font-size:13px;">
+                        {{ contactEditSaving ? '保存中...' : '保存' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </transition>
 
     <!-- 消息提示（全局，两个Tab共用） -->
     <transition name="fade">
@@ -1243,7 +1341,7 @@
                             {{ previewShowFields ? '隐藏列表' : '查看列表信息' }}
                         </button>
                         <button v-if="previewHasRawText"
-                                @click="previewShowRaw = !previewShowRaw; if(previewShowRaw) { previewShowFields = false; previewShowRules = false; }"
+                                @click="previewShowRaw = !previewShowRaw; if(previewShowRaw) { previewShowFields = false; previewShowRules = false; if(previewAutoRecord && !previewRawText) loadAutoRecordRawText(); }"
                                 class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;"
                                 :class="previewShowRaw ? 'btn-primary' : 'btn-outline'">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1259,6 +1357,18 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                             </svg>
                             {{ previewShowRules ? '隐藏规则' : '查看规则' }}
+                        </button>
+                        <button @click="previewAutoRecord ? reocrRecord(previewAutoRecord) : reocrPreviewFile()"
+                                :disabled="previewAutoRecord ? previewAutoRecord._reocring : previewReocring"
+                                class="btn btn-outline cursor-pointer" style="padding:5px 12px;font-size:12px;color:#f59e0b;border-color:#f59e0b;">
+                            <svg v-if="(previewAutoRecord && previewAutoRecord._reocring) || previewReocring" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                            <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                            {{ (previewAutoRecord && previewAutoRecord._reocring) || previewReocring ? '识别中...' : '重新识别' }}
                         </button>
                         <button @click="previewVisible = false" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer" style="font-size:18px;">&times;</button>
                     </div>
@@ -1283,7 +1393,7 @@
                         </div>
                     </div>
                     <!-- 右侧：提取原文 -->
-                    <div v-if="previewShowRaw && previewRawText" class="border-l flex flex-col" style="width: 420px; min-width: 320px;">
+                    <div v-if="previewShowRaw" class="border-l flex flex-col" style="width: 420px; min-width: 320px;">
                         <div class="px-3 py-2 bg-gray-50 border-b text-xs text-gray-500 font-medium flex-shrink-0 flex items-center justify-between">
                             <span>PDF提取原文</span>
                             <button @click="copyRawText"
@@ -1299,7 +1409,14 @@
                             </button>
                         </div>
                         <div class="flex-1 overflow-auto p-3">
-                            <div class="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed font-mono"
+                            <div v-if="!previewRawText" class="text-center py-12 text-gray-400">
+                                <svg class="w-6 h-6 animate-spin mx-auto mb-2 text-orange-400" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                </svg>
+                                加载原文中...
+                            </div>
+                            <div v-else class="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed font-mono"
                                  v-html="formattedRawText"></div>
                         </div>
                     </div>
@@ -1365,11 +1482,23 @@
                         </div>
                         <div>
                             <label class="text-xs text-gray-500 font-medium">群名</label>
-                            <p class="text-sm text-gray-800 mt-0.5">{{ currentRecord?.room_name || '—' }}</p>
+                            <p class="text-sm text-gray-800 mt-0.5">
+                                <span v-if="currentRecord?.roomid" class="cursor-pointer hover:text-orange-600 hover:underline"
+                                      @click="openContactEdit(currentRecord.roomid, currentRecord.room_name, 'room')">
+                                    {{ currentRecord?.room_name || '—' }}
+                                </span>
+                                <span v-else>—</span>
+                            </p>
                         </div>
                         <div>
                             <label class="text-xs text-gray-500 font-medium">发送人</label>
-                            <p class="text-sm text-gray-800 mt-0.5">{{ currentRecord?.sender_name || '—' }}</p>
+                            <p class="text-sm text-gray-800 mt-0.5">
+                                <span v-if="currentRecord?.sender" class="cursor-pointer hover:text-orange-600 hover:underline"
+                                      @click="openContactEdit(currentRecord.sender, currentRecord.sender_name, 'user')">
+                                    {{ currentRecord?.sender_name || '—' }}
+                                </span>
+                                <span v-else>—</span>
+                            </p>
                         </div>
                         <div>
                             <label class="text-xs text-gray-500 font-medium">险种</label>
@@ -1452,6 +1581,8 @@ createApp({
         const previewSrc = ref('');
         const previewType = ref('pdf');
         const previewFileName = ref('');
+        // 自动识别记录预览时存储当前记录（用于右侧字段面板）
+        const previewAutoRecord = ref(null);
         const previewHasRawText = ref(false);
         const previewShowRaw = ref(false);
         const previewShowFields = ref(false);
@@ -1459,6 +1590,7 @@ createApp({
         const previewRawText = ref('');
         const rawTextCopied = ref(false);
         const extractionRules = ref({});
+        const previewReocring = ref(false);
 
         // 字段标签列表，用于原文自动换行和高亮
         const RAW_TEXT_LABELS = [
@@ -1482,6 +1614,22 @@ createApp({
 
         // 当前预览文件的映射后字段列表
         const previewFieldsList = computed(() => {
+            // 自动识别记录预览：直接用 parsed_fields
+            if (previewAutoRecord.value) {
+                const fields = previewAutoRecord.value.parsed_fields || {};
+                return outputColumns.value.map(col => {
+                    // parsed_fields 的 key 可能是 OCR 字段名，通过映射匹配导出列名
+                    let value = fields[col] || '';
+                    if (!value) {
+                        const mapping = mappingConfig.value.default_mapping || {};
+                        for (const [ocrField, outCol] of Object.entries(mapping)) {
+                            if (outCol === col && fields[ocrField]) { value = fields[ocrField]; break; }
+                        }
+                    }
+                    return { label: col, value };
+                });
+            }
+            // 手动上传预览
             const r = results.value.find(x => x.file_name === previewFileName.value && x.success);
             if (!r || !r.invoices || !r.invoices[0]) return [];
             const fields = r.invoices[0].fields;
@@ -1847,8 +1995,38 @@ createApp({
             });
         }
 
-        // 提取异常必检字段（核心字段全部缺失才算异常）
-        const REQUIRED_FIELDS = ['保单号', '承保公司', '车牌', '投保人'];
+        // 提取异常必检字段（导出列名）：除车船税和无法自动提取的字段外，其余必须有值
+        // 不参与异常检测：车船税、佣金率、佣金、业务员、采购费率、公司利润、跟单人、跟单人利润、出单渠道
+        const REQUIRED_FIELDS = ['承保公司', '保单号', '险种', '车牌', '投保人', '被保人', '签单日期', '起保日期', '终保日期', '保费'];
+
+        // 导出列名 → OCR字段名 的反向映射（用于自动识别记录的字段检测）
+        const EXPORT_TO_OCR = {
+            '承保公司': ['保险公司', '保险公司简称'],
+            '保单号': ['保单号'],
+            '险种': ['险种类型'],
+            '车牌': ['车牌号'],
+            '投保人': ['投保人'],
+            '被保人': ['被保险人'],
+            '签单日期': ['签单日期'],
+            '起保日期': ['保险起期'],
+            '终保日期': ['保险止期'],
+            '保费': ['保费合计'],
+        };
+
+        // 检查自动识别记录是否提取异常（parsed_fields 使用 OCR 字段名）
+        function isRecordAbnormal(record) {
+            if (!record || (record.status !== 'done' && record.status !== 'success')) return false;
+            const cat = record.doc_category || '';
+            if (cat && cat !== '保单') return false;
+            const fields = record.parsed_fields || {};
+            return REQUIRED_FIELDS.some(col => {
+                // 先检查导出列名
+                if (fields[col]) return false;
+                // 再检查对应的 OCR 字段名
+                const ocrKeys = EXPORT_TO_OCR[col] || [];
+                return !ocrKeys.some(k => fields[k]);
+            });
+        }
 
         // 判断是否非保单文档（电子标志、发票、缴款通知、条款、其他、无法识别关键字段等）
         function isNonPolicy(r) {
@@ -2025,6 +2203,7 @@ createApp({
         }
 
         async function previewFile(file) {
+            previewAutoRecord.value = null;
             previewFileName.value = file.name;
             loadPreviewRawText(file.name);
             previewShowRaw.value = false; previewShowFields.value = false; previewShowRules.value = false;
@@ -2040,6 +2219,7 @@ createApp({
         }
 
         async function previewResultFile(r) {
+            previewAutoRecord.value = null;
             const file = files.value.find(f => f.name === r.file_name);
             if (file) { previewFile(file); return; }
             if (db) {
@@ -2052,6 +2232,40 @@ createApp({
                     previewSrc.value = URL.createObjectURL(blob);
                     previewVisible.value = true;
                 }
+            }
+        }
+
+        // 自动识别记录文件预览（通过代理接口避免 COS 下载）
+        function previewRecord(record) {
+            if (!record.cos_url || !record.id) return;
+            previewAutoRecord.value = record;
+            previewFileName.value = record.filename || '保单文件';
+            previewShowRaw.value = false;
+            previewShowFields.value = false;
+            previewShowRules.value = false;
+            const ext = (record.filename || '').split('.').pop().toLowerCase();
+            previewType.value = ext || 'pdf';
+            previewSrc.value = `/api/insurance/records/${record.id}/preview`;
+            // PDF 文件支持查看原文（懒加载）
+            previewHasRawText.value = (ext === 'pdf');
+            previewRawText.value = '';
+            previewVisible.value = true;
+        }
+
+        // 懒加载自动识别记录的 OCR 原文
+        async function loadAutoRecordRawText() {
+            const record = previewAutoRecord.value;
+            if (!record || previewRawText.value) return;
+            try {
+                const resp = await fetch(`/api/insurance/records/${record.id}/raw-text`);
+                const data = await resp.json();
+                if (data.code === 0 && data.data.raw_text) {
+                    previewRawText.value = data.data.raw_text;
+                } else {
+                    previewRawText.value = '（原文提取失败）';
+                }
+            } catch (e) {
+                previewRawText.value = '（加载失败）';
             }
         }
 
@@ -2453,9 +2667,196 @@ createApp({
             setTimeout(() => { syncMessage.value = ''; }, 4000);
         }
 
+        // ========== 联系人编辑 ==========
+        const contactEditVisible = ref(false);
+        const contactEditSaving = ref(false);
+        const contactEditForm = reactive({ id: '', name: '', type: 'user' });
+        const contactNameInput = ref(null);
+
+        function openContactEdit(id, currentName, type) {
+            contactEditForm.id = id;
+            contactEditForm.name = (currentName && currentName !== id) ? currentName : '';
+            contactEditForm.type = type;
+            contactEditVisible.value = true;
+            nextTick(() => { contactNameInput.value?.focus(); });
+        }
+
+        async function saveContactEdit() {
+            if (!contactEditForm.name.trim()) { showMessage('请输入名称', false); return; }
+            contactEditSaving.value = true;
+            try {
+                const res = await fetch('/api/contacts/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: contactEditForm.id,
+                        name: contactEditForm.name.trim(),
+                        type: contactEditForm.type,
+                    }),
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showMessage('名称已更新', true);
+                    contactEditVisible.value = false;
+                    // 刷新记录列表以显示新名称
+                    loadRecords(false);
+                } else {
+                    showMessage(data.error || '保存失败', false);
+                }
+            } catch (e) {
+                showMessage('保存失败: ' + e.message, false);
+            } finally {
+                contactEditSaving.value = false;
+            }
+        }
+
         // ========== 自动识别记录 Tab ==========
         const records = ref([]);
         const isLoadingRecords = ref(false);
+        // 识别成功率统计
+        const recordStats = reactive({
+            total: 0,
+            done: 0,
+            failed: 0,
+            pending: 0,
+            processing: 0,
+            successRate: 0,
+            engines: [],
+        });
+        async function loadRecordStats() {
+            try {
+                const resp = await fetch('/api/insurance/stats');
+                const json = await resp.json();
+                const data = json.data || json;
+                const statusMap = {};
+                for (const s of (data.status_stats || [])) {
+                    statusMap[s.status] = s.cnt;
+                }
+                recordStats.total = data.total || 0;
+                recordStats.done = (statusMap['done'] || 0) + (statusMap['success'] || 0);
+                recordStats.failed = statusMap['failed'] || 0;
+                recordStats.pending = statusMap['pending'] || 0;
+                recordStats.processing = statusMap['processing'] || 0;
+                recordStats.successRate = recordStats.total > 0
+                    ? Math.round(recordStats.done / recordStats.total * 100) : 0;
+                recordStats.engines = (data.engine_stats || [])
+                    .filter(e => e.ocr_engine)
+                    .map(e => ({ name: e.ocr_engine, cnt: e.cnt }));
+            } catch (e) {
+                console.error('加载统计失败', e);
+            }
+        }
+        // 状态 Tab（成功=保单且置信度>=0.5，提取异常=置信度<0.5，非保单=doc_category非保单）
+        const recordActiveTab = ref('all');
+        // 从当前已加载记录中统计各分类数量（辅助 Tab 显示）
+        const recordTabCounts = computed(() => {
+            let success = 0, abnormal = 0, nonPolicy = 0;
+            for (const r of records.value) {
+                if (r.status !== 'done' && r.status !== 'success') continue;
+                const cat = r.doc_category || '';
+                if (cat && cat !== '保单') { nonPolicy++; }
+                else if (isRecordAbnormal(r)) { abnormal++; }
+                else { success++; }
+            }
+            return { success, abnormal, nonPolicy };
+        });
+        const recordTabs = computed(() => [
+            { key: 'all', label: '全部', count: recordStats.total },
+            { key: 'done', label: '成功', count: recordStats.done },
+            { key: 'abnormal', label: '提取异常', count: recordTabCounts.value.abnormal },
+            { key: 'nonpolicy', label: '非保单', count: recordTabCounts.value.nonPolicy },
+            { key: 'failed', label: '失败', count: recordStats.failed },
+        ]);
+
+        // 前端过滤（提取异常/非保单 Tab 需要从 done 记录中二次筛选）
+        const filteredRecords = computed(() => {
+            const tab = recordActiveTab.value;
+            if (tab === 'abnormal') {
+                return records.value.filter(r => isRecordAbnormal(r));
+            }
+            if (tab === 'nonpolicy') {
+                return records.value.filter(r =>
+                    (r.status === 'done' || r.status === 'success') &&
+                    r.doc_category && r.doc_category !== '保单'
+                );
+            }
+            if (tab === 'done') {
+                // 成功 Tab：排除异常和非保单
+                return records.value.filter(r => {
+                    if (r.status !== 'done' && r.status !== 'success') return false;
+                    if (r.doc_category && r.doc_category !== '保单') return false;
+                    if (isRecordAbnormal(r)) return false;
+                    return true;
+                });
+            }
+            // 保司筛选（前端过滤）
+            let list = records.value;
+            if (recordCompanyFilter.value) {
+                list = list.filter(r => {
+                    const pf = r.parsed_fields || {};
+                    const c = pf['保险公司简称'] || pf['保险公司'] || '';
+                    return c === recordCompanyFilter.value;
+                });
+            }
+            return list;
+        });
+
+        // 保司和文档类型筛选
+        const recordCompanyFilter = ref('');
+        const recordDocTypeFilter = ref('');
+        const recordCompanyList = computed(() => {
+            const set = new Set();
+            for (const r of records.value) {
+                const pf = r.parsed_fields || {};
+                const c = pf['保险公司简称'] || pf['保险公司'] || '';
+                if (c) set.add(c);
+            }
+            return [...set].sort();
+        });
+        const recordDocTypes = computed(() => {
+            const map = {};
+            for (const r of records.value) {
+                const cat = r.doc_category || '';
+                if (cat) map[cat] = (map[cat] || 0) + 1;
+            }
+            return Object.entries(map).map(([name, cnt]) => ({ name, cnt }));
+        });
+
+        // 导出自动识别记录
+        async function exportRecordsExcel() {
+            const data = records.value
+                .filter(r => r.status === 'done' || r.status === 'success')
+                .filter(r => {
+                    if (recordCompanyFilter.value) {
+                        const pf = r.parsed_fields || {};
+                        const c = pf['保险公司简称'] || pf['保险公司'] || '';
+                        if (c !== recordCompanyFilter.value) return false;
+                    }
+                    if (recordDocTypeFilter.value && r.doc_category !== recordDocTypeFilter.value) return false;
+                    return true;
+                })
+                .map(r => {
+                    const row = {};
+                    for (const col of outputColumns.value) {
+                        row[col] = getRecordMappedValue(r, col) || '';
+                    }
+                    return { fields: row };
+                });
+            if (!data.length) { showMessage('没有可导出的数据', false); return; }
+            try {
+                const resp = await fetch('/api/insurance/export/excel', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ invoices: data, field_names: outputColumns.value, export_type: 'success' }),
+                });
+                if (!resp.ok) { showMessage('导出失败', false); return; }
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = '自动识别记录.xlsx';
+                a.click(); URL.revokeObjectURL(url);
+            } catch (e) { showMessage(`导出失败: ${e.message}`, false); }
+        }
+
         const roomList = ref([]);  // 群列表（用于筛选下拉）
         const monitorRooms = ref([]);  // 监控群列表
         const monitorUsers = ref([]);  // 监控用户列表
@@ -2503,29 +2904,42 @@ createApp({
             recordFilter.userid = '';
         }
 
-        // 从监控配置加载群和用户列表（用于筛选）
+        // 关键词输入防抖
+        let _keywordTimer = null;
+        function debounceLoadRecords() {
+            clearTimeout(_keywordTimer);
+            _keywordTimer = setTimeout(() => loadRecords(), 400);
+        }
+
+        // 从监控配置加载群和用户列表（用于筛选），并解析名称
         async function loadRoomList() {
             try {
                 const resp = await fetch('/api/monitor-configs');
                 const json = await resp.json();
                 const configs = (json.data || json || []).filter(c => c.enabled !== 0);
-                const roomMap = {};
-                const userMap = {};
+                const roomIds = new Set();
+                const userIds = new Set();
                 for (const cfg of configs) {
-                    // rooms 可能是 [{"id":"wr...","name":"群名"}] 或 ["wr..."]
                     for (const r of (cfg.rooms || [])) {
                         const id = typeof r === 'string' ? r : (r.id || '');
-                        const name = typeof r === 'string' ? r : (r.name || r.id || '');
-                        if (id) roomMap[id] = name;
+                        if (id) roomIds.add(id);
                     }
                     for (const u of (cfg.users || [])) {
                         const id = typeof u === 'string' ? u : (u.id || '');
-                        const name = typeof u === 'string' ? u : (u.name || u.id || '');
-                        if (id) userMap[id] = name;
+                        if (id) userIds.add(id);
                     }
                 }
-                monitorRooms.value = Object.entries(roomMap).map(([id, name]) => ({ id, name }));
-                monitorUsers.value = Object.entries(userMap).map(([id, name]) => ({ id, name }));
+                // 批量解析名称
+                const resolveResp = await fetch('/api/contacts/resolve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_ids: [...userIds], room_ids: [...roomIds] }),
+                });
+                const names = await resolveResp.json();
+                const roomNames = names.rooms || {};
+                const userNames = names.users || {};
+                monitorRooms.value = [...roomIds].map(id => ({ id, name: roomNames[id] || id }));
+                monitorUsers.value = [...userIds].map(id => ({ id, name: userNames[id] || id }));
             } catch (e) {
                 console.error('加载监控列表失败', e);
                 monitorRooms.value = [];
@@ -2551,9 +2965,20 @@ createApp({
                 } else {
                     if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
                 }
-                if (recordFilter.status) params.set('status', recordFilter.status);
+                // 状态：Tab 优先，否则用下拉框
+                const tab = recordActiveTab.value;
+                if (tab === 'done' || tab === 'abnormal' || tab === 'nonpolicy') {
+                    params.set('status', 'done');
+                } else if (tab === 'failed') {
+                    params.set('status', 'failed');
+                } else if (tab === 'pending') {
+                    params.set('status', 'pending');
+                } else if (recordFilter.status) {
+                    params.set('status', recordFilter.status);
+                }
                 if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
                 if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
+                if (recordDocTypeFilter.value) params.set('doc_category', recordDocTypeFilter.value);
                 const resp = await fetch(`/api/insurance/records?${params.toString()}`);
                 const json = await resp.json();
                 // API 返回 {"code":0, "data": {"records":[], "total":N}}
@@ -2566,6 +2991,7 @@ createApp({
                         : (r.parsed_fields || {}),
                     _retrying: false,
                     _syncing: false,
+                    _reocring: false,
                 }));
                 recordPagination.total = data.total || 0;
                 recordPagination.totalPages = Math.ceil(recordPagination.total / recordPagination.pageSize) || 1;
@@ -2589,6 +3015,25 @@ createApp({
             const pf = record.parsed_fields;
             if (!pf || typeof pf !== 'object') return '';
             return pf[fieldName] || '';
+        }
+
+        // 自动识别记录：通过字段映射获取导出列的值
+        function getRecordMappedValue(record, outCol) {
+            const fields = record.parsed_fields;
+            if (!fields || typeof fields !== 'object') return '';
+            const companyShort = fields['保险公司简称'] || '';
+            let mapping;
+            if (companyShort && (mappingConfig.value.company_mappings || {})[companyShort]) {
+                mapping = (mappingConfig.value.company_mappings || {})[companyShort];
+            } else {
+                mapping = mappingConfig.value.default_mapping || {};
+            }
+            for (const [ocrField, col] of Object.entries(mapping)) {
+                if (col === outCol && fields[ocrField]) return fields[ocrField];
+            }
+            // 兜底：直接用列名匹配
+            if (fields[outCol]) return fields[outCol];
+            return '';
         }
 
         // 格式化时间
@@ -2619,17 +3064,71 @@ createApp({
             }
         }
 
+        // 重新识别
+        async function reocrRecord(record) {
+            record._reocring = true;
+            try {
+                const resp = await fetch(`/api/insurance/reocr/${record.id}`, { method: 'POST' });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showMessage('重新识别完成，请预览确认后同步钉钉', true);
+                    // 用返回的新数据更新本地记录
+                    const updated = data.data;
+                    Object.assign(record, {
+                        ...updated,
+                        parsed_fields: typeof updated.parsed_fields === 'string'
+                            ? (() => { try { return JSON.parse(updated.parsed_fields); } catch { return {}; } })()
+                            : (updated.parsed_fields || {}),
+                        _retrying: false, _syncing: false, _reocring: false,
+                    });
+                    // 自动打开预览
+                    previewRecord(record);
+                } else {
+                    showMessage(data.msg || '重新识别失败', false);
+                }
+            } catch (e) {
+                showMessage(`重新识别失败: ${e.message}`, false);
+            } finally {
+                record._reocring = false;
+            }
+        }
+
+        // 手动上传文件重新识别
+        async function reocrPreviewFile() {
+            const fileName = previewFileName.value;
+            const file = files.value.find(f => f.name === fileName);
+            if (!file) { showMessage('未找到原始文件，无法重新识别', false); return; }
+            previewReocring.value = true;
+            try {
+                const result = await recognizeFile(file);
+                // 更新 results 列表
+                const idx = results.value.findIndex(r => r.file_name === fileName);
+                if (idx >= 0) results.value.splice(idx, 1, result);
+                else results.value.push(result);
+                // 刷新预览面板数据
+                loadPreviewRawText(fileName);
+                previewShowFields.value = false;
+                previewShowRaw.value = false;
+                previewShowRules.value = false;
+                showMessage('重新识别完成', true);
+            } catch (e) {
+                showMessage(`重新识别失败: ${e.message}`, false);
+            } finally {
+                previewReocring.value = false;
+            }
+        }
+
         // 同步单条记录到钉钉
         async function syncRecordToDingtalk(record) {
             record._syncing = true;
             try {
                 const resp = await fetch(`/api/insurance/sync/${record.id}`, { method: 'POST' });
                 const data = await resp.json();
-                if (resp.ok && data.success) {
-                    showMessage('同步成功', true);
+                if (data.code === 0) {
+                    showMessage(record.dingtalk_synced ? '更新同步成功' : '同步成功', true);
                     record.dingtalk_synced = true;
                 } else {
-                    showMessage(data.detail || '同步失败', false);
+                    showMessage(data.msg || '同步失败', false);
                 }
             } catch (e) {
                 showMessage(`同步失败: ${e.message}`, false);
@@ -2702,12 +3201,17 @@ createApp({
             // 重复保单
             duplicateVisible, duplicateList, confirmSyncSkipDuplicates, cancelSync,
             // 自动识别记录
-            records, isLoadingRecords, roomList, monitorRooms, monitorUsers,
-            recordFilter, statusLabel, onSourceTypeChange,
-            recordPagination, visiblePages,
-            loadRecords, gotoRecordPage, getParsedField, formatTime,
-            retryRecord, syncRecordToDingtalk,
+            records, filteredRecords, isLoadingRecords, roomList, monitorRooms, monitorUsers,
+            recordFilter, statusLabel, onSourceTypeChange, debounceLoadRecords,
+            recordPagination, visiblePages, recordStats,
+            recordActiveTab, recordTabs, recordCompanyFilter, recordDocTypeFilter,
+            recordCompanyList, recordDocTypes, exportRecordsExcel,
+            loadRecords, loadRecordStats, gotoRecordPage, getParsedField, getRecordMappedValue, formatTime,
+            retryRecord, reocrRecord, reocrPreviewFile, previewReocring, syncRecordToDingtalk, previewRecord, previewAutoRecord, loadAutoRecordRawText,
             recordDetailVisible, currentRecord, openRecordDetail,
+            // 联系人编辑
+            contactEditVisible, contactEditSaving, contactEditForm, contactNameInput,
+            openContactEdit, saveContactEdit,
             // 设置已迁移到 /monitor-config 页面
         };
     },
