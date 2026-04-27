@@ -468,7 +468,6 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
     for p in [
         r"业务员[姓名称]*[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
         r"销售人员[名称]*[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
-        r"销售渠道名称[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
         r"代理人[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
     ]:
         m = re.search(p, text)
@@ -477,6 +476,13 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
             if val and len(val) >= 2 and not re.search(r'公司|集团|保险|有限|机构', val):
                 fields["业务员"] = val
                 break
+    # 销售渠道名称兜底为业务员（值可能是代理公司名，如"深圳添越保险代理有限公司"）
+    if "业务员" not in fields:
+        m = re.search(r"销售渠道名称[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]{1,20})", text)
+        if m:
+            val = m.group(1).strip()
+            if val and len(val) >= 2:
+                fields["业务员"] = val
     # 太平洋：业务员为"渠道"时，用制单人替代
     if fields.get("业务员") == "渠道" and company_short == "太平洋":
         if "制单人" in fields:
