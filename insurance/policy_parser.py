@@ -495,11 +495,11 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
             val = m.group(1).strip()
             if val and len(val) >= 2:
                 fields["业务员"] = val
-    # 太平洋：业务员为"渠道"时，用制单人替代（允许"渠道QXL02047"等编码格式）
-    if fields.get("业务员") == "渠道" and company_short == "太平洋":
-        if "制单人" in fields and len(fields["制单人"]) >= 2:
+    # 太平洋：业务员为"渠道"或未提取到时，取制单人（如"渠道QXL02047"）
+    if company_short == "太平洋" and (fields.get("业务员") == "渠道" or "业务员" not in fields):
+        if "制单人" in fields and fields["制单人"].startswith("渠道"):
             fields["业务员"] = fields["制单人"]
-        else:
+        elif "业务员" in fields:
             del fields["业务员"]
 
     # 平安：经办为代理公司名时作为业务员（如"经办:维客保险代理有限公司"）
