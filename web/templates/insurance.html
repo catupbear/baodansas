@@ -1330,6 +1330,10 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                         </svg>
                         <h3 class="text-sm font-semibold text-gray-700">{{ previewFileName }}</h3>
+                        <span v-if="previewOcrEngine" class="badge text-xs"
+                              :class="previewOcrEngine === 'baidu' ? 'badge-info' : 'badge-success'">
+                            {{ previewOcrEngine === 'baidu' ? 'OCR识别' : 'PDF提取' }}
+                        </span>
                     </div>
                     <div class="flex items-center gap-2">
                         <button @click="previewShowFields = !previewShowFields; if(previewShowFields) { previewShowRaw = false; previewShowRules = false; }"
@@ -1622,6 +1626,15 @@ createApp({
 
         // 当前预览文件是否为图片
         const previewIsImage = computed(() => ['jpg', 'jpeg', 'png', 'bmp'].includes(previewType.value));
+
+        // 当前预览文件的识别方式
+        const previewOcrEngine = computed(() => {
+            // 自动识别记录
+            if (previewAutoRecord.value) return previewAutoRecord.value.ocr_engine || '';
+            // 手动上传
+            const r = results.value.find(x => x.file_name === previewFileName.value && x.success);
+            return r ? (r.ocr_engine || '') : '';
+        });
 
         // 当前预览文件的映射后字段列表
         const previewFieldsList = computed(() => {
@@ -3190,7 +3203,7 @@ createApp({
             recognizedCount, currentFileName, activeTab, docCategoryFilter, companyFilter, isSyncing,
             supportedCompanies, companyStats,
             syncMessage, syncSuccess,
-            previewVisible, previewSrc, previewIsImage,
+            previewVisible, previewSrc, previewIsImage, previewOcrEngine,
             previewType, previewFileName, previewHasRawText, previewShowRaw, previewShowFields, previewShowRules,
             previewRawText, formattedRawText, previewFieldsList, rawTextCopied, copyRawText,
             extractionRules, loadExtractionRules,
