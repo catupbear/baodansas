@@ -495,14 +495,10 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
             val = m.group(1).strip()
             if val and len(val) >= 2:
                 fields["业务员"] = val
-    # 太平洋：业务员为"渠道"时，用制单人替代
+    # 太平洋：业务员为"渠道"时，用制单人替代（允许"渠道QXL02047"等编码格式）
     if fields.get("业务员") == "渠道" and company_short == "太平洋":
-        if "制单人" in fields:
-            val = _clean_person_name(fields["制单人"])
-            if val and len(val) >= 2 and re.match(r'^[\u4e00-\u9fff]+$', val):
-                fields["业务员"] = val
-            else:
-                del fields["业务员"]
+        if "制单人" in fields and len(fields["制单人"]) >= 2:
+            fields["业务员"] = fields["制单人"]
         else:
             del fields["业务员"]
 
