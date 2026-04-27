@@ -78,6 +78,11 @@ def clean_person_name(name: str) -> str:
     # 永诚OCR干扰
     name = re.sub(r'有敬异的.*', '', name)
     name = re.sub(r'果尊.*', '', name)
+    # 清理人名后面多余的职业/证件后缀（如"马玲玲执业证" → "马玲玲"）
+    name = re.sub(r'(执业|资格|从业|代理|经纪)(证|号|资格).*', '', name)
+    # 清理中文字符间的OCR空格（如"叶 文 燕" → "叶文燕"）
+    name = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', name)
+    name = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', name)
     return name.strip()
 
 
@@ -233,6 +238,14 @@ class BaseRule:
 
     def extract_policy_no(self, text: str, text_merged: str) -> str:
         """提取保单号"""
+        # 紫金格式：保单号在"投保确认时间"行，与日期粘连
+        # "投保确认时间：\n20590A44030226000BW12026-04-2716:33:54\n保险单号："
+        m = re.search(r"投保确认时间[：:\s]*\n?\s*([A-Za-z0-9]+?)(\d{4}-\d{2}-\d{2})", text)
+        if m:
+            val = m.group(1)
+            if len(val) > 5:
+                return val
+
         # 标准格式："保险单号：XXX" / "保单号：XXX" / "保险凭证号：XXX"
         for p in [
             r"保险单号[码]?[：:\s]\s*(\S+)",
@@ -286,6 +299,13 @@ class BaseRule:
 
     def extract_insured(self, text: str, text_merged: str) -> str:
         """提取被保险人（通用逻辑，保司特有逻辑由子类 override）"""
+        # OCR带空格格式："被 保 险 人 深圳市中立咨询有限公司"
+        m = re.search(r"被\s+保\s+险\s+人\s+([\u4e00-\u9fff][\u4e00-\u9fff\w（()）)]{1,29})", text)
+        if m:
+            val = clean_person_name(m.group(1))
+            if is_valid_person(val):
+                return val
+
         # 标准冒号格式
         for p in [
             r"被保险人名称[：:]\s*(\S+)",
@@ -310,16 +330,24 @@ class BaseRule:
                 if is_valid_person(val):
                     return val
 
-        # "被保险人"单独一行，邻近行找"名称 XXX"
+        # "被保险人"单独一行或"被保险人 承保公司"等，邻近行找"名称 XXX"
         lines = text.split('\n')
         for i, line in enumerate(lines):
-            if line.strip() == '被保险人':
+            stripped = line.strip()
+            if stripped == '被保险人' or re.match(r'^被保险人\s+(?:证件|信息|承保)', stripped):
+                # 先查附近行的"名称 XXX"格式
                 for j in range(max(0, i - 3), min(len(lines), i + 3)):
                     if j == i:
                         continue
                     m = re.match(r'名称\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+)', lines[j].strip())
                     if m and is_valid_person(m.group(1)):
                         return m.group(1)
+                # 紫金等表格格式：被保人名字在"被保险人"标签的上一行
+                if i > 0:
+                    prev = lines[i - 1].strip()
+                    prev_cleaned = clean_person_name(re.sub(r'\s+', '', prev))
+                    if prev_cleaned and is_valid_person(prev_cleaned):
+                        return prev_cleaned
                 break
 
         # 特别约定中"被保险人为XXX"
@@ -368,6 +396,18 @@ class BaseRule:
             m = re.search(p, text)
             if m:
                 val = clean_person_name(m.group(1))
+                if is_valid_person(val):
+                    return val
+
+        # 前海/紫金等格式：冒号后人名带OCR空格（如"投保人 ： 叶 文 燕"）
+        lines = text.split('\n')
+        for line in lines:
+            m = re.match(r'\s*投保人\s*[：:]\s*(.+)', line)
+            if m:
+                raw = m.group(1).strip()
+                val = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', raw)
+                val = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', val)
+                val = clean_person_name(val)
                 if is_valid_person(val):
                     return val
 
@@ -573,6 +613,18 @@ class BaseRule:
 
     def extract_tax(self, text: str, text_merged: str) -> str:
         """提取车船税"""
+        # 处理OCR将"车船税"拆到多行的情况（如"车\n船 合计...元）\n税"）
+        m_tax_block = re.search(
+            r"车\n.*?船\s*合计.*?[（(]\s*[￥¥][：:\s]*([\d,.]+)\s*(?:元)?[)）].*?\n\s*税",
+            text, re.DOTALL
+        )
+        if m_tax_block:
+            val = m_tax_block.group(1).strip().replace(",", "")
+            try:
+                if float(val) >= 0:
+                    return val
+            except (ValueError, AttributeError):
+                pass
         for p in [
             r"车\s*船\s*税[\s\S]*?合计.*?[（(]\s*[￥¥][：:\s]*([\d,.]+)\s*(?:元)?[)）]",
             r"车\s*船\s*税[\s\S]*?合计.*?([\d,.]+)\s*元",
@@ -583,8 +635,11 @@ class BaseRule:
             m = re.search(p, text)
             if m:
                 val = m.group(1).strip().replace(",", "")
-                if float(val) > 0:
-                    return val
+                try:
+                    if float(val) >= 0:
+                        return val
+                except ValueError:
+                    continue
                 break
         return ""
 
@@ -739,7 +794,34 @@ class BaseRule:
                         return fields
                 break
 
-        # 模式10：缴款通知格式 "YYYY/MM/DD 00时至YYYY/MM/DD 00时"
+        # 模式10：日期与"保险期间自 起至 止"标签分离（紫金等）
+        # OCR输出："2026年5月6日18时0分 2027年5月6日18时0分\n...\n保险期间自 起至 止"
+        period_lines = period_text.split('\n')
+        two_date_pat = r'(\d{4}年\d{1,2}月\d{1,2}日)\d{1,2}时\d{1,2}分\s+(\d{4}年\d{1,2}月\d{1,2}日)\d{1,2}时\d{1,2}分'
+        for i, line in enumerate(period_lines):
+            if re.search(r'保险期间\s*自\s*起\s*[至到]\s*止', line):
+                for j in range(max(0, i - 8), i):
+                    m = re.search(two_date_pat, period_lines[j])
+                    if m:
+                        fields["保险起期"] = m.group(1)
+                        fields["保险止期"] = m.group(2)
+                        fields["保险期间"] = f"{m.group(1)} 至 {m.group(2)}"
+                        return fields
+                break
+
+        # 模式10b：同一行两个"YYYY年M月D日HH时M分"日期，附近有保险期间关键词
+        if not fields:
+            for i, line in enumerate(period_lines):
+                m = re.search(two_date_pat, line)
+                if m:
+                    context = '\n'.join(period_lines[max(0, i - 2):min(len(period_lines), i + 5)])
+                    if re.search(r'保险期间|起保日期|终保日期', context):
+                        fields["保险起期"] = m.group(1)
+                        fields["保险止期"] = m.group(2)
+                        fields["保险期间"] = f"{m.group(1)} 至 {m.group(2)}"
+                        return fields
+
+        # 模式11：缴款通知格式 "YYYY/MM/DD 00时至YYYY/MM/DD 00时"
         m = re.search(r"(\d{4}/\d{2}/\d{2})\s*\d{2}时[\s\S]{0,50}?至\s*(\d{4}/\d{2}/\d{2})", text)
         if m:
             fields["保险起期"] = m.group(1)
@@ -747,7 +829,7 @@ class BaseRule:
             fields["保险期间"] = f"{m.group(1)} 至 {m.group(2)}"
             return fields
 
-        # 模式11：极简格式 "YYYY年M月D日至YYYY年M月D日" 独立一行
+        # 模式12：极简格式 "YYYY年M月D日至YYYY年M月D日" 独立一行
         for line in lines:
             m = re.match(r'\s*(\d{4}年\d{1,2}月\d{1,2}日)\s*[至到]\s*(\d{4}年\d{1,2}月\d{1,2}日)\s*$', line)
             if m:
@@ -829,8 +911,23 @@ class BaseRule:
 
     def extract_handler_person(self, text: str, text_merged: str) -> str:
         """提取经办人"""
-        m = re.search(r"经办[：:\s]*(\S+?)(?:\s|$)", text)
-        return m.group(1) if m else ""
+        m = re.search(r"经办(?:人员?)?[：:]\s*([\u4e00-\u9fff](?:[^\S\n]?[\u4e00-\u9fff]){0,5})", text)
+        if m:
+            val = re.sub(r'\s+', '', m.group(1))
+            if val:
+                return val
+
+        # 紫金等表格格式：值在标签行上方
+        # "999999999 赖晨 王丽霞\n核保： 制单： 经办："
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            if re.search(r'核保[：:]\s*制单[：:]\s*经办[：:]', line) and i > 0:
+                prev = lines[i - 1].strip()
+                names = [p for p in re.split(r'\s+', prev) if re.match(r'^[\u4e00-\u9fff]{2,6}$', p)]
+                if names:
+                    return names[-1]  # 最后一个对应"经办"
+            break
+        return ""
 
     # ----------------------------------------------------------
     # 子类 override 用的空方法

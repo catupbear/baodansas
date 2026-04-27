@@ -203,6 +203,8 @@ def _clean_person_name(val: str) -> str:
     # 永诚OCR干扰：人名后面附带"有敬异的"
     val = re.sub(r'有敬异的.*', '', val)
     val = re.sub(r'果尊.*', '', val)
+    # 清理人名后面多余的职业/证件后缀（如"马玲玲执业证" → "马玲玲"）
+    val = re.sub(r'(执业|资格|从业|代理|经纪)(证|号|资格).*', '', val)
     return val.strip()
 
 
@@ -444,6 +446,22 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
         if val:
             fields["经办人"] = val
 
+    # 紫金等表格格式：值在标签行上方
+    # "999999999 赖晨 王丽霞\n核保： 制单： 经办："
+    # 经办人为上一行最后一个中文人名
+    if "经办人" not in fields:
+        lines_all = text.split('\n')
+        for i, line in enumerate(lines_all):
+            if re.search(r'核保[：:]\s*制单[：:]\s*经办[：:]', line) and i > 0:
+                prev = lines_all[i - 1].strip()
+                # 提取上一行中所有中文人名（按空格分割）
+                names = [p for p in re.split(r'\s+', prev) if re.match(r'^[\u4e00-\u9fff]{2,6}$', p)]
+                if names:
+                    val = _clean_person_name(names[-1])  # 最后一个对应"经办"
+                    if val and len(val) >= 2:
+                        fields["经办人"] = val
+                break
+
     # ===== 业务员 / 代理人 =====
     # 注意："代理人名称"是中介机构公司名，不是业务员
     for p in [
@@ -477,6 +495,16 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
 
 def _extract_policy_no(text: str, fields: dict, company_short: str):
     """提取保单号"""
+
+    # 紫金格式：保单号在"投保确认时间"行，与日期粘连
+    # "投保确认时间：\n20590A44030226000BW12026-04-2716:33:54\n保险单号： 电子保单生成时间："
+    if company_short == "紫金":
+        m = re.search(r"投保确认时间[：:\s]*\n?\s*([A-Za-z0-9]+?)(\d{4}-\d{2}-\d{2})", text)
+        if m:
+            val = m.group(1)
+            if len(val) > 5:
+                fields["保单号"] = val
+                return
 
     # 华农等格式："保单号\n保单号：XXX\n流水号 流水号：YYY"，优先取保单号而非流水号
     m = re.search(r"保单号[：:]\s*(\d{15,30})", text)
@@ -819,6 +847,14 @@ def _extract_insured_zhonghua(text: str, text_merged: str, fields: dict):
 
 def _extract_insured_common(text: str, text_merged: str, fields: dict):
     """通用被保险人提取"""
+    # OCR带空格格式："被 保 险 人 深圳市中立咨询有限公司"（原始text匹配，优先于冒号格式）
+    m = re.search(r"被\s+保\s+险\s+人\s+([\u4e00-\u9fff][\u4e00-\u9fff\w（()）)]{1,29})", text)
+    if m:
+        val = _clean_person_name(m.group(1))
+        if _is_valid_person(val):
+            fields["被保险人"] = val
+            return
+
     # 标准冒号格式
     for p in [
         r"被保险人名称[：:]\s*(\S+(?:[（(][^）)]+[）)])?)",
@@ -838,13 +874,23 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
     lines = text.split('\n')
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if stripped == '被保险人' or re.match(r'^被保险人\s+(?:证件|信息)', stripped):
+        if stripped == '被保险人' or re.match(r'^被保险人\s+(?:证件|信息|承保)', stripped):
+            # 先查附近行的"名称 XXX"格式
             for j in range(max(0, i - 3), min(len(lines), i + 3)):
                 if j == i:
                     continue
                 m = re.match(r'名称\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+(?:[（(][^）)]+[）)])?)', lines[j].strip())
                 if m and _is_valid_person(m.group(1)):
                     fields["被保险人"] = m.group(1)
+                    return
+            # 紫金等表格格式：被保人名字在"被保险人"标签的上一行
+            # 如："刘础行\n被保险人  承保公司"
+            if i > 0:
+                prev = lines[i - 1].strip()
+                # 上一行去掉可能的空格后作为候选人名
+                prev_cleaned = _clean_person_name(re.sub(r'\s+', '', prev))
+                if prev_cleaned and _is_valid_person(prev_cleaned):
+                    fields["被保险人"] = prev_cleaned
                     return
             break
 
@@ -1001,6 +1047,20 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
         m = re.search(p, text)
         if m:
             val = _clean_person_name(m.group(1))
+            if _is_valid_person(val):
+                fields["投保人"] = val
+                return
+
+    # 前海等格式：冒号后人名带OCR空格（如"投保人 ： 叶 文 燕"）
+    # 按行匹配，取冒号后整段内容合并空格
+    for line in lines:
+        m = re.match(r'\s*投保人\s*[：:]\s*(.+)', line)
+        if m:
+            raw = m.group(1).strip()
+            # 合并中文字符间的空格（如"叶 文 燕" → "叶文燕"）
+            val = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', raw)
+            val = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', val)
+            val = _clean_person_name(val)
             if _is_valid_person(val):
                 fields["投保人"] = val
                 return
@@ -1332,6 +1392,18 @@ def _extract_tax(text: str, fields: dict):
     """提取车船税，优先取合计金额"""
     # 合并车船税区域的换行（处理"￥\n：\n2469.6"等跨行格式）
     tax_text = text
+    # 处理OCR将"车船税"拆到多行的情况（如"车\n船 合计...元）\n税"）
+    # 提取"车"开头到"税"结束的区域，合并为单行后追加到 tax_text 供正则匹配
+    m_tax_block = re.search(r"车\n.*?船\s*合计.*?[（(]\s*[￥¥][：:\s]*([\d,.]+)\s*(?:元)?[)）].*?\n\s*税", tax_text, re.DOTALL)
+    if m_tax_block:
+        val = m_tax_block.group(1).strip().replace(",", "")
+        try:
+            amt = float(val)
+            if amt >= 0:
+                fields["车船税"] = val
+                return
+        except (ValueError, AttributeError):
+            pass
     for p in [
         # 车船税...合计...（￥：XXX 元）
         r"车\s*船\s*税[\s\S]*?合计.*?[（(]\s*[￥¥][：:\s]*([\d,.]+)\s*(?:元)?[)）]",
@@ -1347,7 +1419,8 @@ def _extract_tax(text: str, fields: dict):
         if m:
             val = m.group(1).strip().replace(",", "")
             try:
-                if float(val) > 0:
+                amt = float(val)
+                if amt >= 0:
                     fields["车船税"] = val
                     return
             except ValueError:
@@ -1360,6 +1433,16 @@ def _extract_tax(text: str, fields: dict):
 
 def _extract_period(text: str, text_merged: str, fields: dict, company_short: str):
     """提取保险期间"""
+    # 紫金等格式：同一行有两个"YYYY年M月D日HH时M分"日期，标签在其他行
+    # 直接在全文中匹配，不依赖标签位置
+    if company_short == "紫金":
+        m = re.search(r'(\d{4}年\d{1,2}月\d{1,2}日)\d{1,2}时\d{1,2}分\s+(\d{4}年\d{1,2}月\d{1,2}日)\d{1,2}时\d{1,2}分', text)
+        if m:
+            fields["保险起期"] = m.group(1)
+            fields["保险止期"] = m.group(2)
+            fields["保险期间"] = f"{m.group(1)} 至 {m.group(2)}"
+            return
+
     period_text = text_merged
     # 清理数字之间的空格："20 2 6" → "2026"（需多次执行）
     for _ in range(5):
@@ -1435,6 +1518,38 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
                     fields["保险期间"] = f"{m_start.group(1)} 至 {m_end.group(1)}"
                     return
             break
+
+    # 紫金等格式：日期与"保险期间自 起至 止"标签分离
+    # OCR输出示例：
+    # "2026年5月6日18时0分 2027年5月6日18时0分\n保险期间自 起至 止"
+    # 或中间隔多行："...日期\n—\n终保日期\n—\n保险期间自 起至 止"
+    period_lines = period_text.split('\n')
+    two_date_pattern = r'(\d{4}年\d{1,2}月\d{1,2}日)\d{1,2}时\d{1,2}分\s+(\d{4}年\d{1,2}月\d{1,2}日)'
+    for i, line in enumerate(period_lines):
+        # 匹配"保险期间自起至止"或"保险期间自 起至 止"（合并/未合并空格均可）
+        if re.search(r'保险期间\s*自\s*起\s*[至到]\s*止', line):
+            for j in range(max(0, i - 8), i):
+                m = re.search(two_date_pattern, period_lines[j].strip())
+                if m:
+                    fields["保险起期"] = m.group(1)
+                    fields["保险止期"] = m.group(2)
+                    fields["保险期间"] = f"{m.group(1)} 至 {m.group(2)}"
+                    return
+            break
+
+    # 兜底：全文搜索同一行内两个"YYYY年M月D日HH时M分"格式的日期（紫金等无标签关联的情况）
+    if "保险期间" not in fields:
+        for line in period_lines:
+            m = re.search(two_date_pattern, line.strip())
+            if m:
+                # 确认附近有保险期间相关关键词，避免误匹配
+                line_idx = period_lines.index(line)
+                context = '\n'.join(period_lines[max(0, line_idx - 2):min(len(period_lines), line_idx + 5)])
+                if re.search(r'保险期间|起保日期|终保日期', context):
+                    fields["保险起期"] = m.group(1)
+                    fields["保险止期"] = m.group(2)
+                    fields["保险期间"] = f"{m.group(1)} 至 {m.group(2)}"
+                    return
 
     # "保险期限： 2026-05-17 00:00:00 至 2027-05-16 23:59:59" 格式（太平驾意险等）
     # 也支持 "保险期间： 自 2026-04-22 00:00:00 起，至 2027-04-21 23:59:59 止。"
