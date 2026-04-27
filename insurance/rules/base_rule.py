@@ -230,6 +230,11 @@ class BaseRule:
         if val:
             fields["经办人"] = val
 
+        # 业务员
+        val = self.extract_salesperson(text, text_merged, fields)
+        if val:
+            fields["业务员"] = val
+
         return fields
 
     # ----------------------------------------------------------
@@ -927,6 +932,39 @@ class BaseRule:
                 if names:
                     return names[-1]  # 最后一个对应"经办"
             break
+        return ""
+
+    def extract_salesperson(self, text: str, text_merged: str, fields: dict) -> str:
+        """提取业务员/代理人"""
+        # 注意："代理人名称"是中介机构公司名，不是业务员
+        for p in [
+            r"业务员[姓名称]*[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
+            r"销售人员[名称]*[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
+            r"销售渠道名称[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
+            r"代理人[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
+        ]:
+            m = re.search(p, text)
+            if m:
+                val = clean_person_name(m.group(1))
+                if val and len(val) >= 2 and not re.search(r'公司|集团|保险|有限|机构', val):
+                    # 太平洋：业务员为"渠道"时，用制单人替代
+                    if val == "渠道":
+                        fallback = fields.get("制单人", "")
+                        if fallback:
+                            fb_val = clean_person_name(fallback)
+                            if fb_val and len(fb_val) >= 2 and re.match(r'^[\u4e00-\u9fff]+$', fb_val):
+                                return fb_val
+                        return ""
+                    return val
+
+        # 经办人兜底为业务员；经办人无效时用制单人兜底
+        for fallback_field in ["经办人", "制单人"]:
+            if fallback_field in fields:
+                val = clean_person_name(fields[fallback_field])
+                if val and len(val) >= 2 and re.match(r'^[\u4e00-\u9fff]+$', val) \
+                        and not re.search(r'公司|集团|保险|有限|机构|自动', val):
+                    return val
+
         return ""
 
     # ----------------------------------------------------------

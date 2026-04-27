@@ -476,6 +476,17 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
             if val and len(val) >= 2 and not re.search(r'公司|集团|保险|有限|机构', val):
                 fields["业务员"] = val
                 break
+    # 太平洋：业务员为"渠道"时，用制单人替代
+    if fields.get("业务员") == "渠道" and company_short == "太平洋":
+        if "制单人" in fields:
+            val = _clean_person_name(fields["制单人"])
+            if val and len(val) >= 2 and re.match(r'^[\u4e00-\u9fff]+$', val):
+                fields["业务员"] = val
+            else:
+                del fields["业务员"]
+        else:
+            del fields["业务员"]
+
     # 经办人兜底为业务员；经办人无效时用制单人兜底
     if "业务员" not in fields:
         for fallback_field in ["经办人", "制单人"]:
