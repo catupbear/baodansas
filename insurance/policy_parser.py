@@ -1187,7 +1187,9 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
 
     # 车牌号
     PROVINCE_CHARS = "京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁"
-    plate_text = re.sub(r'([A-Z]-?)\s*\n\s*([A-Z0-9])', r'\1\2', text)
+    # 处理跨行车牌：省份简称后换行跟字母数字（如"鄂\nABC123"）
+    plate_text = re.sub(rf'([{PROVINCE_CHARS}])\s*\n\s*([A-Z])', r'\1\2', text)
+    plate_text = re.sub(r'([A-Z]-?)\s*\n\s*([A-Z0-9])', r'\1\2', plate_text)
     # 中华联合格式："号1牌1号1码" 需要合并
     plate_text_merged = re.sub(r'([\u4e00-\u9fff])1([\u4e00-\u9fff])', r'\1\2',
                                 re.sub(r'([\u4e00-\u9fff])1([\u4e00-\u9fff])', r'\1\2', plate_text))
@@ -1235,6 +1237,23 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
         if "车牌号" not in fields:
             if re.search(r"(?:号[1]?牌[1]?号[1]?码|车牌号码?)[：:\s]*\*[-\s]*\*", text):
                 fields["车牌号"] = "新车"
+
+    # 非车险等保单：车牌号码后只有省份简称（如"车牌号码:鄂"），OCR将剩余部分拆到附近行
+    # 在附近行中查找"字母-*"新车格式片段，拼合为完整车牌
+    if "车牌号" not in fields:
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            m_prov = re.search(rf"车牌号码?[：:]\s*([{PROVINCE_CHARS}])\s*$", line)
+            if m_prov:
+                prov = m_prov.group(1)
+                # 在后续几行中找"A-*"等新车片段（排除明显非车牌上下文）
+                for j in range(i + 1, min(len(lines), i + 5)):
+                    m_rest = re.search(r'(?<!\w)([A-Z][-]?\*)', lines[j])
+                    if m_rest:
+                        rest = m_rest.group(1).replace("-", "")
+                        fields["车牌号"] = prov + rest
+                        break
+                break
 
     # 车架号/VIN
     for p in [
