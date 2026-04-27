@@ -82,6 +82,7 @@ def list_records():
     source_type = request.args.get("source_type", "")
     sender = request.args.get("sender", "")
     ocr_engine = request.args.get("ocr_engine", "")
+    doc_category = request.args.get("doc_category", "")
 
     try:
         result = query_insurance_records(
@@ -95,10 +96,11 @@ def list_records():
             source_type=source_type,
             sender=sender,
             ocr_engine=ocr_engine,
+            doc_category=doc_category,
         )
         # JSON 字段自动反序列化，避免前端收到字符串
         for record in result.get("records", []):
-            for field in ("parsed_fields", "mapped_fields"):
+            for field in ("parsed_fields",):
                 if isinstance(record.get(field), str):
                     try:
                         record[field] = json.loads(record[field])
@@ -138,6 +140,95 @@ def get_record(record_id):
         return jsonify({"code": 0, "data": record})
     except Exception as e:
         logger.exception("获取保单记录 %d 失败", record_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/records/<int:record_id>/preview", methods=["GET"])
+def preview_record_file(record_id):
+    """代理预览保单文件（避免 COS 直接下载）"""
+    import requests as http_requests
+
+    try:
+        record = get_insurance_record(_db, record_id)
+        if not record:
+            return jsonify({"code": 404, "msg": "记录不存在"}), 404
+
+        cos_url = record.get("cos_url", "")
+        if not cos_url:
+            return jsonify({"code": 404, "msg": "文件 URL 不存在"}), 404
+
+        # 请求 COS 文件
+        resp = http_requests.get(cos_url, timeout=30, stream=True)
+        if resp.status_code != 200:
+            return jsonify({"code": 502, "msg": "文件下载失败"}), 502
+
+        filename = record.get("filename", "file.pdf")
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "pdf"
+        mime_map = {
+            "pdf": "application/pdf",
+            "jpg": "image/jpeg", "jpeg": "image/jpeg",
+            "png": "image/png", "bmp": "image/bmp",
+        }
+        mimetype = mime_map.get(ext, "application/octet-stream")
+
+        return send_file(
+            io.BytesIO(resp.content),
+            mimetype=mimetype,
+            as_attachment=False,
+            download_name=filename,
+        )
+    except Exception as e:
+        logger.exception("预览保单文件 %d 失败", record_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/records/<int:record_id>/raw-text", methods=["GET"])
+def get_record_raw_text(record_id):
+    """获取保单记录的 OCR 原文（优先从数据库缓存读取，否则从 COS 提取并缓存）"""
+    import requests as http_requests
+
+    try:
+        record = get_insurance_record(_db, record_id)
+        if not record:
+            return jsonify({"code": 404, "msg": "记录不存在"}), 404
+
+        # 优先从数据库缓存读取
+        cached_text = record.get("raw_text", "")
+        if cached_text:
+            return jsonify({"code": 0, "data": {"raw_text": cached_text}})
+
+        # 数据库无缓存，从 COS 下载提取
+        cos_url = record.get("cos_url", "")
+        if not cos_url:
+            return jsonify({"code": 404, "msg": "文件 URL 不存在"}), 404
+
+        resp = http_requests.get(cos_url, timeout=30)
+        if resp.status_code != 200:
+            return jsonify({"code": 502, "msg": "文件下载失败"}), 502
+
+        text = ""
+        filename = record.get("filename", "")
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "pdf"
+
+        if ext == "pdf":
+            try:
+                from insurance.ocr_service import extract_text_from_pdf_bytes
+                result = extract_text_from_pdf_bytes(resp.content)
+                if result.get("success"):
+                    text = result.get("text", "")
+            except Exception as e:
+                logger.warning("pdfplumber 提取原文失败: %s", e)
+
+        # 写回数据库缓存
+        if text:
+            try:
+                update_insurance_record(_db, record_id, {"raw_text": text})
+            except Exception:
+                pass
+
+        return jsonify({"code": 0, "data": {"raw_text": text}})
+    except Exception as e:
+        logger.exception("获取保单原文 %d 失败", record_id)
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
@@ -375,9 +466,14 @@ def retry_record(record_id):
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
-@insurance_bp.route("/api/insurance/sync/<int:record_id>", methods=["POST"])
-def sync_record_to_dingtalk(record_id):
-    """手动触发单条记录同步到钉钉"""
+@insurance_bp.route("/api/insurance/reocr/<int:record_id>", methods=["POST"])
+def reocr_record(record_id):
+    """
+    重新识别：从 COS 下载文件重新 OCR，更新记录中的识别结果。
+    不会自动同步钉钉，需要用户预览确认后手动触发同步。
+    """
+    import requests as http_requests
+
     if not _handler:
         return jsonify({"code": 503, "msg": "识别服务未初始化"}), 503
 
@@ -385,6 +481,83 @@ def sync_record_to_dingtalk(record_id):
         record = get_insurance_record(_db, record_id)
         if not record:
             return jsonify({"code": 404, "msg": "记录不存在"}), 404
+
+        cos_url = record.get("cos_url", "")
+        if not cos_url:
+            return jsonify({"code": 400, "msg": "记录无文件 URL，无法重新识别"}), 400
+
+        # 1. 从 COS 下载 PDF
+        resp = http_requests.get(cos_url, timeout=60)
+        if resp.status_code != 200:
+            return jsonify({"code": 502, "msg": "文件下载失败"}), 502
+        pdf_bytes = resp.content
+
+        # 2. 重新 OCR
+        filename = record.get("filename", "file.pdf")
+        ocr_result = _handler._do_ocr(pdf_bytes, filename)
+        if not ocr_result.get("success"):
+            return jsonify({"code": 500, "msg": f"OCR 识别失败: {ocr_result.get('error', '未知错误')}"}), 500
+
+        policy = ocr_result.get("policy", {})
+        ocr_engine = ocr_result.get("ocr_engine", "pdfplumber")
+        parsed_fields = policy.get("fields", {})
+        doc_category = policy.get("doc_category", "")
+        confidence = policy.get("confidence", 0.0)
+
+        # 3. 同车牌保单字段互补
+        _handler._cross_fill_by_plate(parsed_fields, record_id)
+
+        # 4. 字段映射
+        from insurance.field_mapping import apply_mapping
+        company_short = parsed_fields.get("保险公司简称", "")
+        mapped_fields = apply_mapping(parsed_fields, company_short)
+
+        # 5. 更新记录
+        raw_text = policy.get("raw_text", "")
+        updates = {
+            "status": "done",
+            "ocr_engine": ocr_engine,
+            "doc_category": doc_category,
+            "confidence": confidence,
+            "parsed_fields": parsed_fields,
+            "mapped_fields": mapped_fields,
+            "raw_text": raw_text,
+            "error_message": "",
+        }
+        update_insurance_record(_db, record_id, updates)
+
+        # 返回更新后的记录
+        updated = get_insurance_record(_db, record_id)
+        for field in ("parsed_fields", "mapped_fields"):
+            if isinstance(updated.get(field), str):
+                try:
+                    updated[field] = json.loads(updated[field])
+                except (TypeError, json.JSONDecodeError):
+                    pass
+        for ts_field in ("created_at", "updated_at"):
+            if updated.get(ts_field) and not isinstance(updated[ts_field], str):
+                updated[ts_field] = str(updated[ts_field])
+
+        return jsonify({"code": 0, "data": updated, "msg": "重新识别完成，请预览确认后同步钉钉"})
+    except Exception as e:
+        logger.exception("重新识别保单记录 %d 失败", record_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/sync/<int:record_id>", methods=["POST"])
+def sync_record_to_dingtalk(record_id):
+    """手动触发单条记录同步到钉钉（支持覆盖已同步的记录）"""
+    if not _handler:
+        return jsonify({"code": 503, "msg": "识别服务未初始化"}), 503
+
+    try:
+        record = get_insurance_record(_db, record_id)
+        if not record:
+            return jsonify({"code": 404, "msg": "记录不存在"}), 404
+
+        # 重置同步状态，允许重新同步
+        if record.get("dingtalk_synced"):
+            update_insurance_record(_db, record_id, {"dingtalk_synced": 0})
 
         result = _handler._sync_to_dingtalk(record)
         return jsonify({"code": 0, "data": result, "msg": "同步成功"})
@@ -1109,108 +1282,6 @@ def list_train_records():
         return jsonify({"success": True, "data": {"records": records, "total": total}})
     finally:
         conn.close()
-
-
-# ============================================================
-# 模板训练
-# ============================================================
-
-@insurance_bp.route('/api/insurance/train', methods=['POST'])
-def train_template():
-    """上传样本 PDF，自动训练模板"""
-    from insurance.learner.trainer import TemplateTrainer, save_training_result
-    import os
-
-    files = request.files.getlist('samples')
-    company_id = request.form.get('company_id', '')
-    policy_type = request.form.get('policy_type', '')
-    version = request.form.get('version', 'v1')
-    company_name = request.form.get('company_name', '')
-    company_short = request.form.get('company_short', '')
-
-    if not files or len(files) < 2:
-        return jsonify({"success": False, "error": "至少需要上传 2 份样本 PDF"})
-    if not company_id or not policy_type:
-        return jsonify({"success": False, "error": "必须指定 company_id 和 policy_type"})
-
-    pdf_bytes_list = [f.read() for f in files]
-
-    trainer = TemplateTrainer()
-    result = trainer.train(
-        pdf_bytes_list, company_id, policy_type, version)
-
-    # 保存训练记录到数据库（不会触发 reloader）
-    if _db:
-        from insurance.db import save_train_record
-        save_train_record(_db, {
-            "company_id": company_id,
-            "policy_type": policy_type,
-            "version": version,
-            "sample_count": len(pdf_bytes_list),
-            "discovered_fields": len(result.fields) if result.fields else 0,
-            "overall_hit_rate": result.validation.overall_hit_rate if result.validation else 0,
-            "passed": 1 if result.success else 0,
-            "unstable_fields": result.needs_review,
-            "template_json": json.dumps(result.template, ensure_ascii=False) if result.template else "",
-            "rule_code": result.rule_code,
-            "registered": 1 if result.success else 0,
-            "trigger_source": "manual",
-        })
-
-    # 延迟保存模板和规则文件到磁盘，避免写入 .py 文件触发 Flask reloader 导致响应中断
-    if result.success:
-        import threading
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        templates_dir = os.path.join(base_dir, "templates")
-        rules_dir = os.path.join(base_dir, "rules")
-
-        def _deferred_save():
-            import time
-            time.sleep(1)  # 等响应发送完毕
-            save_training_result(templates_dir, rules_dir, result,
-                               company_id, policy_type, version)
-
-        threading.Thread(target=_deferred_save, daemon=True).start()
-
-    return jsonify({
-        "success": result.success,
-        "error": result.error,
-        "template_id": f"{company_id}/{policy_type}/{version}" if result.success else "",
-        "validation": {
-            "hit_rate": result.validation.overall_hit_rate if result.validation else 0,
-            "sample_count": result.validation.sample_count if result.validation else 0,
-            "passed": result.validation.passed if result.validation else False,
-            "unstable_fields": result.needs_review or [],
-        }
-    })
-
-
-# ============================================================
-# 告警管理
-# ============================================================
-
-@insurance_bp.route('/api/insurance/alerts', methods=['GET'])
-def list_alerts():
-    """查询告警记录"""
-    from insurance.db import query_alerts
-    page = request.args.get('page', 1, type=int)
-    page_size = request.args.get('page_size', 20, type=int)
-    resolved = request.args.get('resolved', None)
-    level = request.args.get('level', None)
-    if resolved is not None:
-        resolved = int(resolved)
-    result = query_alerts(_db, page, page_size, resolved, level)
-    return jsonify({"success": True, "data": result})
-
-
-@insurance_bp.route('/api/insurance/alerts/<int:alert_id>/resolve', methods=['POST'])
-def resolve_alert_api(alert_id):
-    """标记告警已处理"""
-    from insurance.db import resolve_alert
-    data = request.get_json(silent=True) or {}
-    action = data.get('action', 'ignore')
-    resolve_alert(_db, alert_id, action)
-    return jsonify({"success": True})
 
 
 # ============================================================

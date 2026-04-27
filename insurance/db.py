@@ -62,47 +62,6 @@ def init_insurance_tables(db):
             )
         """)
 
-        # 模板告警记录表
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS template_alert_records (
-                id INT PRIMARY KEY AUTO_INCREMENT,
-                insurance_record_id INT,
-                template_id VARCHAR(128) COMMENT '匹配的模板ID',
-                match_score FLOAT COMMENT '匹配度',
-                alert_level VARCHAR(16) COMMENT 'info/warning/critical',
-                alert_type VARCHAR(64) COMMENT '告警类型',
-                alert_message TEXT,
-                resolved TINYINT DEFAULT 0 COMMENT '是否已处理',
-                resolved_action VARCHAR(32) COMMENT 'new_version/ignore/fix_rule',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                INDEX idx_alert_template (template_id),
-                INDEX idx_alert_level (alert_level),
-                INDEX idx_alert_resolved (resolved)
-            )
-        """)
-
-        # 模板训练记录表
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS template_train_records (
-                id INT PRIMARY KEY AUTO_INCREMENT,
-                company_id VARCHAR(64) COMMENT '保司ID',
-                policy_type VARCHAR(32) COMMENT '险种',
-                version VARCHAR(16) COMMENT '版本号',
-                sample_count INT COMMENT '样本数量',
-                discovered_fields INT COMMENT '发现字段数',
-                overall_hit_rate FLOAT COMMENT '整体准确率',
-                passed TINYINT COMMENT '是否通过验证',
-                unstable_fields LONGTEXT COMMENT '不稳定字段JSON',
-                template_json LONGTEXT COMMENT '生成的模板JSON',
-                rule_code LONGTEXT COMMENT '生成的规则代码',
-                registered TINYINT DEFAULT 0 COMMENT '是否已注册',
-                trigger_source VARCHAR(32) DEFAULT 'manual' COMMENT 'manual/auto',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                INDEX idx_train_company_type (company_id, policy_type),
-                INDEX idx_train_registered (registered)
-            )
-        """)
-
         # 索引（忽略已存在的索引错误）
         for idx_sql in [
             "CREATE INDEX idx_insurance_roomid ON insurance_records(roomid)",
@@ -116,13 +75,7 @@ def init_insurance_tables(db):
 
         # 为 insurance_records 表添加新字段（幂等，已存在则跳过）
         new_columns = [
-            ("template_id", "VARCHAR(128) COMMENT '匹配的模板版本'"),
-            ("match_score", "FLOAT COMMENT '模板匹配度'"),
-            ("field_layer_data", "LONGTEXT COMMENT '三层结构化字段JSON'"),
-            ("ocr_engines", "VARCHAR(128) COMMENT '使用的OCR引擎列表'"),
-            ("ocr_cross_validated", "TINYINT DEFAULT 0 COMMENT '是否经过交叉验证'"),
-            ("ocr_diffs", "LONGTEXT COMMENT 'OCR差异详情JSON'"),
-            ("has_critical_diff", "TINYINT DEFAULT 0 COMMENT '是否有关键字段差异'"),
+            ("raw_text", "LONGTEXT COMMENT 'OCR提取原文'"),
         ]
         for col_name, col_def in new_columns:
             try:
@@ -246,12 +199,14 @@ def query_insurance_records(
     source_type: str = "",
     sender: str = "",
     ocr_engine: str = "",
+    doc_category: str = "",
 ) -> dict:
     """
-    分页查询保单识别记录，支持按群、状态、关键词、来源、识别方式筛选。
+    分页查询保单识别记录，支持按群、状态、关键词、来源、识别方式、文档类型筛选。
     source_type: 'room' 仅群聊, 'user' 仅私聊（roomid 为空的记录）
     sender: 按发送人 ID 筛选
     ocr_engine: 按识别方式筛选（pdfplumber / baidu）
+    doc_category: 按文档类型筛选（保单 / 电子标志 等）
     返回: {"total": 总数, "pages": 总页数, "page": 当前页, "records": [...]}
     """
     conditions = []
@@ -287,6 +242,9 @@ def query_insurance_records(
     if ocr_engine:
         conditions.append("ocr_engine = %s")
         params.append(ocr_engine)
+    if doc_category:
+        conditions.append("doc_category = %s")
+        params.append(doc_category)
 
     where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
@@ -302,14 +260,31 @@ def query_insurance_records(
         total = cursor.fetchone()["cnt"]
         pages = max(1, (total + page_size - 1) // page_size)
 
-        # 分页查询
+        # 延迟关联：先查 id（轻量排序），再用 id 取完整数据（避免 LONGTEXT 拖慢排序）
         offset = (page - 1) * page_size
         cursor.execute(
-            f"SELECT * FROM insurance_records {where_clause} "
+            f"SELECT id FROM insurance_records {where_clause} "
             f"ORDER BY created_at DESC LIMIT %s OFFSET %s",
             params + [page_size, offset]
         )
-        records = list(cursor.fetchall())
+        id_rows = cursor.fetchall()
+        if id_rows:
+            ids = [r["id"] for r in id_rows]
+            placeholders = ",".join(["%s"] * len(ids))
+            select_cols = (
+                "id, msg_seq, roomid, room_name, sender, sender_name, "
+                "filename, filesize, cos_url, ocr_engine, doc_category, confidence, "
+                "parsed_fields, dingtalk_synced, dingtalk_target_id, "
+                "status, source, created_at, updated_at"
+            )
+            cursor.execute(
+                f"SELECT {select_cols} FROM insurance_records "
+                f"WHERE id IN ({placeholders}) ORDER BY created_at DESC",
+                ids
+            )
+            records = list(cursor.fetchall())
+        else:
+            records = []
 
         return {"total": total, "pages": pages, "page": page, "records": records}
     finally:
@@ -414,20 +389,36 @@ def get_insurance_stats(db) -> dict:
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        # 总数
-        cursor.execute("SELECT COUNT(*) as cnt FROM insurance_records")
-        total = cursor.fetchone()["cnt"]
+        # 单次全表扫描，同时统计状态和引擎（避免多次扫描 LONGTEXT 表）
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total,
+                SUM(status = 'done' OR status = 'success') as done_cnt,
+                SUM(status = 'failed') as failed_cnt,
+                SUM(status = 'pending') as pending_cnt,
+                SUM(status = 'processing') as processing_cnt
+            FROM insurance_records
+        """)
+        summary = cursor.fetchone()
+        total = summary["total"] or 0
 
-        # 按状态统计
+        # 按状态统计（从汇总结果构造，不再单独查询）
+        status_stats = []
+        for s, c in [("done", summary["done_cnt"]), ("failed", summary["failed_cnt"]),
+                      ("pending", summary["pending_cnt"]), ("processing", summary["processing_cnt"])]:
+            if c:
+                status_stats.append({"status": s, "cnt": int(c)})
+
+        # 按识别方式统计（轻量查询，ocr_engine 是 VARCHAR(32)）
         cursor.execute(
-            "SELECT status, COUNT(*) as cnt "
-            "FROM insurance_records GROUP BY status ORDER BY cnt DESC"
+            "SELECT ocr_engine, COUNT(*) as cnt "
+            "FROM insurance_records GROUP BY ocr_engine ORDER BY cnt DESC"
         )
-        status_stats = list(cursor.fetchall())
+        engine_stats = list(cursor.fetchall())
 
-        # 按群统计（取前 20 个）
+        # 按群统计（轻量查询，只用索引列）
         cursor.execute(
-            "SELECT roomid, room_name, COUNT(*) as cnt "
+            "SELECT roomid, MAX(room_name) as room_name, COUNT(*) as cnt "
             "FROM insurance_records GROUP BY roomid ORDER BY cnt DESC LIMIT 20"
         )
         room_stats = list(cursor.fetchall())
@@ -436,88 +427,8 @@ def get_insurance_stats(db) -> dict:
             "total": total,
             "status_stats": status_stats,
             "room_stats": room_stats,
+            "engine_stats": engine_stats,
         }
     finally:
         conn.close()
 
-
-def save_alert_record(db, record: dict) -> int:
-    """保存告警记录"""
-    conn = db.pool.connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO template_alert_records
-            (insurance_record_id, template_id, match_score, alert_level, alert_type, alert_message)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (record.get("insurance_record_id"), record.get("template_id"),
-              record.get("match_score"), record.get("alert_level"),
-              record.get("alert_type"), record.get("alert_message")))
-        conn.commit()
-        return cursor.lastrowid
-    finally:
-        conn.close()
-
-
-def resolve_alert(db, alert_id: int, action: str):
-    """标记告警已处理"""
-    conn = db.pool.connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE template_alert_records SET resolved=1, resolved_action=%s WHERE id=%s
-        """, (action, alert_id))
-        conn.commit()
-    finally:
-        conn.close()
-
-
-def query_alerts(db, page=1, page_size=20, resolved=None, level=None) -> dict:
-    """查询告警记录"""
-    conn = db.pool.connection()
-    try:
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        conditions = []
-        params = []
-        if resolved is not None:
-            conditions.append("resolved=%s")
-            params.append(resolved)
-        if level:
-            conditions.append("alert_level=%s")
-            params.append(level)
-        where = "WHERE " + " AND ".join(conditions) if conditions else ""
-        cursor.execute(f"SELECT COUNT(*) as total FROM template_alert_records {where}", params)
-        total = cursor.fetchone()["total"]
-        offset = (page - 1) * page_size
-        cursor.execute(f"""
-            SELECT * FROM template_alert_records {where}
-            ORDER BY created_at DESC LIMIT %s OFFSET %s
-        """, params + [page_size, offset])
-        records = cursor.fetchall()
-        return {"total": total, "records": records, "page": page, "page_size": page_size}
-    finally:
-        conn.close()
-
-
-def save_train_record(db, record: dict) -> int:
-    """保存训练记录"""
-    conn = db.pool.connection()
-    try:
-        cursor = conn.cursor()
-        unstable = record.get("unstable_fields", [])
-        fields_json = json.dumps(unstable, ensure_ascii=False) if isinstance(unstable, (list, dict)) else str(unstable)
-        cursor.execute("""
-            INSERT INTO template_train_records
-            (company_id, policy_type, version, sample_count, discovered_fields,
-             overall_hit_rate, passed, unstable_fields, template_json, rule_code,
-             registered, trigger_source)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (record.get("company_id"), record.get("policy_type"), record.get("version"),
-              record.get("sample_count"), record.get("discovered_fields"),
-              record.get("overall_hit_rate"), record.get("passed"),
-              fields_json, record.get("template_json"), record.get("rule_code"),
-              record.get("registered", 0), record.get("trigger_source", "manual")))
-        conn.commit()
-        return cursor.lastrowid
-    finally:
-        conn.close()

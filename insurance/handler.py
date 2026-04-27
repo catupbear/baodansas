@@ -67,29 +67,6 @@ class InsuranceHandler:
         self._baidu_ocr = None
         self._init_baidu_ocr()
 
-        # 新识别引擎（暂时禁用，使用旧 policy_parser 逻辑）
-        self._pipeline = None
-        # try:
-        #     from insurance.engine.pipeline import InsurancePipeline
-        #     from insurance.ocr.baidu_engine import BaiduOCREngine
-        #     ocr_engines = []
-        #     baidu_config = app_config.get("baidu_ocr", {})
-        #     if baidu_config.get("api_key"):
-        #         ocr_engines.append(BaiduOCREngine(
-        #             baidu_config["api_key"], baidu_config["secret_key"]))
-        #     tencent_config = app_config.get("tencent_ocr", {})
-        #     if tencent_config.get("secret_id"):
-        #         from insurance.ocr.tencent_engine import TencentOCREngine
-        #         ocr_engines.append(TencentOCREngine(
-        #             tencent_config["secret_id"], tencent_config["secret_key"]))
-        #     self._pipeline = InsurancePipeline(
-        #         db=db, ocr_engines=ocr_engines,
-        #         alert_webhook=app_config.get("dingtalk", {}).get("alert_webhook", ""))
-        #     logger.info("新识别引擎初始化成功")
-        # except Exception as e:
-        #     logger.warning(f"新识别引擎初始化失败，使用旧逻辑: {e}")
-        #     self._pipeline = None
-
         # 启动消费者守护线程
         self._worker = threading.Thread(target=self._consume, daemon=True)
         self._worker.start()
@@ -327,6 +304,7 @@ class InsuranceHandler:
             mapped_fields = apply_mapping(parsed_fields, company_short)
 
             # 8. 更新记录为 done
+            raw_text = policy.get("raw_text", "")
             updates = {
                 "status": "done",
                 "cos_url": cos_url,
@@ -335,70 +313,63 @@ class InsuranceHandler:
                 "confidence": confidence,
                 "parsed_fields": parsed_fields,
                 "mapped_fields": mapped_fields,
+                "raw_text": raw_text,
             }
             update_insurance_record(self.db, record_id, updates)
 
-            # 保存新引擎的额外信息
-            pipeline_result = ocr_result.get("pipeline_result")
-            if pipeline_result:
-                import json as _json
-                extra_updates = {
-                    "template_id": pipeline_result.template_id,
-                    "match_score": pipeline_result.match_score,
-                    "field_layer_data": _json.dumps({
-                        "common": pipeline_result.fields.get("common", {}),
-                        "type_specific": pipeline_result.fields.get("type_specific", {}),
-                        "company_specific": pipeline_result.fields.get("company_specific", {}),
-                    }, ensure_ascii=False),
-                    "ocr_engines": ",".join(pipeline_result.ocr_engines),
-                    "ocr_cross_validated": 1 if pipeline_result.ocr_diffs else 0,
-                    "ocr_diffs": _json.dumps([{
-                        "field": d.field_name, "values": d.values,
-                        "is_critical": d.is_critical, "resolved": d.resolved_value,
-                    } for d in pipeline_result.ocr_diffs], ensure_ascii=False) if pipeline_result.ocr_diffs else None,
-                    "has_critical_diff": 1 if any(d.is_critical for d in pipeline_result.ocr_diffs) else 0,
-                }
-                update_insurance_record(self.db, record_id, extra_updates)
-
             logger.info("保单处理完成, record_id=%d filename=%s", record_id, filename)
 
-            # 9. 自动同步钉钉（按监控配置决定）
-            try:
-                monitors = self._get_matched_monitors(roomid, sender)
-                for monitor in monitors:
-                    if not (monitor.get("dingtalk_base_id") and monitor.get("dingtalk_sheet_id")):
-                        continue
-                    # 使用监控配置自身的字段映射（如果有），否则用全局映射结果
-                    monitor_mapping = monitor.get("field_mapping") or {}
-                    if monitor_mapping:
-                        # monitor_mapping 的 key 是导出列名（如"承保公司"），
-                        # value 是钉钉目标列名。需要先把导出列名反查为 OCR 字段名，
-                        # 再从 parsed_fields 中取值。
-                        from insurance.field_mapping import DEFAULT_MAPPING
-                        # 构建反向映射：导出列名 → OCR 字段名
-                        export_to_ocr = {v: k for k, v in DEFAULT_MAPPING.items() if v}
-                        sync_fields = {}
-                        for export_col, target_col in monitor_mapping.items():
-                            if not target_col:
-                                continue
-                            # 优先通过反向映射找 OCR 字段名
-                            ocr_field = export_to_ocr.get(export_col, export_col)
-                            if ocr_field in parsed_fields:
-                                sync_fields[target_col] = parsed_fields[ocr_field]
-                            elif export_col in parsed_fields:
-                                # 兜底：导出列名本身也可能是 OCR 字段名
-                                sync_fields[target_col] = parsed_fields[export_col]
-                    else:
-                        sync_fields = mapped_fields
+            # 9. 同步前二次解析发送人名称（首次可能因缓存未命中返回ID）
+            if sender and sender_name == sender and self.contacts:
+                try:
+                    resolved = self.contacts.get_name(sender) or ""
+                    if resolved and resolved != sender:
+                        sender_name = resolved
+                        # 同步更新数据库记录中的发送人名称
+                        update_insurance_record(self.db, record_id, {"sender_name": sender_name})
+                        logger.info("发送人名称二次解析成功: %s -> %s", sender, sender_name)
+                except Exception as e:
+                    logger.warning("发送人名称二次解析失败: %s", e)
 
-                    self._sync_to_dingtalk_v2(
-                        record_id, sync_fields,
-                        sender_name=sender_name,
-                        cos_url=cos_url,
-                        monitor=monitor,
-                    )
-            except Exception as e:
-                logger.error("自动同步钉钉失败, record_id=%d: %s", record_id, e)
+            # 9. 非保单类型不同步钉钉，只记录日志
+            if doc_category and doc_category != "保单":
+                logger.info(
+                    "文档类型为「%s」（非保单），跳过钉钉同步, record_id=%d filename=%s",
+                    doc_category, record_id, filename,
+                )
+            else:
+                # 自动同步钉钉（按监控配置决定）
+                try:
+                    monitors = self._get_matched_monitors(roomid, sender)
+                    for monitor in monitors:
+                        if not (monitor.get("dingtalk_base_id") and monitor.get("dingtalk_sheet_id")):
+                            continue
+                        # 使用监控配置自身的字段映射（如果有），否则用全局映射结果
+                        monitor_mapping = monitor.get("field_mapping") or {}
+                        if monitor_mapping:
+                            from insurance.field_mapping import DEFAULT_MAPPING
+                            export_to_ocr = {v: k for k, v in DEFAULT_MAPPING.items() if v}
+                            sync_fields = {}
+                            for export_col, target_col in monitor_mapping.items():
+                                if not target_col:
+                                    continue
+                                ocr_field = export_to_ocr.get(export_col, export_col)
+                                if ocr_field in parsed_fields:
+                                    sync_fields[target_col] = parsed_fields[ocr_field]
+                                elif export_col in parsed_fields:
+                                    sync_fields[target_col] = parsed_fields[export_col]
+                        else:
+                            sync_fields = mapped_fields
+
+                        self._sync_to_dingtalk_v2(
+                            record_id, sync_fields,
+                            sender_name=sender_name,
+                            cos_url=cos_url,
+                            doc_category=doc_category,
+                            monitor=monitor,
+                        )
+                except Exception as e:
+                    logger.error("自动同步钉钉失败, record_id=%d: %s", record_id, e)
 
         except Exception as e:
             logger.error("保单处理失败, record_id=%d filename=%s: %s", record_id, filename, e, exc_info=True)
@@ -610,39 +581,6 @@ class InsuranceHandler:
                 "error":      str,
             }
         """
-        # 优先使用新引擎
-        if self._pipeline:
-            try:
-                result = self._pipeline.process_pdf(pdf_bytes, filename)
-                if result.confidence > 0:
-                    # 新引擎成功，转换为旧格式兼容
-                    flat_fields = {}
-                    flat_fields.update(result.fields.get("common", {}))
-                    flat_fields.update(result.fields.get("type_specific", {}))
-                    flat_fields.update(result.fields.get("company_specific", {}))
-                    flat_fields["保险公司"] = result.company.company_name
-                    flat_fields["保险公司简称"] = result.company.company_short
-                    flat_fields["险种类型"] = result.policy_type.type_name
-                    flat_fields["文档类型"] = result.doc_category
-
-                    policy = {
-                        "type": result.policy_type.type_name,
-                        "type_code": result.policy_type.type_code,
-                        "confidence": result.confidence,
-                        "doc_category": result.doc_category,
-                        "fields": flat_fields,
-                        "insurance_items": result.insurance_items,
-                        "raw_text": result.raw_text,
-                    }
-                    return {
-                        "success": True,
-                        "policy": policy,
-                        "ocr_engine": ",".join(result.ocr_engines),
-                        "pipeline_result": result,
-                    }
-            except Exception as e:
-                logger.warning(f"新引擎处理失败，降级到旧逻辑: {e}")
-
         text = ""
         ocr_engine = "pdfplumber"
 
@@ -752,7 +690,7 @@ class InsuranceHandler:
     def _sync_to_dingtalk(
         self, record_id: int, mapped_fields: dict, parsed_fields: dict,
         sender_name: str = "", roomid: str = "", sender: str = "",
-        target_ids: list = None,
+        doc_category: str = "", target_ids: list = None,
     ):
         """
         将保单字段同步到钉钉多维表。
@@ -802,10 +740,12 @@ class InsuranceHandler:
                 return
             target_map = {t["id"]: t for t in all_targets if isinstance(t, dict) and t.get("id")}
 
-            # 构建同步数据（带上发送人字段）
+            # 构建同步数据（带上发送人、文档类型字段）
             invoice_fields = {k: v for k, v in mapped_fields.items() if v}
             if sender_name:
                 invoice_fields["发送人"] = sender_name
+            if doc_category:
+                invoice_fields["文档类型"] = doc_category
             field_names = list(invoice_fields.keys())
             invoice = {"fields": invoice_fields}
 
@@ -853,16 +793,18 @@ class InsuranceHandler:
     def _sync_to_dingtalk_v2(
         self, record_id: int, sync_fields: dict,
         sender_name: str = "", cos_url: str = "",
-        monitor: dict = None,
+        doc_category: str = "", monitor: dict = None,
     ):
         """
         按监控配置同步到指定钉钉文档。
 
         Args:
-            record_id:   数据库记录 ID
-            sync_fields: 经过字段映射后的导出字段
-            sender_name: 发送人姓名
-            monitor:     匹配的监控配置（含 dingtalk_base_id, dingtalk_sheet_id 等）
+            record_id:    数据库记录 ID
+            sync_fields:  经过字段映射后的导出字段
+            sender_name:  发送人姓名
+            cos_url:      COS 文件链接
+            doc_category: 文档类型（保单/电子标志等）
+            monitor:      匹配的监控配置（含 dingtalk_base_id, dingtalk_sheet_id 等）
         """
         from insurance.dingtalk_sync import DingTalkTableService
 
@@ -893,6 +835,8 @@ class InsuranceHandler:
                 invoice_fields["发送人"] = sender_name
             if cos_url:
                 invoice_fields["保单文件"] = cos_url
+            if doc_category:
+                invoice_fields["文档类型"] = doc_category
             field_names = list(invoice_fields.keys())
             invoice = {"fields": invoice_fields}
 
