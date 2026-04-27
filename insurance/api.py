@@ -81,6 +81,7 @@ def list_records():
     source = request.args.get("source", "")
     source_type = request.args.get("source_type", "")
     sender = request.args.get("sender", "")
+    ocr_engine = request.args.get("ocr_engine", "")
 
     try:
         result = query_insurance_records(
@@ -93,6 +94,7 @@ def list_records():
             source=source,
             source_type=source_type,
             sender=sender,
+            ocr_engine=ocr_engine,
         )
         # JSON 字段自动反序列化，避免前端收到字符串
         for record in result.get("records", []):

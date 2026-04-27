@@ -274,3 +274,58 @@ def resolve_contacts():
     room_ids = data.get("room_ids", [])
     result = _contacts.batch_resolve(user_ids, room_ids)
     return jsonify(result)
+
+
+@api_bp.route("/contacts/sync", methods=["POST"])
+def sync_contacts():
+    """手动同步通讯录：强制刷新所有群和联系人的名称缓存"""
+    if _contacts is None:
+        return jsonify({"error": "通讯录模块未初始化"}), 503
+    if _db is None:
+        return jsonify({"error": "数据库未初始化"}), 503
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        # 所有群 ID
+        cursor.execute(
+            "SELECT DISTINCT roomid FROM messages WHERE roomid IS NOT NULL AND roomid != ''"
+        )
+        room_ids = [r["roomid"] for r in cursor.fetchall()]
+        # 所有用户 ID
+        cursor.execute(
+            "SELECT DISTINCT sender FROM messages WHERE sender IS NOT NULL AND sender != ''"
+        )
+        user_ids = [r["sender"] for r in cursor.fetchall()]
+    finally:
+        conn.close()
+
+    synced_rooms = 0
+    synced_users = 0
+
+    for rid in room_ids:
+        try:
+            name = _contacts.get_room_name(rid)
+            if name and name != rid:
+                synced_rooms += 1
+        except Exception:
+            pass
+
+    for uid in user_ids:
+        try:
+            name = _contacts.get_name(uid)
+            if name and name != uid:
+                synced_users += 1
+        except Exception:
+            pass
+
+    total = len(room_ids) + len(user_ids)
+    synced = synced_rooms + synced_users
+    return jsonify({
+        "success": True,
+        "message": f"同步完成：共 {total} 项，成功解析 {synced} 项（群 {synced_rooms}/{len(room_ids)}，联系人 {synced_users}/{len(user_ids)}）",
+        "synced_rooms": synced_rooms,
+        "synced_users": synced_users,
+        "total_rooms": len(room_ids),
+        "total_users": len(user_ids),
+    })

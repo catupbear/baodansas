@@ -81,6 +81,10 @@
         .btn-primary:hover { background: #1557b0; }
         .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
+        .btn-secondary { background: #f0f2f5; color: #333; border: 1px solid #d0d0d0; }
+        .btn-secondary:hover { background: #e3e5e8; }
+        .btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
+
         .auto-refresh-label {
             display: flex;
             align-items: center;
@@ -658,6 +662,7 @@
         <div class="nav-links">
             <a href="/">保单识别</a>
         </div>
+        <button class="btn btn-secondary" id="syncContactsBtn" onclick="syncContacts()">同步通讯录</button>
         <button class="btn btn-primary" id="fetchBtn" onclick="manualFetch()">拉取消息</button>
         <label class="auto-refresh-label">
             <input type="checkbox" id="autoRefresh" checked>
@@ -1128,6 +1133,32 @@ function debounceSearchConv() {
         const kw = document.getElementById("convSearch").value.trim();
         loadConversations(kw);
     }, 300);
+}
+
+// ===== 同步通讯录 =====
+async function syncContacts() {
+    const btn = document.getElementById("syncContactsBtn");
+    btn.disabled = true;
+    btn.textContent = "同步中...";
+
+    try {
+        const res = await fetch("/api/contacts/sync", { method: "POST" });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            btn.textContent = data.message;
+            // 刷新会话列表以显示新名称
+            loadConversations();
+            if (currentConv) loadChatMessages(true);
+        } else {
+            btn.textContent = data.error || "同步失败";
+        }
+    } catch(e) {
+        btn.textContent = "同步失败";
+    }
+    setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = "同步通讯录";
+    }, 3000);
 }
 
 // ===== 手动拉取消息 =====

@@ -321,7 +321,17 @@
 
                     <!-- 群聊监控 -->
                     <div style="margin-bottom:20px;">
-                        <label class="form-label">群聊监控</label>
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                            <label class="form-label" style="margin-bottom:0;">群聊监控</label>
+                            <button type="button" @click="refreshOptions" class="btn btn-outline" :disabled="refreshingOptions"
+                                    style="padding:3px 10px;font-size:12px;gap:4px;">
+                                <svg v-if="!refreshingOptions" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                                <span v-if="refreshingOptions" style="display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin 0.6s linear infinite;"></span>
+                                {{ refreshingOptions ? '刷新中...' : '刷新数据' }}
+                            </button>
+                        </div>
                         <!-- 已选标签 -->
                         <div v-if="form.room_ids.length > 0" class="flex flex-wrap gap-2" style="margin-bottom:8px;">
                             <span v-for="id in form.room_ids" :key="id" class="removable-tag badge-blue">
@@ -352,7 +362,7 @@
 
                     <!-- 私聊监控 -->
                     <div style="margin-bottom:20px;">
-                        <label class="form-label">私聊监控</label>
+                        <label class="form-label" style="margin-bottom:6px;">私聊监控</label>
                         <!-- 已选标签 -->
                         <div v-if="form.user_ids.length > 0" class="flex flex-wrap gap-2" style="margin-bottom:8px;">
                             <span v-for="id in form.user_ids" :key="id" class="removable-tag badge-green">
@@ -465,6 +475,7 @@ createApp({
         const userSearch = ref('');
         const roomDropdownOpen = ref(false);
         const userDropdownOpen = ref(false);
+        const refreshingOptions = ref(false);
 
         // 表单
         const form = ref({
@@ -547,6 +558,22 @@ createApp({
                 userOptions.value = (data.users || []).filter(r => r.type === 'user');
             } catch (e) {
                 console.error('加载选项失败:', e);
+            }
+        }
+
+        // 刷新群聊和用户数据（先同步通讯录再重新加载选项）
+        async function refreshOptions() {
+            refreshingOptions.value = true;
+            try {
+                // 先调用同步通讯录接口刷新缓存
+                await fetch('/api/contacts/sync', { method: 'POST' });
+                // 再重新加载选项列表
+                await loadOptions();
+                showToast('数据刷新成功');
+            } catch (e) {
+                showToast('刷新失败: ' + e.message, 'error');
+            } finally {
+                refreshingOptions.value = false;
             }
         }
 
@@ -754,14 +781,14 @@ createApp({
         return {
             configs, loading, showModal, editingId, saving,
             form, roomSearch, userSearch, roomDropdownOpen, userDropdownOpen,
-            fieldMappingRows, toast,
+            fieldMappingRows, toast, refreshingOptions,
             filteredRooms, filteredUsers,
             getRoomName, getUserName,
             addRoom, removeRoom, addUser, removeUser,
             getSourceRooms, getSourceUsers, getFieldCount,
             openAddModal, openEditModal, closeModal,
             saveConfig, toggleConfig, deleteConfig,
-            showToast,
+            refreshOptions, showToast,
         };
     }
 }).mount('#app');

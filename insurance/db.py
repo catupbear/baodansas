@@ -245,11 +245,13 @@ def query_insurance_records(
     source: str = "",
     source_type: str = "",
     sender: str = "",
+    ocr_engine: str = "",
 ) -> dict:
     """
-    分页查询保单识别记录，支持按群、状态、关键词、来源筛选。
+    分页查询保单识别记录，支持按群、状态、关键词、来源、识别方式筛选。
     source_type: 'room' 仅群聊, 'user' 仅私聊（roomid 为空的记录）
     sender: 按发送人 ID 筛选
+    ocr_engine: 按识别方式筛选（pdfplumber / baidu）
     返回: {"total": 总数, "pages": 总页数, "page": 当前页, "records": [...]}
     """
     conditions = []
@@ -282,6 +284,9 @@ def query_insurance_records(
     if source:
         conditions.append("source = %s")
         params.append(source)
+    if ocr_engine:
+        conditions.append("ocr_engine = %s")
+        params.append(ocr_engine)
 
     where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 

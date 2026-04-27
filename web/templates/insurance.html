@@ -760,6 +760,16 @@
                         <option value="failed">失败</option>
                     </select>
                 </div>
+                <!-- 识别方式下拉框 -->
+                <div class="flex items-center gap-1.5">
+                    <span class="text-xs text-gray-500 font-medium whitespace-nowrap">识别方式:</span>
+                    <select v-model="recordFilter.ocr_engine"
+                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
+                        <option value="">全部</option>
+                        <option value="pdfplumber">pdfplumber</option>
+                        <option value="baidu">百度OCR</option>
+                    </select>
+                </div>
                 <!-- 关键词搜索 -->
                 <div class="flex items-center gap-1.5 flex-1" style="min-width:200px;">
                     <span class="text-xs text-gray-500 font-medium">关键词:</span>
@@ -2455,6 +2465,7 @@ createApp({
             userid: '',
             status: '',
             keyword: '',
+            ocr_engine: '',  // '': 全部, 'pdfplumber', 'baidu'
         });
         // 状态中文映射
         const STATUS_MAP = { pending: '待处理', processing: '处理中', done: '已完成', failed: '失败', success: '已完成' };
@@ -2541,6 +2552,7 @@ createApp({
                     if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
                 }
                 if (recordFilter.status) params.set('status', recordFilter.status);
+                if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
                 if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
                 const resp = await fetch(`/api/insurance/records?${params.toString()}`);
                 const json = await resp.json();
