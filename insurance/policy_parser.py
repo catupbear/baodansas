@@ -1662,6 +1662,9 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
 
 def _extract_sign_date(text: str, fields: dict, company_short: str):
     """提取签单日期"""
+    # 预处理：清理日期中的OCR空格（如"2026 - 04-27" → "2026-04-27"）
+    sign_text = re.sub(r'(\d)\s+([-/])\s*(\d)', r'\1\2\3', text)
+    sign_text = re.sub(r'(\d)\s*([-/])\s+(\d)', r'\1\2\3', sign_text)
     for p in [
         r"签单日期[：:\s]*([\d]{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)",
         r"签单日期[：:\s]*([\d\-/年月日]+)",
@@ -1672,7 +1675,7 @@ def _extract_sign_date(text: str, fields: dict, company_short: str):
         # 华泰格式
         r"签单时间[：:\s]*([\d]{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)",
     ]:
-        m = re.search(p, text)
+        m = re.search(p, sign_text)
         if m:
             val = m.group(1).strip()
             if len(val) >= 8:
@@ -1680,7 +1683,7 @@ def _extract_sign_date(text: str, fields: dict, company_short: str):
                 return
 
     # 安盛天平/华泰格式："签单日期：2026-04-23 17:48:56" (带时间)
-    m = re.search(r"签单日期[：:\s]*([\d]{4}[-/]\d{1,2}[-/]\d{1,2})\s*\d{2}:\d{2}", text)
+    m = re.search(r"签单日期[：:\s]*([\d]{4}[-/]\d{1,2}[-/]\d{1,2})\s*\d{2}:\d{2}", sign_text)
     if m:
         fields["签单日期"] = m.group(1)
         return
