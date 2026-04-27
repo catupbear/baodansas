@@ -476,8 +476,8 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
             if val and len(val) >= 2 and not re.search(r'公司|集团|保险|有限|机构', val):
                 fields["业务员"] = val
                 break
-    # 销售渠道名称兜底为业务员（值可能是代理公司名，如"深圳添越保险代理有限公司"）
-    if "业务员" not in fields:
+    # 中华联合：销售渠道名称兜底为业务员（值可能是代理公司名）
+    if "业务员" not in fields and company_short == "中华联合":
         m = re.search(r"销售渠道名称[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]{1,20})", text)
         if m:
             val = m.group(1).strip()
