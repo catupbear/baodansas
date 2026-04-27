@@ -1226,6 +1226,7 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
         # "粤B-*新" / "粤B*新" 格式
         for p in [
             rf"(?:号\s*牌\s*号\s*码|号牌号码|车牌号码?)[：:\s]*([{PROVINCE_CHARS}][A-Z][-\s]*\*?\s*新)",
+            rf"(?:号\s*牌\s*号\s*码|号牌号码|车牌号码?)[：:\s]*([{PROVINCE_CHARS}][A-Z][-\s]*\*)",
         ]:
             m = re.search(p, plate_text)
             if not m:
