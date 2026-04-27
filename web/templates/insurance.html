@@ -1384,7 +1384,18 @@
                         <div class="px-3 py-2 bg-gray-50 border-b text-xs text-gray-500 font-medium flex-shrink-0">
                             列表信息（导出字段）
                         </div>
-                        <div class="flex-1 overflow-auto p-3">
+                        <!-- 识别中：加载进度 -->
+                        <div v-if="(previewAutoRecord && previewAutoRecord._reocring) || previewReocring"
+                             class="flex-1 flex flex-col items-center justify-center text-gray-400">
+                            <svg class="w-10 h-10 animate-spin text-orange-400 mb-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                            <span class="text-sm text-gray-500 font-medium">正在重新识别...</span>
+                            <span class="text-xs text-gray-400 mt-1">请稍候，识别完成后将自动显示结果</span>
+                        </div>
+                        <!-- 识别完成：字段列表 -->
+                        <div v-else class="flex-1 overflow-auto p-3">
                             <div v-for="item in previewFieldsList" :key="item.label"
                                  class="flex border-b border-gray-100 py-1.5 text-sm">
                                 <span class="text-gray-500 w-24 flex-shrink-0 font-medium">{{ item.label }}</span>
@@ -3067,12 +3078,15 @@ createApp({
         // 重新识别
         async function reocrRecord(record) {
             record._reocring = true;
+            // 识别中自动展开列表面板显示进度
+            previewShowFields.value = true;
+            previewShowRaw.value = false;
+            previewShowRules.value = false;
             try {
                 const resp = await fetch(`/api/insurance/reocr/${record.id}`, { method: 'POST' });
                 const data = await resp.json();
                 if (data.code === 0) {
-                    showMessage('重新识别完成，请预览确认后同步钉钉', true);
-                    // 用返回的新数据更新本地记录
+                    showMessage('重新识别完成，请确认后同步钉钉', true);
                     const updated = data.data;
                     Object.assign(record, {
                         ...updated,
@@ -3081,8 +3095,8 @@ createApp({
                             : (updated.parsed_fields || {}),
                         _retrying: false, _syncing: false, _reocring: false,
                     });
-                    // 自动打开预览
-                    previewRecord(record);
+                    // 刷新预览面板数据（保持列表面板打开）
+                    previewAutoRecord.value = record;
                 } else {
                     showMessage(data.msg || '重新识别失败', false);
                 }
@@ -3099,17 +3113,18 @@ createApp({
             const file = files.value.find(f => f.name === fileName);
             if (!file) { showMessage('未找到原始文件，无法重新识别', false); return; }
             previewReocring.value = true;
+            // 识别中自动展开列表面板显示进度
+            previewShowFields.value = true;
+            previewShowRaw.value = false;
+            previewShowRules.value = false;
             try {
                 const result = await recognizeFile(file);
                 // 更新 results 列表
                 const idx = results.value.findIndex(r => r.file_name === fileName);
                 if (idx >= 0) results.value.splice(idx, 1, result);
                 else results.value.push(result);
-                // 刷新预览面板数据
+                // 刷新预览面板数据（保持列表面板打开）
                 loadPreviewRawText(fileName);
-                previewShowFields.value = false;
-                previewShowRaw.value = false;
-                previewShowRules.value = false;
                 showMessage('重新识别完成', true);
             } catch (e) {
                 showMessage(`重新识别失败: ${e.message}`, false);
