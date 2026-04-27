@@ -604,14 +604,27 @@ class BaseRule:
                     fields["保费合计"] = val
                     break
 
-        # 紫金等格式：金额在"保险费合计"标签的上一行，与其他数字粘连
+        # 紫金等格式1：同行"小 写 ： C NY 30 .00"（OCR空格拆散）
+        # 去掉空格后重新匹配 CNY/￥ 后的金额
+        if "保费合计" not in fields:
+            lines = text.split('\n')
+            for i, line in enumerate(lines):
+                if re.search(r'保险?费合计', line):
+                    cleaned = re.sub(r'\s+', '', line)
+                    m = re.search(r'(?:小写|CNY|[￥¥])[：:]*(\d{1,10}\.\d{2})', cleaned)
+                    if m:
+                        val = m.group(1)
+                        if float(val) > 0:
+                            fields["保费合计"] = val
+                    break
+
+        # 紫金等格式2：金额在"保险费合计"标签的上一行，与其他数字粘连
         # "陆佰陆拾伍元整 665.000.00.00\n保险费合计（人民币大写）： （¥： 元）"
         if "保费合计" not in fields:
             lines = text.split('\n')
             for i, line in enumerate(lines):
                 if re.search(r'保险?费合计', line) and i > 0:
                     prev = lines[i - 1].strip()
-                    # 匹配"大写金额 数字金额"格式，提取第一个有效金额
                     m = re.search(r'(\d{1,10}\.\d{2})', prev)
                     if m:
                         val = m.group(1).replace(",", "")
