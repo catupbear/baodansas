@@ -356,6 +356,11 @@ def _identify_policy_type(text: str) -> Optional[str]:
     if m:
         return m.group(1)
 
+    # 众诚等格式："非车险保险单(电子保单)"
+    m = re.search(r"([\u4e00-\u9fff]+险)保险单", text[:500])
+    if m:
+        return m.group(1)
+
     return None
 
 
