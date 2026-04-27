@@ -1384,6 +1384,14 @@ def _extract_premium(text: str, fields: dict, company_short: str):
                 fields["保费合计"] = val
                 break
 
+    # 鼎和等格式：跨行"含税总保险费 人民币：贰佰陆拾\nCNY: 268.00 元"
+    if "保费合计" not in fields:
+        m = re.search(r"总保险费[\s\S]{0,50}?CNY[：:\s]*([\d,]+\.\d{2})", text)
+        if m:
+            val = m.group(1).replace(",", "")
+            if float(val) > 0:
+                fields["保费合计"] = val
+
     # 紫金等格式1：同行"小 写 ： C NY 30 .00"（OCR空格拆散）
     if "保费合计" not in fields:
         lines = text.split('\n')
