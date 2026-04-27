@@ -508,9 +508,10 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
 
     # 平安：经办为代理公司名时作为业务员（如"经办:维客保险代理有限公司"）
     if "业务员" not in fields and company_short == "平安":
-        m = re.search(r"经办[：:]\s*(\S+)", text)
+        m = re.search(r"经办[：:]\s*(.+?)(?:\s{2,}|$)", text, re.MULTILINE)
         if m:
-            val = m.group(1).strip()
+            # 合并OCR空格后取值
+            val = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', m.group(1).strip())
             if val and len(val) >= 2:
                 fields["业务员"] = val
 
