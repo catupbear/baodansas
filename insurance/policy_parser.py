@@ -1238,15 +1238,13 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
             if re.search(r"(?:号[1]?牌[1]?号[1]?码|车牌号码?)[：:\s]*\*[-\s]*\*", text):
                 fields["车牌号"] = "新车"
 
-    # 非车险等保单：车牌号码后只有省份简称（如"车牌号码:鄂"），OCR将剩余部分拆到附近行
-    # 在附近行中查找"字母-*"新车格式片段，拼合为完整车牌
-    if "车牌号" not in fields:
+    # 平安非车险保单：车牌号码后只有省份简称（如"车牌号码:鄂"），OCR将剩余部分拆到附近行
+    if "车牌号" not in fields and company_short == "平安":
         lines = text.split('\n')
         for i, line in enumerate(lines):
             m_prov = re.search(rf"车牌号码?[：:]\s*([{PROVINCE_CHARS}])\s*$", line)
             if m_prov:
                 prov = m_prov.group(1)
-                # 在后续几行中找"A-*"等新车片段（排除明显非车牌上下文）
                 for j in range(i + 1, min(len(lines), i + 5)):
                     m_rest = re.search(r'(?<!\w)([A-Z][-]?\*)', lines[j])
                     if m_rest:
