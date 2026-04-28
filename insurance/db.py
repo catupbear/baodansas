@@ -9,10 +9,53 @@ import logging
 import pymysql
 import pymysql.cursors
 
+from .field_mapping import apply_mapping
+
 logger = logging.getLogger(__name__)
 
 # JSON 字段列表，保存时自动序列化，读取时由调用方自行处理
-_JSON_FIELDS = {"parsed_fields", "mapped_fields"}
+_JSON_FIELDS = {"parsed_fields", "mapped_fields", "display_fields"}
+
+# ------------------------------------------------------------------ #
+# 保单字段关联表：OCR 字段名 → 数据库列名 映射
+# ------------------------------------------------------------------ #
+_OCR_TO_COLUMN = {
+    "保单号": "policy_no",
+    "保险公司": "company",
+    "保险公司简称": "company_short",
+    "险种类型": "policy_type",
+    "被保险人": "insured",
+    "投保人": "applicant",
+    "车主": "owner",
+    "证件号码": "id_number",
+    "车牌号": "plate_no",
+    "车架号VIN": "vin",
+    "发动机号": "engine_no",
+    "厂牌型号": "vehicle_model",
+    "核定载客": "passenger_cap",
+    "核定载质量": "load_cap",
+    "使用性质": "usage_type",
+    "机动车种类": "vehicle_type",
+    "初次登记日期": "first_reg_date",
+    "保费合计": "total_premium",
+    "不含税保费": "premium_no_tax",
+    "增值税额": "tax_amount",
+    "车船税": "vehicle_tax",
+    "保险期间": "insurance_period",
+    "保险起期": "start_date",
+    "保险止期": "end_date",
+    "签单日期": "sign_date",
+    "收费确认时间": "confirm_time",
+    "销售渠道": "sales_channel",
+    "中介机构": "agency",
+    "业务员": "salesperson",
+    "投保确认码": "confirm_code",
+    "争议解决方式": "dispute_resolution",
+    "制单人": "creator",
+    "经办人": "handler",
+}
+# 反向映射：列名 → OCR 字段名
+_COLUMN_TO_OCR = {v: k for k, v in _OCR_TO_COLUMN.items()}
 
 
 def init_insurance_tables(db):
@@ -62,6 +105,83 @@ def init_insurance_tables(db):
             )
         """)
 
+        # 保单字段关联表（拆 parsed_fields JSON 为独立列，方便联表查询）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS insurance_policy_fields (
+                id                 INT PRIMARY KEY AUTO_INCREMENT,
+                record_id          INT NOT NULL UNIQUE COMMENT '关联 insurance_records.id',
+                policy_no          VARCHAR(500) DEFAULT '' COMMENT '保单号',
+                company            VARCHAR(500) DEFAULT '' COMMENT '保险公司',
+                company_short      VARCHAR(500) DEFAULT '' COMMENT '保险公司简称',
+                policy_type        VARCHAR(500) DEFAULT '' COMMENT '险种类型',
+                insured            VARCHAR(500) DEFAULT '' COMMENT '被保险人',
+                applicant          VARCHAR(500) DEFAULT '' COMMENT '投保人',
+                owner              VARCHAR(500) DEFAULT '' COMMENT '车主',
+                id_number          VARCHAR(500) DEFAULT '' COMMENT '证件号码',
+                plate_no           VARCHAR(500) DEFAULT '' COMMENT '车牌号',
+                vin                VARCHAR(500) DEFAULT '' COMMENT '车架号VIN',
+                engine_no          VARCHAR(500) DEFAULT '' COMMENT '发动机号',
+                vehicle_model      VARCHAR(500) DEFAULT '' COMMENT '厂牌型号',
+                passenger_cap      VARCHAR(500) DEFAULT '' COMMENT '核定载客',
+                load_cap           VARCHAR(500) DEFAULT '' COMMENT '核定载质量',
+                usage_type         VARCHAR(500) DEFAULT '' COMMENT '使用性质',
+                vehicle_type       VARCHAR(500) DEFAULT '' COMMENT '机动车种类',
+                first_reg_date     VARCHAR(500) DEFAULT '' COMMENT '初次登记日期',
+                total_premium      VARCHAR(500) DEFAULT '' COMMENT '保费合计',
+                premium_no_tax     VARCHAR(500) DEFAULT '' COMMENT '不含税保费',
+                tax_amount         VARCHAR(500) DEFAULT '' COMMENT '增值税额',
+                vehicle_tax        VARCHAR(500) DEFAULT '' COMMENT '车船税',
+                insurance_period   VARCHAR(500) DEFAULT '' COMMENT '保险期间',
+                start_date         VARCHAR(500) DEFAULT '' COMMENT '保险起期',
+                end_date           VARCHAR(500) DEFAULT '' COMMENT '保险止期',
+                sign_date          VARCHAR(500) DEFAULT '' COMMENT '签单日期',
+                confirm_time       VARCHAR(500) DEFAULT '' COMMENT '收费确认时间',
+                sales_channel      VARCHAR(500) DEFAULT '' COMMENT '销售渠道',
+                agency             VARCHAR(500) DEFAULT '' COMMENT '中介机构',
+                salesperson        VARCHAR(500) DEFAULT '' COMMENT '业务员',
+                confirm_code       VARCHAR(500) DEFAULT '' COMMENT '投保确认码',
+                dispute_resolution VARCHAR(500) DEFAULT '' COMMENT '争议解决方式',
+                creator            VARCHAR(500) DEFAULT '' COMMENT '制单人',
+                handler            VARCHAR(500) DEFAULT '' COMMENT '经办人',
+                created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        """)
+        # 关联表索引（常用查询字段）
+        for idx_sql in [
+            "CREATE UNIQUE INDEX idx_pf_record_id ON insurance_policy_fields(record_id)",
+            "CREATE INDEX idx_pf_policy_no ON insurance_policy_fields(policy_no)",
+            "CREATE INDEX idx_pf_plate_no ON insurance_policy_fields(plate_no)",
+            "CREATE INDEX idx_pf_company_short ON insurance_policy_fields(company_short)",
+            "CREATE INDEX idx_pf_applicant ON insurance_policy_fields(applicant)",
+            "CREATE INDEX idx_pf_insured ON insurance_policy_fields(insured)",
+            "CREATE INDEX idx_pf_start_date ON insurance_policy_fields(start_date)",
+            "CREATE INDEX idx_pf_sign_date ON insurance_policy_fields(sign_date)",
+        ]:
+            try:
+                cursor.execute(idx_sql)
+            except Exception:
+                pass
+
+        # 关联表列宽统一修正为 VARCHAR(500)（已建表的情况下加宽，幂等）
+        _pf_text_cols = [
+            "policy_no", "company", "company_short", "policy_type",
+            "insured", "applicant", "owner", "id_number",
+            "plate_no", "vin", "engine_no", "vehicle_model",
+            "passenger_cap", "load_cap", "usage_type", "vehicle_type",
+            "first_reg_date", "total_premium", "premium_no_tax", "tax_amount",
+            "vehicle_tax", "insurance_period", "start_date", "end_date",
+            "sign_date", "confirm_time", "sales_channel", "agency",
+            "salesperson", "confirm_code", "dispute_resolution", "creator", "handler",
+        ]
+        for col in _pf_text_cols:
+            try:
+                cursor.execute(
+                    f"ALTER TABLE insurance_policy_fields MODIFY {col} VARCHAR(500) DEFAULT ''"
+                )
+            except Exception:
+                pass
+
         # 索引（忽略已存在的索引错误）
         for idx_sql in [
             "CREATE INDEX idx_insurance_roomid ON insurance_records(roomid)",
@@ -77,6 +197,9 @@ def init_insurance_tables(db):
         new_columns = [
             ("raw_text", "LONGTEXT COMMENT 'OCR提取原文'"),
             ("company_short", "VARCHAR(64) DEFAULT '' COMMENT '保险公司简称（冗余列，加速统计）'"),
+            ("is_abnormal", "TINYINT DEFAULT 0 COMMENT '是否提取异常（预计算，加速列表筛选）'"),
+            ("hint", "VARCHAR(64) DEFAULT '' COMMENT '提示信息（如：保单无投保人）'"),
+            ("display_fields", "TEXT COMMENT '映射后的展示字段JSON（列表轻量展示用）'"),
         ]
         for col_name, col_def in new_columns:
             try:
@@ -87,6 +210,7 @@ def init_insurance_tables(db):
         # 新增索引
         for idx_sql in [
             "CREATE INDEX idx_insurance_company_short ON insurance_records(company_short)",
+            "CREATE INDEX idx_insurance_is_abnormal ON insurance_records(is_abnormal)",
         ]:
             try:
                 cursor.execute(idx_sql)
@@ -108,10 +232,249 @@ def init_insurance_tables(db):
         except Exception:
             pass
 
+        # 回填 is_abnormal（仅对已完成且未计算过的记录）
+        try:
+            cursor.execute("""
+                SELECT id, parsed_fields, status, doc_category
+                FROM insurance_records
+                WHERE is_abnormal = 0
+                  AND status IN ('done', 'success')
+                  AND (doc_category IS NULL OR doc_category = '' OR doc_category = '保单')
+                  AND parsed_fields IS NOT NULL
+            """)
+            rows = cursor.fetchall()
+            updated = 0
+            for row in rows:
+                pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
+                try:
+                    pf = json.loads(pf_str) if isinstance(pf_str, str) else (pf_str or {})
+                except (TypeError, json.JSONDecodeError):
+                    pf = {}
+                abnormal, hint = _compute_abnormal(pf, row.get("status") if isinstance(row, dict) else row[2],
+                                                    row.get("doc_category") if isinstance(row, dict) else row[3])
+                if abnormal:
+                    rid = row.get("id") if isinstance(row, dict) else row[0]
+                    cursor.execute(
+                        "UPDATE insurance_records SET is_abnormal = 1, hint = %s WHERE id = %s",
+                        (hint, rid)
+                    )
+                    updated += 1
+            if updated:
+                logger.info("回填 is_abnormal %d 条", updated)
+        except Exception:
+            logger.exception("回填 is_abnormal 失败")
+
+        # 回填 display_fields（仅对有 parsed_fields 但无 display_fields 的记录）
+        try:
+            cursor.execute("""
+                SELECT id, parsed_fields, company_short
+                FROM insurance_records
+                WHERE parsed_fields IS NOT NULL
+                  AND (display_fields IS NULL OR display_fields = '')
+            """)
+            rows = cursor.fetchall()
+            backfilled = 0
+            for row in rows:
+                pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
+                cs = row.get("company_short") if isinstance(row, dict) else row[2]
+                try:
+                    pf = json.loads(pf_str) if isinstance(pf_str, str) else (pf_str or {})
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                df = apply_mapping(pf, cs or "")
+                rid = row.get("id") if isinstance(row, dict) else row[0]
+                cursor.execute(
+                    "UPDATE insurance_records SET display_fields = %s WHERE id = %s",
+                    (json.dumps(df, ensure_ascii=False), rid)
+                )
+                backfilled += 1
+            if backfilled:
+                logger.info("回填 display_fields %d 条", backfilled)
+        except Exception:
+            logger.exception("回填 display_fields 失败")
+
+        # 回填 insurance_policy_fields（仅对有 parsed_fields 但无关联记录的）
+        try:
+            cursor.execute("""
+                SELECT r.id, r.parsed_fields
+                FROM insurance_records r
+                LEFT JOIN insurance_policy_fields pf ON pf.record_id = r.id
+                WHERE r.parsed_fields IS NOT NULL
+                  AND r.parsed_fields != ''
+                  AND pf.id IS NULL
+            """)
+            rows = cursor.fetchall()
+            backfilled_pf = 0
+            for row in rows:
+                pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
+                try:
+                    pf = json.loads(pf_str) if isinstance(pf_str, str) else (pf_str or {})
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                rid = row.get("id") if isinstance(row, dict) else row[0]
+                try:
+                    _insert_policy_fields(cursor, rid, pf)
+                    backfilled_pf += 1
+                except Exception as e:
+                    logger.warning("回填 policy_fields 失败, record_id=%s: %s", rid, e)
+            if backfilled_pf:
+                logger.info("回填 insurance_policy_fields %d 条", backfilled_pf)
+        except Exception:
+            logger.exception("回填 insurance_policy_fields 失败")
+
         conn.commit()
         logger.info("保单识别数据库表初始化完成")
     finally:
         conn.close()
+
+
+# ------------------------------------------------------------------ #
+# 关联表操作（内部函数，由 save/update_insurance_record 自动调用）
+# ------------------------------------------------------------------ #
+
+def _parsed_fields_to_row(parsed_fields: dict) -> dict:
+    """将 OCR parsed_fields 字典转为关联表的列名-值字典"""
+    row = {}
+    for ocr_key, col_name in _OCR_TO_COLUMN.items():
+        val = parsed_fields.get(ocr_key, "")
+        if val:
+            row[col_name] = str(val)[:500]  # 截断防溢出
+    return row
+
+
+def _insert_policy_fields(cursor, record_id: int, parsed_fields: dict):
+    """向关联表插入一条记录（内部使用，需外部传入 cursor）"""
+    row = _parsed_fields_to_row(parsed_fields)
+    if not row:
+        return
+    row["record_id"] = record_id
+    columns = ", ".join(row.keys())
+    placeholders = ", ".join(["%s"] * len(row))
+    cursor.execute(
+        f"INSERT INTO insurance_policy_fields ({columns}) VALUES ({placeholders})",
+        list(row.values())
+    )
+
+
+def _upsert_policy_fields(cursor, record_id: int, parsed_fields: dict):
+    """向关联表插入或更新一条记录（内部使用，需外部传入 cursor）"""
+    row = _parsed_fields_to_row(parsed_fields)
+    if not row:
+        return
+    # 检查是否已存在
+    cursor.execute(
+        "SELECT id FROM insurance_policy_fields WHERE record_id = %s",
+        (record_id,)
+    )
+    existing = cursor.fetchone()
+    if existing:
+        # 更新
+        set_clause = ", ".join([f"{k} = %s" for k in row.keys()])
+        values = list(row.values()) + [record_id]
+        cursor.execute(
+            f"UPDATE insurance_policy_fields SET {set_clause} WHERE record_id = %s",
+            values
+        )
+    else:
+        # 插入
+        row["record_id"] = record_id
+        columns = ", ".join(row.keys())
+        placeholders = ", ".join(["%s"] * len(row))
+        cursor.execute(
+            f"INSERT INTO insurance_policy_fields ({columns}) VALUES ({placeholders})",
+            list(row.values())
+        )
+
+
+def sync_policy_fields(db, record_id: int, parsed_fields: dict):
+    """
+    公开方法：同步关联表（外部调用用，如手动重新识别场景）。
+    parsed_fields 为 dict 类型。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        _upsert_policy_fields(cursor, record_id, parsed_fields)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def query_policy_fields(db, record_id: int) -> dict:
+    """查询单条关联表记录，返回 OCR 字段名为 key 的字典"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT * FROM insurance_policy_fields WHERE record_id = %s",
+            (record_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return {}
+        # 列名转回 OCR 字段名
+        result = {}
+        for col_name, ocr_key in _COLUMN_TO_OCR.items():
+            val = row.get(col_name, "")
+            if val:
+                result[ocr_key] = val
+        return result
+    finally:
+        conn.close()
+
+
+# 异常检测必检字段（与前端 REQUIRED_FIELDS 保持一致）
+_REQUIRED_FIELDS = ['承保公司', '保单号', '险种', '车牌', '投保人', '被保人', '签单日期', '起保日期', '终保日期', '保费']
+# 导出列名 → OCR 字段名的反向映射
+_EXPORT_TO_OCR = {
+    '承保公司': ['保险公司', '保险公司简称'],
+    '保单号': ['保单号'],
+    '险种': ['险种类型'],
+    '车牌': ['车牌号'],
+    '投保人': ['投保人'],
+    '被保人': ['被保险人'],
+    '签单日期': ['签单日期'],
+    '起保日期': ['保险起期'],
+    '终保日期': ['保险止期'],
+    '保费': ['保费合计'],
+}
+
+
+def _compute_abnormal(parsed_fields: dict, status: str, doc_category: str) -> tuple:
+    """
+    计算记录是否异常，返回 (is_abnormal: bool, hint: str)。
+    逻辑与前端 isRecordAbnormal / getRecordHint 保持一致。
+    """
+    if status not in ('done', 'success'):
+        return False, ''
+    cat = doc_category or ''
+    if cat and cat != '保单':
+        return False, ''
+    fields = parsed_fields or {}
+
+    missing = []
+    for col in _REQUIRED_FIELDS:
+        if fields.get(col):
+            continue
+        ocr_keys = _EXPORT_TO_OCR.get(col, [])
+        if any(fields.get(k) for k in ocr_keys):
+            continue
+        missing.append(col)
+
+    # 交强险仅缺投保人不算异常，但给提示
+    policy_type = fields.get('险种类型', '')
+    is_compulsory = '交强' in policy_type or '交通事故责任强制' in policy_type
+    if is_compulsory and not fields.get('投保人'):
+        hint = '保单无投保人'
+    else:
+        hint = ''
+
+    if not missing:
+        return False, hint
+    if is_compulsory and len(missing) == 1 and missing[0] == '投保人':
+        return False, hint
+
+    return True, hint
 
 
 def _extract_company_short(data: dict) -> str:
@@ -141,6 +504,25 @@ def save_insurance_record(db, record: dict) -> int:
         if cs:
             data["company_short"] = cs
 
+    # 自动计算 is_abnormal 和 hint
+    pf = data.get("parsed_fields")
+    if isinstance(pf, str):
+        try:
+            pf = json.loads(pf)
+        except (TypeError, json.JSONDecodeError):
+            pf = {}
+    abnormal, hint = _compute_abnormal(
+        pf if isinstance(pf, dict) else {},
+        data.get("status", "pending"),
+        data.get("doc_category", ""),
+    )
+    data["is_abnormal"] = 1 if abnormal else 0
+    data["hint"] = hint
+
+    # 自动计算 display_fields（映射后的展示字段）
+    if isinstance(pf, dict) and pf:
+        data["display_fields"] = apply_mapping(pf, data.get("company_short", ""))
+
     for field in _JSON_FIELDS:
         if field in data and not isinstance(data[field], str):
             data[field] = json.dumps(data[field], ensure_ascii=False)
@@ -161,8 +543,16 @@ def save_insurance_record(db, record: dict) -> int:
             f"INSERT INTO insurance_records ({columns}) VALUES ({placeholders})",
             values
         )
-        conn.commit()
         record_id = cursor.lastrowid
+
+        # 同步关联表（有 parsed_fields 时）
+        if isinstance(pf, dict) and pf:
+            try:
+                _insert_policy_fields(cursor, record_id, pf)
+            except Exception as e:
+                logger.warning("同步关联表失败(insert), record_id=%d: %s", record_id, e)
+
+        conn.commit()
         logger.debug("保单记录已插入, id=%d", record_id)
         return record_id
     finally:
@@ -182,11 +572,23 @@ def update_insurance_record(db, record_id: int, updates: dict):
         else:
             data[k] = v
 
-    # 如果更新了 parsed_fields，同步更新 company_short
+    # 如果更新了 parsed_fields，同步更新 company_short 和 display_fields
     if "parsed_fields" in updates and "company_short" not in updates:
         cs = _extract_company_short(updates)
         if cs:
             data["company_short"] = cs
+    if "parsed_fields" in updates:
+        pf_raw = updates["parsed_fields"]
+        if isinstance(pf_raw, str):
+            try:
+                pf_raw = json.loads(pf_raw)
+            except (TypeError, json.JSONDecodeError):
+                pf_raw = {}
+        if isinstance(pf_raw, dict) and pf_raw:
+            cs = data.get("company_short") or _extract_company_short(updates)
+            data["display_fields"] = json.dumps(
+                apply_mapping(pf_raw, cs or ""), ensure_ascii=False
+            )
 
     # MySQL 的 ON UPDATE CURRENT_TIMESTAMP 会自动更新 updated_at，无需手动传入
     set_clause = ", ".join([f"{k} = %s" for k in data.keys()])
@@ -195,10 +597,49 @@ def update_insurance_record(db, record_id: int, updates: dict):
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        # 如果更新了影响异常判断的字段，需先读取现有值补全上下文
+        if any(k in updates for k in ("parsed_fields", "status", "doc_category")):
+            cursor.execute(
+                "SELECT parsed_fields, status, doc_category FROM insurance_records WHERE id = %s",
+                (record_id,)
+            )
+            existing = cursor.fetchone() or {}
+            pf_raw = updates.get("parsed_fields", existing.get("parsed_fields", ""))
+            if isinstance(pf_raw, str):
+                try:
+                    pf_raw = json.loads(pf_raw)
+                except (TypeError, json.JSONDecodeError):
+                    pf_raw = {}
+            abnormal, hint = _compute_abnormal(
+                pf_raw if isinstance(pf_raw, dict) else {},
+                updates.get("status") or existing.get("status", ""),
+                updates.get("doc_category") or existing.get("doc_category", ""),
+            )
+            data["is_abnormal"] = 1 if abnormal else 0
+            data["hint"] = hint
+            set_clause = ", ".join([f"{k} = %s" for k in data.keys()])
+            values = list(data.values()) + [record_id]
+
         cursor.execute(
             f"UPDATE insurance_records SET {set_clause} WHERE id = %s",
             values
         )
+
+        # 同步关联表（parsed_fields 有更新时）
+        if "parsed_fields" in updates:
+            pf_sync = updates["parsed_fields"]
+            if isinstance(pf_sync, str):
+                try:
+                    pf_sync = json.loads(pf_sync)
+                except (TypeError, json.JSONDecodeError):
+                    pf_sync = {}
+            if isinstance(pf_sync, dict) and pf_sync:
+                try:
+                    _upsert_policy_fields(cursor, record_id, pf_sync)
+                except Exception as e:
+                    logger.warning("同步关联表失败(update), record_id=%d: %s", record_id, e)
+
         conn.commit()
         logger.debug("保单记录已更新, id=%d, 字段=%s", record_id, list(updates.keys()))
     finally:
@@ -252,6 +693,10 @@ def query_insurance_records(
     sender: str = "",
     ocr_engine: str = "",
     doc_category: str = "",
+    is_abnormal: str = "",
+    company_short: str = "",
+    date_start: str = "",
+    date_end: str = "",
 ) -> dict:
     """
     分页查询保单识别记录，支持按群、状态、关键词、来源、识别方式、文档类型筛选。
@@ -295,8 +740,26 @@ def query_insurance_records(
         conditions.append("ocr_engine = %s")
         params.append(ocr_engine)
     if doc_category:
-        conditions.append("doc_category = %s")
-        params.append(doc_category)
+        if doc_category.startswith("!"):
+            # 排除模式，如 !保单 表示排除保单
+            conditions.append("doc_category != %s AND doc_category != ''")
+            params.append(doc_category[1:])
+        else:
+            conditions.append("doc_category = %s")
+            params.append(doc_category)
+    if is_abnormal == "1":
+        conditions.append("is_abnormal = 1")
+    elif is_abnormal == "0":
+        conditions.append("is_abnormal = 0")
+    if company_short:
+        conditions.append("company_short = %s")
+        params.append(company_short)
+    if date_start:
+        conditions.append("created_at >= %s")
+        params.append(date_start)
+    if date_end:
+        conditions.append("created_at < %s")
+        params.append(date_end)
 
     where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
@@ -323,11 +786,12 @@ def query_insurance_records(
         if id_rows:
             ids = [r["id"] for r in id_rows]
             placeholders = ",".join(["%s"] * len(ids))
+            # 列表只返回轻量字段，parsed_fields 等大字段移到详情接口
             select_cols = (
-                "id, msg_seq, roomid, room_name, sender, sender_name, "
-                "filename, filesize, cos_url, ocr_engine, doc_category, confidence, "
-                "parsed_fields, dingtalk_synced, dingtalk_target_id, "
-                "status, source, created_at, updated_at"
+                "id, roomid, room_name, sender, sender_name, "
+                "filename, cos_url, ocr_engine, doc_category, confidence, "
+                "dingtalk_synced, status, source, created_at, "
+                "company_short, is_abnormal, hint, display_fields"
             )
             cursor.execute(
                 f"SELECT {select_cols} FROM insurance_records "
@@ -499,59 +963,94 @@ def get_company_stats(db) -> list:
         conn.close()
 
 
-def get_insurance_stats(db) -> dict:
+def get_insurance_stats(db, filters: dict = None) -> dict:
     """
-    获取保单识别统计信息。
-    返回:
-        {
-            "total": 总记录数,
-            "status_stats": [{"status": ..., "cnt": ...}, ...],
-            "room_stats":   [{"roomid": ..., "room_name": ..., "cnt": ...}, ...]
-        }
+    获取保单识别统计信息，支持筛选条件。
+    filters 支持: roomid, source_type, sender, keyword, company_short,
+                   ocr_engine, date_start, date_end
     """
+    filters = filters or {}
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        # 单次全表扫描，同时统计状态和引擎（避免多次扫描 LONGTEXT 表）
-        cursor.execute("""
+        # 构建 WHERE 条件
+        where_parts = []
+        params = []
+        if filters.get("roomid"):
+            where_parts.append("roomid = %s")
+            params.append(filters["roomid"])
+        if filters.get("source_type") == "user":
+            where_parts.append("(roomid IS NULL OR roomid = '')")
+        elif filters.get("source_type") == "room":
+            where_parts.append("roomid IS NOT NULL AND roomid != ''")
+        if filters.get("sender"):
+            where_parts.append("sender = %s")
+            params.append(filters["sender"])
+        if filters.get("keyword"):
+            kw = f"%{filters['keyword']}%"
+            where_parts.append("(policy_number LIKE %s OR company_short LIKE %s OR filename LIKE %s)")
+            params.extend([kw, kw, kw])
+        if filters.get("company_short"):
+            where_parts.append("company_short = %s")
+            params.append(filters["company_short"])
+        if filters.get("ocr_engine"):
+            where_parts.append("ocr_engine = %s")
+            params.append(filters["ocr_engine"])
+        if filters.get("date_start"):
+            where_parts.append("created_at >= %s")
+            params.append(filters["date_start"] + " 00:00:00")
+        if filters.get("date_end"):
+            where_parts.append("created_at <= %s")
+            params.append(filters["date_end"] + " 23:59:59")
+
+        where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
+
+        # 单次扫描统计
+        cursor.execute(f"""
             SELECT
                 COUNT(*) as total,
                 SUM(status = 'done' OR status = 'success') as done_cnt,
                 SUM(status = 'failed') as failed_cnt,
                 SUM(status = 'pending') as pending_cnt,
-                SUM(status = 'processing') as processing_cnt
-            FROM insurance_records
-        """)
+                SUM(status = 'processing') as processing_cnt,
+                SUM((status = 'done' OR status = 'success') AND is_abnormal = 1) as abnormal_cnt,
+                SUM((status = 'done' OR status = 'success') AND doc_category != '' AND doc_category != '保单') as nonpolicy_cnt
+            FROM insurance_records{where_sql}
+        """, params)
         summary = cursor.fetchone()
         total = summary["total"] or 0
 
-        # 按状态统计（从汇总结果构造，不再单独查询）
         status_stats = []
         for s, c in [("done", summary["done_cnt"]), ("failed", summary["failed_cnt"]),
                       ("pending", summary["pending_cnt"]), ("processing", summary["processing_cnt"])]:
             if c:
                 status_stats.append({"status": s, "cnt": int(c)})
 
-        # 按识别方式统计（轻量查询，ocr_engine 是 VARCHAR(32)）
+        # 按识别方式统计
         cursor.execute(
-            "SELECT ocr_engine, COUNT(*) as cnt "
-            "FROM insurance_records GROUP BY ocr_engine ORDER BY cnt DESC"
+            f"SELECT ocr_engine, COUNT(*) as cnt "
+            f"FROM insurance_records{where_sql} GROUP BY ocr_engine ORDER BY cnt DESC",
+            params
         )
         engine_stats = list(cursor.fetchall())
 
-        # 按群统计（轻量查询，只用索引列）
-        cursor.execute(
-            "SELECT roomid, MAX(room_name) as room_name, COUNT(*) as cnt "
-            "FROM insurance_records GROUP BY roomid ORDER BY cnt DESC LIMIT 20"
-        )
-        room_stats = list(cursor.fetchall())
+        # 按群统计（仅无筛选时返回，有筛选时不需要）
+        room_stats = []
+        if not filters:
+            cursor.execute(
+                "SELECT roomid, MAX(room_name) as room_name, COUNT(*) as cnt "
+                "FROM insurance_records GROUP BY roomid ORDER BY cnt DESC LIMIT 20"
+            )
+            room_stats = list(cursor.fetchall())
 
         return {
             "total": total,
             "status_stats": status_stats,
             "room_stats": room_stats,
             "engine_stats": engine_stats,
+            "abnormal_cnt": int(summary["abnormal_cnt"] or 0),
+            "nonpolicy_cnt": int(summary["nonpolicy_cnt"] or 0),
         }
     finally:
         conn.close()

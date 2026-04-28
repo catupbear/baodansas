@@ -85,6 +85,10 @@ def list_records():
     sender = request.args.get("sender", "")
     ocr_engine = request.args.get("ocr_engine", "")
     doc_category = request.args.get("doc_category", "")
+    is_abnormal = request.args.get("is_abnormal", "")
+    company_short = request.args.get("company_short", "")
+    date_start = request.args.get("date_start", "")
+    date_end = request.args.get("date_end", "")
 
     try:
         result = query_insurance_records(
@@ -99,17 +103,21 @@ def list_records():
             sender=sender,
             ocr_engine=ocr_engine,
             doc_category=doc_category,
+            is_abnormal=is_abnormal,
+            company_short=company_short,
+            date_start=date_start,
+            date_end=date_end,
         )
-        # JSON 字段自动反序列化，避免前端收到字符串
+        # 列表返回 display_fields（轻量映射字段）替代 parsed_fields
         for record in result.get("records", []):
-            for field in ("parsed_fields",):
-                if isinstance(record.get(field), str):
-                    try:
-                        record[field] = json.loads(record[field])
-                    except (TypeError, json.JSONDecodeError):
-                        pass
+            # 反序列化 display_fields
+            if isinstance(record.get("display_fields"), str):
+                try:
+                    record["display_fields"] = json.loads(record["display_fields"])
+                except (TypeError, json.JSONDecodeError):
+                    record["display_fields"] = {}
             # 时间戳转字符串
-            for ts_field in ("created_at", "updated_at"):
+            for ts_field in ("created_at",):
                 if record.get(ts_field) and not isinstance(record[ts_field], str):
                     record[ts_field] = str(record[ts_field])
 
@@ -236,9 +244,15 @@ def get_record_raw_text(record_id):
 
 @insurance_bp.route("/api/insurance/stats", methods=["GET"])
 def get_stats():
-    """获取保单识别统计信息"""
+    """获取保单识别统计信息，支持与列表相同的筛选参数"""
     try:
-        stats = get_insurance_stats(_db)
+        filters = {}
+        for key in ("roomid", "source_type", "sender", "keyword",
+                     "company_short", "ocr_engine", "date_start", "date_end"):
+            val = request.args.get(key, "").strip()
+            if val:
+                filters[key] = val
+        stats = get_insurance_stats(_db, filters=filters if filters else None)
         return jsonify({"code": 0, "data": stats})
     except Exception as e:
         logger.exception("获取保单统计失败")

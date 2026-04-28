@@ -85,6 +85,62 @@
         .btn-secondary:hover { background: #e3e5e8; }
         .btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
 
+        /* 联系人编辑弹窗 */
+        .contact-modal-mask {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: rgba(0,0,0,0.4);
+            justify-content: center;
+            align-items: center;
+        }
+        .contact-modal-mask.show { display: flex; }
+        .contact-modal {
+            background: #fff;
+            border-radius: 12px;
+            width: 380px;
+            max-width: 90vw;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        .contact-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .contact-modal-header h3 { font-size: 15px; font-weight: 600; color: #1a1a1a; }
+        .contact-modal-close {
+            background: none; border: none; font-size: 20px; color: #999;
+            cursor: pointer; line-height: 1; padding: 0 4px;
+        }
+        .contact-modal-close:hover { color: #333; }
+        .contact-modal-body { padding: 20px; }
+        .contact-form-group { margin-bottom: 14px; }
+        .contact-form-group label {
+            display: block; font-size: 12px; font-weight: 600;
+            color: #666; margin-bottom: 4px;
+        }
+        .contact-form-group input, .contact-form-group select {
+            width: 100%; height: 36px; padding: 0 10px;
+            border: 1px solid #d0d0d0; border-radius: 6px;
+            font-size: 13px; outline: none;
+            transition: border-color 0.2s;
+        }
+        .contact-form-group input:focus, .contact-form-group select:focus {
+            border-color: #1a73e8;
+        }
+        .contact-form-group input[readonly] { background: #f5f5f5; color: #888; }
+        .contact-modal-footer {
+            display: flex; justify-content: flex-end; gap: 8px;
+            padding: 12px 20px; border-top: 1px solid #e0e0e0;
+        }
+
+        /* 头像可点击 */
+        .conv-avatar, .msg-avatar { cursor: pointer; position: relative; }
+        .conv-avatar:hover, .msg-avatar:hover { opacity: 0.8; }
+
         .auto-refresh-label {
             display: flex;
             align-items: center;
@@ -701,6 +757,37 @@
     </div>
 </div>
 
+<!-- 联系人编辑弹窗 -->
+<div class="contact-modal-mask" id="contactModal" onclick="closeContactModal(event)">
+    <div class="contact-modal" onclick="event.stopPropagation()">
+        <div class="contact-modal-header">
+            <h3 id="contactModalTitle">编辑联系人</h3>
+            <button class="contact-modal-close" onclick="closeContactModal()">&times;</button>
+        </div>
+        <div class="contact-modal-body">
+            <div class="contact-form-group">
+                <label>ID</label>
+                <input type="text" id="contactEditId" readonly>
+            </div>
+            <div class="contact-form-group">
+                <label>类型</label>
+                <select id="contactEditType">
+                    <option value="user">用户</option>
+                    <option value="room">群聊</option>
+                </select>
+            </div>
+            <div class="contact-form-group">
+                <label>名称</label>
+                <input type="text" id="contactEditName" placeholder="输入名称...">
+            </div>
+        </div>
+        <div class="contact-modal-footer">
+            <button class="btn btn-secondary" onclick="closeContactModal()">取消</button>
+            <button class="btn btn-primary" id="contactSaveBtn" onclick="saveContact()">保存</button>
+        </div>
+    </div>
+</div>
+
 <!-- 图片预览灯箱 -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox(event)">
     <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
@@ -830,8 +917,10 @@ function renderConversations() {
         const prefix = isGroup && lastSender ? `${lastSender}: ` : "";
         const isPrivate = !isGroup && conv.conversation_id.startsWith("private_");
         const avatarLabel = isGroup ? '群' : (isPrivate ? '私' : getInitial(name));
+        const contactId = isGroup ? conv.roomid : (conv.peer_ids && conv.peer_ids[0] || conv.conversation_id);
+        const contactType = isGroup ? 'room' : 'user';
         return `<div class="conv-item ${isActive ? 'active' : ''}" onclick="selectConv('${conv.conversation_id}', '${conv.roomid || ''}', '${escapeHtml(name)}')">
-            <div class="conv-avatar" style="background:${color}">${avatarLabel}</div>
+            <div class="conv-avatar" style="background:${color}" onclick="event.stopPropagation(); openContactModal('${contactId}', '${escapeHtml(name)}', '${contactType}')" title="点击编辑名称">${avatarLabel}</div>
             <div class="conv-info">
                 <div class="conv-info-top">
                     <div class="conv-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
@@ -976,7 +1065,7 @@ function renderChat(scrollToBottom) {
             </div>`;
         } else {
             html += `<div class="msg-item">
-                <div class="msg-avatar" style="background:${color}">${getInitial(senderName)}</div>
+                <div class="msg-avatar" style="background:${color}" onclick="openContactModal('${msg.sender}', '${escapeHtml(senderName)}', 'user')" title="点击编辑名称">${getInitial(senderName)}</div>
                 <div class="msg-body">
                     <div class="msg-header">
                         <span class="msg-sender-name" style="color:${color}">${escapeHtml(senderName)}</span>${toTag}
@@ -1133,6 +1222,57 @@ function debounceSearchConv() {
         const kw = document.getElementById("convSearch").value.trim();
         loadConversations(kw);
     }, 300);
+}
+
+// ===== 联系人编辑 =====
+function openContactModal(contactId, currentName, type) {
+    document.getElementById("contactEditId").value = contactId;
+    document.getElementById("contactEditName").value = currentName === contactId ? "" : currentName;
+    document.getElementById("contactEditType").value = type;
+    document.getElementById("contactModalTitle").textContent =
+        type === "room" ? "编辑群信息" : "编辑联系人";
+    document.getElementById("contactModal").classList.add("show");
+    const nameInput = document.getElementById("contactEditName");
+    nameInput.focus();
+    nameInput.onkeydown = (e) => { if (e.key === "Enter") saveContact(); };
+}
+
+function closeContactModal(e) {
+    if (e && e.target !== e.currentTarget) return;
+    document.getElementById("contactModal").classList.remove("show");
+}
+
+async function saveContact() {
+    const id = document.getElementById("contactEditId").value;
+    const name = document.getElementById("contactEditName").value.trim();
+    const type = document.getElementById("contactEditType").value;
+
+    if (!name) { alert("请输入名称"); return; }
+
+    const btn = document.getElementById("contactSaveBtn");
+    btn.disabled = true;
+    btn.textContent = "保存中...";
+
+    try {
+        const res = await fetch("/api/contacts/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, name, type }),
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            closeContactModal();
+            // 刷新会话列表和当前聊天以显示新名称
+            loadConversations();
+            if (currentConv) loadChatMessages(true);
+        } else {
+            alert(data.error || "保存失败");
+        }
+    } catch(e) {
+        alert("保存失败: " + e.message);
+    }
+    btn.disabled = false;
+    btn.textContent = "保存";
 }
 
 // ===== 同步通讯录 =====

@@ -70,6 +70,7 @@ def create_app(config: dict) -> Flask:
                 region=cos_config["region"],
                 bucket=cos_config["bucket"],
                 prefix=cos_config.get("prefix", "wxbot/media/"),
+                cdn_domain=cos_config.get("cdn_domain", ""),
             )
         except Exception as e:
             logger.warning("COS初始化失败（%s），媒体文件将保存到本地", e)

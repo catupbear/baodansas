@@ -90,8 +90,9 @@ class InsuranceHandler:
             secret_key = cfg.get("secret_key", "") if isinstance(cfg, dict) else ""
 
             if api_key and secret_key:
-                self._baidu_ocr = BaiduOCR(api_key, secret_key)
-                logger.info("百度 OCR 客户端初始化成功")
+                accuracy = cfg.get("accuracy", "accurate") if isinstance(cfg, dict) else "accurate"
+                self._baidu_ocr = BaiduOCR(api_key, secret_key, accuracy=accuracy)
+                logger.info("百度 OCR 客户端初始化成功（精度: %s）", accuracy)
             else:
                 self._baidu_ocr = None
                 logger.warning("百度 OCR 未配置 api_key / secret_key，降级功能不可用")

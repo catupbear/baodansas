@@ -846,10 +846,10 @@
                 <span class="text-xs text-gray-500 font-medium whitespace-nowrap">日期:</span>
                 <button v-for="s in dateShortcuts" :key="s.key"
                         @click="setDateShortcut(s.key)"
-                        class="text-xs px-2.5 py-1 rounded-full border transition-colors cursor-pointer"
-                        :class="recordFilter.date_shortcut === s.key
-                            ? 'bg-orange-50 border-orange-300 text-orange-600 font-medium'
-                            : 'border-gray-200 text-gray-500 hover:border-orange-200 hover:text-orange-500'">
+                        class="text-xs px-2.5 py-1 rounded-full transition-colors cursor-pointer"
+                        :style="recordFilter.date_shortcut === s.key
+                            ? 'background:#fff7ed;border:1px solid #fb923c;color:#ea580c;font-weight:500;'
+                            : 'background:white;border:1px solid #e5e7eb;color:#6b7280;'"
                     {{ s.label }}
                 </button>
                 <!-- 自定义日期区间 -->
@@ -991,7 +991,7 @@
                     </thead>
                     <tbody>
                         <!-- 数据行 -->
-                        <tr v-else v-for="record in filteredRecords" :key="record.id">
+                        <tr v-for="record in filteredRecords" :key="record.id">
                             <!-- 选择框 -->
                             <td>
                                 <input type="checkbox" :value="record.id" v-model="selectedRecordIds" class="cursor-pointer">
@@ -3063,9 +3063,29 @@ createApp({
             abnormal: 0,
             nonpolicy: 0,
         });
+        function buildStatsFilterParams() {
+            const params = new URLSearchParams();
+            if (recordFilter.source_type === 'user') {
+                params.set('source_type', 'user');
+                if (recordFilter.userid) params.set('sender', recordFilter.userid);
+            } else if (recordFilter.source_type === 'room') {
+                params.set('source_type', 'room');
+                if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
+            } else {
+                if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
+            }
+            if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
+            if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
+            if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
+            if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
+            if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+            return params;
+        }
         async function loadRecordStats() {
             try {
-                const resp = await fetch('/api/insurance/stats');
+                const params = buildStatsFilterParams();
+                const qs = params.toString();
+                const resp = await fetch('/api/insurance/stats' + (qs ? '?' + qs : ''));
                 const json = await resp.json();
                 const data = json.data || json;
                 const statusMap = {};
@@ -3447,6 +3467,8 @@ createApp({
             } finally {
                 isLoadingRecords.value = false;
             }
+            // 同步刷新统计数量（与筛选条件一致）
+            loadRecordStats();
         }
 
         // 跳转分页

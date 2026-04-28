@@ -15,10 +15,13 @@ logger = logging.getLogger(__name__)
 class CosStorage:
     """腾讯云COS存储"""
 
-    def __init__(self, secret_id: str, secret_key: str, region: str, bucket: str, prefix: str = "wxbot/media/"):
+    def __init__(self, secret_id: str, secret_key: str, region: str, bucket: str,
+                 prefix: str = "wxbot/media/", cdn_domain: str = ""):
         self.bucket = bucket
         self.prefix = prefix
         self.region = region
+        # CDN 域名（如 wxbotcdn.wuhuxiche.com），为空时使用默认 COS 域名
+        self.cdn_domain = cdn_domain.rstrip("/") if cdn_domain else ""
 
         config = CosConfig(
             Region=region,
@@ -26,7 +29,14 @@ class CosStorage:
             SecretKey=secret_key,
         )
         self.client = CosS3Client(config)
-        logger.info("COS初始化完成: %s/%s", bucket, prefix)
+        cdn_info = f", cdn={self.cdn_domain}" if self.cdn_domain else ""
+        logger.info("COS初始化完成: %s/%s%s", bucket, prefix, cdn_info)
+
+    def _make_url(self, cos_key: str) -> str:
+        """根据是否配置 CDN 域名生成访问 URL"""
+        if self.cdn_domain:
+            return f"https://{self.cdn_domain}/{cos_key}"
+        return f"https://{self.bucket}.cos.{self.region}.myqcloud.com/{cos_key}"
 
     def upload_file(self, local_path: str, filename: str) -> str:
         """
@@ -43,7 +53,7 @@ class CosStorage:
                 Key=cos_key,
                 LocalFilePath=local_path,
             )
-            url = f"https://{self.bucket}.cos.{self.region}.myqcloud.com/{cos_key}"
+            url = self._make_url(cos_key)
             logger.info("上传COS成功: %s", url)
             return url
         except Exception as e:
@@ -65,7 +75,7 @@ class CosStorage:
                 Key=cos_key,
                 Body=data,
             )
-            url = f"https://{self.bucket}.cos.{self.region}.myqcloud.com/{cos_key}"
+            url = self._make_url(cos_key)
             logger.info("上传COS成功(bytes): %s", url)
             return url
         except Exception as e:
@@ -75,7 +85,7 @@ class CosStorage:
     def get_url(self, filename: str) -> str:
         """获取文件的COS URL"""
         cos_key = f"{self.prefix}{filename}"
-        return f"https://{self.bucket}.cos.{self.region}.myqcloud.com/{cos_key}"
+        return self._make_url(cos_key)
 
     def file_exists(self, filename: str) -> bool:
         """检查文件是否已存在于COS"""

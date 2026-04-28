@@ -26,14 +26,21 @@ def _is_clause_page(text: str) -> bool:
 
 
 class BaiduOCR:
-    """百度OCR客户端"""
+    """百度OCR客户端，支持高精度版和标准版切换"""
 
     TOKEN_URL = "https://aip.baidubce.com/oauth/2.0/token"
-    OCR_URL = "https://aip.baidubce.com/rest/2.0/ocr/v1/accurate_basic"
+    # 高精度版（accurate）和标准版（standard）的 API 地址
+    OCR_URLS = {
+        "accurate": "https://aip.baidubce.com/rest/2.0/ocr/v1/accurate_basic",
+        "standard": "https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic",
+    }
 
-    def __init__(self, api_key: str, secret_key: str):
+    def __init__(self, api_key: str, secret_key: str, accuracy: str = "accurate"):
         self.api_key = api_key
         self.secret_key = secret_key
+        # 兼容旧配置：无 accuracy 参数时默认高精度版
+        self.accuracy = accuracy if accuracy in self.OCR_URLS else "accurate"
+        self.ocr_url = self.OCR_URLS[self.accuracy]
         self._access_token: Optional[str] = None
         self._token_expire_time: float = 0
 
@@ -108,7 +115,7 @@ class BaiduOCR:
         token = self._get_access_token()
 
         resp = requests.post(
-            f"{self.OCR_URL}?access_token={token}",
+            f"{self.ocr_url}?access_token={token}",
             data={
                 "pdf_file": pdf_base64,
                 "pdf_file_num": str(page_num),
@@ -198,7 +205,7 @@ class BaiduOCR:
         token = self._get_access_token()
 
         resp = requests.post(
-            f"{self.OCR_URL}?access_token={token}",
+            f"{self.ocr_url}?access_token={token}",
             data={
                 "image": image_base64,
                 "language_type": "CHN_ENG",

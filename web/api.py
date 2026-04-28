@@ -329,3 +329,47 @@ def sync_contacts():
         "total_rooms": len(room_ids),
         "total_users": len(user_ids),
     })
+
+
+@api_bp.route("/contacts/update", methods=["POST"])
+def update_contact():
+    """手动设置联系人/群名称（解决企微 API 获取失败的情况）"""
+    if _contacts is None:
+        return jsonify({"error": "通讯录模块未初始化"}), 503
+
+    data = request.get_json() or {}
+    contact_id = data.get("id", "").strip()
+    name = data.get("name", "").strip()
+    contact_type = data.get("type", "user")  # 'user' 或 'room'
+
+    if not contact_id or not name:
+        return jsonify({"error": "id 和 name 不能为空"}), 400
+
+    try:
+        _contacts._set_cache(contact_id, contact_type, name)
+
+        # 同步更新 insurance_records 表中的冗余名称字段
+        if _db:
+            try:
+                conn = _db.pool.connection()
+                try:
+                    cursor = conn.cursor()
+                    if contact_type == "room":
+                        cursor.execute(
+                            "UPDATE insurance_records SET room_name = %s WHERE roomid = %s",
+                            (name, contact_id)
+                        )
+                    else:
+                        cursor.execute(
+                            "UPDATE insurance_records SET sender_name = %s WHERE sender = %s",
+                            (name, contact_id)
+                        )
+                    conn.commit()
+                finally:
+                    conn.close()
+            except Exception:
+                pass  # 非关键操作，不影响主流程
+
+        return jsonify({"success": True, "message": f"已更新: {contact_id} → {name}"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
