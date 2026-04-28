@@ -386,14 +386,14 @@ def _get_policy_type_code(policy_type: str) -> tuple:
 # 第三步：通用字段提取（各保司共用）
 # ============================================================
 
-def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
+def _extract_common_fields(text: str, company_short: str, policy_type: str = "") -> Dict[str, Any]:
     """提取各保司通用的字段"""
     fields = {}
     text_merged = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2',
                          re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', text))
 
     # ===== 保单号 =====
-    _extract_policy_no(text, fields, company_short)
+    _extract_policy_no(text, fields, company_short, policy_type)
 
     # ===== 投保确认码 =====
     m = re.search(r"(?:投保)?确认码[：:\s]*(\S+)", text)
@@ -541,8 +541,25 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
 # 保单号提取
 # ============================================================
 
-def _extract_policy_no(text: str, fields: dict, company_short: str):
+def _extract_policy_no(text: str, fields: dict, company_short: str, policy_type: str = ""):
     """提取保单号"""
+
+    # 浙商等格式：文本中同时包含"交强险投保单号"和"商业险投保单号"，根据险种类型选取
+    m_commercial = re.search(r"商业险投\s*保单号[：:\s]*(\d{15,30})", text)
+    m_compulsory = re.search(r"交强险投\s*保单号[：:\s]*(\d{15,30})", text)
+    if m_commercial and m_compulsory:
+        if "商业" in policy_type or "机动车辆保险" in policy_type or "机动车辆综合险" in policy_type:
+            fields["保单号"] = m_commercial.group(1)
+        else:
+            # 交强险或其他情况默认取交强险
+            fields["保单号"] = m_compulsory.group(1)
+        return
+    elif m_commercial:
+        fields["保单号"] = m_commercial.group(1)
+        return
+    elif m_compulsory:
+        fields["保单号"] = m_compulsory.group(1)
+        return
 
     # 紫金格式：保单号在"投保确认时间"行，与日期粘连或空格分隔
     # 格式1："投保确认时间：\n20590A44030226000BW12026-04-2716:33:54"（粘连）
@@ -1941,7 +1958,7 @@ def parse_policy_text(text: str) -> Dict[str, Any]:
         fields["险种类型"] = policy_type
 
     # ===== 第三步：按保司提取各字段 =====
-    extracted = _extract_common_fields(text, company_short)
+    extracted = _extract_common_fields(text, company_short, policy_type or "")
     fields.update(extracted)
 
     # ===== 第四步：险种明细 =====
