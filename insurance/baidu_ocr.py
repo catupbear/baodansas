@@ -38,7 +38,7 @@ class BaiduOCR:
     def __init__(self, api_key: str, secret_key: str, accuracy: str = "accurate"):
         self.api_key = api_key
         self.secret_key = secret_key
-        # 兼容旧配置：无 accuracy 参数时默认高精度版
+        # 无 accuracy 参数时默认高精度版
         self.accuracy = accuracy if accuracy in self.OCR_URLS else "accurate"
         self.ocr_url = self.OCR_URLS[self.accuracy]
         self._access_token: Optional[str] = None
