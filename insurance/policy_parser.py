@@ -50,6 +50,7 @@ COMPANY_BASES = [
     "华农财产保险股份有限公司",
     "鼎和财产保险股份有限公司",
     "众诚汽车保险股份有限公司",
+    "安诚财产保险股份有限公司",
 ]
 
 # 保司简称映射
@@ -82,6 +83,7 @@ COMPANY_SHORT_MAP = {
     "华农财产": "华农",
     "鼎和财产": "鼎和",
     "众诚汽车": "众诚",
+    "安诚财产": "安诚",
 }
 
 # 通过特征关键词辅助识别保司（当公司名未直接出现时的兜底）
@@ -106,6 +108,7 @@ COMPANY_FALLBACK_SIGNALS = [
     (r"华农财产|华农保险", "华农财产保险股份有限公司"),
     (r"鼎和财产|鼎和保险", "鼎和财产保险股份有限公司"),
     (r"4008600600|众诚汽车|众诚保险|urtrust\.com", "众诚汽车保险股份有限公司"),
+    (r"95544|安诚财产|安诚保险", "安诚财产保险股份有限公司"),
 ]
 
 
@@ -147,10 +150,10 @@ def _is_valid_person(val: str) -> bool:
     # ====== 公司名判断（优先，允许较长） ======
     # 去掉括号后缀再判断（如"飘逸共雅饮品店（个体工商户）"→ 以"店"结尾）
     val_no_paren = re.sub(r'[（(][^）)]*[）)]$', '', val)
-    if re.search(r'公司|集团|合伙|工厂|商行|商贸|车行|车队|事务所|经营部|经营店|经销商|专营店|服务部|加工厂|养殖场|合作社|研究院|研究所|设计院|分院|医院|学院|中心|个体工商户', val) or val_no_paren.endswith('店'):
+    if re.search(r'公司|集团|合伙|工厂|商行|商贸|车行(?!驶)|车队|事务所|经营部|经营店|经销商|专营店|服务部|加工厂|养殖场|合作社|研究院|研究所|设计院|分院|医院|学院|中心|个体工商户', val) or val_no_paren.endswith('店'):
         # 公司名允许长一些，但不能超过 30 字
-        # 排除含动词/条款用语的句子片段（如"向本公司提出的申请"）
-        if re.search(r'提出|提供|负责|承担|向.*公司|本公司.*的|申请|告知|声明', val):
+        # 排除含动词/条款用语/保险术语的句子片段（如"向本公司提出的申请"）
+        if re.search(r'提出|提供|负责|承担|向.*公司|本公司.*的|申请|告知|声明|附加.*险|附加.*费|损失费|保险费', val):
             return False
         return len(val) <= 30
 
@@ -200,6 +203,8 @@ def _clean_person_name(val: str) -> str:
     val = re.sub(r'车主.*', '', val)
     val = re.sub(r'名称.*', '', val)
     val = re.sub(r'证件.*', '', val)
+    # 公司名后粘连保险术语（如"XX有限公司附加出行不便损失费"→"XX有限公司"）
+    val = re.sub(r'((?:股份有限|有限责任|有限)公司)(?:附加|免责|条款|保险费|损失费|出行).*', r'\1', val)
     # 永诚OCR干扰：人名后面附带"有敬异的"
     val = re.sub(r'有敬异的.*', '', val)
     val = re.sub(r'果尊.*', '', val)
@@ -225,8 +230,8 @@ def _identify_company(text: str) -> Dict[str, str]:
     company_text = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2',
                           re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', text))
 
-    # 方式1："公司名称："格式
-    m = re.search(r"公司名称[：:\s]*(.+?)(?:\s+公司地址|$)", company_text)
+    # 方式1："公司名称："或"承保公司为："格式
+    m = re.search(r"(?:公司名称|承保公司为?)[：:\s]*\n?\s*(.+?)(?:\s+公司地址|$)", company_text)
     if m:
         val = m.group(1).strip()
         if len(val) > 6:
@@ -531,14 +536,17 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
 def _extract_policy_no(text: str, fields: dict, company_short: str):
     """提取保单号"""
 
-    # 紫金格式：保单号在"投保确认时间"行，与日期粘连
-    # "投保确认时间：\n20590A44030226000BW12026-04-2716:33:54\n保险单号： 电子保单生成时间："
+    # 紫金格式：保单号在"投保确认时间"行，与日期粘连或空格分隔
+    # 格式1："投保确认时间：\n20590A44030226000BW12026-04-2716:33:54"（粘连）
+    # 格式2："投保确认时间：\n20590A44030226000BWY 2026-04-2718:38:01"（空格分隔）
     if company_short == "紫金":
-        m = re.search(r"投保确认时间[：:\s]*\n?\s*([A-Za-z0-9]+?)(\d{4}-\d{2}-\d{2})", text)
+        m = re.search(r"投保确认时间[：:\s]*\n?\s*([A-Za-z0-9]+?)\s*(\d{4}-\d{2}-\d{2})", text)
         if m:
             val = m.group(1)
             if len(val) > 5:
                 fields["保单号"] = val
+                # 顺便存投保确认时间
+                fields["收费确认时间"] = m.group(2)
                 return
 
     # 华农等格式："保单号\n保单号：XXX\n流水号 流水号：YYY"，优先取保单号而非流水号
@@ -1064,8 +1072,8 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
                     return
             break
 
-    # 永诚等格式："投保人信息\n姓名：李飞" 或 "投保人信息 姓名：李飞"
-    m = re.search(r"投保人信息[\s\n]*姓名[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|$)", text)
+    # 永诚/中华联合等格式："投保人信息\n姓名：李飞" 或 "投保人信息\n姓名/名称：深圳XXX公司"
+    m = re.search(r"投保人信息[\s\n]*姓名(?:[/／]名称)?[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|$)", text)
     if m:
         val = _clean_person_name(m.group(1))
         if _is_valid_person(val):
@@ -1087,7 +1095,7 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
         r"投保人\s*(?:姓名|名称)?[：:]\s*(\S+)",
         r"本保单\s*[的]?\s*投保人为[：:]?\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:[，,。\s\n]|$)",
         r"本保单\s*投保人为[：:]?\s*(\S+)",
-        r"投保人\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|$)",
+        r"(?<![/／\d])投保人\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|$)",
     ]:
         m = re.search(p, text)
         if m:
@@ -1137,6 +1145,7 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
                 # 清除 "保单验真码" 等后缀
                 prev = re.sub(r'\s*保单验真码.*', '', prev).strip()
                 prev = re.sub(r'\s*企业宝.*', '', prev).strip()
+                prev = _clean_person_name(prev)
                 if _is_valid_person(prev):
                     fields["投保人"] = prev
                     return
@@ -1146,8 +1155,10 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
         if re.search(r'投保人姓名\s+证件类型', line):
             for j in range(i + 1, min(i + 4, len(lines))):
                 parts = re.split(r'\s+', lines[j].strip())
-                if parts and _is_valid_person(parts[0]):
-                    fields["投保人"] = parts[0]
+                if parts:
+                    cleaned = _clean_person_name(parts[0])
+                    if _is_valid_person(cleaned):
+                        fields["投保人"] = cleaned
                     return
             break
 
@@ -1170,6 +1181,7 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
                             frag = lines[k].strip()
                             if frag and len(frag) <= 3 and not re.match(r'^(投保|证件|邮编)', frag):
                                 val += frag
+                        val = _clean_person_name(val)
                         if len(val) >= 2:
                             fields["投保人"] = val
                     break
@@ -1760,6 +1772,12 @@ def _extract_sign_date(text: str, fields: dict, company_short: str):
         if m:
             fields["签单日期"] = m.group(1)
 
+    # 兜底：浙商格式 — 投保人签名/签章后紧跟日期，如"投保人签名/签章：\n2026年03月31日"
+    if "签单日期" not in fields and company_short == "浙商":
+        m = re.search(r"投保人签名[/／]?签章[：:\s]*\n?\s*(\d{4}年\d{1,2}月\d{1,2}日)", text)
+        if m:
+            fields["签单日期"] = m.group(1)
+
 
 # ============================================================
 # 日期格式标准化
@@ -1851,12 +1869,17 @@ def _identify_doc_category(text: str, fields: dict) -> str:
     if '缴款通知书' in text_head:
         return "缴款通知"
 
+    # 投保人声明 / 免责事项说明书 / 授权委托书
+    # 这些文档本身含"投保人"等关键词，会触发 _has_policy_markers，需优先独立判断
+    if '投保人声明' in text_head or '免责事项说明书' in text_head:
+        return "条款"
+    if '授权委托书' in text_head:
+        return "其他"
+
     # 条款/免责说明
     # 注意：正式保单中常出现"适用条款"/"产品名称"引用了"保险示范条款"字样，
     # 必须排除含保单关键字段的文件，避免将正式保单误判为条款
     if not _has_policy_markers:
-        if any(x in text_head for x in ['免责事项说明书', '投保人声明']):
-            return "条款"
         if '保险示范条款' in text_head:
             return "条款"
         if re.search(r'示范条款[（(]\d{4}版[)）]', text_head):
@@ -1868,8 +1891,10 @@ def _identify_doc_category(text: str, fields: dict) -> str:
         if '总则' in text_head and '第一条' in text_head:
             return "条款"
 
-    # 保单（含投保单、批单，统一归为保单类）
-    return "保单"
+    # 有保单关键字段才认定为保单，否则标记为未知
+    if _has_policy_markers:
+        return "保单"
+    return "未知"
 
 
 # ============================================================
