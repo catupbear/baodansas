@@ -507,6 +507,14 @@ def _extract_common_fields(text: str, company_short: str) -> Dict[str, Any]:
         elif "业务员" in fields:
             del fields["业务员"]
 
+    # 安盛天平：出单代理 Agency Name 作为业务员（值通常是代理公司名）
+    if "业务员" not in fields and company_short == "安盛天平":
+        m = re.search(r"出单代理\s*(?:Agency\s*Name)?[：:]\s*(.+?)(?:\s{2,}|\n|$)", text, re.IGNORECASE)
+        if m:
+            val = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', m.group(1).strip())
+            if val and len(val) >= 2:
+                fields["业务员"] = val
+
     # 平安：经办为代理公司名时作为业务员（如"经办:维客保险代理有限公司"）
     if "业务员" not in fields and company_short == "平安":
         m = re.search(r"经办[：:]\s*(.+?)(?:\s{2,}|$)", text, re.MULTILINE)
@@ -1726,16 +1734,18 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
 
 def _extract_sign_date(text: str, fields: dict, company_short: str):
     """提取签单日期"""
-    # 预处理：清理日期中的OCR空格（如"2026 - 04-27" → "2026-04-27"）
-    sign_text = re.sub(r'(\d)\s+([-/])\s*(\d)', r'\1\2\3', text)
+    # 预处理：清理OCR空格（汉字间空格如"签 单 日 期"，日期中空格如"2026 - 04-27"）
+    sign_text = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2',
+                        re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', text))
+    sign_text = re.sub(r'(\d)\s+([-/])\s*(\d)', r'\1\2\3', sign_text)
     sign_text = re.sub(r'(\d)\s*([-/])\s+(\d)', r'\1\2\3', sign_text)
     for p in [
         r"签单日期[：:\s]*([\d]{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)",
         r"签单日期[：:\s]*([\d\-/年月日]+)",
         r"签发时间[：:\s]*([\d]{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)",
         r"签发日期[：:\s]*([\d]{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)",
-        # 平安个意险格式
-        r"出单日期[：:\s]*([\d]{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)",
+        # 平安个意险格式；安盛天平格式："出单日期 Issue Date(年/月/日 Y/M/D):2026-04-28"
+        r"出单日期[^：:\d]*[：:\s]*([\d]{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)",
         # 华泰格式
         r"签单时间[：:\s]*([\d]{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)",
     ]:
@@ -1859,6 +1869,10 @@ def _identify_doc_category(text: str, fields: dict) -> str:
     # 注意：多页交强险保单可能在附页包含电子标志，需排除含保单关键字段的情况
     if '此标志粘贴在机动车前窗' in text or '此标志正面的年份' in text:
         if not _has_policy_markers:
+            return "电子标志"
+    # 电子标志：文本极短 + 含"单证查验" + 无被保人/保费信息（安盛天平等格式）
+    if text_len < 500 and '单证查验' in text:
+        if '被保险人' not in text and '保险费' not in text:
             return "电子标志"
 
     # 发票

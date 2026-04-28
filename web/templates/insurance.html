@@ -841,6 +841,33 @@
                            @input="debounceLoadRecords()">
                 </div>
             </div>
+            <!-- 日期筛选 -->
+            <div class="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+                <span class="text-xs text-gray-500 font-medium whitespace-nowrap">日期:</span>
+                <button v-for="s in dateShortcuts" :key="s.key"
+                        @click="setDateShortcut(s.key)"
+                        class="text-xs px-2.5 py-1 rounded-full border transition-colors cursor-pointer"
+                        :class="recordFilter.date_shortcut === s.key
+                            ? 'bg-orange-50 border-orange-300 text-orange-600 font-medium'
+                            : 'border-gray-200 text-gray-500 hover:border-orange-200 hover:text-orange-500'">
+                    {{ s.label }}
+                </button>
+                <!-- 自定义日期区间 -->
+                <template v-if="recordFilter.date_shortcut === 'custom'">
+                    <input type="date" v-model="recordFilter.date_start"
+                           class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                           @change="loadRecords()">
+                    <span class="text-xs text-gray-400">至</span>
+                    <input type="date" v-model="recordFilter.date_end"
+                           class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                           @change="loadRecords()">
+                </template>
+                <!-- 清除日期 -->
+                <button v-if="recordFilter.date_shortcut"
+                        @click="recordFilter.date_shortcut = ''; recordFilter.date_start = ''; recordFilter.date_end = ''; loadRecords()"
+                        class="text-xs text-gray-400 hover:text-orange-500 cursor-pointer ml-1"
+                        title="清除日期筛选">&times; 清除</button>
+            </div>
         </div>
 
         <!-- 状态 Tab + 导出 + 筛选 -->
@@ -928,7 +955,21 @@
 
         <!-- 记录表格 -->
         <div class="card">
-            <div class="table-scroll-wrapper" style="max-height: 65vh;">
+            <!-- 加载中 / 空数据提示（独立于表格，不受列宽影响） -->
+            <div v-if="isLoadingRecords" class="text-center py-12 text-gray-400">
+                <svg class="w-6 h-6 animate-spin mx-auto mb-2 text-orange-400" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                加载中...
+            </div>
+            <div v-else-if="!records.length" class="text-center py-12 text-gray-400">
+                <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                暂无识别记录
+            </div>
+            <div v-else class="table-scroll-wrapper" style="max-height: 65vh;">
                 <table class="records-table text-left">
                     <thead>
                         <tr>
@@ -949,25 +990,6 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- 加载中占位 -->
-                        <tr v-if="isLoadingRecords">
-                            <td :colspan="outputColumns.length + 11" class="text-center py-12 text-gray-400">
-                                <svg class="w-6 h-6 animate-spin mx-auto mb-2 text-orange-400" fill="none" viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                                </svg>
-                                加载中...
-                            </td>
-                        </tr>
-                        <!-- 空数据占位 -->
-                        <tr v-else-if="!records.length">
-                            <td :colspan="outputColumns.length + 11" class="text-center py-12 text-gray-400">
-                                <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                </svg>
-                                暂无识别记录
-                            </td>
-                        </tr>
                         <!-- 数据行 -->
                         <tr v-else v-for="record in filteredRecords" :key="record.id">
                             <!-- 选择框 -->
@@ -999,7 +1021,7 @@
                                 <span v-else class="text-gray-600 text-sm truncate block" style="max-width:180px;" :title="record.filename">
                                     {{ record.filename || '—' }}
                                 </span>
-                                <span v-if="getRecordHint(record)" class="text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">{{ getRecordHint(record) }}</span>
+                                <span v-if="record.hint" class="text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">{{ record.hint }}</span>
                             </td>
                             <!-- 文档类型 -->
                             <td>
@@ -1011,9 +1033,9 @@
                                 </span>
                                 <span v-else class="text-gray-400 text-sm">—</span>
                             </td>
-                            <!-- 动态字段列（与手动上传一致） -->
+                            <!-- 动态字段列（使用预计算的 display_fields） -->
                             <td v-for="col in outputColumns" :key="col" class="text-gray-700 text-sm">
-                                {{ getRecordMappedValue(record, col) || '—' }}
+                                {{ (record.display_fields || {})[col] || '—' }}
                             </td>
                             <!-- 识别方式 -->
                             <td>
@@ -2263,12 +2285,17 @@ createApp({
         function getRecordHint(record) {
             if (!record) return '';
             const fields = record.parsed_fields || {};
+            const hints = [];
             const policyType = fields['险种类型'] || '';
-            const hasInsured = fields['投保人'] || false;
-            if ((policyType.includes('交强') || policyType.includes('交通事故责任强制')) && !hasInsured) {
-                return '保单无投保人';
+            if ((policyType.includes('交强') || policyType.includes('交通事故责任强制')) && !fields['投保人']) {
+                hints.push('交强险无投保人属正常');
             }
-            return '';
+            const companyShort = fields['保险公司简称'] || '';
+            const rPolicyType = fields['险种类型'] || '';
+            if (companyShort === '紫金' && rPolicyType.includes('驾乘') && !fields['签单日期']) {
+                hints.push('紫金驾乘险无签单日期属正常');
+            }
+            return hints.join('；');
         }
 
         // 判断是否非保单文档（电子标志、发票、缴款通知、条款、其他、无法识别关键字段等）
@@ -2303,16 +2330,27 @@ createApp({
             if (isCompulsory(r) && missing.length === 1 && missing[0] === '投保人') {
                 return false;
             }
+            // 紫金驾乘险：保单无签单日期属于正常
+            const companyShort = getCompanyShort(r);
+            const policyType = getMappedValue(r, '险种') || '';
+            if (companyShort === '紫金' && policyType.includes('驾乘') && missing.length === 1 && missing[0] === '签单日期') {
+                return false;
+            }
             return true;
         }
 
-        // 获取保单提示信息（如交强险无投保人）
+        // 获取保单提示信息（如交强险无投保人、紫金无签单日期）
         function getPolicyHint(r) {
             if (!r || !r.success) return '';
+            const hints = [];
             if (isCompulsory(r) && !getMappedValue(r, '投保人')) {
-                return '保单无投保人';
+                hints.push('交强险无投保人属正常');
             }
-            return '';
+            const pType = getMappedValue(r, '险种') || '';
+            if (getCompanyShort(r) === '紫金' && pType.includes('驾乘') && !getMappedValue(r, '签单日期')) {
+                hints.push('紫金驾乘险无签单日期属正常');
+            }
+            return hints.join('；');
         }
 
         // 计算属性：分类结果（按车牌分组排列）
@@ -2502,9 +2540,9 @@ createApp({
         }
 
         // 自动识别记录文件预览（通过代理接口避免 COS 下载）
-        function previewRecord(record) {
+        async function previewRecord(record) {
             if (!record.cos_url || !record.id) return;
-            previewAutoRecord.value = record;
+            previewAutoRecord.value = { ...record };
             previewFileName.value = record.filename || '保单文件';
             previewShowRaw.value = false;
             previewShowFields.value = false;
@@ -2516,6 +2554,20 @@ createApp({
             previewHasRawText.value = (ext === 'pdf');
             previewRawText.value = '';
             previewVisible.value = true;
+            // 异步加载完整详情（含 parsed_fields）
+            try {
+                const resp = await fetch(`/api/insurance/records/${record.id}`);
+                const json = await resp.json();
+                if (json.code === 0 && json.data) {
+                    const detail = json.data;
+                    if (typeof detail.parsed_fields === 'string') {
+                        try { detail.parsed_fields = JSON.parse(detail.parsed_fields); } catch { detail.parsed_fields = {}; }
+                    }
+                    previewAutoRecord.value = detail;
+                }
+            } catch (e) {
+                console.error('加载预览详情失败', e);
+            }
         }
 
         // 懒加载自动识别记录的 OCR 原文
@@ -3008,6 +3060,8 @@ createApp({
             processing: 0,
             successRate: 0,
             engines: [],
+            abnormal: 0,
+            nonpolicy: 0,
         });
         async function loadRecordStats() {
             try {
@@ -3028,64 +3082,26 @@ createApp({
                 recordStats.engines = (data.engine_stats || [])
                     .filter(e => e.ocr_engine)
                     .map(e => ({ name: e.ocr_engine, cnt: e.cnt }));
+                recordStats.abnormal = data.abnormal_cnt || 0;
+                recordStats.nonpolicy = data.nonpolicy_cnt || 0;
             } catch (e) {
                 console.error('加载统计失败', e);
             }
         }
         // 状态 Tab（成功=保单且置信度>=0.5，提取异常=置信度<0.5，非保单=doc_category非保单）
         const recordActiveTab = ref('all');
-        // 从当前已加载记录中统计各分类数量（辅助 Tab 显示）
-        const recordTabCounts = computed(() => {
-            let success = 0, abnormal = 0, nonPolicy = 0;
-            for (const r of records.value) {
-                if (r.status !== 'done' && r.status !== 'success') continue;
-                const cat = r.doc_category || '';
-                if (cat && cat !== '保单') { nonPolicy++; }
-                else if (isRecordAbnormal(r)) { abnormal++; }
-                else { success++; }
-            }
-            return { success, abnormal, nonPolicy };
-        });
+        // Tab 统计数来自服务端，不再依赖前端 parsed_fields 计算
         const recordTabs = computed(() => [
             { key: 'all', label: '全部', count: recordStats.total },
-            { key: 'done', label: '成功', count: recordStats.done },
-            { key: 'abnormal', label: '提取异常', count: recordTabCounts.value.abnormal },
-            { key: 'nonpolicy', label: '非保单', count: recordTabCounts.value.nonPolicy },
+            { key: 'done', label: '成功', count: recordStats.done - recordStats.abnormal - recordStats.nonpolicy },
+            { key: 'abnormal', label: '提取异常', count: recordStats.abnormal },
+            { key: 'nonpolicy', label: '非保单', count: recordStats.nonpolicy },
             { key: 'failed', label: '失败', count: recordStats.failed },
         ]);
 
         // 前端过滤（提取异常/非保单 Tab 需要从 done 记录中二次筛选）
-        const filteredRecords = computed(() => {
-            const tab = recordActiveTab.value;
-            if (tab === 'abnormal') {
-                return records.value.filter(r => isRecordAbnormal(r));
-            }
-            if (tab === 'nonpolicy') {
-                return records.value.filter(r =>
-                    (r.status === 'done' || r.status === 'success') &&
-                    r.doc_category && r.doc_category !== '保单'
-                );
-            }
-            if (tab === 'done') {
-                // 成功 Tab：排除异常和非保单
-                return records.value.filter(r => {
-                    if (r.status !== 'done' && r.status !== 'success') return false;
-                    if (r.doc_category && r.doc_category !== '保单') return false;
-                    if (isRecordAbnormal(r)) return false;
-                    return true;
-                });
-            }
-            // 保司筛选（前端过滤）
-            let list = records.value;
-            if (recordCompanyFilter.value) {
-                list = list.filter(r => {
-                    const pf = r.parsed_fields || {};
-                    const c = pf['保险公司简称'] || pf['保险公司'] || '';
-                    return c === recordCompanyFilter.value;
-                });
-            }
-            return list;
-        });
+        // 筛选已移至服务端，前端直接返回列表数据
+        const filteredRecords = computed(() => records.value);
 
         // 保司和文档类型筛选
         const recordCompanyFilter = ref('');
@@ -3093,8 +3109,7 @@ createApp({
         const recordCompanyList = computed(() => {
             const set = new Set();
             for (const r of records.value) {
-                const pf = r.parsed_fields || {};
-                const c = pf['保险公司简称'] || pf['保险公司'] || '';
+                const c = r.company_short || '';
                 if (c) set.add(c);
             }
             return [...set].sort();
@@ -3170,21 +3185,14 @@ createApp({
 
         // 导出自动识别记录
         async function exportRecordsExcel() {
+            // 使用列表已有的 display_fields 导出，无需额外请求
             const data = records.value
                 .filter(r => r.status === 'done' || r.status === 'success')
-                .filter(r => {
-                    if (recordCompanyFilter.value) {
-                        const pf = r.parsed_fields || {};
-                        const c = pf['保险公司简称'] || pf['保险公司'] || '';
-                        if (c !== recordCompanyFilter.value) return false;
-                    }
-                    if (recordDocTypeFilter.value && r.doc_category !== recordDocTypeFilter.value) return false;
-                    return true;
-                })
                 .map(r => {
+                    const df = r.display_fields || {};
                     const row = {};
                     for (const col of outputColumns.value) {
-                        row[col] = getRecordMappedValue(r, col) || '';
+                        row[col] = df[col] || '';
                     }
                     return { fields: row };
                 });
@@ -3213,7 +3221,60 @@ createApp({
             status: '',
             keyword: '',
             ocr_engine: '',  // '': 全部, 'pdfplumber', 'baidu'
+            date_shortcut: '',  // 日期快捷：today/yesterday/thisWeek/lastWeek/thisMonth/lastMonth/custom
+            date_start: '',     // 自定义开始日期 YYYY-MM-DD
+            date_end: '',       // 自定义结束日期 YYYY-MM-DD
         });
+        // 日期快捷选项
+        const dateShortcuts = [
+            { key: 'today', label: '今天' },
+            { key: 'yesterday', label: '昨天' },
+            { key: 'thisWeek', label: '本周' },
+            { key: 'lastWeek', label: '上周' },
+            { key: 'thisMonth', label: '本月' },
+            { key: 'lastMonth', label: '上月' },
+            { key: 'custom', label: '自定义' },
+        ];
+        function _fmt(d) { return d.toISOString().slice(0, 10); }
+        function setDateShortcut(key) {
+            recordFilter.date_shortcut = key;
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            if (key === 'today') {
+                recordFilter.date_start = _fmt(today);
+                const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+                recordFilter.date_end = _fmt(tomorrow);
+            } else if (key === 'yesterday') {
+                const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+                recordFilter.date_start = _fmt(yesterday);
+                recordFilter.date_end = _fmt(today);
+            } else if (key === 'thisWeek') {
+                const day = today.getDay() || 7; // 周日=7
+                const mon = new Date(today); mon.setDate(mon.getDate() - day + 1);
+                recordFilter.date_start = _fmt(mon);
+                const nextMon = new Date(mon); nextMon.setDate(nextMon.getDate() + 7);
+                recordFilter.date_end = _fmt(nextMon);
+            } else if (key === 'lastWeek') {
+                const day = today.getDay() || 7;
+                const thisMon = new Date(today); thisMon.setDate(thisMon.getDate() - day + 1);
+                const lastMon = new Date(thisMon); lastMon.setDate(lastMon.getDate() - 7);
+                recordFilter.date_start = _fmt(lastMon);
+                recordFilter.date_end = _fmt(thisMon);
+            } else if (key === 'thisMonth') {
+                recordFilter.date_start = _fmt(new Date(today.getFullYear(), today.getMonth(), 1));
+                recordFilter.date_end = _fmt(new Date(today.getFullYear(), today.getMonth() + 1, 1));
+            } else if (key === 'lastMonth') {
+                recordFilter.date_start = _fmt(new Date(today.getFullYear(), today.getMonth() - 1, 1));
+                recordFilter.date_end = _fmt(new Date(today.getFullYear(), today.getMonth(), 1));
+            } else if (key === 'custom') {
+                // 自定义：不自动设置，等用户选择
+                recordFilter.date_start = '';
+                recordFilter.date_end = '';
+                return;
+            }
+            loadRecords();
+        }
+
         // 状态中文映射
         const STATUS_MAP = { pending: '待处理', processing: '处理中', done: '已完成', failed: '失败', success: '已完成' };
         function statusLabel(s) { return STATUS_MAP[s] || s || '—'; }
@@ -3342,8 +3403,18 @@ createApp({
                 }
                 // 状态：Tab 优先，否则用下拉框
                 const tab = recordActiveTab.value;
-                if (tab === 'done' || tab === 'abnormal' || tab === 'nonpolicy') {
+                if (tab === 'done') {
                     params.set('status', 'done');
+                    params.set('is_abnormal', '0');
+                    // done Tab 排除非保单
+                    params.set('doc_category', recordDocTypeFilter.value || '保单');
+                } else if (tab === 'abnormal') {
+                    params.set('status', 'done');
+                    params.set('is_abnormal', '1');
+                } else if (tab === 'nonpolicy') {
+                    params.set('status', 'done');
+                    // 排除保单文档类型
+                    params.set('doc_category', '!保单');
                 } else if (tab === 'failed') {
                     params.set('status', 'failed');
                 } else if (tab === 'pending') {
@@ -3353,17 +3424,17 @@ createApp({
                 }
                 if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
                 if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
-                if (recordDocTypeFilter.value) params.set('doc_category', recordDocTypeFilter.value);
+                if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
+                // 保司筛选改为服务端
+                if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
+                if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
+                if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
                 const resp = await fetch(`/api/insurance/records?${params.toString()}`);
                 const json = await resp.json();
                 // API 返回 {"code":0, "data": {"records":[], "total":N}}
                 const data = json.data || json;
                 records.value = (data.records || data.items || []).map(r => ({
                     ...r,
-                    // 解析 parsed_fields（如果是字符串则转对象）
-                    parsed_fields: typeof r.parsed_fields === 'string'
-                        ? (() => { try { return JSON.parse(r.parsed_fields); } catch { return {}; } })()
-                        : (r.parsed_fields || {}),
                     _retrying: false,
                     _syncing: false,
                     _reocring: false,
@@ -3520,9 +3591,24 @@ createApp({
         const recordDetailVisible = ref(false);
         const currentRecord = ref(null);
 
-        function openRecordDetail(record) {
-            currentRecord.value = record;
+        async function openRecordDetail(record) {
+            // 先显示列表已有的轻量数据，再异步加载完整详情
+            currentRecord.value = { ...record };
             recordDetailVisible.value = true;
+            try {
+                const resp = await fetch(`/api/insurance/records/${record.id}`);
+                const json = await resp.json();
+                if (json.code === 0 && json.data) {
+                    const detail = json.data;
+                    // 解析 parsed_fields
+                    if (typeof detail.parsed_fields === 'string') {
+                        try { detail.parsed_fields = JSON.parse(detail.parsed_fields); } catch { detail.parsed_fields = {}; }
+                    }
+                    currentRecord.value = detail;
+                }
+            } catch (e) {
+                console.error('加载记录详情失败', e);
+            }
         }
 
         // 设置已迁移到独立的 /monitor-config 页面
@@ -3588,7 +3674,7 @@ createApp({
             records, filteredRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
             isAllSelected, toggleSelectAll, batchReocrSync, batchProgress,
             roomList, monitorRooms, monitorUsers,
-            recordFilter, statusLabel, onSourceTypeChange, debounceLoadRecords,
+            recordFilter, statusLabel, onSourceTypeChange, debounceLoadRecords, dateShortcuts, setDateShortcut,
             recordPagination, visiblePages, recordStats,
             recordActiveTab, recordTabs, recordCompanyFilter, recordDocTypeFilter,
             recordCompanyList, recordDocTypes, exportRecordsExcel,
