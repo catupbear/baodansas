@@ -995,6 +995,21 @@ def update_config():
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
+@insurance_bp.route("/api/insurance/reload-ocr", methods=["POST"])
+def reload_ocr():
+    """重新加载百度 OCR 配置（支持 config.yaml 热更新）"""
+    try:
+        if not _handler:
+            return jsonify({"code": 500, "msg": "handler 未初始化"}), 500
+        _handler.reload_baidu_ocr()
+        # 返回当前生效的精度
+        accuracy = getattr(_handler._baidu_ocr, "accuracy", "未知") if _handler._baidu_ocr else "未初始化"
+        return jsonify({"code": 0, "msg": f"百度 OCR 已重载，当前精度: {accuracy}"})
+    except Exception as e:
+        logger.exception("重载百度 OCR 失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
 @insurance_bp.route("/api/insurance/rooms", methods=["GET"])
 def get_rooms():
     """

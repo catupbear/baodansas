@@ -81,8 +81,18 @@ class InsuranceHandler:
         try:
             from insurance.baidu_ocr import BaiduOCR
 
-            # 优先从 config.yaml 读取
-            cfg = self.app_config.get("baidu_ocr", {})
+            # 每次初始化都重新读 config.yaml，支持热加载
+            cfg = {}
+            try:
+                import yaml
+                with open("config.yaml", "r", encoding="utf-8") as f:
+                    file_cfg = yaml.safe_load(f) or {}
+                cfg = file_cfg.get("baidu_ocr", {})
+                # 同步更新内存中的 app_config
+                if cfg:
+                    self.app_config["baidu_ocr"] = cfg
+            except Exception:
+                cfg = self.app_config.get("baidu_ocr", {})
             if not cfg or not cfg.get("api_key"):
                 # 降级从数据库读取
                 cfg = get_insurance_config(self.db, "baidu_ocr", {})
@@ -92,7 +102,8 @@ class InsuranceHandler:
             if api_key and secret_key:
                 accuracy = cfg.get("accuracy", "accurate") if isinstance(cfg, dict) else "accurate"
                 self._baidu_ocr = BaiduOCR(api_key, secret_key, accuracy=accuracy)
-                logger.info("百度 OCR 客户端初始化成功（精度: %s）", accuracy)
+                accuracy_label = {"accurate": "高精度版", "standard": "标准版"}.get(accuracy, accuracy)
+                logger.info("百度 OCR 客户端初始化成功（精度: %s）", accuracy_label)
             else:
                 self._baidu_ocr = None
                 logger.warning("百度 OCR 未配置 api_key / secret_key，降级功能不可用")
