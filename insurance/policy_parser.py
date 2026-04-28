@@ -703,16 +703,22 @@ def _extract_insured_pingan(text: str, text_merged: str, fields: dict):
     for i, line in enumerate(lines):
         if re.search(r'被保险人姓名\s+证件类型', line):
             for j in range(i + 1, min(i + 6, len(lines))):
-                # 跳过"发动机号"等干扰行
-                if re.search(r'发动机|车架号|车牌', lines[j]):
+                line_j = lines[j].strip()
+                # 纯车辆信息行跳过（行首就是车辆关键词）
+                if re.match(r'(?:发动机|车架号|车牌|VIN)', line_j):
                     continue
                 # 匹配"序号 姓名 身份证类型" 格式
-                m = re.match(r'\d+\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)\s+(?:身份证|证件|统一社会)', lines[j].strip())
+                m = re.match(r'\d+\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)\s+(?:身份证|证件|统一社会)', line_j)
+                if m and _is_valid_person(m.group(1)):
+                    fields["被保险人"] = m.group(1)
+                    return
+                # 匹配"姓名 身份证 ..."格式（行尾可能粘连车辆信息如"发动机号:XXX"）
+                m = re.match(r'([\u4e00-\u9fff]{2,6})\s+(?:身份证|证件|统一社会)', line_j)
                 if m and _is_valid_person(m.group(1)):
                     fields["被保险人"] = m.group(1)
                     return
                 # 匹配纯"姓名 身份证类型"格式
-                parts = re.split(r'\s+', lines[j].strip())
+                parts = re.split(r'\s+', line_j)
                 if len(parts) >= 2 and _is_valid_person(parts[0]):
                     fields["被保险人"] = parts[0]
                     return
