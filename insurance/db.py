@@ -76,6 +76,7 @@ def init_insurance_tables(db):
         # 为 insurance_records 表添加新字段（幂等，已存在则跳过）
         new_columns = [
             ("raw_text", "LONGTEXT COMMENT 'OCR提取原文'"),
+            ("company_short", "VARCHAR(64) DEFAULT '' COMMENT '保险公司简称（冗余列，加速统计）'"),
         ]
         for col_name, col_def in new_columns:
             try:
@@ -83,10 +84,48 @@ def init_insurance_tables(db):
             except Exception:
                 pass  # 字段已存在，忽略
 
+        # 新增索引
+        for idx_sql in [
+            "CREATE INDEX idx_insurance_company_short ON insurance_records(company_short)",
+        ]:
+            try:
+                cursor.execute(idx_sql)
+            except Exception:
+                pass
+
+        # 回填 company_short（仅对已有数据且 company_short 为空的记录）
+        try:
+            cursor.execute("""
+                UPDATE insurance_records
+                SET company_short = JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.保险公司简称'))
+                WHERE company_short = ''
+                  AND parsed_fields IS NOT NULL
+                  AND JSON_EXTRACT(parsed_fields, '$.保险公司简称') IS NOT NULL
+                  AND JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.保险公司简称')) != ''
+            """)
+            if cursor.rowcount:
+                logger.info("回填 company_short %d 条", cursor.rowcount)
+        except Exception:
+            pass
+
         conn.commit()
         logger.info("保单识别数据库表初始化完成")
     finally:
         conn.close()
+
+
+def _extract_company_short(data: dict) -> str:
+    """从 parsed_fields 中提取保险公司简称，用于填充 company_short 冗余列"""
+    pf = data.get("parsed_fields")
+    if isinstance(pf, dict):
+        return pf.get("保险公司简称", "") or ""
+    if isinstance(pf, str):
+        try:
+            pf_dict = json.loads(pf)
+            return pf_dict.get("保险公司简称", "") or ""
+        except (TypeError, json.JSONDecodeError):
+            pass
+    return ""
 
 
 def save_insurance_record(db, record: dict) -> int:
@@ -95,6 +134,13 @@ def save_insurance_record(db, record: dict) -> int:
     JSON 字段（parsed_fields / mapped_fields）若传入 dict/list，自动序列化。
     """
     data = dict(record)
+
+    # 自动填充 company_short
+    if "company_short" not in data or not data["company_short"]:
+        cs = _extract_company_short(data)
+        if cs:
+            data["company_short"] = cs
+
     for field in _JSON_FIELDS:
         if field in data and not isinstance(data[field], str):
             data[field] = json.dumps(data[field], ensure_ascii=False)
@@ -135,6 +181,12 @@ def update_insurance_record(db, record_id: int, updates: dict):
             data[k] = json.dumps(v, ensure_ascii=False)
         else:
             data[k] = v
+
+    # 如果更新了 parsed_fields，同步更新 company_short
+    if "parsed_fields" in updates and "company_short" not in updates:
+        cs = _extract_company_short(updates)
+        if cs:
+            data["company_short"] = cs
 
     # MySQL 的 ON UPDATE CURRENT_TIMESTAMP 会自动更新 updated_at，无需手动传入
     set_clause = ", ".join([f"{k} = %s" for k in data.keys()])
@@ -354,15 +406,22 @@ def set_insurance_config(db, key: str, value):
         conn.close()
 
 
-def get_all_insurance_config(db) -> dict:
+def get_all_insurance_config(db, max_value_len: int = 0) -> dict:
     """
     获取全部配置项，返回 {key: value} 字典。
     每个 value 自动尝试 JSON 反序列化。
+    max_value_len: 大于 0 时截断 config_value 读取长度，避免大 LONGTEXT 拖慢查询
     """
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("SELECT config_key, config_value FROM insurance_config")
+        if max_value_len > 0:
+            cursor.execute(
+                "SELECT config_key, LEFT(config_value, %s) as config_value FROM insurance_config",
+                (max_value_len,)
+            )
+        else:
+            cursor.execute("SELECT config_key, config_value FROM insurance_config")
         result = {}
         for row in cursor.fetchall():
             raw = row["config_value"]
@@ -371,6 +430,71 @@ def get_all_insurance_config(db) -> dict:
             except (TypeError, json.JSONDecodeError):
                 result[row["config_key"]] = raw
         return result
+    finally:
+        conn.close()
+
+
+def upsert_insurance_record_by_policy(db, record: dict) -> tuple:
+    """
+    按保单号去重保存记录。
+    如果已存在相同保单号的记录则更新，否则插入新记录。
+    返回: (record_id, is_update)
+    """
+    parsed_fields = record.get("parsed_fields", {})
+    if isinstance(parsed_fields, str):
+        try:
+            parsed_fields = json.loads(parsed_fields)
+        except (TypeError, json.JSONDecodeError):
+            parsed_fields = {}
+
+    policy_no = parsed_fields.get("保单号", "") or parsed_fields.get("保险单号", "")
+
+    # 有保单号时尝试查找已有记录
+    if policy_no:
+        conn = db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor.execute(
+                "SELECT id FROM insurance_records "
+                "WHERE JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.保单号')) = %s "
+                "OR JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.保险单号')) = %s "
+                "ORDER BY id DESC LIMIT 1",
+                (policy_no, policy_no)
+            )
+            existing = cursor.fetchone()
+        finally:
+            conn.close()
+
+        if existing:
+            update_insurance_record(db, existing["id"], record)
+            return existing["id"], True
+
+    # 无保单号或未找到已有记录，插入新记录
+    record_id = save_insurance_record(db, record)
+    return record_id, False
+
+
+def get_company_stats(db) -> list:
+    """
+    统计每个保险公司简称的识别记录数。
+    使用 company_short 冗余列（有索引），避免 JSON_EXTRACT 全表扫描。
+    仅统计：status=done/success、doc_category=保单、confidence>0 的记录。
+    返回: [{"company": "人保PICC", "count": 42}, ...]，按数量降序排列。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("""
+            SELECT company_short AS company, COUNT(*) AS cnt
+            FROM insurance_records
+            WHERE status IN ('done', 'success')
+              AND doc_category = '保单'
+              AND confidence > 0
+              AND company_short != ''
+            GROUP BY company_short
+            ORDER BY cnt DESC
+        """)
+        return [{"company": r["company"], "count": r["cnt"]} for r in cursor.fetchall()]
     finally:
         conn.close()
 

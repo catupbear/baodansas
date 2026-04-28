@@ -516,8 +516,54 @@ class InsuranceHandler:
                         "同车牌互补(反向): plate=%s, 回填record_id=%s, 补充=%s",
                         plate, rec["id"], ", ".join(back_filled),
                     )
+                    # 如果历史记录已同步过钉钉，重新同步更新的字段
+                    self._resync_record_to_dingtalk(rec["id"], mapped, hist_fields)
                 except Exception as e:
                     logger.warning("同车牌反向互补失败: record_id=%s, %s", rec["id"], e)
+
+    def _resync_record_to_dingtalk(self, record_id: int, mapped_fields: dict, parsed_fields: dict):
+        """
+        反向互补后重新同步历史记录到钉钉（更新已有行）。
+        从数据库获取记录的 roomid/sender，匹配监控配置后同步。
+        """
+        try:
+            from insurance.db import get_insurance_record
+            record = get_insurance_record(self.db, record_id)
+            if not record or not record.get("dingtalk_synced"):
+                return  # 未同步过的记录不需要重新同步
+
+            roomid = record.get("roomid", "")
+            sender = record.get("sender", "")
+            monitors = self._get_matched_monitors(roomid, sender)
+            for monitor in monitors:
+                if not (monitor.get("dingtalk_base_id") and monitor.get("dingtalk_sheet_id")):
+                    continue
+                monitor_mapping = monitor.get("field_mapping") or {}
+                if monitor_mapping:
+                    from insurance.field_mapping import DEFAULT_MAPPING
+                    export_to_ocr = {v: k for k, v in DEFAULT_MAPPING.items() if v}
+                    sync_fields = {}
+                    for export_col, target_col in monitor_mapping.items():
+                        if not target_col:
+                            continue
+                        ocr_field = export_to_ocr.get(export_col, export_col)
+                        if ocr_field in parsed_fields:
+                            sync_fields[target_col] = parsed_fields[ocr_field]
+                        elif export_col in parsed_fields:
+                            sync_fields[target_col] = parsed_fields[export_col]
+                else:
+                    sync_fields = mapped_fields
+
+                self._sync_to_dingtalk_v2(
+                    record_id, sync_fields,
+                    sender_name=record.get("sender_name", ""),
+                    cos_url=record.get("cos_url", ""),
+                    doc_category=record.get("doc_category", ""),
+                    monitor=monitor,
+                )
+            logger.info("反向互补后重新同步钉钉: record_id=%d", record_id)
+        except Exception as e:
+            logger.warning("反向互补后重新同步钉钉失败: record_id=%d, %s", record_id, e)
 
     # ------------------------------------------------------------------ #
     # COS 上传

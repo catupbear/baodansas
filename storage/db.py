@@ -9,7 +9,10 @@ from datetime import datetime
 
 import pymysql
 import pymysql.cursors
-from dbutils.pooled_db import PooledDB
+try:
+    from dbutils.pooled_db import PooledDB          # DBUtils >= 2.0
+except ImportError:
+    from DBUtils.PooledDB import PooledDB            # DBUtils 1.x
 
 logger = logging.getLogger(__name__)
 

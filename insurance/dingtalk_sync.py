@@ -224,33 +224,38 @@ class DingTalkTableService:
         Returns:
             已存在的发票号码列表
         """
-        try:
-            existing_records = self.list_records()
-        except Exception as e:
-            print(f"[查重] 获取已有记录失败: {e}")
-            return []
-
-        # 收集已有的发票号码（兼容多种数据结构）
-        existing_keys = set()
-        for record in existing_records:
-            # 记录可能直接是 fields，也可能嵌套在 fields 字段中
-            fields = record.get("fields", record)
-            key_val = fields.get(key_field, "")
-            if key_val:
-                existing_keys.add(str(key_val).strip())
-
-        print(f"[查重] 已有发票号码({len(existing_keys)}个): {existing_keys}")
-
-        # 找出重复的
+        existing_map = self._get_existing_key_map(key_field)
         duplicates = []
         for inv in invoices:
             fields = inv.get("fields", {})
             key_val = fields.get(key_field, "")
-            if key_val and str(key_val).strip() in existing_keys:
+            if key_val and str(key_val).strip() in existing_map:
                 duplicates.append(str(key_val).strip())
 
         print(f"[查重] 发现重复: {duplicates}")
         return duplicates
+
+    def _get_existing_key_map(self, key_field: str) -> Dict[str, str]:
+        """
+        获取多维表中已有记录的 key_field → recordId 映射。
+        返回: {"保单号值": "recordId", ...}
+        """
+        try:
+            existing_records = self.list_records()
+        except Exception as e:
+            print(f"[查重] 获取已有记录失败: {e}")
+            return {}
+
+        key_map = {}
+        for record in existing_records:
+            fields = record.get("fields", record)
+            record_id = record.get("id", record.get("recordId", ""))
+            key_val = fields.get(key_field, "")
+            if key_val and record_id:
+                key_map[str(key_val).strip()] = record_id
+
+        print(f"[查重] 已有记录({len(key_map)}个)")
+        return key_map
 
     def insert_records(self, records: List[Dict[str, Any]],
                        sheet_id: str = None) -> Dict[str, Any]:
@@ -271,17 +276,33 @@ class DingTalkTableService:
         body = {"records": records}
         return self._request("POST", url, params=params, json=body, timeout=30)
 
-    def append_invoices(self, field_names: List[str],
-                        invoices: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def update_records(self, records: List[Dict[str, Any]],
+                       sheet_id: str = None) -> Dict[str, Any]:
         """
-        将发票识别结果追加到多维表（自动创建缺失字段）
+        批量更新多维表记录
+        PUT /v1.0/notable/bases/{baseId}/sheets/{sheetIdOrName}/records?operatorId=xxx
+        请求体: {"records": [{"id": "recordId", "fields": {...}}, ...]}
+        """
+        sid = sheet_id or self.sheet_id
+        url = f"{self.BASE_URL}/{self.base_id}/sheets/{sid}/records"
+        params = {"operatorId": self.operator_id}
+        body = {"records": records}
+        return self._request("PUT", url, params=params, json=body, timeout=30)
+
+    def append_invoices(self, field_names: List[str],
+                        invoices: List[Dict[str, Any]],
+                        key_field: str = "保单号") -> Dict[str, Any]:
+        """
+        将发票识别结果追加到多维表（自动创建缺失字段）。
+        相同保单号已存在时自动更新而非重复插入。
 
         Args:
             field_names: 字段名列表
             invoices: 发票数据列表，每项包含 {"fields": {"字段名": "值"}}
+            key_field: 去重字段名，默认"保单号"
 
         Returns:
-            API响应，包含插入的记录数和字段创建信息
+            API响应，包含插入/更新的记录数和字段创建信息
         """
         # 检查多维表现有字段，尝试创建缺失的
         field_result = self.ensure_fields_exist(field_names)
@@ -302,31 +323,58 @@ class DingTalkTableService:
                 f"{', '.join(field_names[:10])}..."
             )
 
-        # 构建多维表记录格式（只写入可用字段）
-        records = []
+        # 获取已有记录的保单号 → recordId 映射，用于去重更新
+        existing_map = self._get_existing_key_map(key_field)
+
+        # 构建多维表记录格式，区分新增和更新
+        to_insert = []
+        to_update = []  # (record_id, fields)
         for inv in invoices:
             fields = inv.get("fields", {})
             record_fields = {}
             for name in usable_fields:
                 value = fields.get(name, "")
-                if value:  # 只写入有值的字段
+                if value:
                     record_fields[name] = value
-            if record_fields:  # 跳过空记录
-                records.append({"fields": record_fields})
+            if not record_fields:
+                continue
 
-        # 分批插入（每批最多100条，避免超限）
+            # 检查是否已存在
+            key_val = fields.get(key_field, "")
+            existing_record_id = existing_map.get(str(key_val).strip()) if key_val else None
+            if existing_record_id:
+                to_update.append((existing_record_id, record_fields))
+            else:
+                to_insert.append({"fields": record_fields})
+
         batch_size = 100
+
+        # 批量更新已有记录（每批最多100条）
+        total_updated = 0
+        for i in range(0, len(to_update), batch_size):
+            batch = [{"id": rid, "fields": flds} for rid, flds in to_update[i:i + batch_size]]
+            try:
+                self.update_records(batch)
+                total_updated += len(batch)
+            except Exception as e:
+                print(f"[同步] 批量更新失败: {e}")
+
+        # 分批插入新记录
         total_inserted = 0
         last_result = {}
 
-        for i in range(0, len(records), batch_size):
-            batch = records[i:i + batch_size]
+        for i in range(0, len(to_insert), batch_size):
+            batch = to_insert[i:i + batch_size]
             last_result = self.insert_records(batch)
             total_inserted += len(batch)
+
+        if total_updated:
+            print(f"[同步] 更新 {total_updated} 条，新增 {total_inserted} 条")
 
         return {
             "success": True,
             "inserted_count": total_inserted,
+            "updated_count": total_updated,
             "created_fields": field_result["created"],
             "skipped_fields": skipped_fields,
             "detail": last_result,

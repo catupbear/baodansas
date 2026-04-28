@@ -17,12 +17,14 @@ from flask import Blueprint, jsonify, request, send_file
 
 from .db import (
     get_all_insurance_config,
+    get_company_stats,
     get_insurance_config,
     get_insurance_record,
     get_insurance_stats,
     query_insurance_records,
     set_insurance_config,
     update_insurance_record,
+    upsert_insurance_record_by_policy,
 )
 from .monitor_config_db import (
     list_monitor_configs,
@@ -243,20 +245,160 @@ def get_stats():
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
+# 支持保司统计缓存（后端5分钟缓存，避免频繁查库）
+_company_cache = {"data": None, "time": 0}
+_COMPANY_CACHE_TTL = 300  # 5分钟
+
+
+@insurance_bp.route("/api/insurance/supported-companies", methods=["GET"])
+def get_supported_companies():
+    """
+    获取支持的保司列表（从已识别记录中统计，5分钟缓存）。
+    返回: {companies: [{company, count, supported}], threshold, aliases: {原名: 简称}}
+    """
+    import time as _time
+
+    # 检查缓存
+    if _company_cache["data"] and (_time.time() - _company_cache["time"] < _COMPANY_CACHE_TTL):
+        return jsonify({"code": 0, "data": _company_cache["data"]})
+
+    try:
+        # 从配置读取阈值和别名映射
+        threshold = get_insurance_config(_db, "company_threshold", 10)
+        if isinstance(threshold, str):
+            try:
+                threshold = int(threshold)
+            except ValueError:
+                threshold = 10
+        aliases = get_insurance_config(_db, "company_aliases", {})
+        if not isinstance(aliases, dict):
+            aliases = {}
+
+        # 从数据库统计各保司识别数量
+        stats = get_company_stats(_db)
+
+        # 应用别名合并统计：多个原名 → 同一简称的数量合并
+        merged = {}
+        for item in stats:
+            company = item["company"]
+            display_name = aliases.get(company, company)
+            if display_name in merged:
+                merged[display_name]["count"] += item["count"]
+            else:
+                merged[display_name] = {"company": display_name, "count": item["count"]}
+
+        companies = sorted(merged.values(), key=lambda x: x["count"], reverse=True)
+        for c in companies:
+            c["supported"] = c["count"] >= threshold
+
+        result_data = {
+            "companies": companies,
+            "threshold": threshold,
+            "aliases": aliases,
+        }
+        _company_cache["data"] = result_data
+        _company_cache["time"] = _time.time()
+
+        return jsonify({"code": 0, "data": result_data})
+    except Exception as e:
+        logger.exception("获取支持保司列表失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/supported-companies/config", methods=["PUT"])
+def update_supported_companies_config():
+    """
+    更新保司支持配置。
+    请求体: {threshold?: int, aliases?: {原名: 简称, ...}}
+    """
+    try:
+        body = request.get_json(force=True) or {}
+
+        if "threshold" in body:
+            set_insurance_config(_db, "company_threshold", int(body["threshold"]))
+        if "aliases" in body:
+            if not isinstance(body["aliases"], dict):
+                return jsonify({"code": 400, "msg": "aliases 必须是对象格式"}), 400
+            set_insurance_config(_db, "company_aliases", body["aliases"])
+
+        # 清除缓存
+        _company_cache["data"] = None
+        _company_cache["time"] = 0
+
+        return jsonify({"code": 0, "msg": "配置已更新"})
+    except Exception as e:
+        logger.exception("更新保司配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
 # ============================================================
 # 手动上传识别
 # ============================================================
+
+def _save_manual_record(file_name, policy, ocr_engine, file_data_b64=None, upload_cos=False):
+    """
+    保存手动识别记录到数据库（按保单号去重：存在则更新，否则新建）。
+    upload_cos=True 时上传文件到 COS。
+    返回 (record_id, is_update)。
+    """
+    parsed_fields = policy.get("fields", {})
+    doc_category = policy.get("doc_category", "")
+    confidence = policy.get("confidence", 0.0)
+
+    # 字段映射
+    company_short = parsed_fields.get("保险公司简称", "")
+    mapped_fields = apply_mapping(parsed_fields, company_short)
+
+    cos_url = ""
+    # 上传 COS（仅在开关打开且有文件数据时）
+    if upload_cos and file_data_b64 and _handler and getattr(_handler, "cos_storage", None):
+        try:
+            import os
+            import time
+            pdf_bytes = base64.b64decode(file_data_b64)
+            name, ext = os.path.splitext(file_name)
+            key_suffix = f"insurance/manual/{file_name}"
+            if _handler.cos_storage.file_exists(key_suffix):
+                ts = int(time.time() * 1000)
+                key_suffix = f"insurance/manual/{name}_{ts}{ext}"
+            cos_url = _handler.cos_storage.upload_bytes(pdf_bytes, key_suffix) or ""
+        except Exception as e:
+            logger.warning("手动上传 COS 失败: %s", e)
+
+    record = {
+        "filename": file_name,
+        "cos_url": cos_url,
+        "ocr_engine": ocr_engine,
+        "doc_category": doc_category,
+        "confidence": confidence,
+        "parsed_fields": parsed_fields,
+        "mapped_fields": mapped_fields,
+        "status": "done",
+        "source": "manual",
+    }
+
+    try:
+        record_id, is_update = upsert_insurance_record_by_policy(_db, record)
+        logger.info("手动识别记录已%s, id=%d, file=%s",
+                     "更新" if is_update else "新建", record_id, file_name)
+        return record_id, is_update
+    except Exception as e:
+        logger.warning("手动识别记录保存失败: %s", e)
+        return None, False
+
 
 @insurance_bp.route("/api/insurance/parse", methods=["POST"])
 def parse_text_only():
     """
     纯文本解析（不做 OCR），接收前端提取的文本直接解析保单字段。
-    请求体: {text, file_name}
+    请求体: {text, file_name, upload_cos, file_data(可选，upload_cos=true时用于上传COS)}
     """
     try:
         body = request.get_json(force=True) or {}
         text = body.get("text", "")
         file_name = body.get("file_name", "upload")
+        upload_cos = body.get("upload_cos", False)
+        file_data_b64 = body.get("file_data", "")
 
         if not text:
             return jsonify({
@@ -274,12 +416,19 @@ def parse_text_only():
                 "error": "need_ocr", "invoices": [],
             })
 
+        # 保存识别记录到数据库
+        record_id, is_update = _save_manual_record(
+            file_name, policy, "pdfjs",
+            file_data_b64=file_data_b64, upload_cos=upload_cos)
+
         return jsonify({
             "success": True,
             "file_name": file_name,
             "invoices": [policy],
             "char_count": len(text),
             "ocr_engine": "pdfjs",
+            "record_id": record_id,
+            "is_update": is_update,
         })
     except Exception as e:
         logger.exception("文本解析失败")
@@ -292,9 +441,9 @@ def parse_text_only():
 @insurance_bp.route("/api/insurance/ocr", methods=["POST"])
 def manual_ocr():
     """
-    手动上传文件进行保单识别（纯识别，不上传 COS、不保存记录）。
-    采用 baoxianOcr 的轻量逻辑：pdfplumber → 质量不佳降级百度 OCR → parse_policy_text
-    请求体: {file_data(base64), file_type, file_name, pdf_page}
+    手动上传文件进行保单识别，识别结果保存到数据库（按保单号去重）。
+    upload_cos=true 时同时上传文件到 COS。
+    请求体: {file_data(base64), file_type, file_name, pdf_page, upload_cos}
     """
     try:
         body = request.get_json(force=True) or {}
@@ -302,6 +451,7 @@ def manual_ocr():
         file_type = body.get("file_type", "pdf")
         file_name = body.get("file_name", "upload")
         pdf_page = body.get("pdf_page", 0) or 0  # 0=提取所有页
+        upload_cos = body.get("upload_cos", False)
 
         if not file_data_b64:
             return jsonify({"code": 400, "msg": "缺少 file_data 参数"}), 400
@@ -371,12 +521,19 @@ def manual_ocr():
         if _handler and policy.get("fields"):
             _handler._cross_fill_by_plate(policy["fields"])
 
+        # 保存识别记录到数据库
+        record_id, is_update = _save_manual_record(
+            file_name, policy, ocr_engine,
+            file_data_b64=file_data_b64, upload_cos=upload_cos)
+
         return jsonify({
             "success": True,
             "file_name": file_name,
             "invoices": [policy],
             "char_count": extract_result.get("char_count", 0),
             "ocr_engine": ocr_engine,
+            "record_id": record_id,
+            "is_update": is_update,
         })
     except Exception as e:
         logger.exception("手动上传识别失败")
@@ -559,10 +716,219 @@ def sync_record_to_dingtalk(record_id):
         if record.get("dingtalk_synced"):
             update_insurance_record(_db, record_id, {"dingtalk_synced": 0})
 
-        result = _handler._sync_to_dingtalk(record)
-        return jsonify({"code": 0, "data": result, "msg": "同步成功"})
+        # 解析字段
+        parsed_fields = record.get("parsed_fields") or {}
+        if isinstance(parsed_fields, str):
+            try:
+                parsed_fields = json.loads(parsed_fields)
+            except (TypeError, json.JSONDecodeError):
+                parsed_fields = {}
+        mapped_fields = record.get("mapped_fields") or {}
+        if isinstance(mapped_fields, str):
+            try:
+                mapped_fields = json.loads(mapped_fields)
+            except (TypeError, json.JSONDecodeError):
+                mapped_fields = {}
+
+        # 如果没有 mapped_fields，重新生成
+        if not mapped_fields and parsed_fields:
+            company_short = parsed_fields.get("保险公司简称", "")
+            mapped_fields = apply_mapping(parsed_fields, company_short)
+
+        roomid = record.get("roomid", "")
+        sender = record.get("sender", "")
+        monitors = _handler._get_matched_monitors(roomid, sender)
+        if not monitors:
+            return jsonify({"code": 400, "msg": "该记录无匹配的监控配置，无法确定同步目标"}), 400
+
+        synced = False
+        for monitor in monitors:
+            if not (monitor.get("dingtalk_base_id") and monitor.get("dingtalk_sheet_id")):
+                continue
+            monitor_mapping = monitor.get("field_mapping") or {}
+            if monitor_mapping:
+                from insurance.field_mapping import DEFAULT_MAPPING
+                export_to_ocr = {v: k for k, v in DEFAULT_MAPPING.items() if v}
+                sync_fields = {}
+                for export_col, target_col in monitor_mapping.items():
+                    if not target_col:
+                        continue
+                    ocr_field = export_to_ocr.get(export_col, export_col)
+                    if ocr_field in parsed_fields:
+                        sync_fields[target_col] = parsed_fields[ocr_field]
+                    elif export_col in parsed_fields:
+                        sync_fields[target_col] = parsed_fields[export_col]
+            else:
+                sync_fields = mapped_fields
+            _handler._sync_to_dingtalk_v2(
+                record_id, sync_fields,
+                sender_name=record.get("sender_name", ""),
+                cos_url=record.get("cos_url", ""),
+                doc_category=record.get("doc_category", ""),
+                monitor=monitor,
+            )
+            synced = True
+
+        if synced:
+            update_insurance_record(_db, record_id, {"dingtalk_synced": 1})
+            return jsonify({"code": 0, "msg": "同步成功"})
+        else:
+            return jsonify({"code": 400, "msg": "监控配置未绑定钉钉文档"}), 400
     except Exception as e:
         logger.exception("同步记录 %d 到钉钉失败", record_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/batch-reocr-sync", methods=["POST"])
+def batch_reocr_sync():
+    """
+    批量重新识别并同步钉钉。
+    对选中的记录逐条执行：重新OCR → 同步到钉钉。
+    请求体: {record_ids: [int, ...]}
+    """
+    import requests as http_requests
+
+    if not _handler:
+        return jsonify({"code": 503, "msg": "识别服务未初始化"}), 503
+
+    try:
+        body = request.get_json(force=True) or {}
+        record_ids = body.get("record_ids", [])
+
+        if not record_ids:
+            return jsonify({"code": 400, "msg": "缺少 record_ids 参数"}), 400
+
+        results = {"reocr_success": 0, "reocr_failed": 0, "sync_success": 0, "sync_failed": 0, "errors": []}
+
+        for rid in record_ids:
+            # 1. 获取记录
+            record = get_insurance_record(_db, rid)
+            if not record:
+                results["errors"].append({"id": rid, "error": "记录不存在"})
+                results["reocr_failed"] += 1
+                continue
+
+            cos_url = record.get("cos_url", "")
+            if not cos_url:
+                results["errors"].append({"id": rid, "error": "无文件URL"})
+                results["reocr_failed"] += 1
+                continue
+
+            # 2. 重新识别
+            try:
+                resp = http_requests.get(cos_url, timeout=60)
+                if resp.status_code != 200:
+                    results["errors"].append({"id": rid, "error": "文件下载失败"})
+                    results["reocr_failed"] += 1
+                    continue
+
+                pdf_bytes = resp.content
+                filename = record.get("filename", "file.pdf")
+                ocr_result = _handler._do_ocr(pdf_bytes, filename)
+                if not ocr_result.get("success"):
+                    results["errors"].append({"id": rid, "error": f"OCR失败: {ocr_result.get('error', '')}"})
+                    results["reocr_failed"] += 1
+                    continue
+
+                policy = ocr_result.get("policy", {})
+                ocr_engine = ocr_result.get("ocr_engine", "pdfplumber")
+                parsed_fields = policy.get("fields", {})
+                doc_category = policy.get("doc_category", "")
+                confidence = policy.get("confidence", 0.0)
+
+                # 同车牌互补
+                _handler._cross_fill_by_plate(parsed_fields, rid)
+
+                # 字段映射
+                company_short = parsed_fields.get("保险公司简称", "")
+                mapped_fields = apply_mapping(parsed_fields, company_short)
+
+                # 更新记录
+                raw_text = policy.get("raw_text", "")
+                update_insurance_record(_db, rid, {
+                    "status": "done",
+                    "ocr_engine": ocr_engine,
+                    "doc_category": doc_category,
+                    "confidence": confidence,
+                    "parsed_fields": parsed_fields,
+                    "mapped_fields": mapped_fields,
+                    "raw_text": raw_text,
+                    "error_message": "",
+                })
+                results["reocr_success"] += 1
+
+            except Exception as e:
+                results["errors"].append({"id": rid, "error": f"识别异常: {str(e)[:200]}"})
+                results["reocr_failed"] += 1
+                continue
+
+            # 3. 同步钉钉（使用监控配置绑定关系，与自动同步一致）
+            try:
+                roomid = record.get("roomid", "")
+                sender = record.get("sender", "")
+                sender_name = record.get("sender_name", "")
+                cos_url = record.get("cos_url", "")
+                monitors = _handler._get_matched_monitors(roomid, sender)
+                if not monitors:
+                    logger.info("record_id=%d 无匹配监控配置，跳过钉钉同步", rid)
+                    results["sync_failed"] += 1
+                    results["errors"].append({"id": rid, "error": "无匹配的监控配置"})
+                else:
+                    synced = False
+                    for monitor in monitors:
+                        if not (monitor.get("dingtalk_base_id") and monitor.get("dingtalk_sheet_id")):
+                            continue
+                        # 使用监控配置自身的字段映射（如果有）
+                        monitor_mapping = monitor.get("field_mapping") or {}
+                        if monitor_mapping:
+                            from insurance.field_mapping import DEFAULT_MAPPING
+                            export_to_ocr = {v: k for k, v in DEFAULT_MAPPING.items() if v}
+                            sync_fields = {}
+                            for export_col, target_col in monitor_mapping.items():
+                                if not target_col:
+                                    continue
+                                ocr_field = export_to_ocr.get(export_col, export_col)
+                                if ocr_field in parsed_fields:
+                                    sync_fields[target_col] = parsed_fields[ocr_field]
+                                elif export_col in parsed_fields:
+                                    sync_fields[target_col] = parsed_fields[export_col]
+                        else:
+                            sync_fields = mapped_fields
+                        _handler._sync_to_dingtalk_v2(
+                            rid, sync_fields,
+                            sender_name=sender_name,
+                            cos_url=cos_url,
+                            doc_category=doc_category,
+                            monitor=monitor,
+                        )
+                        synced = True
+                    if synced:
+                        update_insurance_record(_db, rid, {"dingtalk_synced": 1})
+                        results["sync_success"] += 1
+                    else:
+                        results["sync_failed"] += 1
+                        results["errors"].append({"id": rid, "error": "监控配置未绑定钉钉文档"})
+            except Exception as e:
+                results["errors"].append({"id": rid, "error": f"同步失败: {str(e)[:200]}"})
+                results["sync_failed"] += 1
+
+        msg_parts = []
+        if results["reocr_success"]:
+            msg_parts.append(f"识别成功 {results['reocr_success']} 条")
+        if results["sync_success"]:
+            msg_parts.append(f"同步成功 {results['sync_success']} 条")
+        if results["reocr_failed"]:
+            msg_parts.append(f"识别失败 {results['reocr_failed']} 条")
+        if results["sync_failed"]:
+            msg_parts.append(f"同步失败 {results['sync_failed']} 条")
+
+        return jsonify({
+            "code": 0,
+            "data": results,
+            "msg": "、".join(msg_parts) if msg_parts else "无操作",
+        })
+    except Exception as e:
+        logger.exception("批量重新识别同步失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
@@ -574,7 +940,7 @@ def sync_record_to_dingtalk(record_id):
 def get_config():
     """获取全部保单识别配置"""
     try:
-        config = get_all_insurance_config(_db)
+        config = get_all_insurance_config(_db, max_value_len=10000)
         return jsonify({"code": 0, "data": config})
     except Exception as e:
         logger.exception("获取保单配置失败")
@@ -750,45 +1116,63 @@ def sync_contacts():
     })
 
 
+# 配置状态缓存（60秒）
+_config_status_cache = {"data": None, "time": 0}
+
+
 @insurance_bp.route("/api/insurance/config/status", methods=["GET"])
 def config_status():
-    """检查配置状态（OCR、钉钉等关键配置是否就绪）"""
+    """检查配置状态（OCR、钉钉等关键配置是否就绪），60秒缓存"""
+    import time as _time
+
+    if _config_status_cache["data"] and (_time.time() - _config_status_cache["time"] < 60):
+        return jsonify({"code": 0, "data": _config_status_cache["data"]})
+
     try:
-        config = get_all_insurance_config(_db)
+        # 只查 config_key 是否存在 + value 长度，完全不读 LONGTEXT 内容
+        conn = _db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor.execute(
+                "SELECT config_key, LENGTH(config_value) as val_len "
+                "FROM insurance_config "
+                "WHERE config_key IN ("
+                "  'baidu_ocr_app_id','baidu_ocr_api_key','baidu_ocr_secret_key','baidu_ocr_enabled',"
+                "  'dingtalk_app_key','dingtalk_app_secret','dingtalk_operator_id'"
+                ")"
+            )
+            existing = {row["config_key"]: row["val_len"] for row in cursor.fetchall()}
+        finally:
+            conn.close()
 
-        # 检查百度 OCR 配置
-        baidu_ok = all([
-            config.get("baidu_ocr_app_id"),
-            config.get("baidu_ocr_api_key"),
-            config.get("baidu_ocr_secret_key"),
-        ])
+        baidu_ok = all(existing.get(k, 0) for k in ["baidu_ocr_app_id", "baidu_ocr_api_key", "baidu_ocr_secret_key"])
+        dingtalk_ok = all(existing.get(k, 0) for k in ["dingtalk_app_key", "dingtalk_app_secret", "dingtalk_operator_id"])
+        baidu_enabled = "baidu_ocr_enabled" not in existing or existing.get("baidu_ocr_enabled", 0) > 0
 
-        # 检查钉钉配置
-        dingtalk_ok = all([
-            config.get("dingtalk_app_key"),
-            config.get("dingtalk_app_secret"),
-            config.get("dingtalk_operator_id"),
-        ])
-
-        # 钉钉目标表
-        targets = config.get("dingtalk_targets", [])
-        if isinstance(targets, str):
-            try:
-                targets = json.loads(targets)
-            except Exception:
-                targets = []
+        # 钉钉目标数量：用监控配置表计数，不读大 JSON
+        targets_count = 0
+        try:
+            from .monitor_config_db import list_monitor_configs
+            monitors = list_monitor_configs(_db)
+            targets_count = len([m for m in monitors if m.get("dingtalk_base_id")])
+        except Exception:
+            pass
 
         status = {
             "baidu_ocr": {
                 "configured": baidu_ok,
-                "enabled": bool(config.get("baidu_ocr_enabled", True)),
+                "enabled": baidu_enabled,
             },
             "dingtalk": {
                 "configured": dingtalk_ok,
-                "targets_count": len(targets) if isinstance(targets, list) else 0,
+                "targets_count": targets_count,
             },
             "handler_ready": _handler is not None,
         }
+
+        _config_status_cache["data"] = status
+        _config_status_cache["time"] = _time.time()
+
         return jsonify({"code": 0, "data": status})
     except Exception as e:
         logger.exception("获取配置状态失败")
@@ -1117,6 +1501,15 @@ def batch_sync_dingtalk():
             except Exception as upd_err:
                 logger.warning("更新记录 %d 同步状态失败: %s", rid, upd_err)
 
+        inserted = result.get("inserted_count", 0)
+        updated = result.get("updated_count", 0)
+        msg_parts = []
+        if inserted:
+            msg_parts.append(f"新增 {inserted} 条")
+        if updated:
+            msg_parts.append(f"更新 {updated} 条")
+        msg = "、".join(msg_parts) if msg_parts else f"同步 {len(success_ids)} 条记录"
+
         return jsonify({
             "code": 0,
             "data": {
@@ -1124,7 +1517,7 @@ def batch_sync_dingtalk():
                 "failed": failed_ids,
                 "detail": result,
             },
-            "msg": f"成功同步 {len(success_ids)} 条记录",
+            "msg": msg,
         })
     except Exception as e:
         logger.exception("批量同步钉钉失败")

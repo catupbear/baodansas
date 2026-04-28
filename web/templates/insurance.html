@@ -301,17 +301,91 @@
     <main v-if="pageTab === 'upload'" class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-5">
         <!-- 支持保司列表 -->
         <div class="card p-4">
-            <div class="flex items-start gap-3">
-                <div class="flex items-center gap-2 flex-shrink-0 mt-0.5">
-                    <svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
-                    </svg>
-                    <span class="text-sm font-medium text-gray-700">支持保司</span>
-                    <span class="badge badge-info font-semibold">{{ supportedCompanies.length }}家</span>
+            <!-- 加载中 -->
+            <div v-if="companiesLoading" class="flex items-center gap-3 py-2">
+                <svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                </svg>
+                <span class="text-sm text-gray-400">加载支持保司...</span>
+                <svg class="w-4 h-4 animate-spin text-orange-400" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+            </div>
+            <!-- 加载完成 -->
+            <div v-else class="flex items-start gap-3">
+                <div class="flex flex-col items-start flex-shrink-0 mt-0.5">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                        </svg>
+                        <span class="text-sm font-medium text-gray-700">支持保司</span>
+                        <span class="badge badge-info font-semibold">{{ supportedCompanies.length }}家</span>
+                    </div>
+                    <span class="text-xs text-gray-400 ml-6">(识别≥{{ companyThreshold }}次)</span>
                 </div>
                 <div class="flex flex-wrap gap-1.5">
-                    <span v-for="c in supportedCompanies" :key="c" class="company-tag">{{ c }}</span>
+                    <span v-for="c in allCompaniesData" :key="c.company"
+                          class="company-tag"
+                          :class="{ 'opacity-40': !c.supported }"
+                          :title="c.company + '：已识别 ' + c.count + ' 次'">
+                        {{ c.company }}
+                        <span class="text-xs text-gray-400 ml-0.5">({{ c.count }})</span>
+                    </span>
                 </div>
+            </div>
+            <!-- 保司简称配置（可折叠） -->
+            <div v-if="showCompanyConfig" class="mt-3 pt-3 border-t border-gray-100">
+                <div class="space-y-3">
+                    <!-- 阈值设置 -->
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-gray-500 flex-shrink-0">支持阈值：</span>
+                        <input v-model.number="editThreshold" type="number" min="1" max="1000"
+                               class="w-20 px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-orange-400 focus:border-orange-400">
+                        <span class="text-xs text-gray-400">次识别</span>
+                    </div>
+                    <!-- 简称别名 -->
+                    <div>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-xs text-gray-500">简称别名：</span>
+                            <span class="text-xs text-gray-400">将不同名称合并为同一保司</span>
+                        </div>
+                        <div class="space-y-1">
+                            <div v-for="(alias, orig) in editAliases" :key="orig" class="flex items-center gap-2">
+                                <input :value="orig" disabled
+                                       class="w-32 px-2 py-1 text-xs border border-gray-200 rounded-md bg-gray-50 text-gray-500">
+                                <span class="text-xs text-gray-400">→</span>
+                                <input v-model="editAliases[orig]"
+                                       class="w-32 px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-orange-400 focus:border-orange-400">
+                                <button @click="delete editAliases[orig]"
+                                        class="text-xs text-red-400 hover:text-red-600 cursor-pointer">删除</button>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 mt-2">
+                            <input v-model="newAliasFrom" placeholder="原名称"
+                                   class="w-32 px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-orange-400 focus:border-orange-400">
+                            <span class="text-xs text-gray-400">→</span>
+                            <input v-model="newAliasTo" placeholder="合并为"
+                                   class="w-32 px-2 py-1 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-orange-400 focus:border-orange-400">
+                            <button @click="addAlias"
+                                    :disabled="!newAliasFrom || !newAliasTo"
+                                    class="text-xs px-2 py-1 bg-orange-50 text-orange-600 rounded-md hover:bg-orange-100 disabled:opacity-40 cursor-pointer">添加</button>
+                        </div>
+                    </div>
+                    <!-- 保存按钮 -->
+                    <div class="flex justify-end">
+                        <button @click="saveCompanyConfig"
+                                class="text-xs px-3 py-1.5 bg-orange-500 text-white rounded-md hover:bg-orange-600 cursor-pointer">
+                            保存配置
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- 配置按钮 -->
+            <div class="mt-2 flex justify-end">
+                <button @click="toggleCompanyConfig" class="text-xs text-gray-400 hover:text-orange-500 cursor-pointer">
+                    {{ showCompanyConfig ? '收起配置' : '配置' }}
+                </button>
             </div>
         </div>
 
@@ -388,7 +462,7 @@
             </div>
 
             <!-- 操作按钮 -->
-            <div v-if="files.length" class="mt-5 flex gap-3">
+            <div v-if="files.length" class="mt-5 flex items-center gap-3">
                 <button @click="startRecognize" :disabled="isRecognizing" class="btn btn-primary">
                     <svg v-if="!isRecognizing" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
@@ -399,6 +473,14 @@
                     </svg>
                     {{ isRecognizing ? '识别中...' : '开始识别' }}
                 </button>
+                <!-- 上传保单开关 -->
+                <div class="flex items-center gap-2 cursor-pointer select-none" @click="uploadCos = !uploadCos">
+                    <div class="relative flex-shrink-0" style="width:36px;height:20px;">
+                        <div class="absolute inset-0 rounded-full transition-colors" :style="{ background: uploadCos ? '#f97316' : '#d1d5db' }"></div>
+                        <div class="absolute rounded-full bg-white shadow transition-all" style="width:16px;height:16px;top:2px;" :style="{ left: uploadCos ? '18px' : '2px' }"></div>
+                    </div>
+                    <span class="text-xs text-gray-500">上传保单到云存储</span>
+                </div>
             </div>
 
             <!-- 进度条 -->
@@ -523,6 +605,7 @@
                                 <td class="px-3 py-2 text-gray-700 col-fname">
                                     <span class="cursor-pointer text-orange-600 hover:underline"
                                           @click="previewResultFile(r)" :title="r.file_name">{{ r.file_name }}</span>
+                                    <span v-if="getPolicyHint(r)" class="ml-1 text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded">{{ getPolicyHint(r) }}</span>
                                 </td>
                                 <td class="px-3 py-2">
                                     <span class="text-xs px-1.5 py-0.5 rounded font-medium"
@@ -817,12 +900,41 @@
             </div>
         </div>
 
+        <!-- 批量操作栏 -->
+        <div v-if="selectedRecordIds.length || batchProcessing" class="card p-3">
+            <div class="flex items-center gap-3">
+                <span class="text-sm text-gray-600">已选 <span class="font-semibold text-orange-600">{{ selectedRecordIds.length }}</span> 条</span>
+                <button @click="batchReocrSync" :disabled="batchProcessing"
+                        class="btn btn-primary" style="font-size:12px;padding:4px 14px;">
+                    {{ batchProcessing ? '处理中...' : '重新识别并同步钉钉' }}
+                </button>
+                <button v-if="!batchProcessing" @click="selectedRecordIds = []" class="text-xs text-gray-400 hover:text-gray-600 cursor-pointer">清除选择</button>
+            </div>
+            <!-- 进度条 -->
+            <div v-if="batchProcessing" class="mt-3">
+                <div class="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>{{ batchProgress.current }} / {{ batchProgress.total }}　{{ batchProgress.currentFile }}</span>
+                    <span>
+                        <span class="text-green-600">成功 {{ batchProgress.success }}</span>
+                        <span v-if="batchProgress.failed" class="text-red-500 ml-2">失败 {{ batchProgress.failed }}</span>
+                    </span>
+                </div>
+                <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                    <div class="h-full bg-orange-500 rounded-full transition-all duration-300"
+                         :style="{ width: (batchProgress.total ? batchProgress.current / batchProgress.total * 100 : 0) + '%' }"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- 记录表格 -->
         <div class="card">
             <div class="table-scroll-wrapper" style="max-height: 65vh;">
                 <table class="records-table text-left">
                     <thead>
                         <tr>
+                            <th style="min-width:40px;">
+                                <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" class="cursor-pointer">
+                            </th>
                             <th style="min-width:100px;">群名</th>
                             <th style="min-width:80px;">发送人</th>
                             <th style="min-width:150px;">文件名</th>
@@ -839,7 +951,7 @@
                     <tbody>
                         <!-- 加载中占位 -->
                         <tr v-if="isLoadingRecords">
-                            <td :colspan="outputColumns.length + 10" class="text-center py-12 text-gray-400">
+                            <td :colspan="outputColumns.length + 11" class="text-center py-12 text-gray-400">
                                 <svg class="w-6 h-6 animate-spin mx-auto mb-2 text-orange-400" fill="none" viewBox="0 0 24 24">
                                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
@@ -849,7 +961,7 @@
                         </tr>
                         <!-- 空数据占位 -->
                         <tr v-else-if="!records.length">
-                            <td :colspan="outputColumns.length + 10" class="text-center py-12 text-gray-400">
+                            <td :colspan="outputColumns.length + 11" class="text-center py-12 text-gray-400">
                                 <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                 </svg>
@@ -858,6 +970,10 @@
                         </tr>
                         <!-- 数据行 -->
                         <tr v-else v-for="record in filteredRecords" :key="record.id">
+                            <!-- 选择框 -->
+                            <td>
+                                <input type="checkbox" :value="record.id" v-model="selectedRecordIds" class="cursor-pointer">
+                            </td>
                             <!-- 群名（可点击编辑） -->
                             <td class="text-gray-700 text-sm">
                                 <span v-if="record.roomid" class="cursor-pointer hover:text-orange-600 hover:underline"
@@ -883,6 +999,7 @@
                                 <span v-else class="text-gray-600 text-sm truncate block" style="max-width:180px;" :title="record.filename">
                                     {{ record.filename || '—' }}
                                 </span>
+                                <span v-if="getRecordHint(record)" class="text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">{{ getRecordHint(record) }}</span>
                             </td>
                             <!-- 文档类型 -->
                             <td>
@@ -1310,8 +1427,11 @@
                 </div>
                 <div class="px-5 py-3 border-t bg-gray-50 rounded-b-xl flex justify-end gap-2">
                     <button @click="cancelSync" class="btn btn-outline" style="font-size:13px;">取消</button>
-                    <button @click="confirmSyncSkipDuplicates" class="btn btn-primary" style="font-size:13px;">
+                    <button @click="confirmSyncSkipDuplicates" class="btn btn-outline" style="font-size:13px;">
                         跳过重复，同步其余
+                    </button>
+                    <button @click="confirmSyncUpdateDuplicates" class="btn btn-primary" style="font-size:13px;">
+                        更新已有，全部同步
                     </button>
                 </div>
             </div>
@@ -1574,20 +1694,101 @@ createApp({
         const results = ref([]);
         const isDragging = ref(false);
         const isRecognizing = ref(false);
+        const uploadCos = ref(false);  // 上传保单到云存储开关，默认关闭
         const recognizedCount = ref(0);
         const currentFileName = ref('');
         const activeTab = ref('all');
         const docCategoryFilter = ref('all');
         const companyFilter = ref('all');
 
-        // 支持的保司列表
-        const supportedCompanies = [
-            '人保PICC', '平安', '太平洋', '大家财险', '阳光', '太平',
-            '国寿财产', '紫金', '申能', '浙商', '中华联合',
-            '华泰', '永诚', '前海联合', '京东安联', '安盛天平',
-            '众安', '亚太', '都邦', '渤海', '锦泰',
-            '天安', '华安', '永安',
-        ];
+        // 支持的保司列表（从后端动态获取）
+        const supportedCompaniesData = ref([]);
+        const companyThreshold = ref(10);
+        const companyAliases = ref({});
+        const companiesLoading = ref(true);
+        const supportedCompanies = computed(() =>
+            supportedCompaniesData.value
+                .filter(c => c.supported)
+                .map(c => c.company)
+        );
+        const allCompaniesData = computed(() => supportedCompaniesData.value);
+
+        // 加载支持保司列表（带缓存，5分钟有效）
+        let _companiesCache = null;
+        let _companiesCacheTime = 0;
+        const CACHE_TTL = 5 * 60 * 1000;
+
+        async function loadSupportedCompanies(forceRefresh = false) {
+            // 有缓存且未过期时直接使用
+            if (!forceRefresh && _companiesCache && (Date.now() - _companiesCacheTime < CACHE_TTL)) {
+                supportedCompaniesData.value = _companiesCache.companies;
+                companyThreshold.value = _companiesCache.threshold;
+                companyAliases.value = _companiesCache.aliases;
+                companiesLoading.value = false;
+                return;
+            }
+            companiesLoading.value = true;
+            try {
+                const resp = await fetch('/api/insurance/supported-companies');
+                const data = await resp.json();
+                if (data.code === 0) {
+                    supportedCompaniesData.value = data.data.companies || [];
+                    companyThreshold.value = data.data.threshold || 10;
+                    companyAliases.value = data.data.aliases || {};
+                    _companiesCache = { companies: data.data.companies || [], threshold: data.data.threshold || 10, aliases: data.data.aliases || {} };
+                    _companiesCacheTime = Date.now();
+                }
+            } catch (e) {
+                console.warn('加载支持保司列表失败:', e);
+            }
+            companiesLoading.value = false;
+        }
+
+        // 保司配置编辑状态
+        const showCompanyConfig = ref(false);
+        const editThreshold = ref(10);
+        const editAliases = ref({});
+        const newAliasFrom = ref('');
+        const newAliasTo = ref('');
+
+        function toggleCompanyConfig() {
+            showCompanyConfig.value = !showCompanyConfig.value;
+            if (showCompanyConfig.value) {
+                // 打开时用当前值初始化编辑状态
+                editThreshold.value = companyThreshold.value;
+                editAliases.value = { ...companyAliases.value };
+            }
+        }
+
+        function addAlias() {
+            if (newAliasFrom.value && newAliasTo.value) {
+                editAliases.value[newAliasFrom.value] = newAliasTo.value;
+                newAliasFrom.value = '';
+                newAliasTo.value = '';
+            }
+        }
+
+        async function saveCompanyConfig() {
+            try {
+                const resp = await fetch('/api/insurance/supported-companies/config', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        threshold: editThreshold.value,
+                        aliases: editAliases.value,
+                    }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showCompanyConfig.value = false;
+                    await loadSupportedCompanies(true);
+                } else {
+                    alert('保存失败: ' + (data.msg || '未知错误'));
+                }
+            } catch (e) {
+                alert('保存失败: ' + e.message);
+            }
+        }
 
         const isSyncing = ref(false);
         const syncMessage = ref('');
@@ -2043,13 +2244,31 @@ createApp({
             const cat = record.doc_category || '';
             if (cat && cat !== '保单') return false;
             const fields = record.parsed_fields || {};
-            return REQUIRED_FIELDS.some(col => {
-                // 先检查导出列名
+            const missing = REQUIRED_FIELDS.filter(col => {
                 if (fields[col]) return false;
-                // 再检查对应的 OCR 字段名
                 const ocrKeys = EXPORT_TO_OCR[col] || [];
                 return !ocrKeys.some(k => fields[k]);
             });
+            if (missing.length === 0) return false;
+            // 交强险：仅缺投保人时不算异常
+            const policyType = fields['险种类型'] || '';
+            if ((policyType.includes('交强') || policyType.includes('交通事故责任强制'))
+                && missing.length === 1 && missing[0] === '投保人') {
+                return false;
+            }
+            return true;
+        }
+
+        // 获取自动识别记录的提示信息
+        function getRecordHint(record) {
+            if (!record) return '';
+            const fields = record.parsed_fields || {};
+            const policyType = fields['险种类型'] || '';
+            const hasInsured = fields['投保人'] || false;
+            if ((policyType.includes('交强') || policyType.includes('交通事故责任强制')) && !hasInsured) {
+                return '保单无投保人';
+            }
+            return '';
         }
 
         // 判断是否非保单文档（电子标志、发票、缴款通知、条款、其他、无法识别关键字段等）
@@ -2066,11 +2285,34 @@ createApp({
             return false;
         }
 
-        // 判断是否提取异常（成功识别的保单但任一必填字段缺失即为异常）
+        // 判断险种是否为交强险
+        function isCompulsory(r) {
+            if (!r || !r.invoices || !r.invoices[0] || !r.invoices[0].fields) return false;
+            const fields = r.invoices[0].fields;
+            const policyType = fields['险种类型'] || fields['险种'] || '';
+            return policyType.includes('交强') || policyType.includes('交通事故责任强制');
+        }
+
+        // 判断是否提取异常（成功识别的保单但必填字段缺失即为异常）
+        // 交强险且同车牌仅一份时，缺少投保人不算异常
         function isAbnormal(r) {
             if (!r.success || isNonPolicy(r)) return false;
-            // 任一必填字段缺失就算异常
-            return REQUIRED_FIELDS.some(col => !getMappedValue(r, col));
+            const missing = REQUIRED_FIELDS.filter(col => !getMappedValue(r, col));
+            if (missing.length === 0) return false;
+            // 交强险：仅缺投保人时不算异常
+            if (isCompulsory(r) && missing.length === 1 && missing[0] === '投保人') {
+                return false;
+            }
+            return true;
+        }
+
+        // 获取保单提示信息（如交强险无投保人）
+        function getPolicyHint(r) {
+            if (!r || !r.success) return '';
+            if (isCompulsory(r) && !getMappedValue(r, '投保人')) {
+                return '保单无投保人';
+            }
+            return '';
         }
 
         // 计算属性：分类结果（按车牌分组排列）
@@ -2365,9 +2607,12 @@ createApp({
                 if (text && text.length > 50) {
                     // 发送纯文本到后端解析（极快，不传文件）
                     try {
+                        const parseBody = { text, file_name: file.name, upload_cos: uploadCos.value };
+                        // 需要上传 COS 时附带文件数据
+                        if (uploadCos.value) parseBody.file_data = file.base64;
                         const resp = await fetch('/api/insurance/parse', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ text, file_name: file.name }),
+                            body: JSON.stringify(parseBody),
                         });
                         const data = await resp.json();
                         if (data.success) return data;
@@ -2380,7 +2625,7 @@ createApp({
             return withOcrLock(async () => {
                 const resp = await fetch('/api/insurance/ocr', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ file_data: file.base64, file_type: file.type, file_name: file.name, pdf_page: 0 }),
+                    body: JSON.stringify({ file_data: file.base64, file_type: file.type, file_name: file.name, pdf_page: 0, upload_cos: uploadCos.value }),
                 });
                 const data = await resp.json();
                 return resp.ok ? data : { success: false, file_name: file.name, error: data.detail || '请求失败' };
@@ -2664,6 +2909,13 @@ createApp({
             await doSync(filtered);
         }
 
+        // 更新已有记录，全部同步
+        async function confirmSyncUpdateDuplicates() {
+            duplicateVisible.value = false; isSyncing.value = true;
+            await doSync(pendingSyncInvoices);
+            pendingSyncInvoices = null;
+        }
+
         function cancelSync() { duplicateVisible.value = false; pendingSyncInvoices = null; }
 
         // 实际执行同步请求
@@ -2676,11 +2928,19 @@ createApp({
                     }),
                 });
                 const data = await resp.json();
-                if (resp.ok && data.success) {
-                    let msg = `成功同步 ${data.synced_count} 条记录到钉钉表格`;
-                    if (data.skipped_fields && data.skipped_fields.length) msg += `（${data.skipped_fields.length}个字段未在表中）`;
+                const result = data.data || data;
+                if (resp.ok && (data.code === 0 || data.success)) {
+                    const detail = result.detail || {};
+                    const inserted = detail.inserted_count || result.synced || data.synced_count || 0;
+                    const updated = detail.updated_count || 0;
+                    let msg = '';
+                    if (updated && inserted) msg = `新增 ${inserted} 条，更新 ${updated} 条`;
+                    else if (updated) msg = `更新 ${updated} 条记录`;
+                    else msg = `新增 ${inserted} 条记录`;
+                    msg += '到钉钉表格';
+                    if (detail.skipped_fields && detail.skipped_fields.length) msg += `（${detail.skipped_fields.length}个字段未在表中）`;
                     showMessage(msg, true);
-                } else { showMessage(data.detail || '同步失败', false); }
+                } else { showMessage(data.msg || data.detail || '同步失败', false); }
             } catch (e) { showMessage(`同步失败: ${e.message}`, false); }
             isSyncing.value = false;
         }
@@ -2737,6 +2997,8 @@ createApp({
         // ========== 自动识别记录 Tab ==========
         const records = ref([]);
         const isLoadingRecords = ref(false);
+        const selectedRecordIds = ref([]);
+        const batchProcessing = ref(false);
         // 识别成功率统计
         const recordStats = reactive({
             total: 0,
@@ -2846,6 +3108,66 @@ createApp({
             return Object.entries(map).map(([name, cnt]) => ({ name, cnt }));
         });
 
+        // 全选/取消全选
+        const isAllSelected = computed(() => {
+            const ids = filteredRecords.value.map(r => r.id);
+            return ids.length > 0 && ids.every(id => selectedRecordIds.value.includes(id));
+        });
+        function toggleSelectAll(e) {
+            const ids = filteredRecords.value.map(r => r.id);
+            if (e.target.checked) {
+                const set = new Set(selectedRecordIds.value);
+                ids.forEach(id => set.add(id));
+                selectedRecordIds.value = [...set];
+            } else {
+                const removeSet = new Set(ids);
+                selectedRecordIds.value = selectedRecordIds.value.filter(id => !removeSet.has(id));
+            }
+        }
+
+        // 批量进度
+        const batchProgress = reactive({ total: 0, current: 0, success: 0, failed: 0, currentFile: '' });
+
+        // 批量重新识别并同步钉钉（逐条处理，实时进度）
+        async function batchReocrSync() {
+            if (!selectedRecordIds.value.length) return;
+            if (!confirm(`确定对选中的 ${selectedRecordIds.value.length} 条记录重新识别并同步钉钉？`)) return;
+
+            const ids = [...selectedRecordIds.value];
+            batchProcessing.value = true;
+            Object.assign(batchProgress, { total: ids.length, current: 0, success: 0, failed: 0, currentFile: '' });
+
+            for (const rid of ids) {
+                // 从当前记录列表获取文件名用于显示
+                const rec = records.value.find(r => r.id === rid);
+                batchProgress.currentFile = rec ? (rec.filename || `#${rid}`) : `#${rid}`;
+
+                try {
+                    const resp = await fetch('/api/insurance/batch-reocr-sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ record_ids: [rid] }),
+                    });
+                    const data = await resp.json();
+                    if (data.code === 0 && data.data) {
+                        batchProgress.success += (data.data.sync_success || data.data.reocr_success || 0);
+                        batchProgress.failed += (data.data.reocr_failed || 0);
+                    } else {
+                        batchProgress.failed++;
+                    }
+                } catch (e) {
+                    batchProgress.failed++;
+                }
+                batchProgress.current++;
+            }
+
+            batchProgress.currentFile = '完成';
+            selectedRecordIds.value = [];
+            await loadRecords();
+
+            setTimeout(() => { batchProcessing.value = false; }, 1500);
+        }
+
         // 导出自动识别记录
         async function exportRecordsExcel() {
             const data = records.value
@@ -2935,37 +3257,66 @@ createApp({
             _keywordTimer = setTimeout(() => loadRecords(), 400);
         }
 
-        // 从监控配置加载群和用户列表（用于筛选），并解析名称
+        // 加载群和用户列表（从已有识别记录 + 监控配置合并，用于筛选下拉）
         async function loadRoomList() {
             try {
-                const resp = await fetch('/api/monitor-configs');
-                const json = await resp.json();
-                const configs = (json.data || json || []).filter(c => c.enabled !== 0);
-                const roomIds = new Set();
-                const userIds = new Set();
-                for (const cfg of configs) {
-                    for (const r of (cfg.rooms || [])) {
-                        const id = typeof r === 'string' ? r : (r.id || '');
-                        if (id) roomIds.add(id);
+                // 从识别记录统计中获取已有群（最可靠的数据来源）
+                const roomMap = {};  // id → name
+                const userMap = {};
+                try {
+                    const statsResp = await fetch('/api/insurance/stats');
+                    const statsJson = await statsResp.json();
+                    const roomStats = (statsJson.data || statsJson).room_stats || [];
+                    for (const r of roomStats) {
+                        if (r.roomid) {
+                            roomMap[r.roomid] = r.room_name || r.roomid;
+                        }
                     }
-                    for (const u of (cfg.users || [])) {
-                        const id = typeof u === 'string' ? u : (u.id || '');
-                        if (id) userIds.add(id);
+                } catch (e) {}
+
+                // 从监控配置补充
+                try {
+                    const resp = await fetch('/api/monitor-configs');
+                    const json = await resp.json();
+                    const configs = (json.data || json || []).filter(c => c.enabled !== 0);
+                    for (const cfg of configs) {
+                        for (const r of (cfg.rooms || [])) {
+                            const id = typeof r === 'string' ? r : (r.id || '');
+                            const name = typeof r === 'object' ? (r.name || '') : '';
+                            if (id && !roomMap[id]) roomMap[id] = name || id;
+                        }
+                        for (const u of (cfg.users || [])) {
+                            const id = typeof u === 'string' ? u : (u.id || '');
+                            const name = typeof u === 'object' ? (u.name || '') : '';
+                            if (id && !userMap[id]) userMap[id] = name || id;
+                        }
                     }
+                } catch (e) {}
+
+                // 对未解析的名称批量解析
+                const unresolvedRooms = Object.keys(roomMap).filter(id => roomMap[id] === id);
+                const unresolvedUsers = Object.keys(userMap).filter(id => userMap[id] === id);
+                if (unresolvedRooms.length || unresolvedUsers.length) {
+                    try {
+                        const resolveResp = await fetch('/api/contacts/resolve', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ user_ids: unresolvedUsers, room_ids: unresolvedRooms }),
+                        });
+                        const names = await resolveResp.json();
+                        for (const [id, name] of Object.entries(names.rooms || {})) {
+                            if (name) roomMap[id] = name;
+                        }
+                        for (const [id, name] of Object.entries(names.users || {})) {
+                            if (name) userMap[id] = name;
+                        }
+                    } catch (e) {}
                 }
-                // 批量解析名称
-                const resolveResp = await fetch('/api/contacts/resolve', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_ids: [...userIds], room_ids: [...roomIds] }),
-                });
-                const names = await resolveResp.json();
-                const roomNames = names.rooms || {};
-                const userNames = names.users || {};
-                monitorRooms.value = [...roomIds].map(id => ({ id, name: roomNames[id] || id }));
-                monitorUsers.value = [...userIds].map(id => ({ id, name: userNames[id] || id }));
+
+                monitorRooms.value = Object.entries(roomMap).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+                monitorUsers.value = Object.entries(userMap).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
             } catch (e) {
-                console.error('加载监控列表失败', e);
+                console.error('加载筛选列表失败', e);
                 monitorRooms.value = [];
                 monitorUsers.value = [];
             }
@@ -3187,6 +3538,8 @@ createApp({
             await loadTargets();
             // 加载字段映射配置
             await loadMappingConfig();
+            // 加载支持保司列表
+            await loadSupportedCompanies();
             // 加载群列表
             await loadRoomList();
             // 初始化 IndexedDB
@@ -3199,16 +3552,19 @@ createApp({
             // 配置状态
             configStatus,
             // 手动上传
-            files, results, isDragging, isRecognizing,
+            files, results, isDragging, isRecognizing, uploadCos,
             recognizedCount, currentFileName, activeTab, docCategoryFilter, companyFilter, isSyncing,
-            supportedCompanies, companyStats,
+            supportedCompanies, supportedCompaniesData, allCompaniesData, companyThreshold, companyAliases, companiesLoading,
+            loadSupportedCompanies, showCompanyConfig, editThreshold, editAliases,
+            newAliasFrom, newAliasTo, toggleCompanyConfig, addAlias, saveCompanyConfig,
+            companyStats,
             syncMessage, syncSuccess,
             previewVisible, previewSrc, previewIsImage, previewOcrEngine,
             previewType, previewFileName, previewHasRawText, previewShowRaw, previewShowFields, previewShowRules,
             previewRawText, formattedRawText, previewFieldsList, rawTextCopied, copyRawText,
             extractionRules, loadExtractionRules,
             rawTextVisible, rawTextContent, rawTextFileName,
-            successResults, abnormalResults, nonPolicyResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal,
+            successResults, abnormalResults, nonPolicyResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal, getPolicyHint, getRecordHint,
             outputColumns, getMappedValue, getDocCategory, docCategories,
             isLoadingFiles, loadingFileCount, loadingFileTotal, loadingPercent,
             handleFileSelect, handleDrop, removeFile, clearFiles,
@@ -3227,9 +3583,11 @@ createApp({
             addTarget, removeTarget, openSyncModal, confirmSync,
             selectedFields, isAllFieldsSelected, toggleAllFields,
             // 重复保单
-            duplicateVisible, duplicateList, confirmSyncSkipDuplicates, cancelSync,
+            duplicateVisible, duplicateList, confirmSyncSkipDuplicates, confirmSyncUpdateDuplicates, cancelSync,
             // 自动识别记录
-            records, filteredRecords, isLoadingRecords, roomList, monitorRooms, monitorUsers,
+            records, filteredRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
+            isAllSelected, toggleSelectAll, batchReocrSync, batchProgress,
+            roomList, monitorRooms, monitorUsers,
             recordFilter, statusLabel, onSourceTypeChange, debounceLoadRecords,
             recordPagination, visiblePages, recordStats,
             recordActiveTab, recordTabs, recordCompanyFilter, recordDocTypeFilter,
