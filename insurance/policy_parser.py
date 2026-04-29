@@ -2021,19 +2021,6 @@ FIELD_ORDER = [
 ]
 
 
-def get_all_field_names(policies: List[Dict[str, Any]]) -> List[str]:
-    """
-    从所有识别结果中收集所有出现过的字段名（用于生成表头）
-    """
-    all_fields = set()
-    for policy in policies:
-        all_fields.update(policy.get("fields", {}).keys())
-
-    ordered = [f for f in FIELD_ORDER if f in all_fields]
-    remaining = sorted(all_fields - set(ordered))
-    return ordered + remaining
-
-
 def get_extraction_rules(company_short: str = "") -> Dict[str, Dict[str, str]]:
     """
     返回各字段的提取规则描述，按保司区分特殊规则

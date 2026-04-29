@@ -620,8 +620,8 @@
                                 </td>
                                 <td class="px-3 py-2">
                                     <span class="badge text-xs"
-                                          :class="r.ocr_engine === 'baidu' ? 'badge-info' : 'badge-success'">
-                                        {{ r.ocr_engine === 'baidu' ? 'OCR识别' : 'PDF提取' }}
+                                          :class="r.ocr_engine === 'baidu' ? 'badge-info' : r.ocr_engine === 'volc' ? 'badge-warning' : 'badge-success'">
+                                        {{ r.ocr_engine === 'baidu' ? '百度OCR' : r.ocr_engine === 'volc' ? '火山引擎' : 'PDF提取' }}
                                     </span>
                                 </td>
                                 <td class="px-3 py-2">
@@ -677,8 +677,8 @@
                             </td>
                             <td class="px-3 py-2">
                                 <span class="badge text-xs"
-                                      :class="r.ocr_engine === 'baidu' ? 'badge-info' : 'badge-success'">
-                                    {{ r.ocr_engine === 'baidu' ? 'OCR识别' : 'PDF提取' }}
+                                      :class="r.ocr_engine === 'baidu' ? 'badge-info' : r.ocr_engine === 'volc' ? 'badge-warning' : 'badge-success'">
+                                    {{ r.ocr_engine === 'baidu' ? '百度OCR' : r.ocr_engine === 'volc' ? '火山引擎' : 'PDF提取' }}
                                 </span>
                             </td>
                             <td class="px-3 py-2">
@@ -849,7 +849,7 @@
                         class="text-xs px-2.5 py-1 rounded-full transition-colors cursor-pointer"
                         :style="recordFilter.date_shortcut === s.key
                             ? 'background:#fff7ed;border:1px solid #fb923c;color:#ea580c;font-weight:500;'
-                            : 'background:white;border:1px solid #e5e7eb;color:#6b7280;'"
+                            : 'background:white;border:1px solid #e5e7eb;color:#6b7280;'">
                     {{ s.label }}
                 </button>
                 <!-- 自定义日期区间 -->
@@ -919,7 +919,7 @@
                                 class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
                             <option value="">全部</option>
                             <option v-for="eng in recordStats.engines" :key="eng.name" :value="eng.name">
-                                {{ eng.name === 'pdfplumber' ? 'PDF识别' : eng.name === 'baidu' ? '百度OCR' : eng.name }} ({{ eng.cnt }})
+                                {{ eng.name === 'pdfplumber' ? 'PDF提取' : eng.name === 'baidu' ? '百度OCR' : eng.name === 'volc' ? '火山引擎' : eng.name }} ({{ eng.cnt }})
                             </option>
                         </select>
                     </div>
@@ -976,8 +976,6 @@
                             <th style="min-width:40px;">
                                 <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" class="cursor-pointer">
                             </th>
-                            <th style="min-width:100px;">群名</th>
-                            <th style="min-width:80px;">发送人</th>
                             <th style="min-width:150px;">文件名</th>
                             <th style="min-width:70px;">文档类型</th>
                             <th v-for="col in outputColumns" :key="col" class="text-gray-600 font-medium" style="min-width:80px;">{{ col }}</th>
@@ -986,6 +984,8 @@
                             <th style="min-width:80px;">状态</th>
                             <th style="min-width:80px;">钉钉同步</th>
                             <th style="min-width:150px;">时间</th>
+                            <th style="min-width:100px;">群名</th>
+                            <th style="min-width:80px;">发送人</th>
                             <th style="min-width:160px;">操作</th>
                         </tr>
                     </thead>
@@ -995,20 +995,6 @@
                             <!-- 选择框 -->
                             <td>
                                 <input type="checkbox" :value="record.id" v-model="selectedRecordIds" class="cursor-pointer">
-                            </td>
-                            <!-- 群名（可点击编辑） -->
-                            <td class="text-gray-700 text-sm">
-                                <span v-if="record.roomid" class="cursor-pointer hover:text-orange-600 hover:underline"
-                                      @click="openContactEdit(record.roomid, record.room_name, 'room')"
-                                      title="点击编辑群名">{{ record.room_name || record.roomid || '—' }}</span>
-                                <span v-else>—</span>
-                            </td>
-                            <!-- 发送人（可点击编辑） -->
-                            <td class="text-gray-600 text-sm">
-                                <span v-if="record.sender" class="cursor-pointer hover:text-orange-600 hover:underline"
-                                      @click="openContactEdit(record.sender, record.sender_name, 'user')"
-                                      title="点击编辑发送人">{{ record.sender_name || record.sender || '—' }}</span>
-                                <span v-else>—</span>
                             </td>
                             <!-- 文件名（可点击预览） -->
                             <td>
@@ -1040,8 +1026,8 @@
                             <!-- 识别方式 -->
                             <td>
                                 <span v-if="record.ocr_engine" class="badge text-xs"
-                                      :class="record.ocr_engine === 'baidu' ? 'badge-info' : 'badge-success'">
-                                    {{ record.ocr_engine === 'baidu' ? 'OCR识别' : 'PDF提取' }}
+                                      :class="record.ocr_engine === 'baidu' ? 'badge-info' : record.ocr_engine === 'volc' ? 'badge-warning' : 'badge-success'">
+                                    {{ record.ocr_engine === 'baidu' ? '百度OCR' : record.ocr_engine === 'volc' ? '火山引擎' : 'PDF提取' }}
                                 </span>
                                 <span v-else class="text-gray-400 text-sm">—</span>
                             </td>
@@ -1073,6 +1059,20 @@
                             </td>
                             <!-- 时间 -->
                             <td class="text-gray-500 text-xs">{{ formatTime(record.created_at) }}</td>
+                            <!-- 群名（可点击编辑） -->
+                            <td class="text-gray-700 text-sm">
+                                <span v-if="record.roomid" class="cursor-pointer hover:text-orange-600 hover:underline"
+                                      @click="openContactEdit(record.roomid, record.room_name, 'room')"
+                                      title="点击编辑群名">{{ record.room_name || record.roomid || '—' }}</span>
+                                <span v-else>—</span>
+                            </td>
+                            <!-- 发送人（可点击编辑） -->
+                            <td class="text-gray-600 text-sm">
+                                <span v-if="record.sender" class="cursor-pointer hover:text-orange-600 hover:underline"
+                                      @click="openContactEdit(record.sender, record.sender_name, 'user')"
+                                      title="点击编辑发送人">{{ record.sender_name || record.sender || '—' }}</span>
+                                <span v-else>—</span>
+                            </td>
                             <!-- 操作 -->
                             <td>
                                 <div class="flex items-center gap-1.5">
@@ -1473,8 +1473,8 @@
                         </svg>
                         <h3 class="text-sm font-semibold text-gray-700">{{ previewFileName }}</h3>
                         <span v-if="previewOcrEngine" class="badge text-xs"
-                              :class="previewOcrEngine === 'baidu' ? 'badge-info' : 'badge-success'">
-                            {{ previewOcrEngine === 'baidu' ? 'OCR识别' : 'PDF提取' }}
+                              :class="previewOcrEngine === 'baidu' ? 'badge-info' : previewOcrEngine === 'volc' ? 'badge-warning' : 'badge-success'">
+                            {{ previewOcrEngine === 'baidu' ? '百度OCR' : previewOcrEngine === 'volc' ? '火山引擎' : 'PDF提取' }}
                         </span>
                     </div>
                     <div class="flex items-center gap-2">
@@ -1495,15 +1495,7 @@
                             </svg>
                             {{ previewShowRaw ? '隐藏原文' : '查看原文' }}
                         </button>
-                        <button @click="previewShowRules = !previewShowRules; if(previewShowRules) { previewShowFields = false; previewShowRaw = false; loadExtractionRules(previewFileName); }"
-                                class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;"
-                                :class="previewShowRules ? 'btn-warning' : 'btn-outline'">
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                            </svg>
-                            {{ previewShowRules ? '隐藏规则' : '查看规则' }}
-                        </button>
+                        <!-- 查看规则按钮已隐藏 -->
                         <button @click="previewAutoRecord ? reocrRecord(previewAutoRecord) : reocrPreviewFile()"
                                 :disabled="previewAutoRecord ? previewAutoRecord._reocring : previewReocring"
                                 class="btn btn-outline cursor-pointer" style="padding:5px 12px;font-size:12px;color:#f59e0b;border-color:#f59e0b;">
@@ -3205,19 +3197,59 @@ createApp({
 
         // 导出自动识别记录
         async function exportRecordsExcel() {
-            // 使用列表已有的 display_fields 导出，无需额外请求
-            const data = records.value
-                .filter(r => r.status === 'done' || r.status === 'success')
-                .map(r => {
-                    const df = r.display_fields || {};
-                    const row = {};
-                    for (const col of outputColumns.value) {
-                        row[col] = df[col] || '';
-                    }
-                    return { fields: row };
-                });
-            if (!data.length) { showMessage('没有可导出的数据', false); return; }
+            // 用当前筛选条件请求全部数据（不限分页），导出完整结果
             try {
+                showMessage('正在导出，请稍候...', true);
+                // 构建与 loadRecords 一致的筛选参数
+                const params = new URLSearchParams({ page: 1, page_size: 10000 });
+                if (recordFilter.source_type === 'user') {
+                    params.set('source_type', 'user');
+                    if (recordFilter.userid) params.set('sender', recordFilter.userid);
+                } else if (recordFilter.source_type === 'room') {
+                    params.set('source_type', 'room');
+                    if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
+                } else {
+                    if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
+                }
+                const tab = recordActiveTab.value;
+                if (tab === 'done') {
+                    params.set('status', 'done');
+                    params.set('is_abnormal', '0');
+                    params.set('doc_category', recordDocTypeFilter.value || '保单');
+                } else if (tab === 'abnormal') {
+                    params.set('status', 'done');
+                    params.set('is_abnormal', '1');
+                } else if (tab === 'nonpolicy') {
+                    params.set('status', 'done');
+                    params.set('doc_category', '!保单');
+                } else if (tab === 'failed') {
+                    params.set('status', 'failed');
+                } else if (recordFilter.status) {
+                    params.set('status', recordFilter.status);
+                }
+                if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
+                if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
+                if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
+                if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
+                if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
+                if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+
+                const listResp = await fetch(`/api/insurance/records?${params.toString()}`);
+                const listJson = await listResp.json();
+                const allRecords = (listJson.data || listJson).records || [];
+
+                const data = allRecords
+                    .filter(r => r.status === 'done' || r.status === 'success')
+                    .map(r => {
+                        const df = r.display_fields || {};
+                        const row = {};
+                        for (const col of outputColumns.value) {
+                            row[col] = df[col] || '';
+                        }
+                        return { fields: row };
+                    });
+                if (!data.length) { showMessage('没有可导出的数据', false); return; }
+
                 const resp = await fetch('/api/insurance/export/excel', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ invoices: data, field_names: outputColumns.value, export_type: 'success' }),
@@ -3228,6 +3260,7 @@ createApp({
                 const a = document.createElement('a');
                 a.href = url; a.download = '自动识别记录.xlsx';
                 a.click(); URL.revokeObjectURL(url);
+                showMessage(`导出成功，共 ${data.length} 条`, true);
             } catch (e) { showMessage(`导出失败: ${e.message}`, false); }
         }
 
@@ -3255,7 +3288,13 @@ createApp({
             { key: 'lastMonth', label: '上月' },
             { key: 'custom', label: '自定义' },
         ];
-        function _fmt(d) { return d.toISOString().slice(0, 10); }
+        function _fmt(d) {
+            // 使用本地时间格式化，避免 toISOString() 的 UTC 偏移问题
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
         function setDateShortcut(key) {
             recordFilter.date_shortcut = key;
             const now = new Date();

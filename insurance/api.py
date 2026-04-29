@@ -997,16 +997,25 @@ def update_config():
 
 @insurance_bp.route("/api/insurance/reload-ocr", methods=["POST"])
 def reload_ocr():
-    """重新加载百度 OCR 配置（支持 config.yaml 热更新）"""
+    """重新加载所有 OCR 引擎配置（支持 config.yaml 热更新）"""
     try:
         if not _handler:
             return jsonify({"code": 500, "msg": "handler 未初始化"}), 500
-        _handler.reload_baidu_ocr()
-        # 返回当前生效的精度
-        accuracy = getattr(_handler._baidu_ocr, "accuracy", "未知") if _handler._baidu_ocr else "未初始化"
-        return jsonify({"code": 0, "msg": f"百度 OCR 已重载，当前精度: {accuracy}"})
+        _handler.reload_all_ocr()
+        # 返回各引擎状态
+        engines = []
+        if _handler._volc_ocr:
+            engines.append("火山引擎: 已启用")
+        if _handler._baidu_ocr:
+            acc = {"accurate": "高精度版", "standard": "标准版"}.get(
+                getattr(_handler._baidu_ocr, "accuracy", ""), "未知"
+            )
+            engines.append(f"百度OCR: {acc}")
+        if not engines:
+            engines.append("无可用引擎")
+        return jsonify({"code": 0, "msg": "OCR 引擎已重载", "engines": engines})
     except Exception as e:
-        logger.exception("重载百度 OCR 失败")
+        logger.exception("重载 OCR 引擎失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 

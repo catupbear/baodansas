@@ -63,9 +63,11 @@ class InsuranceHandler:
         # 内部消息队列（最多 100 条）
         self._queue: queue.Queue = queue.Queue(maxsize=100)
 
-        # 百度 OCR 客户端（优先从 config.yaml 读取）
+        # OCR 客户端初始化
         self._baidu_ocr = None
+        self._volc_ocr = None
         self._init_baidu_ocr()
+        self._init_volc_ocr()
 
         # 启动消费者守护线程
         self._worker = threading.Thread(target=self._consume, daemon=True)
@@ -112,9 +114,54 @@ class InsuranceHandler:
             logger.error("百度 OCR 初始化失败: %s", e)
 
     def reload_baidu_ocr(self):
-        """公开方法：重新从数据库读取配置并重建百度 OCR 客户端。"""
+        """公开方法：重新从配置文件读取并重建百度 OCR 客户端。"""
         logger.info("重新加载百度 OCR 配置")
         self._init_baidu_ocr()
+
+    # ------------------------------------------------------------------ #
+    # 火山引擎 OCR 初始化
+    # ------------------------------------------------------------------ #
+
+    def _init_volc_ocr(self):
+        """初始化火山引擎 OCR 客户端（从 config.yaml 读取）。"""
+        try:
+            from insurance.volc_ocr import VolcOCR
+
+            cfg = {}
+            try:
+                import yaml
+                with open("config.yaml", "r", encoding="utf-8") as f:
+                    file_cfg = yaml.safe_load(f) or {}
+                cfg = file_cfg.get("volc_ocr", {})
+                if cfg:
+                    self.app_config["volc_ocr"] = cfg
+            except Exception:
+                cfg = self.app_config.get("volc_ocr", {})
+            if not cfg or not cfg.get("access_key_id"):
+                cfg = get_insurance_config(self.db, "volc_ocr", {})
+
+            ak = cfg.get("access_key_id", "") if isinstance(cfg, dict) else ""
+            sk = cfg.get("secret_access_key", "") if isinstance(cfg, dict) else ""
+
+            if ak and sk:
+                self._volc_ocr = VolcOCR(ak, sk)
+                logger.info("火山引擎 OCR 客户端初始化成功")
+            else:
+                self._volc_ocr = None
+                logger.info("火山引擎 OCR 未配置，跳过初始化")
+        except Exception as e:
+            self._volc_ocr = None
+            logger.error("火山引擎 OCR 初始化失败: %s", e)
+
+    def reload_volc_ocr(self):
+        """公开方法：重新加载火山引擎 OCR 配置。"""
+        logger.info("重新加载火山引擎 OCR 配置")
+        self._init_volc_ocr()
+
+    def reload_all_ocr(self):
+        """重新加载所有 OCR 引擎配置。"""
+        self.reload_baidu_ocr()
+        self.reload_volc_ocr()
 
     # ------------------------------------------------------------------ #
     # 监控群列表
@@ -671,21 +718,40 @@ class InsuranceHandler:
                 logger.warning("初步质量检查失败: %s，降级百度 OCR", e)
                 needs_fallback = True
 
-        # --- 第二步（可选降级）：百度 OCR ---
+        # --- 第二步（可选降级）：火山引擎 OCR → 百度 OCR ---
         if needs_fallback:
-            if self._baidu_ocr:
+            fallback_done = False
+
+            # 优先尝试火山引擎 OCR
+            if self._volc_ocr:
+                try:
+                    volc_result = self._volc_ocr.recognize_pdf_multi_pages(pdf_bytes, max_pages=6)
+                    if volc_result.get("success"):
+                        text = volc_result.get("text", "")
+                        ocr_engine = "volc"
+                        fallback_done = True
+                        logger.info("火山引擎 OCR 识别成功，文字数=%d", len(text))
+                    else:
+                        logger.warning("火山引擎 OCR 识别失败: %s", volc_result.get("error", ""))
+                except Exception as e:
+                    logger.error("火山引擎 OCR 调用异常: %s", e, exc_info=True)
+
+            # 火山引擎失败或未配置，降级百度 OCR
+            if not fallback_done and self._baidu_ocr:
                 try:
                     baidu_result = self._baidu_ocr.recognize_pdf_multi_pages(pdf_bytes, max_pages=6)
                     if baidu_result.get("success"):
                         text = baidu_result.get("text", "")
                         ocr_engine = "baidu"
+                        fallback_done = True
                         logger.info("百度 OCR 识别成功，文字数=%d", len(text))
                     else:
                         logger.warning("百度 OCR 识别失败: %s", baidu_result.get("error", ""))
                 except Exception as e:
                     logger.error("百度 OCR 调用异常: %s", e, exc_info=True)
-            else:
-                logger.warning("百度 OCR 未配置，无法降级识别")
+
+            if not fallback_done:
+                logger.warning("所有 OCR 引擎均不可用或识别失败")
 
         if not text:
             return {
@@ -717,136 +783,6 @@ class InsuranceHandler:
     # ------------------------------------------------------------------ #
     # 同步到钉钉
     # ------------------------------------------------------------------ #
-
-    def _get_bound_targets(self, roomid: str, sender: str) -> list:
-        """
-        根据 roomid / sender 查找绑定的钉钉目标 ID 列表。
-        watch_list 中每个监控项有 target_ids 字段。
-        """
-        watch_list = get_insurance_config(self.db, "watch_list", [])
-        if not isinstance(watch_list, list):
-            return []
-
-        target_ids = set()
-        for w in watch_list:
-            if not isinstance(w, dict):
-                continue
-            wid = w.get("id", "")
-            wtype = w.get("type", "")
-            # 群聊匹配 roomid，私聊匹配 sender
-            matched = False
-            if wtype == "room" and roomid and wid == roomid:
-                matched = True
-            elif wtype == "user" and not roomid and sender and wid == sender:
-                matched = True
-            if matched:
-                for tid in w.get("target_ids", []):
-                    target_ids.add(tid)
-
-        return list(target_ids)
-
-    def _sync_to_dingtalk(
-        self, record_id: int, mapped_fields: dict, parsed_fields: dict,
-        sender_name: str = "", roomid: str = "", sender: str = "",
-        doc_category: str = "", target_ids: list = None,
-    ):
-        """
-        将保单字段同步到钉钉多维表。
-
-        根据 roomid/sender 查找绑定的目标文档，只同步到绑定的目标。
-        同步时自动带上「发送人」字段。
-
-        Args:
-            record_id:     数据库记录 ID
-            mapped_fields: apply_mapping 后的导出列字段
-            parsed_fields: OCR 原始解析字段
-            sender_name:   发送人姓名
-            roomid:        来源群 ID
-            sender:        发送人 ID
-            target_ids:    指定目标 ID 列表（为 None 时根据绑定关系自动查找）
-        """
-        from insurance.dingtalk_sync import DingTalkTableService
-
-        try:
-            # 读取应用凭证（优先 config.yaml，其次数据库）
-            app_cfg = self.app_config.get("dingtalk", {})
-            if not app_cfg or not app_cfg.get("app_key"):
-                app_cfg = get_insurance_config(self.db, "dingtalk_app", {})
-            if not isinstance(app_cfg, dict):
-                logger.warning("钉钉应用配置格式不正确")
-                return
-
-            app_key = app_cfg.get("app_key", "")
-            app_secret = app_cfg.get("app_secret", "")
-            operator_id = app_cfg.get("operator_id", "")
-
-            if not (app_key and app_secret and operator_id):
-                logger.warning("钉钉应用凭证未完整配置（app_key/app_secret/operator_id）")
-                return
-
-            # 确定要同步的目标
-            if target_ids is None:
-                target_ids = self._get_bound_targets(roomid, sender)
-
-            if not target_ids:
-                logger.debug("record_id=%d 无绑定的钉钉目标，跳过同步", record_id)
-                return
-
-            # 读取所有目标配置
-            all_targets = get_insurance_config(self.db, "dingtalk_targets", [])
-            if not isinstance(all_targets, list):
-                return
-            target_map = {t["id"]: t for t in all_targets if isinstance(t, dict) and t.get("id")}
-
-            # 构建同步数据（带上发送人、文档类型字段）
-            invoice_fields = {k: v for k, v in mapped_fields.items() if v}
-            if sender_name:
-                invoice_fields["发送人"] = sender_name
-            if doc_category:
-                invoice_fields["文档类型"] = doc_category
-            field_names = list(invoice_fields.keys())
-            invoice = {"fields": invoice_fields}
-
-            all_success = True
-            synced_target_ids = []
-
-            for tid in target_ids:
-                target = target_map.get(tid)
-                if not target:
-                    logger.warning("钉钉目标 %s 不存在，跳过", tid)
-                    continue
-
-                base_id = target.get("base_id", "")
-                sheet_id = target.get("sheet_id", "")
-                if not (base_id and sheet_id):
-                    continue
-
-                try:
-                    svc = DingTalkTableService(
-                        app_key, app_secret, base_id, sheet_id, operator_id
-                    )
-                    result = svc.append_invoices(field_names, [invoice])
-                    synced_target_ids.append(tid)
-                    logger.info(
-                        "同步钉钉成功, record_id=%d target=%s inserted=%s",
-                        record_id, target.get("name", tid),
-                        result.get("inserted_count", 0),
-                    )
-                except Exception as e:
-                    all_success = False
-                    logger.error(
-                        "同步钉钉失败, record_id=%d target=%s: %s",
-                        record_id, target.get("name", tid), e, exc_info=True,
-                    )
-
-            if synced_target_ids:
-                update_insurance_record(self.db, record_id, {
-                    "dingtalk_synced": 1 if all_success else 0,
-                    "dingtalk_target_id": ",".join(synced_target_ids),
-                })
-
-        except Exception as e:
-            logger.error("_sync_to_dingtalk 异常, record_id=%d: %s", record_id, e, exc_info=True)
 
     def _sync_to_dingtalk_v2(
         self, record_id: int, sync_fields: dict,
@@ -955,19 +891,31 @@ class InsuranceHandler:
         error_msg = ""
 
         try:
-            # --- 图片走百度 OCR ---
+            # --- 图片走 OCR（优先火山引擎，降级百度）---
             if file_type != "pdf":
                 import base64
-                if not self._baidu_ocr:
-                    raise RuntimeError("百度 OCR 未配置，无法识别图片")
-
                 img_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
-                baidu_result = self._baidu_ocr.recognize_image(img_b64)
-                if not baidu_result.get("success"):
-                    raise RuntimeError(f"百度 OCR 识别失败: {baidu_result.get('error', '')}")
+                text = ""
 
-                text = baidu_result.get("text", "")
-                ocr_engine = "baidu"
+                # 优先火山引擎
+                if self._volc_ocr:
+                    try:
+                        volc_result = self._volc_ocr.recognize_image(img_b64)
+                        if volc_result.get("success"):
+                            text = volc_result.get("text", "")
+                            ocr_engine = "volc"
+                    except Exception as e:
+                        logger.warning("火山引擎图片识别失败: %s", e)
+
+                # 降级百度 OCR
+                if not text and self._baidu_ocr:
+                    baidu_result = self._baidu_ocr.recognize_image(img_b64)
+                    if baidu_result.get("success"):
+                        text = baidu_result.get("text", "")
+                        ocr_engine = "baidu"
+
+                if not text:
+                    raise RuntimeError("所有 OCR 引擎均无法识别图片")
             else:
                 # --- PDF 走标准流水线 ---
                 ocr_result = self._do_ocr(pdf_bytes, filename)

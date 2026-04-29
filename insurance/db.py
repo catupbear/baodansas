@@ -386,43 +386,6 @@ def _upsert_policy_fields(cursor, record_id: int, parsed_fields: dict):
         )
 
 
-def sync_policy_fields(db, record_id: int, parsed_fields: dict):
-    """
-    公开方法：同步关联表（外部调用用，如手动重新识别场景）。
-    parsed_fields 为 dict 类型。
-    """
-    conn = db.pool.connection()
-    try:
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        _upsert_policy_fields(cursor, record_id, parsed_fields)
-        conn.commit()
-    finally:
-        conn.close()
-
-
-def query_policy_fields(db, record_id: int) -> dict:
-    """查询单条关联表记录，返回 OCR 字段名为 key 的字典"""
-    conn = db.pool.connection()
-    try:
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute(
-            "SELECT * FROM insurance_policy_fields WHERE record_id = %s",
-            (record_id,)
-        )
-        row = cursor.fetchone()
-        if not row:
-            return {}
-        # 列名转回 OCR 字段名
-        result = {}
-        for col_name, ocr_key in _COLUMN_TO_OCR.items():
-            val = row.get(col_name, "")
-            if val:
-                result[ocr_key] = val
-        return result
-    finally:
-        conn.close()
-
-
 # 异常检测必检字段（与前端 REQUIRED_FIELDS 保持一致）
 _REQUIRED_FIELDS = ['承保公司', '保单号', '险种', '车牌', '投保人', '被保人', '签单日期', '起保日期', '终保日期', '保费']
 # 导出列名 → OCR 字段名的反向映射
