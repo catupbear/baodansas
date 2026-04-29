@@ -881,6 +881,94 @@
                         @click="recordFilter.date_shortcut = ''; recordFilter.date_start = ''; recordFilter.date_end = ''; loadRecords()"
                         class="text-xs text-gray-400 hover:text-orange-500 cursor-pointer ml-1"
                         title="清除日期筛选">&times; 清除</button>
+                <!-- 展开高级搜索按钮 -->
+                <button @click="showAdvancedSearch = !showAdvancedSearch"
+                        class="text-xs px-2.5 py-1 rounded-full transition-colors cursor-pointer ml-auto"
+                        :style="showAdvancedSearch
+                            ? 'background:#fff7ed;border:1px solid #fb923c;color:#ea580c;font-weight:500;'
+                            : 'background:white;border:1px solid #e5e7eb;color:#6b7280;'">
+                    {{ showAdvancedSearch ? '收起高级搜索' : '高级搜索' }}
+                    <span style="font-size:10px;">{{ showAdvancedSearch ? '▲' : '▼' }}</span>
+                </button>
+            </div>
+            <!-- 高级搜索面板 -->
+            <div v-if="showAdvancedSearch" class="mt-3 pt-3 border-t border-gray-100">
+                <!-- 字段模糊搜索 -->
+                <div class="flex flex-wrap items-center gap-2 mb-2">
+                    <div class="flex items-center gap-1">
+                        <span class="text-xs text-gray-500 font-medium whitespace-nowrap">承保公司:</span>
+                        <input v-model="recordFilter.search_company" type="text" placeholder="模糊搜索..."
+                               class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                               style="width:100px;" @input="debounceLoadRecords()">
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <span class="text-xs text-gray-500 font-medium whitespace-nowrap">保单号:</span>
+                        <input v-model="recordFilter.search_policy_no" type="text" placeholder="模糊搜索..."
+                               class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                               style="width:110px;" @input="debounceLoadRecords()">
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <span class="text-xs text-gray-500 font-medium whitespace-nowrap">车牌:</span>
+                        <input v-model="recordFilter.search_plate_no" type="text" placeholder="模糊搜索..."
+                               class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                               style="width:90px;" @input="debounceLoadRecords()">
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <span class="text-xs text-gray-500 font-medium whitespace-nowrap">投保人:</span>
+                        <input v-model="recordFilter.search_applicant" type="text" placeholder="模糊搜索..."
+                               class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                               style="width:90px;" @input="debounceLoadRecords()">
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <span class="text-xs text-gray-500 font-medium whitespace-nowrap">被保人:</span>
+                        <input v-model="recordFilter.search_insured" type="text" placeholder="模糊搜索..."
+                               class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                               style="width:90px;" @input="debounceLoadRecords()">
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <span class="text-xs text-gray-500 font-medium whitespace-nowrap">业务员:</span>
+                        <input v-model="recordFilter.search_salesperson" type="text" placeholder="模糊搜索..."
+                               class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                               style="width:90px;" @input="debounceLoadRecords()">
+                    </div>
+                </div>
+                <!-- 保单日期筛选 -->
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="flex items-center gap-1">
+                        <span class="text-xs text-gray-500 font-medium whitespace-nowrap">签单日期:</span>
+                        <input type="date" v-model="recordFilter.sign_date_start"
+                               class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                               @change="loadRecords()">
+                        <span class="text-xs text-gray-400">至</span>
+                        <input type="date" v-model="recordFilter.sign_date_end"
+                               class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                               @change="loadRecords()">
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <span class="text-xs text-gray-500 font-medium whitespace-nowrap">起保日期:</span>
+                        <input type="date" v-model="recordFilter.start_date_start"
+                               class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                               @change="loadRecords()">
+                        <span class="text-xs text-gray-400">至</span>
+                        <input type="date" v-model="recordFilter.start_date_end"
+                               class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                               @change="loadRecords()">
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <span class="text-xs text-gray-500 font-medium whitespace-nowrap">终保日期:</span>
+                        <input type="date" v-model="recordFilter.end_date_start"
+                               class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                               @change="loadRecords()">
+                        <span class="text-xs text-gray-400">至</span>
+                        <input type="date" v-model="recordFilter.end_date_end"
+                               class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                               @change="loadRecords()">
+                    </div>
+                    <!-- 清除高级搜索 -->
+                    <button @click="recordFilter.search_company=''; recordFilter.search_policy_no=''; recordFilter.search_plate_no=''; recordFilter.search_applicant=''; recordFilter.search_insured=''; recordFilter.search_salesperson=''; recordFilter.sign_date_start=''; recordFilter.sign_date_end=''; recordFilter.start_date_start=''; recordFilter.start_date_end=''; recordFilter.end_date_start=''; recordFilter.end_date_end=''; loadRecords()"
+                            class="text-xs text-gray-400 hover:text-orange-500 cursor-pointer"
+                            title="清除高级搜索条件">&times; 清除</button>
+                </div>
             </div>
         </div>
 
@@ -3090,6 +3178,19 @@ createApp({
             abnormal: 0,
             nonpolicy: 0,
         });
+        // 将关联表搜索/日期筛选参数追加到 URLSearchParams
+        function _appendAdvancedParams(params) {
+            const keys = [
+                'search_company', 'search_policy_no', 'search_plate_no',
+                'search_applicant', 'search_insured', 'search_salesperson',
+                'sign_date_start', 'sign_date_end',
+                'start_date_start', 'start_date_end',
+                'end_date_start', 'end_date_end',
+            ];
+            for (const k of keys) {
+                if (recordFilter[k]) params.set(k, recordFilter[k]);
+            }
+        }
         function buildStatsFilterParams() {
             const params = new URLSearchParams();
             if (recordFilter.source_type === 'user') {
@@ -3106,6 +3207,7 @@ createApp({
             if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
             if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
             if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+            _appendAdvancedParams(params);
             return params;
         }
         async function loadRecordStats() {
@@ -3268,6 +3370,7 @@ createApp({
                 if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
                 if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
                 if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+                _appendAdvancedParams(params);
 
                 const listResp = await authFetch(`/api/insurance/records?${params.toString()}`);
                 const listJson = await listResp.json();
@@ -3312,7 +3415,23 @@ createApp({
             date_shortcut: '',  // 日期快捷：today/yesterday/thisWeek/lastWeek/thisMonth/lastMonth/custom
             date_start: '',     // 自定义开始日期 YYYY-MM-DD
             date_end: '',       // 自定义结束日期 YYYY-MM-DD
+            // 关联表模糊搜索
+            search_company: '',     // 承保公司
+            search_policy_no: '',   // 保单号
+            search_plate_no: '',    // 车牌
+            search_applicant: '',   // 投保人
+            search_insured: '',     // 被保人
+            search_salesperson: '', // 业务员
+            // 关联表日期筛选
+            sign_date_start: '',    // 签单日期起
+            sign_date_end: '',      // 签单日期止
+            start_date_start: '',   // 起保日期起
+            start_date_end: '',     // 起保日期止
+            end_date_start: '',     // 终保日期起
+            end_date_end: '',       // 终保日期止
         });
+        // 展开/折叠高级搜索
+        const showAdvancedSearch = ref(false);
         // 日期快捷选项
         const dateShortcuts = [
             { key: 'today', label: '今天' },
@@ -3523,6 +3642,7 @@ createApp({
                 if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
                 if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
                 if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+                _appendAdvancedParams(params);
                 const resp = await authFetch(`/api/insurance/records?${params.toString()}`);
                 const json = await resp.json();
                 // API 返回 {"code":0, "data": {"records":[], "total":N}}
@@ -3770,7 +3890,7 @@ createApp({
             records, filteredRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
             isAllSelected, toggleSelectAll, batchReocrSync, batchProgress,
             roomList, monitorRooms, monitorUsers,
-            recordFilter, statusLabel, onSourceTypeChange, debounceLoadRecords, dateShortcuts, setDateShortcut,
+            recordFilter, statusLabel, onSourceTypeChange, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
             recordPagination, visiblePages, recordStats,
             recordActiveTab, recordTabs, recordCompanyFilter, recordDocTypeFilter,
             recordCompanyList, recordDocTypes, exportRecordsExcel,

@@ -11,7 +11,31 @@ import pymysql.cursors
 
 from .field_mapping import apply_mapping
 
+import re as _re
+
 logger = logging.getLogger(__name__)
+
+
+def _date_to_iso(date_str: str) -> str:
+    """将 YYYY-MM-DD 保持原样；将 YYYY年M月D日 转为 YYYY-MM-DD"""
+    m = _re.match(r'(\d{4})-(\d{1,2})-(\d{1,2})', date_str)
+    if m:
+        return date_str
+    m = _re.match(r'(\d{4})年(\d{1,2})月(\d{1,2})日?', date_str)
+    if m:
+        return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    return date_str
+
+
+# MySQL 表达式：将 "YYYY年M月D日" 格式的字段转为 DATE 类型以便范围比较
+_CN_DATE_TO_DATE = (
+    "STR_TO_DATE(CONCAT("
+    "SUBSTRING_INDEX({col}, '年', 1), '-',"
+    "SUBSTRING_INDEX(SUBSTRING_INDEX({col}, '月', 1), '年', -1), '-',"
+    "SUBSTRING_INDEX(SUBSTRING_INDEX({col}, '日', 1), '月', -1)"
+    "), '%Y-%m-%d')"
+)
+
 
 # JSON 字段列表，保存时自动序列化，读取时由调用方自行处理
 _JSON_FIELDS = {"parsed_fields", "mapped_fields", "display_fields"}
@@ -801,25 +825,19 @@ def query_insurance_records(
         if search_salesperson:
             conditions.append("pf.salesperson LIKE %s")
             params.append(f"%{search_salesperson}%")
-        # 关联表日期范围筛选
-        if sign_date_start:
-            conditions.append("pf.sign_date >= %s")
-            params.append(sign_date_start)
-        if sign_date_end:
-            conditions.append("pf.sign_date <= %s")
-            params.append(sign_date_end)
-        if start_date_start:
-            conditions.append("pf.start_date >= %s")
-            params.append(start_date_start)
-        if start_date_end:
-            conditions.append("pf.start_date <= %s")
-            params.append(start_date_end)
-        if end_date_start:
-            conditions.append("pf.end_date >= %s")
-            params.append(end_date_start)
-        if end_date_end:
-            conditions.append("pf.end_date <= %s")
-            params.append(end_date_end)
+        # 关联表日期范围筛选（存储格式为 "YYYY年M月D日"，通过 STR_TO_DATE 转 DATE 比较）
+        for col, val_start, val_end in [
+            ("pf.sign_date", sign_date_start, sign_date_end),
+            ("pf.start_date", start_date_start, start_date_end),
+            ("pf.end_date", end_date_start, end_date_end),
+        ]:
+            expr = _CN_DATE_TO_DATE.format(col=col)
+            if val_start:
+                conditions.append(f"{expr} >= %s")
+                params.append(_date_to_iso(val_start))
+            if val_end:
+                conditions.append(f"{expr} <= %s")
+                params.append(_date_to_iso(val_end))
 
     where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
@@ -1113,24 +1131,18 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
             if filters.get("search_salesperson"):
                 where_parts.append("pf.salesperson LIKE %s")
                 params.append(f"%{filters['search_salesperson']}%")
-            if filters.get("sign_date_start"):
-                where_parts.append("pf.sign_date >= %s")
-                params.append(filters["sign_date_start"])
-            if filters.get("sign_date_end"):
-                where_parts.append("pf.sign_date <= %s")
-                params.append(filters["sign_date_end"])
-            if filters.get("start_date_start"):
-                where_parts.append("pf.start_date >= %s")
-                params.append(filters["start_date_start"])
-            if filters.get("start_date_end"):
-                where_parts.append("pf.start_date <= %s")
-                params.append(filters["start_date_end"])
-            if filters.get("end_date_start"):
-                where_parts.append("pf.end_date >= %s")
-                params.append(filters["end_date_start"])
-            if filters.get("end_date_end"):
-                where_parts.append("pf.end_date <= %s")
-                params.append(filters["end_date_end"])
+            for col, key_start, key_end in [
+                ("pf.sign_date", "sign_date_start", "sign_date_end"),
+                ("pf.start_date", "start_date_start", "start_date_end"),
+                ("pf.end_date", "end_date_start", "end_date_end"),
+            ]:
+                expr = _CN_DATE_TO_DATE.format(col=col)
+                if filters.get(key_start):
+                    where_parts.append(f"{expr} >= %s")
+                    params.append(_date_to_iso(filters[key_start]))
+                if filters.get(key_end):
+                    where_parts.append(f"{expr} <= %s")
+                    params.append(_date_to_iso(filters[key_end]))
 
         where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
         if need_join:
