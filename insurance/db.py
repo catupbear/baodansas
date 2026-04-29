@@ -206,32 +206,56 @@ def init_insurance_tables(db):
             except Exception:
                 pass
 
-        # 回填已有数据的 ISO 日期列（分批处理，避免阻塞启动）
-        for cn_col, iso_col in [
-            ("sign_date", "sign_date_iso"),
-            ("start_date", "start_date_iso"),
-            ("end_date", "end_date_iso"),
-        ]:
+        # 回填已有数据的 ISO 日期列（后台线程执行，不阻塞启动）
+        conn.commit()  # 先提交前面的 DDL
+
+        def _backfill_iso_dates(db_ref):
+            """后台线程：回填 ISO 日期列"""
+            import time as _t
+            _t.sleep(2)  # 等启动完成
+            backfill_conn = db_ref.pool.connection()
             try:
-                cursor.execute(
-                    f"SELECT COUNT(*) AS cnt FROM insurance_policy_fields "
-                    f"WHERE {iso_col} IS NULL AND {cn_col} != '' AND {cn_col} LIKE '%%年%%月%%'"
-                )
-                cnt = cursor.fetchone()["cnt"]
-                if cnt > 0:
-                    logger.info("回填 %s → %s，共 %d 条...", cn_col, iso_col, cnt)
-                    cursor.execute(f"""
-                        UPDATE insurance_policy_fields
-                        SET {iso_col} = STR_TO_DATE(CONCAT(
-                            SUBSTRING_INDEX({cn_col}, '年', 1), '-',
-                            SUBSTRING_INDEX(SUBSTRING_INDEX({cn_col}, '月', 1), '年', -1), '-',
-                            SUBSTRING_INDEX(SUBSTRING_INDEX({cn_col}, '日', 1), '月', -1)
-                        ), '%%Y-%%m-%%d')
-                        WHERE {iso_col} IS NULL AND {cn_col} != '' AND {cn_col} LIKE '%%年%%月%%'
-                    """)
-                    logger.info("回填 %s 完成", iso_col)
-            except Exception as e:
-                logger.warning("回填 %s 失败: %s", iso_col, e)
+                bc = backfill_conn.cursor(pymysql.cursors.DictCursor)
+                for cn_col, iso_col in [
+                    ("sign_date", "sign_date_iso"),
+                    ("start_date", "start_date_iso"),
+                    ("end_date", "end_date_iso"),
+                ]:
+                    try:
+                        bc.execute(
+                            f"SELECT COUNT(*) AS cnt FROM insurance_policy_fields "
+                            f"WHERE {iso_col} IS NULL AND {cn_col} != '' AND {cn_col} LIKE '%%年%%月%%'"
+                        )
+                        cnt = bc.fetchone()["cnt"]
+                        if cnt == 0:
+                            continue
+                        logger.info("后台回填 %s → %s，共 %d 条", cn_col, iso_col, cnt)
+                        # 分批处理，每次200条
+                        done = 0
+                        while done < cnt:
+                            bc.execute(f"""
+                                UPDATE insurance_policy_fields
+                                SET {iso_col} = STR_TO_DATE(CONCAT(
+                                    SUBSTRING_INDEX({cn_col}, '年', 1), '-',
+                                    SUBSTRING_INDEX(SUBSTRING_INDEX({cn_col}, '月', 1), '年', -1), '-',
+                                    SUBSTRING_INDEX(SUBSTRING_INDEX({cn_col}, '日', 1), '月', -1)
+                                ), '%%Y-%%m-%%d')
+                                WHERE {iso_col} IS NULL AND {cn_col} != '' AND {cn_col} LIKE '%%年%%月%%'
+                                LIMIT 200
+                            """)
+                            backfill_conn.commit()
+                            affected = bc.rowcount
+                            done += affected
+                            if affected == 0:
+                                break
+                        logger.info("后台回填 %s 完成，共处理 %d 条", iso_col, done)
+                    except Exception as e:
+                        logger.warning("后台回填 %s 失败: %s", iso_col, e)
+            finally:
+                backfill_conn.close()
+
+        import threading as _threading
+        _threading.Thread(target=_backfill_iso_dates, args=(db,), daemon=True).start()
 
         # 关联表列宽统一修正为 VARCHAR(500)（已建表的情况下加宽，幂等）
         _pf_text_cols = [
