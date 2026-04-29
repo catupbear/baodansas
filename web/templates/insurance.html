@@ -1002,6 +1002,12 @@
                     </svg>
                     批量导出保单{{ selectedRecordIds.length ? ` (${selectedRecordIds.length})` : '' }}
                 </button>
+                <button @click="batchReocrSync" :disabled="batchProcessing" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    {{ batchProcessing ? '处理中...' : '批量重新识别' }}{{ !batchProcessing && selectedRecordIds.length ? ` (${selectedRecordIds.length})` : '' }}
+                </button>
                 <div class="ml-auto flex items-center gap-3">
                     <div class="flex items-center gap-1.5">
                         <span class="text-xs text-gray-500 font-medium">保司:</span>
@@ -1033,29 +1039,11 @@
             </div>
         </div>
 
-        <!-- 批量操作栏 -->
-        <div v-if="selectedRecordIds.length || batchProcessing" class="card p-3">
+        <!-- 批量操作栏（勾选时显示选中数量 + 清除） -->
+        <div v-if="selectedRecordIds.length" class="card p-3">
             <div class="flex items-center gap-3">
                 <span class="text-sm text-gray-600">已选 <span class="font-semibold text-orange-600">{{ selectedRecordIds.length }}</span> 条</span>
-                <button @click="batchReocrSync" :disabled="batchProcessing"
-                        class="btn btn-primary" style="font-size:12px;padding:4px 14px;">
-                    {{ batchProcessing ? '处理中...' : '批量重新识别' }}
-                </button>
-                <button v-if="!batchProcessing" @click="selectedRecordIds = []" class="text-xs text-gray-400 hover:text-gray-600 cursor-pointer">清除选择</button>
-            </div>
-            <!-- 进度条 -->
-            <div v-if="batchProcessing" class="mt-3">
-                <div class="flex justify-between text-xs text-gray-500 mb-1">
-                    <span>{{ batchProgress.current }} / {{ batchProgress.total }}　{{ batchProgress.currentFile }}</span>
-                    <span>
-                        <span class="text-green-600">成功 {{ batchProgress.success }}</span>
-                        <span v-if="batchProgress.failed" class="text-red-500 ml-2">失败 {{ batchProgress.failed }}</span>
-                    </span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-bar-fill"
-                         :style="{ width: (batchProgress.total ? batchProgress.current / batchProgress.total * 100 : 0) + '%' }"></div>
-                </div>
+                <button @click="selectedRecordIds = []" class="text-xs text-gray-400 hover:text-gray-600 cursor-pointer">清除选择</button>
             </div>
         </div>
 
@@ -1292,6 +1280,37 @@
             {{ syncMessage }}
         </div>
     </transition>
+
+    <!-- ========== 批量重新识别进度浮窗 ========== -->
+    <div v-if="batchProcessing" class="fixed z-50"
+         :style="{ bottom: downloadTask.visible ? '180px' : '24px', right: '24px' }"
+         style="width:320px;background:white;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.15);border:1px solid #e5e7eb;overflow:hidden;">
+        <div style="padding:10px 14px 8px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #f3f4f6;">
+            <div style="display:flex;align-items:center;gap:6px;">
+                <svg style="width:16px;height:16px;color:#f97316;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                <span style="font-size:13px;font-weight:600;color:#1f2937;">批量重新识别</span>
+            </div>
+        </div>
+        <div style="padding:10px 14px 12px;">
+            <div style="font-size:12px;color:#6b7280;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                {{ batchProgress.currentFile || '准备中...' }}
+            </div>
+            <div class="progress-bar" style="margin-bottom:6px;">
+                <div class="progress-bar-fill"
+                     :style="{ width: (batchProgress.total ? batchProgress.current / batchProgress.total * 100 : 0) + '%',
+                               background: batchProgress.currentFile === '完成' ? '#22c55e' : undefined }"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:#9ca3af;">
+                <span>{{ batchProgress.current }} / {{ batchProgress.total }}</span>
+                <span>
+                    <span style="color:#16a34a;">成功 {{ batchProgress.success }}</span>
+                    <span v-if="batchProgress.failed" style="color:#ef4444;margin-left:6px;">失败 {{ batchProgress.failed }}</span>
+                </span>
+            </div>
+        </div>
+    </div>
 
     <!-- ========== 批量下载进度浮窗 ========== -->
     <div v-if="downloadTask.visible" class="fixed bottom-6 right-6 z-50"
@@ -3479,44 +3498,92 @@ createApp({
         // 批量进度
         const batchProgress = reactive({ total: 0, current: 0, success: 0, failed: 0, currentFile: '' });
 
-        // 批量重新识别并同步钉钉（逐条处理，实时进度）
+        // 批量重新识别（逐条处理，实时进度）：有勾选按勾选，否则按当前筛选条件全部处理
         async function batchReocrSync() {
-            if (!selectedRecordIds.value.length) return;
-            if (!confirm(`确定对选中的 ${selectedRecordIds.value.length} 条记录批量重新识别？`)) return;
+            if (batchProcessing.value) return;
+            try {
+                let ids = [...selectedRecordIds.value];
 
-            const ids = [...selectedRecordIds.value];
-            batchProcessing.value = true;
-            Object.assign(batchProgress, { total: ids.length, current: 0, success: 0, failed: 0, currentFile: '' });
-
-            for (const rid of ids) {
-                // 从当前记录列表获取文件名用于显示
-                const rec = records.value.find(r => r.id === rid);
-                batchProgress.currentFile = rec ? (rec.filename || `#${rid}`) : `#${rid}`;
-
-                try {
-                    const resp = await authFetch('/api/insurance/batch-reocr-sync', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ record_ids: [rid] }),
-                    });
-                    const data = await resp.json();
-                    if (data.code === 0 && data.data) {
-                        batchProgress.success += (data.data.sync_success || data.data.reocr_success || 0);
-                        batchProgress.failed += (data.data.reocr_failed || 0);
+                // 没有勾选时，按当前筛选条件查询全部记录
+                if (!ids.length) {
+                    const params = new URLSearchParams({ page: 1, page_size: 10000 });
+                    if (recordFilter.source_type === 'user') {
+                        params.set('source_type', 'user');
+                        if (recordFilter.userid) params.set('sender', recordFilter.userid);
+                    } else if (recordFilter.source_type === 'room') {
+                        params.set('source_type', 'room');
+                        if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
                     } else {
+                        if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
+                    }
+                    const tab = recordActiveTab.value;
+                    if (tab === 'done') {
+                        params.set('status', 'done');
+                        params.set('is_abnormal', '0');
+                        params.set('doc_category', recordDocTypeFilter.value || '保单');
+                    } else if (tab === 'abnormal') {
+                        params.set('status', 'done');
+                        params.set('is_abnormal', '1');
+                    } else if (tab === 'nonpolicy') {
+                        params.set('status', 'done');
+                        params.set('doc_category', '!保单');
+                    } else if (tab === 'failed') {
+                        params.set('status', 'failed');
+                    } else if (recordFilter.status) {
+                        params.set('status', recordFilter.status);
+                    }
+                    if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
+                    if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
+                    if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
+                    if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
+                    if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
+                    if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+                    _appendAdvancedParams(params);
+
+                    const listResp = await authFetch(`/api/insurance/records?${params.toString()}`);
+                    const listJson = await listResp.json();
+                    const allRecords = (listJson.data || listJson).records || [];
+                    ids = allRecords.filter(r => r.cos_url).map(r => r.id);
+                    if (!ids.length) { showMessage('没有可重新识别的记录', false); return; }
+                }
+
+                if (!confirm(`确定对 ${ids.length} 条记录批量重新识别？`)) return;
+
+                batchProcessing.value = true;
+                Object.assign(batchProgress, { total: ids.length, current: 0, success: 0, failed: 0, currentFile: '' });
+
+                for (const rid of ids) {
+                    const rec = records.value.find(r => r.id === rid);
+                    batchProgress.currentFile = rec ? (rec.filename || `#${rid}`) : `#${rid}`;
+
+                    try {
+                        const resp = await authFetch('/api/insurance/batch-reocr-sync', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ record_ids: [rid] }),
+                        });
+                        const data = await resp.json();
+                        if (data.code === 0 && data.data) {
+                            batchProgress.success += (data.data.sync_success || data.data.reocr_success || 0);
+                            batchProgress.failed += (data.data.reocr_failed || 0);
+                        } else {
+                            batchProgress.failed++;
+                        }
+                    } catch (e) {
                         batchProgress.failed++;
                     }
-                } catch (e) {
-                    batchProgress.failed++;
+                    batchProgress.current++;
                 }
-                batchProgress.current++;
+
+                batchProgress.currentFile = '完成';
+                selectedRecordIds.value = [];
+                await loadRecords();
+
+                setTimeout(() => { batchProcessing.value = false; }, 1500);
+            } catch (e) {
+                showMessage('批量重新识别失败: ' + e.message, false);
+                batchProcessing.value = false;
             }
-
-            batchProgress.currentFile = '完成';
-            selectedRecordIds.value = [];
-            await loadRecords();
-
-            setTimeout(() => { batchProcessing.value = false; }, 1500);
         }
 
         // 批量下载状态
