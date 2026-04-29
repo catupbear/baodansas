@@ -836,35 +836,64 @@ def reocr_record(record_id):
         if not ocr_result.get("success"):
             return jsonify({"code": 500, "msg": f"OCR 识别失败: {ocr_result.get('error', '未知错误')}"}), 500
 
-        policy = ocr_result.get("policy", {})
+        policies = ocr_result.get("policies", [])
         ocr_engine = ocr_result.get("ocr_engine", "pdfplumber")
-        parsed_fields = policy.get("fields", {})
-        doc_category = policy.get("doc_category", "")
-        confidence = policy.get("confidence", 0.0)
 
-        # 3. 同车牌保单字段互补
-        _handler._cross_fill_by_plate(parsed_fields, record_id)
+        if not policies:
+            return jsonify({"code": 500, "msg": "OCR 未解析到任何保单"}), 500
 
-        # 4. 字段映射
         from insurance.field_mapping import apply_mapping
-        company_short = parsed_fields.get("保险公司简称", "")
-        mapped_fields = apply_mapping(parsed_fields, company_short)
 
-        # 5. 更新记录
-        raw_text = policy.get("raw_text", "")
-        updates = {
-            "status": "done",
-            "ocr_engine": ocr_engine,
-            "doc_category": doc_category,
-            "confidence": confidence,
-            "parsed_fields": parsed_fields,
-            "mapped_fields": mapped_fields,
-            "raw_text": raw_text,
-            "error_message": "",
-        }
-        update_insurance_record(_db, record_id, updates)
+        # 逐条处理：第1条更新原记录，后续创建新记录
+        extra_record_ids = []
+        for idx, policy in enumerate(policies):
+            parsed_fields = policy.get("fields", {})
+            doc_category = policy.get("doc_category", "")
+            confidence = policy.get("confidence", 0.0)
 
-        # 返回更新后的记录
+            cur_record_id = record_id
+            if idx > 0:
+                # 多保单：为第2条及之后创建新记录
+                new_record = {
+                    "msg_seq": record.get("msg_seq"),
+                    "roomid": record.get("roomid", ""),
+                    "room_name": record.get("room_name", ""),
+                    "sender": record.get("sender", ""),
+                    "sender_name": record.get("sender_name", ""),
+                    "filename": filename,
+                    "filesize": record.get("filesize", 0),
+                    "status": "processing",
+                    "source": record.get("source", "auto"),
+                    "user_id": record.get("user_id"),
+                    "file_md5": record.get("file_md5"),
+                    "cos_url": cos_url,
+                }
+                cur_record_id = save_insurance_record(_db, new_record)
+                extra_record_ids.append(cur_record_id)
+
+            # 同车牌保单字段互补
+            _handler._cross_fill_by_plate(parsed_fields, cur_record_id)
+
+            # 字段映射
+            company_short = parsed_fields.get("保险公司简称", "")
+            mapped_fields = apply_mapping(parsed_fields, company_short)
+
+            # 更新记录
+            raw_text = policy.get("raw_text", "")
+            updates = {
+                "status": "done",
+                "ocr_engine": ocr_engine,
+                "doc_category": doc_category,
+                "confidence": confidence,
+                "parsed_fields": parsed_fields,
+                "mapped_fields": mapped_fields,
+                "raw_text": raw_text,
+                "error_message": "",
+                "cos_url": cos_url,
+            }
+            update_insurance_record(_db, cur_record_id, updates)
+
+        # 返回更新后的主记录
         updated = get_insurance_record(_db, record_id)
         for field in ("parsed_fields", "mapped_fields"):
             if isinstance(updated.get(field), str):
@@ -876,7 +905,16 @@ def reocr_record(record_id):
             if updated.get(ts_field) and not isinstance(updated[ts_field], str):
                 updated[ts_field] = str(updated[ts_field])
 
-        return jsonify({"code": 0, "data": updated, "msg": "重新识别完成，请预览确认后同步钉钉"})
+        msg = "重新识别完成，请预览确认后同步钉钉"
+        if extra_record_ids:
+            msg = f"重新识别完成，检测到{len(policies)}份保单，已创建{len(extra_record_ids)}条新记录"
+
+        return jsonify({
+            "code": 0,
+            "data": updated,
+            "msg": msg,
+            "extra_record_ids": extra_record_ids,
+        })
     except Exception as e:
         logger.exception("重新识别保单记录 %d 失败", record_id)
         return jsonify({"code": 500, "msg": str(e)}), 500
