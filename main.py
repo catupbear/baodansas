@@ -22,6 +22,10 @@ from insurance.db import init_insurance_tables
 from insurance.monitor_config_db import init_monitor_config_table, migrate_from_watch_list
 from insurance.handler import InsuranceHandler
 from insurance.api import insurance_bp, init_insurance_api
+from auth.db import init_users_table
+from auth.jwt_utils import init_jwt
+from auth.decorators import init_auth_decorators
+from auth.api import auth_bp, init_auth_api
 
 # 日志配置
 logging.basicConfig(
@@ -75,6 +79,14 @@ def create_app(config: dict) -> Flask:
         except Exception as e:
             logger.warning("COS初始化失败（%s），媒体文件将保存到本地", e)
 
+    # 初始化账号认证模块
+    init_users_table(db)
+    jwt_secret = config.get("secret_key", "wxbot-monitor-secret-key")
+    init_jwt(jwt_secret)
+    init_auth_decorators(db)
+    init_auth_api(db)
+    app.register_blueprint(auth_bp)
+
     # 注册前端 API 蓝图
     init_api(db, contacts=contacts, cos_storage=cos_storage)
     app.register_blueprint(api_bp)
@@ -89,6 +101,11 @@ def create_app(config: dict) -> Flask:
     )
     init_insurance_api(db, handler=insurance_handler, contacts=contacts)
     app.register_blueprint(insurance_bp)
+
+    # 登录页（无需认证）
+    @app.route("/login")
+    def login_page():
+        return render_template("login.html")
 
     # 首页 → 保单识别
     @app.route("/")
@@ -109,6 +126,11 @@ def create_app(config: dict) -> Flask:
     @app.route("/training")
     def training_page():
         return render_template("training.html")
+
+    # 账号管理（超管专属，前端校验权限）
+    @app.route("/admin/users")
+    def admin_users_page():
+        return render_template("admin_users.html")
 
     # 消息监控（需要密码）
     @app.route("/monitor")
