@@ -22,6 +22,7 @@ from .db import (
     get_insurance_record,
     get_insurance_stats,
     query_insurance_records,
+    save_insurance_record,
     set_insurance_config,
     update_insurance_record,
     upsert_insurance_record_by_policy,
