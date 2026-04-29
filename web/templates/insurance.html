@@ -1617,7 +1617,7 @@
                     <div v-if="previewShowFields" class="border-l flex flex-col" style="width: 420px; min-width: 320px;">
                         <div class="px-3 py-2 bg-gray-50 border-b flex-shrink-0 flex items-center justify-between">
                             <span class="text-xs text-gray-500 font-medium">列表信息（导出字段）</span>
-                            <span v-if="previewAutoRecord" class="text-xs text-orange-400">点击字段值可修改</span>
+                            <!-- 提示已移至承保公司字段行 -->
                         </div>
                         <!-- 识别中：加载进度 -->
                         <div v-if="(previewAutoRecord && previewAutoRecord._reocring) || previewReocring"
@@ -1631,8 +1631,16 @@
                         </div>
                         <!-- 识别完成：字段列表（支持点击编辑） -->
                         <div v-else class="flex-1 overflow-auto p-3">
-                            <div v-for="item in previewFieldsList" :key="item.label"
-                                 class="flex items-center border-b border-gray-100 py-1.5 text-sm group">
+                            <div v-for="item in previewFieldsList" :key="item.label">
+                                <!-- 承保公司字段上方：编辑提示 -->
+                                <div v-if="item.label === '承保公司' && previewAutoRecord"
+                                     class="flex items-center gap-1.5 mb-2 px-2 py-1.5 bg-orange-50 rounded-lg border border-orange-200">
+                                    <svg class="w-3.5 h-3.5 text-orange-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                    </svg>
+                                    <span class="text-xs text-orange-600 font-medium">识别有误？点击字段值即可修改</span>
+                                </div>
+                                <div class="flex items-center border-b border-gray-100 py-1.5 text-sm group">
                                 <span class="text-gray-500 w-24 flex-shrink-0 font-medium flex items-center gap-1">
                                     {{ item.label }}
                                     <span v-if="isManualField(item.label)"
@@ -1671,6 +1679,7 @@
                                         {{ item.value || '—' }}
                                     </span>
                                 </template>
+                            </div>
                             </div>
                         </div>
                     </div>
