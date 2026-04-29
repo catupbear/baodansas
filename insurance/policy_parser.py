@@ -128,6 +128,8 @@ PERSON_BLACKLIST = {
     "包括主", "Policy",
     # 投保单中的条款文字
     "须如实告知",
+    # 单独的通用词（非具体名称）
+    "公司",
 }
 
 
@@ -727,6 +729,13 @@ def _extract_insured(text: str, text_merged: str, fields: dict, company_short: s
         if "被保险人" in fields:
             return
 
+    # ===== 紫金被保险人清单格式 =====
+    # "被保险人清单" → 表头含"被保险人姓名" → 数据行"序号 姓名 ..."，可能多人
+    if company_short == "紫金":
+        _extract_insured_zijin(text, fields)
+        if "被保险人" in fields:
+            return
+
     # ===== 通用提取逻辑 =====
     _extract_insured_common(text, text_merged, fields)
 
@@ -760,6 +769,32 @@ def _extract_insured_pingan(text: str, text_merged: str, fields: dict):
                     fields["被保险人"] = parts[0]
                     return
             break
+
+    # 平安商业险跨行格式：OCR 将公司名截断到下一行
+    # "被保 正式名称: 深圳市义奇和乐科技有限公 证件类型: ...\n险人 司\n信息 ..."
+    # 需要从"正式名称:"到"证件类型"之间提取公司名，并拼接下一行的残余部分
+    for i, line in enumerate(lines):
+        m = re.search(r"被保\s*正式名称[：:]\s*(.+?)(?:\s+证件类型)", line)
+        if m:
+            val = m.group(1).strip()
+            # 如果公司名不完整（不以"公司/集团/商行/店"等结尾），尝试从下一行拼接
+            if val and not re.search(r'(?:公司|集团|商行|商贸|店|工厂|事务所)$', val):
+                for j in range(i + 1, min(i + 3, len(lines))):
+                    next_line = lines[j].strip()
+                    # 下一行开头可能有"险人"等干扰，提取第一个有意义的中文片段
+                    parts = re.split(r'\s+', next_line)
+                    for part in parts:
+                        # 尝试拼接每个片段，看是否能组成完整公司名
+                        candidate = val + part
+                        if re.search(r'(?:公司|集团|商行|商贸|店|工厂|事务所)$', candidate):
+                            val = candidate
+                            break
+                    if re.search(r'(?:公司|集团|商行|商贸|店|工厂|事务所)$', val):
+                        break
+            val = _clean_person_name(val)
+            if _is_valid_person(val):
+                fields["被保险人"] = val
+                return
 
     # 平安标准格式：被保姓名 / 被保 正式名称
     for p in [
@@ -864,6 +899,51 @@ def _extract_insured_taiping(text: str, text_merged: str, fields: dict):
                     fields["被保险人"] = parts[0]
                     return
             break
+
+
+def _extract_insured_zijin(text: str, fields: dict):
+    """紫金被保险人清单提取（支持多人）
+    格式：
+      被保险人清单
+      序号 被保险人姓名 方案号 证件类型 证件号码 ...
+      1    钟赛敬       2     身份证   441424...
+      2    张三         1     身份证   ...
+    """
+    lines = text.split('\n')
+    header_idx = -1
+    name_col = -1
+
+    for i, line in enumerate(lines):
+        # 查找含"被保险人姓名"的表头行
+        if re.search(r'被保险人姓名', line):
+            header_idx = i
+            # 确定"被保险人姓名"在表头中的列位置
+            cols = re.split(r'\s+', line.strip())
+            for ci, col in enumerate(cols):
+                if '被保险人姓名' in col:
+                    name_col = ci
+                    break
+            break
+
+    if header_idx < 0:
+        return
+
+    # 从表头下一行开始，提取以数字序号开头的数据行中的姓名
+    names = []
+    for j in range(header_idx + 1, min(header_idx + 50, len(lines))):
+        row = lines[j].strip()
+        if not row:
+            continue
+        parts = re.split(r'\s+', row)
+        # 数据行以数字序号开头
+        if not parts or not re.match(r'^\d+$', parts[0]):
+            break
+        # 姓名在序号后面（第2列，即 index 1）
+        if len(parts) > 1 and _is_valid_person(parts[1]):
+            names.append(parts[1])
+
+    if names:
+        fields["被保险人"] = "、".join(names)
 
 
 def _extract_insured_qianhai(text: str, text_merged: str, fields: dict):
@@ -998,11 +1078,16 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
         fields["被保险人"] = m.group(1)
         return
 
-    # 表格格式
+    # 表格格式：表头含"被保险人姓名"，数据行以序号开头
     for i, line in enumerate(lines):
-        if re.search(r'被保险人姓名\s+证件类型', line):
+        if re.search(r'被保险人姓名\s+(?:证件类型|方案号|方案|保额)', line):
             for j in range(i + 1, min(i + 6, len(lines))):
                 parts = re.split(r'\s+', lines[j].strip())
+                # 序号开头的数据行，姓名在第2列
+                if len(parts) > 1 and re.match(r'^\d+$', parts[0]) and _is_valid_person(parts[1]):
+                    fields["被保险人"] = parts[1]
+                    return
+                # 兼容无序号的格式，姓名在第1列
                 if parts and _is_valid_person(parts[0]):
                     fields["被保险人"] = parts[0]
                     return
@@ -1444,6 +1529,12 @@ def _extract_premium(text: str, fields: dict, company_short: str):
         # "含税保险费合计" 格式
         patterns.insert(2, r"含税保险费合计.*?[（(][￥¥][：:\s]*([\d,]+\.?\d{0,2})\s*(?:元)?[)）]")
 
+    # 安盛天平驾乘格式："总保险费(含税价): RMB 保费：￥180.32 税费：￥9.68 价税合计：￥190.00"
+    # 优先取"价税合计"金额
+    if company_short == "安盛天平":
+        patterns.insert(0, r"价税合计[：:\s]*[￥¥]([\d,]+\.\d{2})")
+        patterns.insert(1, r"总保险费.*?价税合计[：:\s]*[￥¥]([\d,]+\.\d{2})")
+
     # 国寿驾乘险："保险费合计 人民币（大写） XXX ￥CNY299.00元"
     if company_short == "国寿财产":
         patterns.insert(0, r"保险费合计.*?[￥¥]?CNY([\d,]+\.\d{2})(?:元)?")
@@ -1460,6 +1551,21 @@ def _extract_premium(text: str, fields: dict, company_short: str):
     # 大家交强："本保单含税保费1080.0元"
     if company_short == "大家财险":
         patterns.insert(0, r"含税保费([\d,]+\.?\d*)(?:元)?")
+
+    # 申能格式："保险费总计： （大写） 叁佰元 小写 300.00元"（优先取总计，而非不含税保费）
+    if company_short == "申能":
+        patterns.insert(0, r"保险费总计.*?小写\s*([\d,]+\.?\d{0,2})\s*元")
+        patterns.insert(1, r"保险费总计.*?([\d,]+\.\d{2})\s*元")
+
+    # 太平驾乘格式（跨行）："总保费(含税)：\n小写： CNY 599.00（\n不含税保费：587.23元，税额：11.77元）"
+    # 优先取"总保费"后"小写"行的 CNY 金额
+    if company_short == "太平":
+        patterns.insert(0, r"总保费[\s\S]{0,30}?小写[：:\s]*CNY\s*([\d,]+\.\d{2})")
+        # "人民币大写：...，小写：RMB855.00元（不含税保费...）其中 保险费合计"
+        patterns.insert(1, r"小写[：:\s]*RMB\s*([\d,]+\.\d{2})(?:元)?[\s\S]{0,80}?保险费合计")
+        # "保 险 费 合 计 人民币大写：...，小写：RMB4636.16元（其中 不含税保费...）"
+        # OCR 可能将"保险费合计"拆成带空格的形式
+        patterns.insert(2, r"保\s*险\s*费\s*合\s*计.*?小写[：:\s]*RMB\s*([\d,]+\.\d{2})")
 
     # 阳光驾乘无忧："总保险费 人民币（大写）:壹佰捌拾捌元    ￥188.00"
     if company_short == "阳光":
@@ -2267,7 +2373,7 @@ def get_extraction_rules(company_short: str = "") -> Dict[str, Dict[str, str]]:
             "终保日期": "驾乘格式'Expiry Date: 2027-04-19'",
         },
         "安盛天平": {
-            "保费": "格式'（¥： 1,850.00 元）'",
+            "保费": "格式'（¥： 1,850.00 元）'；驾乘格式优先取'价税合计：￥190.00'",
             "起保日期": "格式'保险合同生效日: 2026-04-25'或数字间有空格",
             "终保日期": "格式'保险合同满期日: 2027-04-24'",
         },
@@ -2282,6 +2388,9 @@ def get_extraction_rules(company_short: str = "") -> Dict[str, Dict[str, str]]:
         "大家财险": {
             "保费": "交强险格式'本保单含税保费1080.0元'",
         },
+        "申能": {
+            "保费": "优先取'保险费总计...小写 300.00元'，而非不含税保费",
+        },
         "中华联合": {
             "车牌": "格式'号1牌1号1码'需合并处理",
             "被保人": "格式'被保险人名称：XXX'或'被保险人姓名XXX'",
@@ -2289,7 +2398,10 @@ def get_extraction_rules(company_short: str = "") -> Dict[str, Dict[str, str]]:
         },
         "太平": {
             "被保人": "太平格式：多种标签'被保险人/被保人'，支持跨行提取",
-            "保费": "支持'(小写)：200.00'格式",
+            "保费": "支持'(小写)：200.00'格式；驾乘'总保费(含税)...小写CNY'；'小写RMB...保险费合计'；OCR空格'保 险 费 合 计...小写RMB'",
+        },
+        "紫金": {
+            "被保人": "附录被保险人清单表格格式，支持多人用'、'拼接",
         },
     }
 
