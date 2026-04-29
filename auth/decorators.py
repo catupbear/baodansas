@@ -51,7 +51,7 @@ def login_required(f):
         # 存到 g 上下文，后续路由函数可通过 g.current_user 获取
         g.current_user = {
             "user_id": payload["user_id"],
-            "username": payload["username"],
+            "phone": payload.get("phone", payload.get("username", "")),
             "role": payload["role"],
             "parent_id": user.get("parent_id"),
         }

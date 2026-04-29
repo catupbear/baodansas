@@ -11,7 +11,7 @@ from .db import (
     ROLE_SUPER_ADMIN,
     ROLE_ENTERPRISE,
     ROLE_EMPLOYEE,
-    get_user_by_username,
+    get_user_by_phone,
     get_user_by_id,
     verify_password,
     list_users,
@@ -43,26 +43,26 @@ def init_auth_api(db):
 def login():
     """
     用户登录，返回 JWT token。
-    请求体: {"username": "xxx", "password": "xxx"}
+    请求体: {"phone": "xxx", "password": "xxx"}
     """
     data = request.get_json(silent=True) or {}
-    username = data.get("username", "").strip()
+    phone = data.get("phone", "").strip()
     password = data.get("password", "")
 
-    if not username or not password:
-        return jsonify({"code": 400, "msg": "用户名和密码不能为空"}), 400
+    if not phone or not password:
+        return jsonify({"code": 400, "msg": "手机号和密码不能为空"}), 400
 
-    user = get_user_by_username(_db, username)
+    user = get_user_by_phone(_db, phone)
     if not user:
-        return jsonify({"code": 401, "msg": "用户名或密码错误"}), 401
+        return jsonify({"code": 401, "msg": "手机号或密码错误"}), 401
 
     if not user.get("enabled"):
         return jsonify({"code": 403, "msg": "账号已禁用，请联系管理员"}), 403
 
     if not verify_password(user, password):
-        return jsonify({"code": 401, "msg": "用户名或密码错误"}), 401
+        return jsonify({"code": 401, "msg": "手机号或密码错误"}), 401
 
-    token = generate_token(user["id"], user["username"], user["role"])
+    token = generate_token(user["id"], user["phone"], user["role"])
 
     return jsonify({
         "code": 0,
@@ -70,9 +70,9 @@ def login():
             "token": token,
             "user": {
                 "id": user["id"],
-                "username": user["username"],
+                "phone": user["phone"],
                 "role": user["role"],
-                "display_name": user.get("display_name", ""),
+                "name": user.get("name", ""),
             },
         },
     })
@@ -117,17 +117,17 @@ def api_list_users():
 def api_create_user():
     """
     创建用户。
-    请求体: {"username", "password", "role", "parent_id"(可选), "display_name"(可选)}
+    请求体: {"phone", "password", "role", "parent_id"(可选), "name"(可选)}
     """
     data = request.get_json(silent=True) or {}
-    username = data.get("username", "").strip()
+    phone = data.get("phone", "").strip()
     password = data.get("password", "")
     role = data.get("role", ROLE_EMPLOYEE)
     parent_id = data.get("parent_id")
-    display_name = data.get("display_name", "")
+    name = data.get("name", "")
 
-    if not username or not password:
-        return jsonify({"code": 400, "msg": "用户名和密码不能为空"}), 400
+    if not phone or not password:
+        return jsonify({"code": 400, "msg": "手机号和密码不能为空"}), 400
 
     if role not in (ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, ROLE_EMPLOYEE):
         return jsonify({"code": 400, "msg": f"无效角色: {role}"}), 400
@@ -135,10 +135,10 @@ def api_create_user():
     if role == ROLE_EMPLOYEE and not parent_id:
         return jsonify({"code": 400, "msg": "员工账号必须指定所属企业"}), 400
 
-    # 检查用户名唯一
-    existing = get_user_by_username(_db, username)
+    # 检查手机号唯一
+    existing = get_user_by_phone(_db, phone)
     if existing:
-        return jsonify({"code": 400, "msg": "用户名已存在"}), 400
+        return jsonify({"code": 400, "msg": "该手机号已注册"}), 400
 
     # 校验 parent_id 指向的企业账号确实存在
     if parent_id:
@@ -147,7 +147,7 @@ def api_create_user():
             return jsonify({"code": 400, "msg": "所属企业账号不存在"}), 400
 
     try:
-        user_id = create_user(_db, username, password, role, parent_id, display_name)
+        user_id = create_user(_db, phone, password, role, parent_id, name)
         return jsonify({"code": 0, "data": {"id": user_id}})
     except Exception as e:
         logger.exception("创建用户失败")
@@ -157,7 +157,7 @@ def api_create_user():
 @auth_bp.route("/api/auth/users/<int:user_id>", methods=["PUT"])
 @admin_required
 def api_update_user(user_id):
-    """更新用户信息（display_name, role, parent_id, enabled）"""
+    """更新用户信息（name, role, parent_id, enabled）"""
     data = request.get_json(silent=True) or {}
     try:
         update_user(_db, user_id, data)
@@ -193,7 +193,7 @@ def api_change_password():
     if not old_password or not new_password:
         return jsonify({"code": 400, "msg": "旧密码和新密码不能为空"}), 400
 
-    user = get_user_by_username(_db, g.current_user["username"])
+    user = get_user_by_phone(_db, g.current_user["phone"])
     if not verify_password(user, old_password):
         return jsonify({"code": 400, "msg": "旧密码错误"}), 400
 

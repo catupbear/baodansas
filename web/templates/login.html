@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 - 一键车险报价系统</title>
+    <title>登录 - 保单识别系统</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -182,8 +182,8 @@
         <div class="logo-icon">
             <svg viewBox="0 0 24 24"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
         </div>
-        <div class="title">一键车险报价系统</div>
-        <div class="subtitle">Insurance Quote System</div>
+        <div class="title">保单识别系统</div>
+        <div class="subtitle">Insurance Policy Recognition System</div>
 
         <!-- 错误提示 -->
         <div v-if="error" class="error-msg">{{ error }}</div>
@@ -195,7 +195,7 @@
                     <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
                     <circle cx="12" cy="7" r="4"/>
                 </svg>
-                <input v-model="username" type="text" placeholder="请输入用户名" autofocus required>
+                <input v-model="phone" type="text" placeholder="请输入手机号" autofocus required>
             </div>
 
             <!-- 密码 -->
@@ -229,7 +229,7 @@
             </button>
         </form>
 
-        <div class="footer">&copy; 2025 车险报价系统 All Rights Reserved</div>
+        <div class="footer">&copy; 2025 保单识别系统 All Rights Reserved</div>
     </div>
 </div>
 
@@ -237,7 +237,7 @@
 const { createApp, ref } = Vue;
 createApp({
     setup() {
-        const username = ref('');
+        const phone = ref('');
         const password = ref('');
         const error = ref('');
         const loading = ref(false);
@@ -249,12 +249,12 @@ createApp({
             window.location.href = '/';
         }
 
-        // 恢复记住的用户名密码
+        // 恢复记住的手机号密码
         const saved = localStorage.getItem('remembered_login');
         if (saved) {
             try {
                 const data = JSON.parse(saved);
-                username.value = data.username || '';
+                phone.value = data.phone || '';
                 password.value = data.password || '';
                 remember.value = true;
             } catch {}
@@ -267,14 +267,14 @@ createApp({
                 const resp = await fetch('/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: username.value, password: password.value }),
+                    body: JSON.stringify({ phone: phone.value, password: password.value }),
                 });
                 const data = await resp.json();
                 if (data.code === 0) {
                     // 记住密码
                     if (remember.value) {
                         localStorage.setItem('remembered_login', JSON.stringify({
-                            username: username.value, password: password.value
+                            phone: phone.value, password: password.value
                         }));
                     } else {
                         localStorage.removeItem('remembered_login');
@@ -292,7 +292,7 @@ createApp({
             }
         }
 
-        return { username, password, error, loading, showPwd, remember, handleLogin };
+        return { phone, password, error, loading, showPwd, remember, handleLogin };
     }
 }).mount('#app');
 </script>

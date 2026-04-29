@@ -303,7 +303,7 @@
                     账号
                 </a>
                 <!-- 当前用户 + 退出 -->
-                <span class="text-xs text-white text-opacity-70" v-if="currentUser">{{ currentUser.display_name || currentUser.username }}</span>
+                <span class="text-xs text-white text-opacity-70" v-if="currentUser">{{ currentUser.name || currentUser.phone }}</span>
                 <button @click="doLogout()" class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;">
                     退出
                 </button>

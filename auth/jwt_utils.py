@@ -23,11 +23,11 @@ def init_jwt(secret_key: str, expire_seconds: int = 86400 * 7):
     _expire_seconds = expire_seconds
 
 
-def generate_token(user_id: int, username: str, role: str) -> str:
+def generate_token(user_id: int, phone: str, role: str) -> str:
     """签发 JWT token"""
     payload = {
         "user_id": user_id,
-        "username": username,
+        "phone": phone,
         "role": role,
         "exp": int(time.time()) + _expire_seconds,
         "iat": int(time.time()),

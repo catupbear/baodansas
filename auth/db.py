@@ -29,11 +29,11 @@ def init_users_table(db):
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id           INT PRIMARY KEY AUTO_INCREMENT,
-                username     VARCHAR(64) NOT NULL UNIQUE,
+                phone        VARCHAR(64) NOT NULL UNIQUE COMMENT '手机号（登录凭证）',
                 password_hash VARCHAR(256) NOT NULL,
+                name         VARCHAR(128) DEFAULT '' COMMENT '姓名',
                 role         VARCHAR(32) NOT NULL DEFAULT 'employee',
                 parent_id    INT DEFAULT NULL COMMENT '所属企业账号ID，员工必填',
-                display_name VARCHAR(128) DEFAULT '',
                 enabled      TINYINT NOT NULL DEFAULT 1,
                 created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -42,11 +42,22 @@ def init_users_table(db):
             )
         """)
 
+        # 兼容旧表：username → phone, display_name → name
+        for old_col, new_col, col_def in [
+            ("username", "phone", "VARCHAR(64) NOT NULL COMMENT '手机号（登录凭证）'"),
+            ("display_name", "name", "VARCHAR(128) DEFAULT '' COMMENT '姓名'"),
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE users CHANGE COLUMN {old_col} {new_col} {col_def}")
+                logger.info("users 表列 %s → %s 迁移完成", old_col, new_col)
+            except Exception:
+                pass  # 列不存在或已迁移
+
         # 初始超管账号（仅在表为空时插入）
         cursor.execute("SELECT COUNT(*) AS cnt FROM users")
         if cursor.fetchone()["cnt"] == 0:
             cursor.execute(
-                "INSERT INTO users (username, password_hash, role, display_name) VALUES (%s, %s, %s, %s)",
+                "INSERT INTO users (phone, password_hash, role, name) VALUES (%s, %s, %s, %s)",
                 ("admin", generate_password_hash("admin123"), ROLE_SUPER_ADMIN, "超级管理员"),
             )
             logger.info("已创建默认超管账号: admin / admin123")
@@ -57,12 +68,12 @@ def init_users_table(db):
         conn.close()
 
 
-def get_user_by_username(db, username: str) -> dict | None:
-    """根据用户名查找用户"""
+def get_user_by_phone(db, phone: str) -> dict | None:
+    """根据手机号查找用户"""
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+        cursor.execute("SELECT * FROM users WHERE phone = %s", (phone,))
         return cursor.fetchone()
     finally:
         conn.close()
@@ -73,7 +84,7 @@ def get_user_by_id(db, user_id: int) -> dict | None:
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("SELECT id, username, role, parent_id, display_name, enabled, created_at, updated_at FROM users WHERE id = %s", (user_id,))
+        cursor.execute("SELECT id, phone, role, parent_id, name, enabled, created_at, updated_at FROM users WHERE id = %s", (user_id,))
         return cursor.fetchone()
     finally:
         conn.close()
@@ -89,7 +100,7 @@ def list_users(db, role: str = "", parent_id: int = None) -> list:
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        sql = "SELECT id, username, role, parent_id, display_name, enabled, created_at, updated_at FROM users WHERE 1=1"
+        sql = "SELECT id, phone, role, parent_id, name, enabled, created_at, updated_at FROM users WHERE 1=1"
         params = []
         if role:
             sql += " AND role = %s"
@@ -109,14 +120,14 @@ def list_users(db, role: str = "", parent_id: int = None) -> list:
         conn.close()
 
 
-def create_user(db, username: str, password: str, role: str, parent_id: int = None, display_name: str = "") -> int:
+def create_user(db, phone: str, password: str, role: str, parent_id: int = None, name: str = "") -> int:
     """创建用户，返回新用户 ID"""
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute(
-            "INSERT INTO users (username, password_hash, role, parent_id, display_name) VALUES (%s, %s, %s, %s, %s)",
-            (username, generate_password_hash(password), role, parent_id, display_name),
+            "INSERT INTO users (phone, password_hash, role, parent_id, name) VALUES (%s, %s, %s, %s, %s)",
+            (phone, generate_password_hash(password), role, parent_id, name),
         )
         conn.commit()
         return cursor.lastrowid
@@ -125,11 +136,11 @@ def create_user(db, username: str, password: str, role: str, parent_id: int = No
 
 
 def update_user(db, user_id: int, data: dict):
-    """更新用户信息（支持 display_name, role, parent_id, enabled）"""
+    """更新用户信息（支持 name, role, parent_id, enabled）"""
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        allowed = {"display_name", "role", "parent_id", "enabled"}
+        allowed = {"name", "role", "parent_id", "enabled"}
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
             return

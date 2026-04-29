@@ -129,7 +129,7 @@
                 <a href="/admin/users" class="text-sm text-orange-600 font-medium">账号管理</a>
             </div>
             <div class="flex items-center space-x-4">
-                <span class="text-sm text-gray-500">{{ currentUser.display_name || currentUser.username }}</span>
+                <span class="text-sm text-gray-500">{{ currentUser.name || currentUser.phone }}</span>
                 <button @click="logout" class="text-sm text-gray-400 hover:text-red-500">退出</button>
             </div>
         </nav>
@@ -168,8 +168,8 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>用户名</th>
-                                <th>显示名</th>
+                                <th>手机号</th>
+                                <th>姓名</th>
                                 <th>角色</th>
                                 <th>所属企业</th>
                                 <th>状态</th>
@@ -179,8 +179,8 @@
                         </thead>
                         <tbody>
                             <tr v-for="user in users" :key="user.id">
-                                <td class="font-medium text-gray-800">{{ user.username }}</td>
-                                <td>{{ user.display_name || '-' }}</td>
+                                <td class="font-medium text-gray-800">{{ user.phone }}</td>
+                                <td>{{ user.name || '-' }}</td>
                                 <td>
                                     <span class="badge" :class="roleBadgeClass(user.role)">{{ roleLabel(user.role) }}</span>
                                 </td>
@@ -217,11 +217,11 @@
                     <h3 class="text-lg font-semibold text-gray-800 mb-5">{{ isEdit ? '编辑用户' : '创建用户' }}</h3>
 
                     <div class="space-y-4">
-                        <!-- 用户名 -->
+                        <!-- 手机号 -->
                         <div>
-                            <label class="block text-sm text-gray-500 mb-1">用户名 <span v-if="!isEdit" class="text-red-500">*</span></label>
-                            <input v-model="form.username" type="text" class="form-input"
-                                :disabled="isEdit" placeholder="请输入用户名">
+                            <label class="block text-sm text-gray-500 mb-1">手机号 <span v-if="!isEdit" class="text-red-500">*</span></label>
+                            <input v-model="form.phone" type="text" class="form-input"
+                                :disabled="isEdit" placeholder="请输入手机号">
                         </div>
 
                         <!-- 密码（仅创建时） -->
@@ -230,10 +230,10 @@
                             <input v-model="form.password" type="password" class="form-input" placeholder="请输入密码">
                         </div>
 
-                        <!-- 显示名 -->
+                        <!-- 姓名 -->
                         <div>
-                            <label class="block text-sm text-gray-500 mb-1">显示名</label>
-                            <input v-model="form.display_name" type="text" class="form-input" placeholder="请输入显示名">
+                            <label class="block text-sm text-gray-500 mb-1">姓名</label>
+                            <input v-model="form.name" type="text" class="form-input" placeholder="请输入姓名">
                         </div>
 
                         <!-- 角色 -->
@@ -252,7 +252,7 @@
                             <select v-model="form.parent_id" class="form-select">
                                 <option :value="null">请选择企业</option>
                                 <option v-for="ent in enterprises" :key="ent.id" :value="ent.id">
-                                    {{ ent.display_name || ent.username }}
+                                    {{ ent.name || ent.phone }}
                                 </option>
                             </select>
                         </div>
@@ -277,7 +277,7 @@
             <div v-if="showResetPwdModal" class="modal-mask" @click.self="closeResetPwdModal">
                 <div class="modal-content">
                     <h3 class="text-lg font-semibold text-gray-800 mb-5">重置密码</h3>
-                    <p class="text-sm text-gray-500 mb-4">正在为 <span class="font-medium text-gray-700">{{ resetPwdUser?.username }}</span> 重置密码</p>
+                    <p class="text-sm text-gray-500 mb-4">正在为 <span class="font-medium text-gray-700">{{ resetPwdUser?.phone }}</span> 重置密码</p>
 
                     <div>
                         <label class="block text-sm text-gray-500 mb-1">新密码 <span class="text-red-500">*</span></label>
@@ -342,7 +342,7 @@ createApp({
         const showUserModal = ref(false);
         const isEdit = ref(false);
         const editUserId = ref(null);
-        const form = reactive({ username: '', password: '', display_name: '', role: 'employee', parent_id: null });
+        const form = reactive({ phone: '', password: '', name: '', role: 'employee', parent_id: null });
         const formError = ref('');
         const submitting = ref(false);
 
@@ -425,9 +425,9 @@ createApp({
         function openCreateModal() {
             isEdit.value = false;
             editUserId.value = null;
-            form.username = '';
+            form.phone = '';
             form.password = '';
-            form.display_name = '';
+            form.name = '';
             form.role = 'employee';
             form.parent_id = null;
             formError.value = '';
@@ -439,9 +439,9 @@ createApp({
         function openEditModal(user) {
             isEdit.value = true;
             editUserId.value = user.id;
-            form.username = user.username;
+            form.phone = user.phone;
             form.password = '';
-            form.display_name = user.display_name || '';
+            form.name = user.name || '';
             form.role = user.role;
             form.parent_id = user.parent_id || null;
             formError.value = '';
@@ -457,7 +457,7 @@ createApp({
         async function submitUser() {
             formError.value = '';
             if (!isEdit.value) {
-                if (!form.username.trim()) { formError.value = '请输入用户名'; return; }
+                if (!form.phone.trim()) { formError.value = '请输入手机号'; return; }
                 if (!form.password.trim()) { formError.value = '请输入密码'; return; }
             }
             submitting.value = true;
@@ -467,7 +467,7 @@ createApp({
                     url = '/api/auth/users/' + editUserId.value;
                     method = 'PUT';
                     body = {
-                        display_name: form.display_name,
+                        name: form.name,
                         role: form.role,
                         parent_id: form.role === 'employee' ? form.parent_id : null,
                     };
@@ -475,9 +475,9 @@ createApp({
                     url = '/api/auth/users';
                     method = 'POST';
                     body = {
-                        username: form.username.trim(),
+                        phone: form.phone.trim(),
                         password: form.password,
-                        display_name: form.display_name,
+                        name: form.name,
                         role: form.role,
                         parent_id: form.role === 'employee' ? form.parent_id : null,
                     };
@@ -542,7 +542,7 @@ createApp({
                 });
                 const data = await resp.json();
                 if (data.code === 0) {
-                    showToast('已' + action + '用户 ' + user.username);
+                    showToast('已' + action + '用户 ' + user.phone);
                     fetchUsers();
                 } else {
                     showToast(data.msg || action + '失败', 'error');

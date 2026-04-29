@@ -96,7 +96,7 @@ def _require_login():
     from flask import g
     g.current_user = {
         "user_id": payload["user_id"],
-        "username": payload["username"],
+        "phone": payload.get("phone", payload.get("username", "")),
         "role": payload["role"],
         "parent_id": user.get("parent_id"),
     }
