@@ -167,6 +167,9 @@ def init_insurance_tables(db):
                 dispute_resolution VARCHAR(500) DEFAULT '' COMMENT '争议解决方式',
                 creator            VARCHAR(500) DEFAULT '' COMMENT '制单人',
                 handler            VARCHAR(500) DEFAULT '' COMMENT '经办人',
+                sign_date_iso      DATE DEFAULT NULL COMMENT '签单日期(ISO格式，用于索引查询)',
+                start_date_iso     DATE DEFAULT NULL COMMENT '起保日期(ISO格式，用于索引查询)',
+                end_date_iso       DATE DEFAULT NULL COMMENT '止保日期(ISO格式，用于索引查询)',
                 created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )
@@ -179,11 +182,46 @@ def init_insurance_tables(db):
             "CREATE INDEX idx_pf_company_short ON insurance_policy_fields(company_short)",
             "CREATE INDEX idx_pf_applicant ON insurance_policy_fields(applicant)",
             "CREATE INDEX idx_pf_insured ON insurance_policy_fields(insured)",
-            "CREATE INDEX idx_pf_start_date ON insurance_policy_fields(start_date)",
-            "CREATE INDEX idx_pf_sign_date ON insurance_policy_fields(sign_date)",
+            "CREATE INDEX idx_pf_start_date_iso ON insurance_policy_fields(start_date_iso)",
+            "CREATE INDEX idx_pf_sign_date_iso ON insurance_policy_fields(sign_date_iso)",
+            "CREATE INDEX idx_pf_end_date_iso ON insurance_policy_fields(end_date_iso)",
         ]:
             try:
                 cursor.execute(idx_sql)
+            except Exception:
+                pass
+
+        # 迁移：为已有表添加 ISO 日期列（幂等）
+        for iso_col in ["sign_date_iso", "start_date_iso", "end_date_iso"]:
+            try:
+                cursor.execute(
+                    f"ALTER TABLE insurance_policy_fields ADD COLUMN {iso_col} DATE DEFAULT NULL"
+                )
+            except Exception:
+                pass
+            try:
+                cursor.execute(
+                    f"CREATE INDEX idx_pf_{iso_col} ON insurance_policy_fields({iso_col})"
+                )
+            except Exception:
+                pass
+
+        # 回填已有数据的 ISO 日期列（仅对非空中文日期且 ISO 列为空的行）
+        for cn_col, iso_col in [
+            ("sign_date", "sign_date_iso"),
+            ("start_date", "start_date_iso"),
+            ("end_date", "end_date_iso"),
+        ]:
+            try:
+                cursor.execute(f"""
+                    UPDATE insurance_policy_fields
+                    SET {iso_col} = STR_TO_DATE(CONCAT(
+                        SUBSTRING_INDEX({cn_col}, '年', 1), '-',
+                        SUBSTRING_INDEX(SUBSTRING_INDEX({cn_col}, '月', 1), '年', -1), '-',
+                        SUBSTRING_INDEX(SUBSTRING_INDEX({cn_col}, '日', 1), '月', -1)
+                    ), '%%Y-%%m-%%d')
+                    WHERE {iso_col} IS NULL AND {cn_col} != '' AND {cn_col} LIKE '%%年%%月%%'
+                """)
             except Exception:
                 pass
 
@@ -368,6 +406,17 @@ def _parsed_fields_to_row(parsed_fields: dict) -> dict:
         val = parsed_fields.get(ocr_key, "")
         if val:
             row[col_name] = str(val)[:500]  # 截断防溢出
+    # 自动生成 ISO 格式日期列（用于索引查询，避免 STR_TO_DATE）
+    for cn_col, iso_col in [
+        ("sign_date", "sign_date_iso"),
+        ("start_date", "start_date_iso"),
+        ("end_date", "end_date_iso"),
+    ]:
+        cn_val = row.get(cn_col, "")
+        if cn_val:
+            iso_val = _date_to_iso(cn_val)
+            if _re.match(r'\d{4}-\d{2}-\d{2}', iso_val):
+                row[iso_col] = iso_val
     return row
 
 
@@ -826,18 +875,17 @@ def query_insurance_records(
         if search_salesperson:
             conditions.append("pf.salesperson LIKE %s")
             params.append(f"%{search_salesperson}%")
-        # 关联表日期范围筛选（存储格式为 "YYYY年M月D日"，通过 STR_TO_DATE 转 DATE 比较）
-        for col, val_start, val_end in [
-            ("pf.sign_date", sign_date_start, sign_date_end),
-            ("pf.start_date", start_date_start, start_date_end),
-            ("pf.end_date", end_date_start, end_date_end),
+        # 关联表日期范围筛选（使用 ISO 日期列，可命中索引）
+        for iso_col, val_start, val_end in [
+            ("pf.sign_date_iso", sign_date_start, sign_date_end),
+            ("pf.start_date_iso", start_date_start, start_date_end),
+            ("pf.end_date_iso", end_date_start, end_date_end),
         ]:
-            expr = _CN_DATE_TO_DATE.format(col=col)
             if val_start:
-                conditions.append(f"{expr} >= %s")
+                conditions.append(f"{iso_col} >= %s")
                 params.append(_date_to_iso(val_start))
             if val_end:
-                conditions.append(f"{expr} <= %s")
+                conditions.append(f"{iso_col} <= %s")
                 params.append(_date_to_iso(val_end))
 
     where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
@@ -1132,17 +1180,16 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
             if filters.get("search_salesperson"):
                 where_parts.append("pf.salesperson LIKE %s")
                 params.append(f"%{filters['search_salesperson']}%")
-            for col, key_start, key_end in [
-                ("pf.sign_date", "sign_date_start", "sign_date_end"),
-                ("pf.start_date", "start_date_start", "start_date_end"),
-                ("pf.end_date", "end_date_start", "end_date_end"),
+            for iso_col, key_start, key_end in [
+                ("pf.sign_date_iso", "sign_date_start", "sign_date_end"),
+                ("pf.start_date_iso", "start_date_start", "start_date_end"),
+                ("pf.end_date_iso", "end_date_start", "end_date_end"),
             ]:
-                expr = _CN_DATE_TO_DATE.format(col=col)
                 if filters.get(key_start):
-                    where_parts.append(f"{expr} >= %s")
+                    where_parts.append(f"{iso_col} >= %s")
                     params.append(_date_to_iso(filters[key_start]))
                 if filters.get(key_end):
-                    where_parts.append(f"{expr} <= %s")
+                    where_parts.append(f"{iso_col} <= %s")
                     params.append(_date_to_iso(filters[key_end]))
 
         where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
