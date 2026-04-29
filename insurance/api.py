@@ -1855,53 +1855,43 @@ def export_excel():
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
-@insurance_bp.route("/api/insurance/batch-download", methods=["POST"])
-def batch_download():
-    """
-    批量下载保单文件，打包为 ZIP 后返回。
-    请求体: {record_ids: [int, ...]}
-    从 COS 下载各记录对应的 PDF 文件，打包为 ZIP 流式返回。
-    """
+# ---- 批量下载任务管理 ----
+import threading
+import time as _time
+import uuid
+import zipfile
+
+# 内存任务池（task_id → 任务状态），自动清理已完成超过 10 分钟的任务
+_download_tasks = {}
+_TASK_EXPIRE_SECONDS = 600
+
+
+def _cleanup_expired_tasks():
+    """清理过期任务（已完成超过 10 分钟）"""
+    now = _time.time()
+    expired = [tid for tid, t in _download_tasks.items()
+               if t.get("finished_at") and now - t["finished_at"] > _TASK_EXPIRE_SECONDS]
+    for tid in expired:
+        _download_tasks.pop(tid, None)
+
+
+def _do_batch_download(task_id, files_to_zip):
+    """后台线程：逐个从 COS 下载文件并打包 ZIP"""
     import requests as http_requests
-    import zipfile
+
+    task = _download_tasks[task_id]
+    zip_buffer = io.BytesIO()
+    used_names = {}
 
     try:
-        body = request.get_json(force=True) or {}
-        record_ids = body.get("record_ids", [])
-
-        if not record_ids:
-            return jsonify({"code": 400, "msg": "缺少 record_ids 参数"}), 400
-
-        if len(record_ids) > 500:
-            return jsonify({"code": 400, "msg": "单次下载不超过 500 条"}), 400
-
-        # 收集文件信息
-        files_to_zip = []
-        errors = []
-        for rid in record_ids:
-            record = get_insurance_record(_db, rid)
-            if not record:
-                errors.append(f"记录 {rid} 不存在")
-                continue
-            cos_url = record.get("cos_url", "")
-            if not cos_url:
-                errors.append(f"记录 {rid} 无文件URL")
-                continue
-            filename = record.get("filename", f"record_{rid}.pdf")
-            files_to_zip.append({"id": rid, "cos_url": cos_url, "filename": filename})
-
-        if not files_to_zip:
-            return jsonify({"code": 400, "msg": "没有可下载的文件", "errors": errors}), 400
-
-        # 下载并打包 ZIP（内存中完成）
-        zip_buffer = io.BytesIO()
-        used_names = {}
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for item in files_to_zip:
+            for i, item in enumerate(files_to_zip):
+                task["current"] = i + 1
+                task["current_file"] = item["filename"]
                 try:
                     resp = http_requests.get(item["cos_url"], timeout=30)
                     if resp.status_code != 200:
-                        errors.append(f"文件 {item['filename']} 下载失败(HTTP {resp.status_code})")
+                        task["failed"] += 1
                         continue
                     # 处理重名文件
                     name = item["filename"]
@@ -1912,24 +1902,119 @@ def batch_download():
                     else:
                         used_names[name] = 0
                     zf.writestr(name, resp.content)
-                except Exception as e:
-                    errors.append(f"文件 {item['filename']} 下载异常: {str(e)[:100]}")
+                    task["success"] += 1
+                except Exception:
+                    task["failed"] += 1
 
         zip_buffer.seek(0)
-
-        if zip_buffer.getbuffer().nbytes <= 22:
-            # ZIP 空文件（只有文件头）
-            return jsonify({"code": 400, "msg": "所有文件下载失败", "errors": errors}), 400
-
-        return send_file(
-            zip_buffer,
-            mimetype="application/zip",
-            as_attachment=True,
-            download_name="保单文件批量下载.zip",
-        )
+        task["zip_data"] = zip_buffer
+        task["status"] = "done"
     except Exception as e:
-        logger.exception("批量下载保单文件失败")
+        task["status"] = "error"
+        task["error"] = str(e)[:200]
+    finally:
+        task["finished_at"] = _time.time()
+
+
+@insurance_bp.route("/api/insurance/batch-download/start", methods=["POST"])
+def batch_download_start():
+    """
+    启动批量下载任务（异步）。
+    请求体: {record_ids: [int, ...]}
+    返回 task_id，前端轮询进度。
+    """
+    _cleanup_expired_tasks()
+
+    try:
+        body = request.get_json(force=True) or {}
+        record_ids = body.get("record_ids", [])
+
+        if not record_ids:
+            return jsonify({"code": 400, "msg": "缺少 record_ids 参数"}), 400
+        if len(record_ids) > 500:
+            return jsonify({"code": 400, "msg": "单次下载不超过 500 条"}), 400
+
+        # 收集文件信息
+        files_to_zip = []
+        for rid in record_ids:
+            record = get_insurance_record(_db, rid)
+            if not record:
+                continue
+            cos_url = record.get("cos_url", "")
+            if not cos_url:
+                continue
+            filename = record.get("filename", f"record_{rid}.pdf")
+            files_to_zip.append({"id": rid, "cos_url": cos_url, "filename": filename})
+
+        if not files_to_zip:
+            return jsonify({"code": 400, "msg": "没有可下载的文件"}), 400
+
+        # 创建任务
+        task_id = uuid.uuid4().hex[:12]
+        _download_tasks[task_id] = {
+            "status": "processing",
+            "total": len(files_to_zip),
+            "current": 0,
+            "success": 0,
+            "failed": 0,
+            "current_file": "",
+            "zip_data": None,
+            "error": "",
+            "finished_at": None,
+        }
+
+        # 启动后台线程
+        t = threading.Thread(target=_do_batch_download, args=(task_id, files_to_zip), daemon=True)
+        t.start()
+
+        return jsonify({"code": 0, "data": {"task_id": task_id, "total": len(files_to_zip)}})
+    except Exception as e:
+        logger.exception("启动批量下载任务失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/batch-download/status/<task_id>", methods=["GET"])
+def batch_download_status(task_id):
+    """查询批量下载任务进度"""
+    task = _download_tasks.get(task_id)
+    if not task:
+        return jsonify({"code": 404, "msg": "任务不存在或已过期"}), 404
+
+    return jsonify({"code": 0, "data": {
+        "status": task["status"],
+        "total": task["total"],
+        "current": task["current"],
+        "success": task["success"],
+        "failed": task["failed"],
+        "current_file": task["current_file"],
+        "error": task.get("error", ""),
+    }})
+
+
+@insurance_bp.route("/api/insurance/batch-download/file/<task_id>", methods=["GET"])
+def batch_download_file(task_id):
+    """下载已完成的 ZIP 文件"""
+    task = _download_tasks.get(task_id)
+    if not task:
+        return jsonify({"code": 404, "msg": "任务不存在或已过期"}), 404
+    if task["status"] != "done":
+        return jsonify({"code": 400, "msg": "任务尚未完成"}), 400
+
+    zip_data = task.get("zip_data")
+    if not zip_data or zip_data.getbuffer().nbytes <= 22:
+        return jsonify({"code": 400, "msg": "所有文件下载失败，无可下载内容"}), 400
+
+    zip_data.seek(0)
+
+    # 取出后清理任务数据（只允许下载一次，释放内存）
+    _download_tasks.pop(task_id, None)
+
+    return send_file(
+        zip_data,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name="保单文件批量下载.zip",
+    )
 
 
 @insurance_bp.route("/api/insurance/extraction-rules", methods=["GET"])

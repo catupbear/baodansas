@@ -1293,6 +1293,52 @@
         </div>
     </transition>
 
+    <!-- ========== 批量下载进度浮窗 ========== -->
+    <div v-if="downloadTask.visible" class="fixed bottom-6 right-6 z-50"
+         style="width:320px;background:white;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.15);border:1px solid #e5e7eb;overflow:hidden;">
+        <!-- 标题栏 -->
+        <div style="padding:10px 14px 8px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #f3f4f6;">
+            <div style="display:flex;align-items:center;gap:6px;">
+                <svg style="width:16px;height:16px;color:#f97316;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                <span style="font-size:13px;font-weight:600;color:#1f2937;">批量下载</span>
+            </div>
+            <button @click="closeDownloadTask" style="color:#9ca3af;cursor:pointer;font-size:16px;line-height:1;border:none;background:none;" title="关闭">&times;</button>
+        </div>
+        <!-- 进度内容 -->
+        <div style="padding:10px 14px 12px;">
+            <!-- 当前文件 -->
+            <div style="font-size:12px;color:#6b7280;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                <template v-if="downloadTask.status === 'processing'">
+                    正在下载: {{ downloadTask.currentFile || '准备中...' }}
+                </template>
+                <template v-else-if="downloadTask.status === 'done'">
+                    <span style="color:#16a34a;">打包完成，正在下载 ZIP...</span>
+                </template>
+                <template v-else-if="downloadTask.status === 'error'">
+                    <span style="color:#dc2626;">下载失败: {{ downloadTask.error }}</span>
+                </template>
+            </div>
+            <!-- 进度条 -->
+            <div class="progress-bar" style="margin-bottom:6px;">
+                <div class="progress-bar-fill"
+                     :style="{
+                         width: (downloadTask.total ? downloadTask.current / downloadTask.total * 100 : 0) + '%',
+                         background: downloadTask.status === 'error' ? '#ef4444' : downloadTask.status === 'done' ? '#22c55e' : undefined,
+                     }"></div>
+            </div>
+            <!-- 统计 -->
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:#9ca3af;">
+                <span>{{ downloadTask.current }} / {{ downloadTask.total }}</span>
+                <span>
+                    <span style="color:#16a34a;">成功 {{ downloadTask.success }}</span>
+                    <span v-if="downloadTask.failed" style="color:#ef4444;margin-left:6px;">失败 {{ downloadTask.failed }}</span>
+                </span>
+            </div>
+        </div>
+    </div>
+
     <!-- ========== 字段映射配置弹窗 ========== -->
     <transition name="fade">
         <div v-if="mappingModalVisible" class="fixed inset-0 z-50 modal-mask flex items-center justify-center"
@@ -3473,8 +3519,23 @@ createApp({
             setTimeout(() => { batchProcessing.value = false; }, 1500);
         }
 
-        // 批量下载保单文件（打包 ZIP）：有勾选按勾选，否则按当前筛选条件全部下载
+        // 批量下载状态
+        const downloadTask = reactive({
+            visible: false,
+            status: '',      // processing / done / error
+            total: 0,
+            current: 0,
+            success: 0,
+            failed: 0,
+            currentFile: '',
+            taskId: '',
+            error: '',
+        });
+        let _downloadPollTimer = null;
+
+        // 批量下载保单文件（异步打包 ZIP）：有勾选按勾选，否则按当前筛选条件全部下载
         async function batchDownload() {
+            if (downloadTask.visible) { showMessage('已有下载任务进行中', false); return; }
             try {
                 let ids = [...selectedRecordIds.value];
 
@@ -3522,14 +3583,56 @@ createApp({
                     if (!ids.length) { showMessage('没有可下载的文件', false); return; }
                 }
 
-                showMessage(`正在打包 ${ids.length} 个文件，请稍候...`, true);
-                const resp = await authFetch('/api/insurance/batch-download', {
+                // 启动异步下载任务
+                const resp = await authFetch('/api/insurance/batch-download/start', {
                     method: 'POST',
                     body: JSON.stringify({ record_ids: ids }),
                 });
+                const json = await resp.json();
+                if (json.code !== 0) { showMessage(json.msg || '启动下载失败', false); return; }
+
+                // 显示进度浮窗
+                Object.assign(downloadTask, {
+                    visible: true, status: 'processing',
+                    total: json.data.total, current: 0, success: 0, failed: 0,
+                    currentFile: '', taskId: json.data.task_id, error: '',
+                });
+
+                // 轮询进度
+                _downloadPollTimer = setInterval(async () => {
+                    try {
+                        const sr = await authFetch(`/api/insurance/batch-download/status/${downloadTask.taskId}`);
+                        const sj = await sr.json();
+                        if (sj.code !== 0) return;
+                        const d = sj.data;
+                        Object.assign(downloadTask, {
+                            status: d.status, current: d.current, success: d.success,
+                            failed: d.failed, currentFile: d.current_file, error: d.error,
+                        });
+                        if (d.status === 'done' || d.status === 'error') {
+                            clearInterval(_downloadPollTimer);
+                            _downloadPollTimer = null;
+                            if (d.status === 'done') {
+                                // 自动触发下载
+                                _triggerDownloadFile(downloadTask.taskId);
+                            }
+                        }
+                    } catch (e) {
+                        // 忽略轮询异常
+                    }
+                }, 800);
+            } catch (e) {
+                showMessage('下载失败: ' + e.message, false);
+            }
+        }
+
+        // 触发浏览器下载 ZIP 文件
+        async function _triggerDownloadFile(taskId) {
+            try {
+                const resp = await authFetch(`/api/insurance/batch-download/file/${taskId}`);
                 if (!resp.ok) {
                     const err = await resp.json().catch(() => ({}));
-                    showMessage(err.msg || '下载失败', false);
+                    showMessage(err.msg || '下载文件失败', false);
                     return;
                 }
                 const blob = await resp.blob();
@@ -3541,10 +3644,15 @@ createApp({
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                showMessage(`已下载 ${ids.length} 个文件`, true);
             } catch (e) {
-                showMessage('下载失败: ' + e.message, false);
+                showMessage('下载文件失败: ' + e.message, false);
             }
+        }
+
+        // 关闭下载进度浮窗
+        function closeDownloadTask() {
+            downloadTask.visible = false;
+            if (_downloadPollTimer) { clearInterval(_downloadPollTimer); _downloadPollTimer = null; }
         }
 
         // 导出自动识别记录
@@ -3612,7 +3720,8 @@ createApp({
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url; a.download = '自动识别记录.xlsx';
-                a.click(); URL.revokeObjectURL(url);
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                URL.revokeObjectURL(url);
                 showMessage(`导出成功，共 ${data.length} 条`, true);
             } catch (e) { showMessage(`导出失败: ${e.message}`, false); }
         }
@@ -4111,7 +4220,7 @@ createApp({
             duplicateVisible, duplicateList, confirmSyncSkipDuplicates, confirmSyncUpdateDuplicates, cancelSync,
             // 自动识别记录
             records, filteredRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
-            isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress,
+            isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask,
             roomList, monitorRooms, monitorUsers,
             recordFilter, statusLabel, onSourceTypeChange, clearAllFilters, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
             recordPagination, visiblePages, recordStats,
