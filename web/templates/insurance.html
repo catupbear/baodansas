@@ -2847,10 +2847,10 @@ createApp({
                     previewAutoRecord.value.parsed_fields = json.data.parsed_fields;
                     previewAutoRecord.value.manual_fields = json.data.manual_fields;
                     // 同步更新记录列表中的数据
-                    const idx = autoRecords.value.findIndex(r => r.id === previewAutoRecord.value.id);
+                    const idx = records.value.findIndex(r => r.id === previewAutoRecord.value.id);
                     if (idx !== -1) {
-                        autoRecords.value[idx].parsed_fields = json.data.parsed_fields;
-                        autoRecords.value[idx].manual_fields = json.data.manual_fields;
+                        records.value[idx].parsed_fields = json.data.parsed_fields;
+                        records.value[idx].manual_fields = json.data.manual_fields;
                     }
                 } else {
                     alert('保存失败：' + (json.msg || '未知错误'));
