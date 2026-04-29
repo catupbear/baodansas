@@ -3,42 +3,233 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 - 保单识别系统</title>
+    <title>登录 - 一键车险报价系统</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-        body { background: #faf8f5; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #f5a623 0%, #f07c3e 40%, #e8673d 70%, #e05535 100%);
+            position: relative;
+            overflow: hidden;
+        }
+        /* 装饰圆 */
+        body::before {
+            content: '';
+            position: absolute;
+            width: 300px; height: 300px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.08);
+            top: -80px; right: -60px;
+        }
+        body::after {
+            content: '';
+            position: absolute;
+            width: 200px; height: 200px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.06);
+            bottom: 60px; right: 80px;
+        }
         [v-cloak] { display: none; }
+
+        .login-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 48px 40px 36px;
+            width: 420px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 顶部图标 */
+        .logo-icon {
+            width: 56px; height: 56px;
+            background: linear-gradient(135deg, #f5a623, #e8673d);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+            box-shadow: 0 4px 16px rgba(232,103,61,0.3);
+        }
+        .logo-icon svg { width: 30px; height: 30px; fill: #fff; }
+
+        .title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1a1a1a;
+            text-align: center;
+            margin-bottom: 4px;
+        }
+        .subtitle {
+            font-size: 12px;
+            color: #b0b0b0;
+            text-align: center;
+            margin-bottom: 32px;
+            letter-spacing: 1px;
+        }
+
+        /* 输入框 */
+        .input-group {
+            position: relative;
+            margin-bottom: 16px;
+        }
+        .input-group .icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 18px; height: 18px;
+            color: #c0c0c0;
+        }
+        .input-group input {
+            width: 100%;
+            height: 48px;
+            padding: 0 44px 0 42px;
+            border: 1px solid #e8e8e8;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #333;
+            outline: none;
+            transition: border-color 0.2s;
+            background: #fafafa;
+        }
+        .input-group input:focus {
+            border-color: #f07c3e;
+            background: #fff;
+        }
+        .input-group input::placeholder { color: #c0c0c0; }
+
+        .input-group .toggle-pwd {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: #c0c0c0;
+            width: 20px; height: 20px;
+            transition: color 0.2s;
+        }
+        .input-group .toggle-pwd:hover { color: #999; }
+
+        /* 记住密码 */
+        .remember-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 24px;
+            user-select: none;
+        }
+        .remember-row input[type=checkbox] {
+            width: 15px; height: 15px;
+            margin-right: 6px;
+            accent-color: #f07c3e;
+            cursor: pointer;
+        }
+        .remember-row label {
+            font-size: 13px;
+            color: #999;
+            cursor: pointer;
+        }
+
+        /* 登录按钮 */
+        .btn-login {
+            width: 100%;
+            height: 48px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #f5a623 0%, #e8673d 100%);
+            color: #fff;
+            font-size: 16px;
+            font-weight: 500;
+            letter-spacing: 8px;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+            box-shadow: 0 4px 16px rgba(232,103,61,0.3);
+        }
+        .btn-login:hover { opacity: 0.92; }
+        .btn-login:active { transform: scale(0.99); }
+        .btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* 错误提示 */
+        .error-msg {
+            background: #fff2f0;
+            color: #e05535;
+            font-size: 13px;
+            padding: 8px 14px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
+        /* 底部版权 */
+        .footer {
+            text-align: center;
+            margin-top: 24px;
+            font-size: 11px;
+            color: #ccc;
+        }
     </style>
 </head>
 <body>
 <div id="app" v-cloak>
-    <div class="min-h-screen flex items-center justify-center">
-        <div class="bg-white rounded-xl shadow-lg p-10 w-96">
-            <h1 class="text-xl font-semibold text-gray-800 text-center mb-2">保单识别系统</h1>
-            <p class="text-sm text-gray-400 text-center mb-8">请登录以继续</p>
-
-            <div v-if="error" class="bg-red-50 text-red-600 text-sm rounded-lg px-4 py-2 mb-4">{{ error }}</div>
-
-            <form @submit.prevent="handleLogin">
-                <div class="mb-5">
-                    <label class="block text-sm text-gray-500 mb-1">用户名</label>
-                    <input v-model="username" type="text" placeholder="请输入用户名" autofocus required
-                        class="w-full h-11 px-4 border border-gray-200 rounded-lg text-sm outline-none focus:border-orange-400 transition">
-                </div>
-                <div class="mb-6">
-                    <label class="block text-sm text-gray-500 mb-1">密码</label>
-                    <input v-model="password" type="password" placeholder="请输入密码" required
-                        class="w-full h-11 px-4 border border-gray-200 rounded-lg text-sm outline-none focus:border-orange-400 transition">
-                </div>
-                <button type="submit" :disabled="loading"
-                    class="w-full h-11 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-medium transition disabled:opacity-50">
-                    {{ loading ? '登录中...' : '登 录' }}
-                </button>
-            </form>
+    <div class="login-card">
+        <!-- 图标 -->
+        <div class="logo-icon">
+            <svg viewBox="0 0 24 24"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
         </div>
+        <div class="title">一键车险报价系统</div>
+        <div class="subtitle">Insurance Quote System</div>
+
+        <!-- 错误提示 -->
+        <div v-if="error" class="error-msg">{{ error }}</div>
+
+        <form @submit.prevent="handleLogin">
+            <!-- 用户名 -->
+            <div class="input-group">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <input v-model="username" type="text" placeholder="请输入用户名" autofocus required>
+            </div>
+
+            <!-- 密码 -->
+            <div class="input-group">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0110 0v4"/>
+                </svg>
+                <input v-model="password" :type="showPwd ? 'text' : 'password'" placeholder="请输入密码" required>
+                <svg class="toggle-pwd" @click="showPwd = !showPwd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <template v-if="!showPwd">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                    </template>
+                    <template v-else>
+                        <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+                        <line x1="1" y1="1" x2="23" y2="23"/>
+                    </template>
+                </svg>
+            </div>
+
+            <!-- 记住密码 -->
+            <div class="remember-row">
+                <input type="checkbox" id="remember" v-model="remember">
+                <label for="remember">记住密码</label>
+            </div>
+
+            <!-- 登录按钮 -->
+            <button type="submit" class="btn-login" :disabled="loading">
+                {{ loading ? '登录中...' : '登 录' }}
+            </button>
+        </form>
+
+        <div class="footer">&copy; 2025 车险报价系统 All Rights Reserved</div>
     </div>
 </div>
 
@@ -50,10 +241,23 @@ createApp({
         const password = ref('');
         const error = ref('');
         const loading = ref(false);
+        const showPwd = ref(false);
+        const remember = ref(false);
 
         // 已登录则跳转首页
         if (localStorage.getItem('token')) {
             window.location.href = '/';
+        }
+
+        // 恢复记住的用户名密码
+        const saved = localStorage.getItem('remembered_login');
+        if (saved) {
+            try {
+                const data = JSON.parse(saved);
+                username.value = data.username || '';
+                password.value = data.password || '';
+                remember.value = true;
+            } catch {}
         }
 
         async function handleLogin() {
@@ -67,6 +271,14 @@ createApp({
                 });
                 const data = await resp.json();
                 if (data.code === 0) {
+                    // 记住密码
+                    if (remember.value) {
+                        localStorage.setItem('remembered_login', JSON.stringify({
+                            username: username.value, password: password.value
+                        }));
+                    } else {
+                        localStorage.removeItem('remembered_login');
+                    }
                     localStorage.setItem('token', data.data.token);
                     localStorage.setItem('user', JSON.stringify(data.data.user));
                     window.location.href = '/';
@@ -80,7 +292,7 @@ createApp({
             }
         }
 
-        return { username, password, error, loading, handleLogin };
+        return { username, password, error, loading, showPwd, remember, handleLogin };
     }
 }).mount('#app');
 </script>
