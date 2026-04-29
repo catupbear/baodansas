@@ -1042,8 +1042,8 @@
                         <span v-if="batchProgress.failed" class="text-red-500 ml-2">失败 {{ batchProgress.failed }}</span>
                     </span>
                 </div>
-                <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                    <div class="h-full bg-orange-500 rounded-full transition-all duration-300"
+                <div class="progress-bar">
+                    <div class="progress-bar-fill"
                          :style="{ width: (batchProgress.total ? batchProgress.current / batchProgress.total * 100 : 0) + '%' }"></div>
                 </div>
             </div>
