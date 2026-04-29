@@ -1820,7 +1820,7 @@
     <!-- ========== 记录详情弹窗 ========== -->
     <transition name="fade">
         <div v-if="recordDetailVisible" class="fixed inset-0 z-50 modal-mask flex items-center justify-center"
-             @click.self="recordDetailVisible = false">
+             @click.self="recordDetailVisible = false; editingField = null; editingValue = ''">
             <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full mx-4" style="max-height: 90vh;">
                 <div class="px-5 py-4 border-b flex items-center justify-between">
                     <div class="flex items-center gap-2">
@@ -1833,7 +1833,7 @@
                             {{ statusLabel(currentRecord?.status) }}
                         </span>
                     </div>
-                    <button @click="recordDetailVisible = false" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">&times;</button>
+                    <button @click="recordDetailVisible = false; editingField = null; editingValue = ''" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">&times;</button>
                 </div>
                 <div class="px-5 py-4 overflow-auto space-y-4" style="max-height: calc(90vh - 130px);">
                     <!-- 基本信息 -->
@@ -1899,7 +1899,7 @@
                     </div>
                 </div>
                 <div class="px-5 py-3 border-t bg-gray-50 rounded-b-xl flex justify-end gap-2">
-                    <button @click="recordDetailVisible = false" class="btn btn-outline" style="font-size:13px;">关闭</button>
+                    <button @click="recordDetailVisible = false; editingField = null; editingValue = ''" class="btn btn-outline" style="font-size:13px;">关闭</button>
                 </div>
             </div>
         </div>
