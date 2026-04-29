@@ -684,6 +684,20 @@ def query_insurance_records(
     date_start: str = "",
     date_end: str = "",
     user_ids: list = None,
+    # 关联表模糊搜索
+    search_company: str = "",
+    search_policy_no: str = "",
+    search_plate_no: str = "",
+    search_applicant: str = "",
+    search_insured: str = "",
+    search_salesperson: str = "",
+    # 关联表日期筛选
+    sign_date_start: str = "",
+    sign_date_end: str = "",
+    start_date_start: str = "",
+    start_date_end: str = "",
+    end_date_start: str = "",
+    end_date_end: str = "",
 ) -> dict:
     """
     分页查询保单识别记录，支持按群、状态、关键词、来源、识别方式、文档类型筛选。
@@ -691,72 +705,129 @@ def query_insurance_records(
     sender: 按发送人 ID 筛选
     ocr_engine: 按识别方式筛选（pdfplumber / baidu）
     doc_category: 按文档类型筛选（保单 / 电子标志 等）
+    search_*: 关联表字段模糊搜索（承保公司、保单号、车牌、投保人、被保人、业务员）
+    sign_date_*/start_date_*/end_date_*: 关联表日期范围筛选
     返回: {"total": 总数, "pages": 总页数, "page": 当前页, "records": [...]}
     """
     conditions = []
     params = []
+    # 是否需要 JOIN 关联表
+    need_join = any([
+        search_company, search_policy_no, search_plate_no,
+        search_applicant, search_insured, search_salesperson,
+        sign_date_start, sign_date_end,
+        start_date_start, start_date_end,
+        end_date_start, end_date_end,
+    ])
+    # 主表别名前缀
+    col_prefix = "r." if need_join else ""
 
     # 来源类型筛选
     if source_type == "room":
-        conditions.append("roomid IS NOT NULL AND roomid != ''")
+        conditions.append(f"{col_prefix}roomid IS NOT NULL AND {col_prefix}roomid != ''")
         if roomid:
-            conditions.append("roomid = %s")
+            conditions.append(f"{col_prefix}roomid = %s")
             params.append(roomid)
     elif source_type == "user":
-        conditions.append("(roomid IS NULL OR roomid = '')")
+        conditions.append(f"({col_prefix}roomid IS NULL OR {col_prefix}roomid = '')")
         if sender:
-            conditions.append("sender = %s")
+            conditions.append(f"{col_prefix}sender = %s")
             params.append(sender)
     else:
         if roomid:
-            conditions.append("roomid LIKE %s")
+            conditions.append(f"{col_prefix}roomid LIKE %s")
             params.append(f"%{roomid}%")
     if status:
-        conditions.append("status = %s")
+        conditions.append(f"{col_prefix}status = %s")
         params.append(status)
     if keyword:
         # 在文件名、群名、发送人名中模糊匹配
         conditions.append(
-            "(filename LIKE %s OR room_name LIKE %s OR sender_name LIKE %s)"
+            f"({col_prefix}filename LIKE %s OR {col_prefix}room_name LIKE %s OR {col_prefix}sender_name LIKE %s)"
         )
         params.extend([f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"])
     if source:
-        conditions.append("source = %s")
+        conditions.append(f"{col_prefix}source = %s")
         params.append(source)
     if ocr_engine:
-        conditions.append("ocr_engine = %s")
+        conditions.append(f"{col_prefix}ocr_engine = %s")
         params.append(ocr_engine)
     if doc_category:
         if doc_category.startswith("!"):
-            # 排除模式，如 !保单 表示排除保单
-            conditions.append("doc_category != %s AND doc_category != ''")
+            conditions.append(f"{col_prefix}doc_category != %s AND {col_prefix}doc_category != ''")
             params.append(doc_category[1:])
         else:
-            conditions.append("doc_category = %s")
+            conditions.append(f"{col_prefix}doc_category = %s")
             params.append(doc_category)
     if is_abnormal == "1":
-        conditions.append("is_abnormal = 1")
+        conditions.append(f"{col_prefix}is_abnormal = 1")
     elif is_abnormal == "0":
-        conditions.append("is_abnormal = 0")
+        conditions.append(f"{col_prefix}is_abnormal = 0")
     if company_short:
-        conditions.append("company_short = %s")
+        conditions.append(f"{col_prefix}company_short = %s")
         params.append(company_short)
     if date_start:
-        conditions.append("created_at >= %s")
+        conditions.append(f"{col_prefix}created_at >= %s")
         params.append(date_start)
     if date_end:
-        conditions.append("created_at < %s")
+        conditions.append(f"{col_prefix}created_at < %s")
         params.append(date_end)
     # 按账号权限过滤
     if user_ids is not None:
         if user_ids:
-            placeholders = ",".join(["%s"] * len(user_ids))
-            conditions.append(f"user_id IN ({placeholders})")
+            ph = ",".join(["%s"] * len(user_ids))
+            conditions.append(f"{col_prefix}user_id IN ({ph})")
             params.extend(user_ids)
         else:
             conditions.append("0")  # 空列表不返回数据
 
+    # 关联表模糊搜索条件
+    if need_join:
+        if search_company:
+            conditions.append("pf.company LIKE %s")
+            params.append(f"%{search_company}%")
+        if search_policy_no:
+            conditions.append("pf.policy_no LIKE %s")
+            params.append(f"%{search_policy_no}%")
+        if search_plate_no:
+            conditions.append("pf.plate_no LIKE %s")
+            params.append(f"%{search_plate_no}%")
+        if search_applicant:
+            conditions.append("pf.applicant LIKE %s")
+            params.append(f"%{search_applicant}%")
+        if search_insured:
+            conditions.append("pf.insured LIKE %s")
+            params.append(f"%{search_insured}%")
+        if search_salesperson:
+            conditions.append("pf.salesperson LIKE %s")
+            params.append(f"%{search_salesperson}%")
+        # 关联表日期范围筛选
+        if sign_date_start:
+            conditions.append("pf.sign_date >= %s")
+            params.append(sign_date_start)
+        if sign_date_end:
+            conditions.append("pf.sign_date <= %s")
+            params.append(sign_date_end)
+        if start_date_start:
+            conditions.append("pf.start_date >= %s")
+            params.append(start_date_start)
+        if start_date_end:
+            conditions.append("pf.start_date <= %s")
+            params.append(start_date_end)
+        if end_date_start:
+            conditions.append("pf.end_date >= %s")
+            params.append(end_date_start)
+        if end_date_end:
+            conditions.append("pf.end_date <= %s")
+            params.append(end_date_end)
+
     where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    # 构建 FROM 子句（有关联搜索时 JOIN）
+    if need_join:
+        from_clause = "insurance_records r INNER JOIN insurance_policy_fields pf ON r.id = pf.record_id"
+    else:
+        from_clause = "insurance_records"
 
     conn = db.pool.connection()
     try:
@@ -764,7 +835,7 @@ def query_insurance_records(
 
         # 查询总数
         cursor.execute(
-            f"SELECT COUNT(*) as cnt FROM insurance_records {where_clause}",
+            f"SELECT COUNT(*) as cnt FROM {from_clause} {where_clause}",
             params
         )
         total = cursor.fetchone()["cnt"]
@@ -773,8 +844,8 @@ def query_insurance_records(
         # 延迟关联：先查 id（轻量排序），再用 id 取完整数据（避免 LONGTEXT 拖慢排序）
         offset = (page - 1) * page_size
         cursor.execute(
-            f"SELECT id FROM insurance_records {where_clause} "
-            f"ORDER BY created_at DESC LIMIT %s OFFSET %s",
+            f"SELECT {col_prefix}id FROM {from_clause} {where_clause} "
+            f"ORDER BY {col_prefix}created_at DESC LIMIT %s OFFSET %s",
             params + [page_size, offset]
         )
         id_rows = cursor.fetchall()
@@ -962,65 +1033,122 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
     """
     获取保单识别统计信息，支持筛选条件。
     filters 支持: roomid, source_type, sender, keyword, company_short,
-                   ocr_engine, date_start, date_end
+                   ocr_engine, date_start, date_end,
+                   search_company, search_policy_no, search_plate_no,
+                   search_applicant, search_insured, search_salesperson,
+                   sign_date_start, sign_date_end, start_date_start, start_date_end,
+                   end_date_start, end_date_end
     """
     filters = filters or {}
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
+        # 是否需要 JOIN 关联表
+        _pf_keys = [
+            "search_company", "search_policy_no", "search_plate_no",
+            "search_applicant", "search_insured", "search_salesperson",
+            "sign_date_start", "sign_date_end",
+            "start_date_start", "start_date_end",
+            "end_date_start", "end_date_end",
+        ]
+        need_join = any(filters.get(k) for k in _pf_keys)
+        col_prefix = "r." if need_join else ""
+
         # 构建 WHERE 条件
         where_parts = []
         params = []
         if filters.get("roomid"):
-            where_parts.append("roomid = %s")
+            where_parts.append(f"{col_prefix}roomid = %s")
             params.append(filters["roomid"])
         if filters.get("source_type") == "user":
-            where_parts.append("(roomid IS NULL OR roomid = '')")
+            where_parts.append(f"({col_prefix}roomid IS NULL OR {col_prefix}roomid = '')")
         elif filters.get("source_type") == "room":
-            where_parts.append("roomid IS NOT NULL AND roomid != ''")
+            where_parts.append(f"{col_prefix}roomid IS NOT NULL AND {col_prefix}roomid != ''")
         if filters.get("sender"):
-            where_parts.append("sender = %s")
+            where_parts.append(f"{col_prefix}sender = %s")
             params.append(filters["sender"])
         if filters.get("keyword"):
             kw = f"%{filters['keyword']}%"
-            where_parts.append("(policy_number LIKE %s OR company_short LIKE %s OR filename LIKE %s)")
+            where_parts.append(f"({col_prefix}company_short LIKE %s OR {col_prefix}filename LIKE %s OR {col_prefix}sender_name LIKE %s)")
             params.extend([kw, kw, kw])
         if filters.get("company_short"):
-            where_parts.append("company_short = %s")
+            where_parts.append(f"{col_prefix}company_short = %s")
             params.append(filters["company_short"])
         if filters.get("ocr_engine"):
-            where_parts.append("ocr_engine = %s")
+            where_parts.append(f"{col_prefix}ocr_engine = %s")
             params.append(filters["ocr_engine"])
         if filters.get("date_start"):
-            where_parts.append("created_at >= %s")
+            where_parts.append(f"{col_prefix}created_at >= %s")
             params.append(filters["date_start"] + " 00:00:00")
         if filters.get("date_end"):
-            where_parts.append("created_at <= %s")
+            where_parts.append(f"{col_prefix}created_at <= %s")
             params.append(filters["date_end"] + " 23:59:59")
         # 按账号权限过滤
         if filters.get("user_ids") is not None:
             uid_list = filters["user_ids"]
             if uid_list:
                 placeholders = ",".join(["%s"] * len(uid_list))
-                where_parts.append(f"user_id IN ({placeholders})")
+                where_parts.append(f"{col_prefix}user_id IN ({placeholders})")
                 params.extend(uid_list)
             else:
                 where_parts.append("0")
+        # 关联表模糊搜索和日期筛选
+        if need_join:
+            if filters.get("search_company"):
+                where_parts.append("pf.company LIKE %s")
+                params.append(f"%{filters['search_company']}%")
+            if filters.get("search_policy_no"):
+                where_parts.append("pf.policy_no LIKE %s")
+                params.append(f"%{filters['search_policy_no']}%")
+            if filters.get("search_plate_no"):
+                where_parts.append("pf.plate_no LIKE %s")
+                params.append(f"%{filters['search_plate_no']}%")
+            if filters.get("search_applicant"):
+                where_parts.append("pf.applicant LIKE %s")
+                params.append(f"%{filters['search_applicant']}%")
+            if filters.get("search_insured"):
+                where_parts.append("pf.insured LIKE %s")
+                params.append(f"%{filters['search_insured']}%")
+            if filters.get("search_salesperson"):
+                where_parts.append("pf.salesperson LIKE %s")
+                params.append(f"%{filters['search_salesperson']}%")
+            if filters.get("sign_date_start"):
+                where_parts.append("pf.sign_date >= %s")
+                params.append(filters["sign_date_start"])
+            if filters.get("sign_date_end"):
+                where_parts.append("pf.sign_date <= %s")
+                params.append(filters["sign_date_end"])
+            if filters.get("start_date_start"):
+                where_parts.append("pf.start_date >= %s")
+                params.append(filters["start_date_start"])
+            if filters.get("start_date_end"):
+                where_parts.append("pf.start_date <= %s")
+                params.append(filters["start_date_end"])
+            if filters.get("end_date_start"):
+                where_parts.append("pf.end_date >= %s")
+                params.append(filters["end_date_start"])
+            if filters.get("end_date_end"):
+                where_parts.append("pf.end_date <= %s")
+                params.append(filters["end_date_end"])
 
         where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
+        if need_join:
+            from_sql = "insurance_records r INNER JOIN insurance_policy_fields pf ON r.id = pf.record_id"
+        else:
+            from_sql = "insurance_records"
 
         # 单次扫描统计
         cursor.execute(f"""
             SELECT
                 COUNT(*) as total,
-                SUM(status = 'done' OR status = 'success') as done_cnt,
-                SUM(status = 'failed') as failed_cnt,
-                SUM(status = 'pending') as pending_cnt,
-                SUM(status = 'processing') as processing_cnt,
-                SUM((status = 'done' OR status = 'success') AND is_abnormal = 1) as abnormal_cnt,
-                SUM((status = 'done' OR status = 'success') AND doc_category != '' AND doc_category != '保单') as nonpolicy_cnt
-            FROM insurance_records{where_sql}
+                SUM({col_prefix}status = 'done' OR {col_prefix}status = 'success') as done_cnt,
+                SUM({col_prefix}status = 'failed') as failed_cnt,
+                SUM({col_prefix}status = 'pending') as pending_cnt,
+                SUM({col_prefix}status = 'processing') as processing_cnt,
+                SUM(({col_prefix}status = 'done' OR {col_prefix}status = 'success') AND {col_prefix}is_abnormal = 1) as abnormal_cnt,
+                SUM(({col_prefix}status = 'done' OR {col_prefix}status = 'success') AND {col_prefix}doc_category != '' AND {col_prefix}doc_category != '保单') as nonpolicy_cnt
+            FROM {from_sql}{where_sql}
         """, params)
         summary = cursor.fetchone()
         total = summary["total"] or 0
@@ -1033,8 +1161,8 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
 
         # 按识别方式统计
         cursor.execute(
-            f"SELECT ocr_engine, COUNT(*) as cnt "
-            f"FROM insurance_records{where_sql} GROUP BY ocr_engine ORDER BY cnt DESC",
+            f"SELECT {col_prefix}ocr_engine AS ocr_engine, COUNT(*) as cnt "
+            f"FROM {from_sql}{where_sql} GROUP BY {col_prefix}ocr_engine ORDER BY cnt DESC",
             params
         )
         engine_stats = list(cursor.fetchall())

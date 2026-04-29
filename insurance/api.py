@@ -136,6 +136,20 @@ def list_records():
     company_short = request.args.get("company_short", "")
     date_start = request.args.get("date_start", "")
     date_end = request.args.get("date_end", "")
+    # 关联表模糊搜索
+    search_company = request.args.get("search_company", "")
+    search_policy_no = request.args.get("search_policy_no", "")
+    search_plate_no = request.args.get("search_plate_no", "")
+    search_applicant = request.args.get("search_applicant", "")
+    search_insured = request.args.get("search_insured", "")
+    search_salesperson = request.args.get("search_salesperson", "")
+    # 关联表日期筛选
+    sign_date_start = request.args.get("sign_date_start", "")
+    sign_date_end = request.args.get("sign_date_end", "")
+    start_date_start = request.args.get("start_date_start", "")
+    start_date_end = request.args.get("start_date_end", "")
+    end_date_start = request.args.get("end_date_start", "")
+    end_date_end = request.args.get("end_date_end", "")
 
     try:
         result = query_insurance_records(
@@ -155,6 +169,18 @@ def list_records():
             date_start=date_start,
             date_end=date_end,
             user_ids=_get_user_ids_filter(),
+            search_company=search_company,
+            search_policy_no=search_policy_no,
+            search_plate_no=search_plate_no,
+            search_applicant=search_applicant,
+            search_insured=search_insured,
+            search_salesperson=search_salesperson,
+            sign_date_start=sign_date_start,
+            sign_date_end=sign_date_end,
+            start_date_start=start_date_start,
+            start_date_end=start_date_end,
+            end_date_start=end_date_start,
+            end_date_end=end_date_end,
         )
         # 列表返回 display_fields（轻量映射字段）替代 parsed_fields
         for record in result.get("records", []):
@@ -296,7 +322,12 @@ def get_stats():
     try:
         filters = {}
         for key in ("roomid", "source_type", "sender", "keyword",
-                     "company_short", "ocr_engine", "date_start", "date_end"):
+                     "company_short", "ocr_engine", "date_start", "date_end",
+                     "search_company", "search_policy_no", "search_plate_no",
+                     "search_applicant", "search_insured", "search_salesperson",
+                     "sign_date_start", "sign_date_end",
+                     "start_date_start", "start_date_end",
+                     "end_date_start", "end_date_end"):
             val = request.args.get(key, "").strip()
             if val:
                 filters[key] = val
