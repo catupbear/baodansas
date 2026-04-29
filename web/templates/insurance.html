@@ -1657,11 +1657,11 @@
                                                class="min-w-0 flex-1 px-2 py-0.5 text-sm border border-orange-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-400"
                                                :disabled="fieldSaving" />
                                         <button @click="saveEditField" :disabled="fieldSaving"
-                                                class="flex-shrink-0 px-2 py-1 text-xs bg-orange-500 text-white rounded hover:bg-orange-600 cursor-pointer disabled:opacity-50 font-medium whitespace-nowrap">
+                                                style="flex-shrink:0; padding:4px 10px; font-size:12px; background:#ea580c; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:500; white-space:nowrap;">
                                             {{ fieldSaving ? '...' : '保存' }}
                                         </button>
                                         <button @click="cancelEditField" :disabled="fieldSaving"
-                                                class="flex-shrink-0 px-2 py-1 text-xs bg-gray-200 text-gray-600 rounded hover:bg-gray-300 cursor-pointer disabled:opacity-50 whitespace-nowrap">
+                                                style="flex-shrink:0; padding:4px 10px; font-size:12px; background:#e5e7eb; color:#4b5563; border:none; border-radius:4px; cursor:pointer; white-space:nowrap;">
                                             取消
                                         </button>
                                     </div>
