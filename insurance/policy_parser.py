@@ -885,7 +885,7 @@ def _extract_insured_qianhai(text: str, text_merged: str, fields: dict):
 
 
 def _extract_insured_guoshou(text: str, text_merged: str, fields: dict):
-    """国寿驾乘险被保险人提取"""
+    """国寿被保险人提取"""
     # 国寿驾乘险格式："名称/姓名 梁书敏 441322..."
     m = re.search(r"名称/姓名\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s+\d|\s*$)", text)
     if m:
@@ -894,8 +894,16 @@ def _extract_insured_guoshou(text: str, text_merged: str, fields: dict):
             fields["被保险人"] = val
             return
 
-    # 通用被保险人格式
-    m = re.search(r"被保险人[：:\s]+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|$)", text)
+    # 国寿商业险格式："姓名/名称 刘玖英 证件号码 ..." 在"被保险人"上方一行
+    m = re.search(r"姓名/名称\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s+证件|\s+\d|\s*$)", text)
+    if m:
+        val = _clean_person_name(m.group(1))
+        if _is_valid_person(val):
+            fields["被保险人"] = val
+            return
+
+    # 国寿交强险格式："被保险人 刘玖英"（同一行，后面跟身份证号等）
+    m = re.search(r"被保险人\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|$)", text)
     if m:
         val = _clean_person_name(m.group(1))
         if _is_valid_person(val):
