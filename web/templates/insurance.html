@@ -1000,7 +1000,7 @@
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                     </svg>
-                    下载文件{{ selectedRecordIds.length ? ` (${selectedRecordIds.length})` : '' }}
+                    批量导出保单{{ selectedRecordIds.length ? ` (${selectedRecordIds.length})` : '' }}
                 </button>
                 <div class="ml-auto flex items-center gap-3">
                     <div class="flex items-center gap-1.5">
@@ -1302,7 +1302,7 @@
                 <svg style="width:16px;height:16px;color:#f97316;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                 </svg>
-                <span style="font-size:13px;font-weight:600;color:#1f2937;">批量下载</span>
+                <span style="font-size:13px;font-weight:600;color:#1f2937;">批量导出保单</span>
             </div>
             <button @click="closeDownloadTask" style="color:#9ca3af;cursor:pointer;font-size:16px;line-height:1;border:none;background:none;" title="关闭">&times;</button>
         </div>
@@ -3639,7 +3639,7 @@ createApp({
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = '保单文件批量下载.zip';
+                a.download = '批量导出保单.zip';
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
