@@ -2013,37 +2013,37 @@ def parse_policy_text(text: str) -> Dict[str, Any]:
 # 多保单拆分：一个 PDF 包含多份保单（如交强险+商业险+非车险）
 # ============================================================
 
-# 用于检测和拆分多保单的险种边界关键词（按优先级排列）
-_POLICY_SPLIT_PATTERNS = [
-    (r"新能源汽车交通事故责任强制保险", "compulsory"),
-    (r"机动车交通事故责任强制保险", "compulsory"),
-    (r"新能源汽车商业保险", "commercial"),
-    (r"机动车商业保险", "commercial"),
-    (r"机动车辆商业保险", "commercial"),
-    (r"特种车商业保险", "commercial"),
-    (r"机动车辆保险(?!单)", "commercial"),          # "机动车辆保险"但不是"机动车辆保险单"
-    (r"机动车辆综合险", "commercial"),
-    (r"驾乘\S*保险", "accident"),
-    (r"意外伤害保险", "accident"),
-    (r"人身意外伤害保险", "accident"),
+# 用于检测保单标题行的模式：险种关键词 + "保险单"/"电子保单" 出现在同一行
+# 这样可以过滤掉正文/条款中的关键词，只匹配真正的保单标题
+# 注意：险种名与"保险单"之间可能有版本号、空格等，用 .{0,30}? 宽松匹配
+_POLICY_HEADER_PATTERNS = [
+    # 交强险标题行
+    (r"交通事故责任强制保险.{0,30}?(?:电子保险单|电子保单|保险单|保\s*单)", "compulsory"),
+    # 商业险标题行
+    (r"(?:新能源汽车|机动车|特种车)(?:辆)?(?:商业保险|综合险).{0,30}?(?:电子保险单|电子保单|保险单|保\s*单)", "commercial"),
+    # 驾乘/意外险标题行（如"机动车驾乘人员人身意外伤害保险（2022 版）电子保险单"）
+    # 中间不允许出现逗号、句号等标点，避免匹配正文
+    (r"(?:驾乘|意外伤害)[^，。,;；\n]{0,40}?(?:电子保险单|电子保单|保险单(?=\s*\n|[（(]))", "accident"),
 ]
 
 
 def _find_policy_boundaries(text: str) -> List[dict]:
     """
-    在文本中查找所有险种类型的出现位置，返回按位置排序的边界列表。
+    在文本中查找保单标题行的位置，作为多保单拆分的边界。
+
+    只匹配包含"保险单/电子保单"的标题行，避免将正文/条款中的关键词误判为新保单。
 
     Returns:
         [{"pos": int, "type_code": str, "match": str}, ...]
     """
     found = []
-    seen_positions = set()  # 避免同一位置重复匹配
+    seen_positions = set()
 
-    for pattern, type_code in _POLICY_SPLIT_PATTERNS:
+    for pattern, type_code in _POLICY_HEADER_PATTERNS:
         for m in re.finditer(pattern, text):
             pos = m.start()
-            # 跳过已被更高优先级匹配覆盖的位置（±20字符内视为同一位置）
-            if any(abs(pos - sp) < 20 for sp in seen_positions):
+            # 跳过已被更高优先级匹配覆盖的位置（±50字符内视为同一位置）
+            if any(abs(pos - sp) < 50 for sp in seen_positions):
                 continue
             found.append({
                 "pos": pos,
