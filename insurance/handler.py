@@ -14,7 +14,10 @@ import threading
 import time
 from typing import Optional
 
+import hashlib
+
 from insurance.db import (
+    check_file_md5_exists,
     get_insurance_config,
     save_insurance_record,
     update_insurance_record,
@@ -315,7 +318,15 @@ class InsuranceHandler:
             except Exception as e:
                 logger.warning("获取群名失败: %s", e)
 
-        # 2. 创建初始记录（状态: processing）
+        # 2. 获取匹配的监控配置，提取绑定的 user_id
+        matched_monitors = self._get_matched_monitors(roomid, sender)
+        config_user_id = None
+        for m in matched_monitors:
+            if m.get("user_id"):
+                config_user_id = m["user_id"]
+                break
+
+        # 3. 创建初始记录（状态: processing）
         initial_record = {
             "msg_seq": seq,
             "roomid": roomid,
@@ -326,6 +337,7 @@ class InsuranceHandler:
             "filesize": filesize,
             "status": "processing",
             "source": "auto",
+            "user_id": config_user_id,
         }
         try:
             record_id = save_insurance_record(self.db, initial_record)
@@ -340,6 +352,22 @@ class InsuranceHandler:
             pdf_bytes = self._download_media(sdkfileid, filesize)
             if not pdf_bytes:
                 raise RuntimeError("媒体文件下载失败或内容为空")
+
+            # 3.1 计算文件 MD5 并去重
+            file_md5 = hashlib.md5(pdf_bytes).hexdigest()
+            update_insurance_record(self.db, record_id, {"file_md5": file_md5})
+
+            existing = check_file_md5_exists(self.db, file_md5)
+            if existing and existing["id"] != record_id:
+                logger.info(
+                    "PDF文件重复(MD5=%s), 已有记录id=%d, 当前record_id=%d, 跳过识别",
+                    file_md5, existing["id"], record_id,
+                )
+                update_insurance_record(self.db, record_id, {
+                    "status": "duplicate",
+                    "error_message": f"文件重复，与记录 #{existing['id']}({existing.get('filename', '')}) 相同",
+                })
+                return
 
             # 4. 上传 COS
             cos_url = self._upload_to_cos(pdf_bytes, roomid, sender, filename)
@@ -397,10 +425,9 @@ class InsuranceHandler:
                     doc_category, record_id, filename,
                 )
             else:
-                # 自动同步钉钉（按监控配置决定）
+                # 自动同步钉钉（按监控配置决定，复用之前匹配的监控列表）
                 try:
-                    monitors = self._get_matched_monitors(roomid, sender)
-                    for monitor in monitors:
+                    for monitor in matched_monitors:
                         if not (monitor.get("dingtalk_base_id") and monitor.get("dingtalk_sheet_id")):
                             continue
                         # 使用监控配置自身的字段映射（如果有），否则用全局映射结果

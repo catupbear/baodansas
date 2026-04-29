@@ -440,6 +440,10 @@ def _save_manual_record(file_name, policy, ocr_engine, file_data_b64=None, uploa
         except Exception:
             pass
 
+    # 关联当前登录用户
+    from flask import g
+    current_user_id = g.current_user["user_id"] if hasattr(g, "current_user") else None
+
     record = {
         "filename": file_name,
         "cos_url": cos_url,
@@ -450,6 +454,7 @@ def _save_manual_record(file_name, policy, ocr_engine, file_data_b64=None, uploa
         "mapped_fields": mapped_fields,
         "status": "done",
         "source": "manual",
+        "user_id": current_user_id,
     }
     if file_md5:
         record["file_md5"] = file_md5
