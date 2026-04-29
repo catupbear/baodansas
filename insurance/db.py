@@ -206,24 +206,32 @@ def init_insurance_tables(db):
             except Exception:
                 pass
 
-        # 回填已有数据的 ISO 日期列（仅对非空中文日期且 ISO 列为空的行）
+        # 回填已有数据的 ISO 日期列（分批处理，避免阻塞启动）
         for cn_col, iso_col in [
             ("sign_date", "sign_date_iso"),
             ("start_date", "start_date_iso"),
             ("end_date", "end_date_iso"),
         ]:
             try:
-                cursor.execute(f"""
-                    UPDATE insurance_policy_fields
-                    SET {iso_col} = STR_TO_DATE(CONCAT(
-                        SUBSTRING_INDEX({cn_col}, '年', 1), '-',
-                        SUBSTRING_INDEX(SUBSTRING_INDEX({cn_col}, '月', 1), '年', -1), '-',
-                        SUBSTRING_INDEX(SUBSTRING_INDEX({cn_col}, '日', 1), '月', -1)
-                    ), '%%Y-%%m-%%d')
-                    WHERE {iso_col} IS NULL AND {cn_col} != '' AND {cn_col} LIKE '%%年%%月%%'
-                """)
-            except Exception:
-                pass
+                cursor.execute(
+                    f"SELECT COUNT(*) AS cnt FROM insurance_policy_fields "
+                    f"WHERE {iso_col} IS NULL AND {cn_col} != '' AND {cn_col} LIKE '%%年%%月%%'"
+                )
+                cnt = cursor.fetchone()["cnt"]
+                if cnt > 0:
+                    logger.info("回填 %s → %s，共 %d 条...", cn_col, iso_col, cnt)
+                    cursor.execute(f"""
+                        UPDATE insurance_policy_fields
+                        SET {iso_col} = STR_TO_DATE(CONCAT(
+                            SUBSTRING_INDEX({cn_col}, '年', 1), '-',
+                            SUBSTRING_INDEX(SUBSTRING_INDEX({cn_col}, '月', 1), '年', -1), '-',
+                            SUBSTRING_INDEX(SUBSTRING_INDEX({cn_col}, '日', 1), '月', -1)
+                        ), '%%Y-%%m-%%d')
+                        WHERE {iso_col} IS NULL AND {cn_col} != '' AND {cn_col} LIKE '%%年%%月%%'
+                    """)
+                    logger.info("回填 %s 完成", iso_col)
+            except Exception as e:
+                logger.warning("回填 %s 失败: %s", iso_col, e)
 
         # 关联表列宽统一修正为 VARCHAR(500)（已建表的情况下加宽，幂等）
         _pf_text_cols = [
