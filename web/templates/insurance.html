@@ -2780,6 +2780,11 @@ createApp({
                     method: 'PUT',
                     body: JSON.stringify({ fields: { [fieldName]: newValue } }),
                 });
+                if (!resp.ok) {
+                    const text = await resp.text();
+                    alert('保存失败（' + resp.status + '）：' + text.substring(0, 200));
+                    return;
+                }
                 const json = await resp.json();
                 if (json.code === 0) {
                     // 更新本地数据
@@ -2796,7 +2801,7 @@ createApp({
                 }
             } catch (e) {
                 console.error('保存字段失败', e);
-                alert('保存失败');
+                alert('保存失败：' + (e.message || e));
             } finally {
                 fieldSaving.value = false;
                 editingField.value = null;
