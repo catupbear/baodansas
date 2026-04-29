@@ -1029,7 +1029,7 @@
                 <span class="text-sm text-gray-600">已选 <span class="font-semibold text-orange-600">{{ selectedRecordIds.length }}</span> 条</span>
                 <button @click="batchReocrSync" :disabled="batchProcessing"
                         class="btn btn-primary" style="font-size:12px;padding:4px 14px;">
-                    {{ batchProcessing ? '处理中...' : '重新识别并同步钉钉' }}
+                    {{ batchProcessing ? '处理中...' : '批量重新识别' }}
                 </button>
                 <button v-if="!batchProcessing" @click="selectedRecordIds = []" class="text-xs text-gray-400 hover:text-gray-600 cursor-pointer">清除选择</button>
             </div>
@@ -3426,7 +3426,7 @@ createApp({
         // 批量重新识别并同步钉钉（逐条处理，实时进度）
         async function batchReocrSync() {
             if (!selectedRecordIds.value.length) return;
-            if (!confirm(`确定对选中的 ${selectedRecordIds.value.length} 条记录重新识别并同步钉钉？`)) return;
+            if (!confirm(`确定对选中的 ${selectedRecordIds.value.length} 条记录批量重新识别？`)) return;
 
             const ids = [...selectedRecordIds.value];
             batchProcessing.value = true;
