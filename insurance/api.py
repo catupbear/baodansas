@@ -1855,6 +1855,83 @@ def export_excel():
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
+@insurance_bp.route("/api/insurance/batch-download", methods=["POST"])
+def batch_download():
+    """
+    批量下载保单文件，打包为 ZIP 后返回。
+    请求体: {record_ids: [int, ...]}
+    从 COS 下载各记录对应的 PDF 文件，打包为 ZIP 流式返回。
+    """
+    import requests as http_requests
+    import zipfile
+
+    try:
+        body = request.get_json(force=True) or {}
+        record_ids = body.get("record_ids", [])
+
+        if not record_ids:
+            return jsonify({"code": 400, "msg": "缺少 record_ids 参数"}), 400
+
+        if len(record_ids) > 500:
+            return jsonify({"code": 400, "msg": "单次下载不超过 500 条"}), 400
+
+        # 收集文件信息
+        files_to_zip = []
+        errors = []
+        for rid in record_ids:
+            record = get_insurance_record(_db, rid)
+            if not record:
+                errors.append(f"记录 {rid} 不存在")
+                continue
+            cos_url = record.get("cos_url", "")
+            if not cos_url:
+                errors.append(f"记录 {rid} 无文件URL")
+                continue
+            filename = record.get("filename", f"record_{rid}.pdf")
+            files_to_zip.append({"id": rid, "cos_url": cos_url, "filename": filename})
+
+        if not files_to_zip:
+            return jsonify({"code": 400, "msg": "没有可下载的文件", "errors": errors}), 400
+
+        # 下载并打包 ZIP（内存中完成）
+        zip_buffer = io.BytesIO()
+        used_names = {}
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for item in files_to_zip:
+                try:
+                    resp = http_requests.get(item["cos_url"], timeout=30)
+                    if resp.status_code != 200:
+                        errors.append(f"文件 {item['filename']} 下载失败(HTTP {resp.status_code})")
+                        continue
+                    # 处理重名文件
+                    name = item["filename"]
+                    if name in used_names:
+                        used_names[name] += 1
+                        base, ext = (name.rsplit(".", 1) + [""])[:2]
+                        name = f"{base}_{used_names[name]}.{ext}" if ext else f"{base}_{used_names[name]}"
+                    else:
+                        used_names[name] = 0
+                    zf.writestr(name, resp.content)
+                except Exception as e:
+                    errors.append(f"文件 {item['filename']} 下载异常: {str(e)[:100]}")
+
+        zip_buffer.seek(0)
+
+        if zip_buffer.getbuffer().nbytes <= 22:
+            # ZIP 空文件（只有文件头）
+            return jsonify({"code": 400, "msg": "所有文件下载失败", "errors": errors}), 400
+
+        return send_file(
+            zip_buffer,
+            mimetype="application/zip",
+            as_attachment=True,
+            download_name="保单文件批量下载.zip",
+        )
+    except Exception as e:
+        logger.exception("批量下载保单文件失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
 @insurance_bp.route("/api/insurance/extraction-rules", methods=["GET"])
 def get_extraction_rules_api():
     """获取保单字段提取规则（供前端展示）"""
