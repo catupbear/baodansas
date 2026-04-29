@@ -2664,7 +2664,7 @@ createApp({
             previewShowRules.value = false;
             const ext = (record.filename || '').split('.').pop().toLowerCase();
             previewType.value = ext || 'pdf';
-            previewSrc.value = `/api/insurance/records/${record.id}/preview`;
+            previewSrc.value = `/api/insurance/records/${record.id}/preview?token=${getToken()}`;
             // PDF 文件支持查看原文（懒加载）
             previewHasRawText.value = (ext === 'pdf');
             previewRawText.value = '';
