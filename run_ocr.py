@@ -50,7 +50,17 @@ def main():
 
     # 初始化账号认证模块
     init_users_table(db)
-    init_jwt(config.get("secret_key", "ocr-dev"))
+    # JWT 密钥：优先 config.yaml，否则从数据库读取/自动生成持久化随机密钥
+    jwt_secret = config.get("jwt_secret", "")
+    if not jwt_secret:
+        from insurance.db import get_insurance_config, set_insurance_config
+        import secrets
+        jwt_secret = get_insurance_config(db, "jwt_secret", "")
+        if not jwt_secret:
+            jwt_secret = secrets.token_hex(32)
+            set_insurance_config(db, "jwt_secret", jwt_secret)
+            logging.info("已自动生成 JWT 密钥并持久化到数据库")
+    init_jwt(jwt_secret)
     init_auth_decorators(db)
     init_auth_api(db)
     app.register_blueprint(auth_bp)

@@ -3,6 +3,7 @@ JWT Token 工具
 负责 token 的签发与验证
 """
 
+import secrets
 import time
 import logging
 
@@ -10,8 +11,8 @@ import jwt
 
 logger = logging.getLogger(__name__)
 
-# 模块级配置，由 main.py 初始化时设置
-_secret_key = "wxbot-default-jwt-secret"
+# 模块级配置，由 main.py 初始化时设置（默认生成随机密钥，防止使用弱密钥）
+_secret_key = secrets.token_hex(32)
 _expire_seconds = 86400 * 7  # 默认 7 天
 
 
