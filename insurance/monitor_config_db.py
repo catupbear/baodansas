@@ -39,6 +39,13 @@ def init_monitor_config_table(db):
                 INDEX idx_monitor_enabled (enabled)
             )
         """)
+        # 添加 user_id 列（幂等，已存在则跳过）
+        try:
+            cursor.execute("ALTER TABLE monitor_configs ADD COLUMN user_id INT DEFAULT NULL COMMENT '绑定的用户ID'")
+            cursor.execute("CREATE INDEX idx_mc_user_id ON monitor_configs(user_id)")
+        except Exception:
+            pass  # 列已存在
+
         conn.commit()
         logger.info("monitor_configs 表初始化完成")
     finally:

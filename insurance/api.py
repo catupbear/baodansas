@@ -43,6 +43,8 @@ from .field_mapping import (
 )
 from .policy_parser import get_extraction_rules, parse_policy_text
 from .ocr_service import extract_text_from_pdf
+from auth.decorators import login_required
+from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, get_enterprise_employee_ids
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +68,51 @@ def init_insurance_api(db, handler=None, contacts=None):
     _db = db
     _handler = handler
     _contacts = contacts
+
+
+# ============================================================
+# 全局鉴权：所有保单识别 API 均需登录
+# ============================================================
+
+@insurance_bp.before_request
+def _require_login():
+    """保单识别 API 统一鉴权"""
+    from auth.jwt_utils import verify_token
+    from auth.db import get_user_by_id
+
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header[7:] if auth_header.startswith("Bearer ") else request.args.get("token")
+    if not token:
+        return jsonify({"code": 401, "msg": "未登录"}), 401
+
+    payload = verify_token(token)
+    if not payload:
+        return jsonify({"code": 401, "msg": "登录已过期，请重新登录"}), 401
+
+    user = get_user_by_id(_db, payload["user_id"])
+    if not user or not user.get("enabled"):
+        return jsonify({"code": 401, "msg": "账号已禁用"}), 401
+
+    from flask import g
+    g.current_user = {
+        "user_id": payload["user_id"],
+        "username": payload["username"],
+        "role": payload["role"],
+        "parent_id": user.get("parent_id"),
+    }
+
+
+def _get_user_ids_filter():
+    """根据当前用户角色返回 user_ids 过滤列表，超管返回 None（不过滤）"""
+    from flask import g
+    role = g.current_user["role"]
+    uid = g.current_user["user_id"]
+    if role == ROLE_SUPER_ADMIN:
+        return None
+    elif role == ROLE_ENTERPRISE:
+        return get_enterprise_employee_ids(_db, uid)
+    else:
+        return [uid]
 
 
 # ============================================================
@@ -107,6 +154,7 @@ def list_records():
             company_short=company_short,
             date_start=date_start,
             date_end=date_end,
+            user_ids=_get_user_ids_filter(),
         )
         # 列表返回 display_fields（轻量映射字段）替代 parsed_fields
         for record in result.get("records", []):
@@ -252,6 +300,10 @@ def get_stats():
             val = request.args.get(key, "").strip()
             if val:
                 filters[key] = val
+        # 按账号权限过滤
+        user_ids = _get_user_ids_filter()
+        if user_ids is not None:
+            filters["user_ids"] = user_ids
         stats = get_insurance_stats(_db, filters=filters if filters else None)
         return jsonify({"code": 0, "data": stats})
     except Exception as e:
@@ -379,6 +431,15 @@ def _save_manual_record(file_name, policy, ocr_engine, file_data_b64=None, uploa
         except Exception as e:
             logger.warning("手动上传 COS 失败: %s", e)
 
+    # 计算文件 MD5（用于去重）
+    file_md5 = None
+    if file_data_b64:
+        try:
+            raw_bytes = base64.b64decode(file_data_b64)
+            file_md5 = hashlib.md5(raw_bytes).hexdigest()
+        except Exception:
+            pass
+
     record = {
         "filename": file_name,
         "cos_url": cos_url,
@@ -390,6 +451,8 @@ def _save_manual_record(file_name, policy, ocr_engine, file_data_b64=None, uploa
         "status": "done",
         "source": "manual",
     }
+    if file_md5:
+        record["file_md5"] = file_md5
 
     try:
         record_id, is_update = upsert_insurance_record_by_policy(_db, record)

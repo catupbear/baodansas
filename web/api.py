@@ -12,6 +12,7 @@ import pymysql.cursors
 from flask import Blueprint, jsonify, redirect, request, send_file
 
 from storage.db import Database
+from auth.decorators import login_required
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -38,6 +39,35 @@ def init_api(db: Database, fetcher=None, finance_sdk=None, sdk_config: dict = No
     _sdk_config = sdk_config or {}
     _contacts = contacts
     _cos = cos_storage
+
+
+# 全局鉴权：消息查询 API 均需登录
+@api_bp.before_request
+def _require_login():
+    """消息查询 API 统一鉴权"""
+    from auth.jwt_utils import verify_token
+    from auth.db import get_user_by_id
+    from flask import g
+
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header[7:] if auth_header.startswith("Bearer ") else request.args.get("token")
+    if not token:
+        return jsonify({"code": 401, "msg": "未登录"}), 401
+
+    payload = verify_token(token)
+    if not payload:
+        return jsonify({"code": 401, "msg": "登录已过期，请重新登录"}), 401
+
+    user = get_user_by_id(_db, payload["user_id"])
+    if not user or not user.get("enabled"):
+        return jsonify({"code": 401, "msg": "账号已禁用"}), 401
+
+    g.current_user = {
+        "user_id": payload["user_id"],
+        "username": payload["username"],
+        "role": payload["role"],
+        "parent_id": user.get("parent_id"),
+    }
 
 
 @api_bp.route("/conversations")

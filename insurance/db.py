@@ -200,6 +200,8 @@ def init_insurance_tables(db):
             ("is_abnormal", "TINYINT DEFAULT 0 COMMENT '是否提取异常（预计算，加速列表筛选）'"),
             ("hint", "VARCHAR(64) DEFAULT '' COMMENT '提示信息（如：保单无投保人）'"),
             ("display_fields", "TEXT COMMENT '映射后的展示字段JSON（列表轻量展示用）'"),
+            ("file_md5", "VARCHAR(32) DEFAULT NULL COMMENT 'PDF文件MD5（用于去重）'"),
+            ("user_id", "INT DEFAULT NULL COMMENT '所属用户ID'"),
         ]
         for col_name, col_def in new_columns:
             try:
@@ -211,6 +213,8 @@ def init_insurance_tables(db):
         for idx_sql in [
             "CREATE INDEX idx_insurance_company_short ON insurance_records(company_short)",
             "CREATE INDEX idx_insurance_is_abnormal ON insurance_records(is_abnormal)",
+            "CREATE UNIQUE INDEX idx_insurance_file_md5 ON insurance_records(file_md5)",
+            "CREATE INDEX idx_insurance_user_id ON insurance_records(user_id)",
         ]:
             try:
                 cursor.execute(idx_sql)
@@ -454,6 +458,25 @@ def _extract_company_short(data: dict) -> str:
     return ""
 
 
+def check_file_md5_exists(db, file_md5: str) -> dict | None:
+    """
+    检查指定 MD5 的文件是否已有识别记录。
+    返回已有记录（dict）或 None。
+    """
+    if not file_md5:
+        return None
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT id, filename, status FROM insurance_records WHERE file_md5 = %s LIMIT 1",
+            (file_md5,)
+        )
+        return cursor.fetchone()
+    finally:
+        conn.close()
+
+
 def save_insurance_record(db, record: dict) -> int:
     """
     插入一条保单识别记录，返回新记录的 id。
@@ -660,6 +683,7 @@ def query_insurance_records(
     company_short: str = "",
     date_start: str = "",
     date_end: str = "",
+    user_ids: list = None,
 ) -> dict:
     """
     分页查询保单识别记录，支持按群、状态、关键词、来源、识别方式、文档类型筛选。
@@ -723,6 +747,14 @@ def query_insurance_records(
     if date_end:
         conditions.append("created_at < %s")
         params.append(date_end)
+    # 按账号权限过滤
+    if user_ids is not None:
+        if user_ids:
+            placeholders = ",".join(["%s"] * len(user_ids))
+            conditions.append(f"user_id IN ({placeholders})")
+            params.extend(user_ids)
+        else:
+            conditions.append("0")  # 空列表不返回数据
 
     where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
@@ -966,6 +998,15 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
         if filters.get("date_end"):
             where_parts.append("created_at <= %s")
             params.append(filters["date_end"] + " 23:59:59")
+        # 按账号权限过滤
+        if filters.get("user_ids") is not None:
+            uid_list = filters["user_ids"]
+            if uid_list:
+                placeholders = ",".join(["%s"] * len(uid_list))
+                where_parts.append(f"user_id IN ({placeholders})")
+                params.extend(uid_list)
+            else:
+                where_parts.append("0")
 
         where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
 
