@@ -210,7 +210,7 @@ def get_record(record_id):
             return jsonify({"code": 404, "msg": "记录不存在"}), 404
 
         # JSON 字段自动反序列化
-        for field in ("parsed_fields", "mapped_fields"):
+        for field in ("parsed_fields", "mapped_fields", "manual_fields"):
             if isinstance(record.get(field), str):
                 try:
                     record[field] = json.loads(record[field])
@@ -224,6 +224,59 @@ def get_record(record_id):
         return jsonify({"code": 0, "data": record})
     except Exception as e:
         logger.exception("获取保单记录 %d 失败", record_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/records/<int:record_id>/fields", methods=["PUT"])
+def update_record_fields(record_id):
+    """手动修改保单识别字段值，并记录哪些字段被手动修改过"""
+    _require_login()
+    try:
+        record = get_insurance_record(_db, record_id)
+        if not record:
+            return jsonify({"code": 404, "msg": "记录不存在"}), 404
+
+        data = request.get_json(force=True)
+        updated_fields = data.get("fields", {})  # {字段名: 新值}
+        if not updated_fields:
+            return jsonify({"code": 400, "msg": "未提供修改字段"}), 400
+
+        # 读取现有 parsed_fields
+        pf = record.get("parsed_fields") or "{}"
+        if isinstance(pf, str):
+            try:
+                pf = json.loads(pf)
+            except (TypeError, json.JSONDecodeError):
+                pf = {}
+
+        # 读取现有 manual_fields（手动修改过的字段名列表）
+        mf = record.get("manual_fields") or "[]"
+        if isinstance(mf, str):
+            try:
+                mf = json.loads(mf)
+            except (TypeError, json.JSONDecodeError):
+                mf = []
+        if not isinstance(mf, list):
+            mf = []
+
+        # 合并修改
+        for field_name, new_value in updated_fields.items():
+            pf[field_name] = new_value
+            if field_name not in mf:
+                mf.append(field_name)
+
+        # 更新数据库
+        update_insurance_record(_db, record_id, {
+            "parsed_fields": pf,
+            "manual_fields": mf,
+        })
+
+        return jsonify({"code": 0, "msg": "保存成功", "data": {
+            "parsed_fields": pf,
+            "manual_fields": mf,
+        }})
+    except Exception as e:
+        logger.exception("更新保单字段 %d 失败", record_id)
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 

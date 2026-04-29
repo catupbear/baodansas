@@ -869,7 +869,7 @@
             </div>
             <!-- 日期筛选 -->
             <div class="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-100">
-                <span class="text-xs text-gray-500 font-medium whitespace-nowrap">日期:</span>
+                <span class="text-xs text-gray-500 font-medium whitespace-nowrap">识别日期:</span>
                 <button v-for="s in dateShortcuts" :key="s.key"
                         @click="setDateShortcut(s.key)"
                         class="text-xs px-2.5 py-1 rounded-full transition-colors cursor-pointer"
@@ -1628,12 +1628,48 @@
                             <span class="text-sm text-gray-500 font-medium">正在重新识别...</span>
                             <span class="text-xs text-gray-400 mt-1">请稍候，识别完成后将自动显示结果</span>
                         </div>
-                        <!-- 识别完成：字段列表 -->
+                        <!-- 识别完成：字段列表（支持点击编辑） -->
                         <div v-else class="flex-1 overflow-auto p-3">
                             <div v-for="item in previewFieldsList" :key="item.label"
-                                 class="flex border-b border-gray-100 py-1.5 text-sm">
-                                <span class="text-gray-500 w-24 flex-shrink-0 font-medium">{{ item.label }}</span>
-                                <span class="text-gray-800 ml-2" :class="item.value ? '' : 'text-gray-300'">{{ item.value || '—' }}</span>
+                                 class="flex items-center border-b border-gray-100 py-1.5 text-sm group">
+                                <span class="text-gray-500 w-24 flex-shrink-0 font-medium flex items-center gap-1">
+                                    {{ item.label }}
+                                    <span v-if="isManualField(item.label)"
+                                          class="inline-block w-1.5 h-1.5 rounded-full bg-orange-400 flex-shrink-0"
+                                          title="已手动修改"></span>
+                                </span>
+                                <!-- 编辑模式 -->
+                                <template v-if="editingField === item.label">
+                                    <div class="flex-1 flex items-center gap-1 ml-2">
+                                        <input id="field-edit-input"
+                                               v-model="editingValue"
+                                               @keyup.enter="saveEditField"
+                                               @keyup.escape="cancelEditField"
+                                               class="flex-1 px-2 py-0.5 text-sm border border-orange-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-400"
+                                               :disabled="fieldSaving" />
+                                        <button @click="saveEditField" :disabled="fieldSaving"
+                                                class="px-1.5 py-0.5 text-xs bg-orange-500 text-white rounded hover:bg-orange-600 cursor-pointer disabled:opacity-50">
+                                            {{ fieldSaving ? '...' : '✓' }}
+                                        </button>
+                                        <button @click="cancelEditField" :disabled="fieldSaving"
+                                                class="px-1.5 py-0.5 text-xs bg-gray-200 text-gray-600 rounded hover:bg-gray-300 cursor-pointer disabled:opacity-50">
+                                            ✕
+                                        </button>
+                                    </div>
+                                </template>
+                                <!-- 显示模式（点击进入编辑） -->
+                                <template v-else>
+                                    <span v-if="previewAutoRecord"
+                                          class="text-gray-800 ml-2 flex-1 cursor-pointer rounded px-1 -mx-1 hover:bg-orange-50 transition-colors"
+                                          :class="[item.value ? '' : 'text-gray-300', isManualField(item.label) ? 'font-medium text-orange-700' : '']"
+                                          @click="startEditField(item.label)"
+                                          title="点击编辑">
+                                        {{ item.value || '—' }}
+                                    </span>
+                                    <span v-else class="text-gray-800 ml-2" :class="item.value ? '' : 'text-gray-300'">
+                                        {{ item.value || '—' }}
+                                    </span>
+                                </template>
                             </div>
                         </div>
                     </div>
@@ -1938,6 +1974,11 @@ createApp({
         const rawTextCopied = ref(false);
         const extractionRules = ref({});
         const previewReocring = ref(false);
+
+        // 字段编辑相关状态
+        const editingField = ref(null);       // 当前正在编辑的字段名
+        const editingValue = ref('');         // 编辑中的值
+        const fieldSaving = ref(false);       // 保存中状态
 
         // 字段标签列表，用于原文自动换行和高亮
         const RAW_TEXT_LABELS = [
@@ -2654,7 +2695,7 @@ createApp({
             previewAutoRecord.value = { ...record };
             previewFileName.value = record.filename || '保单文件';
             previewShowRaw.value = false;
-            previewShowFields.value = false;
+            previewShowFields.value = true;  // 自动展开列表信息
             previewShowRules.value = false;
             const ext = (record.filename || '').split('.').pop().toLowerCase();
             previewType.value = ext || 'pdf';
@@ -2671,6 +2712,9 @@ createApp({
                     const detail = json.data;
                     if (typeof detail.parsed_fields === 'string') {
                         try { detail.parsed_fields = JSON.parse(detail.parsed_fields); } catch { detail.parsed_fields = {}; }
+                    }
+                    if (typeof detail.manual_fields === 'string') {
+                        try { detail.manual_fields = JSON.parse(detail.manual_fields); } catch { detail.manual_fields = []; }
                     }
                     previewAutoRecord.value = detail;
                 }
@@ -2694,6 +2738,68 @@ createApp({
             } catch (e) {
                 previewRawText.value = '（加载失败）';
             }
+        }
+
+        // 开始编辑字段
+        function startEditField(label) {
+            const item = previewFieldsList.value.find(f => f.label === label);
+            editingField.value = label;
+            editingValue.value = item ? (item.value || '') : '';
+            // 自动聚焦输入框
+            Vue.nextTick(() => {
+                const input = document.getElementById('field-edit-input');
+                if (input) input.focus();
+            });
+        }
+
+        // 取消编辑
+        function cancelEditField() {
+            editingField.value = null;
+            editingValue.value = '';
+        }
+
+        // 保存编辑的字段
+        async function saveEditField() {
+            if (!editingField.value || !previewAutoRecord.value?.id) return;
+            const fieldName = editingField.value;
+            const newValue = editingValue.value.trim();
+
+            fieldSaving.value = true;
+            try {
+                const resp = await authFetch(`/api/insurance/records/${previewAutoRecord.value.id}/fields`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ fields: { [fieldName]: newValue } }),
+                });
+                const json = await resp.json();
+                if (json.code === 0) {
+                    // 更新本地数据
+                    previewAutoRecord.value.parsed_fields = json.data.parsed_fields;
+                    previewAutoRecord.value.manual_fields = json.data.manual_fields;
+                    // 同步更新记录列表中的数据
+                    const idx = autoRecords.value.findIndex(r => r.id === previewAutoRecord.value.id);
+                    if (idx !== -1) {
+                        autoRecords.value[idx].parsed_fields = json.data.parsed_fields;
+                        autoRecords.value[idx].manual_fields = json.data.manual_fields;
+                    }
+                } else {
+                    alert('保存失败：' + (json.msg || '未知错误'));
+                }
+            } catch (e) {
+                console.error('保存字段失败', e);
+                alert('保存失败');
+            } finally {
+                fieldSaving.value = false;
+                editingField.value = null;
+                editingValue.value = '';
+            }
+        }
+
+        // 判断字段是否被手动修改过
+        function isManualField(label) {
+            if (!previewAutoRecord.value) return false;
+            const mf = previewAutoRecord.value.manual_fields;
+            if (!mf || !Array.isArray(mf)) return false;
+            return mf.includes(label);
         }
 
         function hasRawText(fileName) {
@@ -3907,6 +4013,7 @@ createApp({
             recordCompanyList, recordDocTypes, exportRecordsExcel,
             loadRecords, loadRecordStats, gotoRecordPage, getParsedField, getRecordMappedValue, formatTime,
             retryRecord, reocrRecord, reocrPreviewFile, previewReocring, syncRecordToDingtalk, previewRecord, previewAutoRecord, loadAutoRecordRawText,
+            editingField, editingValue, fieldSaving, startEditField, cancelEditField, saveEditField, isManualField,
             recordDetailVisible, currentRecord, openRecordDetail,
             // 联系人编辑
             contactEditVisible, contactEditSaving, contactEditForm, contactNameInput,

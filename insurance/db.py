@@ -33,12 +33,12 @@ _CN_DATE_TO_DATE = (
     "SUBSTRING_INDEX({col}, '年', 1), '-',"
     "SUBSTRING_INDEX(SUBSTRING_INDEX({col}, '月', 1), '年', -1), '-',"
     "SUBSTRING_INDEX(SUBSTRING_INDEX({col}, '日', 1), '月', -1)"
-    "), '%Y-%m-%d')"
+    "), '%%Y-%%m-%%d')"
 )
 
 
 # JSON 字段列表，保存时自动序列化，读取时由调用方自行处理
-_JSON_FIELDS = {"parsed_fields", "mapped_fields", "display_fields"}
+_JSON_FIELDS = {"parsed_fields", "mapped_fields", "display_fields", "manual_fields"}
 
 # ------------------------------------------------------------------ #
 # 保单字段关联表：OCR 字段名 → 数据库列名 映射
@@ -226,6 +226,7 @@ def init_insurance_tables(db):
             ("display_fields", "TEXT COMMENT '映射后的展示字段JSON（列表轻量展示用）'"),
             ("file_md5", "VARCHAR(32) DEFAULT NULL COMMENT 'PDF文件MD5（用于去重）'"),
             ("user_id", "INT DEFAULT NULL COMMENT '所属用户ID'"),
+            ("manual_fields", "LONGTEXT COMMENT '手动修改过的字段名列表JSON'"),
         ]
         for col_name, col_def in new_columns:
             try:
