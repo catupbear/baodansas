@@ -2009,6 +2009,117 @@ def parse_policy_text(text: str) -> Dict[str, Any]:
     }
 
 
+# ============================================================
+# 多保单拆分：一个 PDF 包含多份保单（如交强险+商业险+非车险）
+# ============================================================
+
+# 用于检测和拆分多保单的险种边界关键词（按优先级排列）
+_POLICY_SPLIT_PATTERNS = [
+    (r"新能源汽车交通事故责任强制保险", "compulsory"),
+    (r"机动车交通事故责任强制保险", "compulsory"),
+    (r"新能源汽车商业保险", "commercial"),
+    (r"机动车商业保险", "commercial"),
+    (r"机动车辆商业保险", "commercial"),
+    (r"特种车商业保险", "commercial"),
+    (r"机动车辆保险(?!单)", "commercial"),          # "机动车辆保险"但不是"机动车辆保险单"
+    (r"机动车辆综合险", "commercial"),
+    (r"驾乘\S*保险", "accident"),
+    (r"意外伤害保险", "accident"),
+    (r"人身意外伤害保险", "accident"),
+]
+
+
+def _find_policy_boundaries(text: str) -> List[dict]:
+    """
+    在文本中查找所有险种类型的出现位置，返回按位置排序的边界列表。
+
+    Returns:
+        [{"pos": int, "type_code": str, "match": str}, ...]
+    """
+    found = []
+    seen_positions = set()  # 避免同一位置重复匹配
+
+    for pattern, type_code in _POLICY_SPLIT_PATTERNS:
+        for m in re.finditer(pattern, text):
+            pos = m.start()
+            # 跳过已被更高优先级匹配覆盖的位置（±20字符内视为同一位置）
+            if any(abs(pos - sp) < 20 for sp in seen_positions):
+                continue
+            found.append({
+                "pos": pos,
+                "type_code": type_code,
+                "match": m.group(0),
+            })
+            seen_positions.add(pos)
+
+    # 按位置排序
+    found.sort(key=lambda x: x["pos"])
+    return found
+
+
+def parse_policy_text_multi(text: str) -> List[Dict[str, Any]]:
+    """
+    从保单文本中提取所有保单——支持一个 PDF 包含多份保单的情况。
+
+    逻辑：
+    1. 检测文本中是否出现多个不同险种类型的关键词
+    2. 如果只有一种或未检测到，退化为单条解析
+    3. 如果有多种，按关键词位置拆分文本，分别解析
+
+    Args:
+        text: 从 PDF 提取的完整文本
+
+    Returns:
+        保单结果列表（至少包含一条）
+    """
+    boundaries = _find_policy_boundaries(text)
+
+    # 检查是否有多种不同的险种类型
+    unique_types = set(b["type_code"] for b in boundaries)
+
+    if len(unique_types) <= 1 or len(boundaries) <= 1:
+        # 只有一种险种或未检测到多种，直接单条解析
+        return [parse_policy_text(text)]
+
+    # 有多种险种类型，按边界拆分文本并分别解析
+    policies = []
+    for i, boundary in enumerate(boundaries):
+        # 每段从当前边界所在行的行首开始
+        line_start = text.rfind("\n", 0, boundary["pos"])
+        segment_start = line_start + 1 if line_start >= 0 else 0
+
+        # 如果不是第一个边界，但前面有内容可能属于本段（如公司名在险种名之前）
+        # 往前多取一些上下文（找到上一段的末尾）
+        if i == 0:
+            segment_start = 0
+
+        # 每段到下一个边界所在行的行首结束
+        if i == len(boundaries) - 1:
+            segment_end = len(text)
+        else:
+            next_pos = boundaries[i + 1]["pos"]
+            # 找到下一个边界所在行的行首作为本段结束点
+            next_line_start = text.rfind("\n", 0, next_pos)
+            segment_end = next_line_start + 1 if next_line_start >= 0 else next_pos
+
+        segment = text[segment_start:segment_end].strip()
+        if not segment:
+            continue
+
+        policy = parse_policy_text(segment)
+        # 只保留有效的保单（有字段且置信度>0）
+        if policy.get("fields") and policy.get("confidence", 0) > 0:
+            policies.append(policy)
+
+    # 如果拆分后没有有效结果，退化为单条解析
+    if not policies:
+        return [parse_policy_text(text)]
+
+    return policies
+
+
+
+
 # 字段排序（用于表头生成和导出）
 FIELD_ORDER = [
     "文档类型", "保单号", "投保确认码", "保险公司", "保险公司简称", "险种类型",

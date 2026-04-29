@@ -41,7 +41,7 @@ from .field_mapping import (
     load_mapping_config,
     save_mapping_config,
 )
-from .policy_parser import get_extraction_rules, parse_policy_text
+from .policy_parser import get_extraction_rules, parse_policy_text, parse_policy_text_multi
 from .ocr_service import extract_text_from_pdf
 from auth.decorators import login_required
 from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, get_enterprise_employee_ids
@@ -521,27 +521,35 @@ def parse_text_only():
 
         from .ocr_service import clean_text
         text = clean_text(text)
-        policy = parse_policy_text(text)
+        policies = parse_policy_text_multi(text)
 
-        if not policy.get("fields") or policy.get("confidence", 0) == 0:
+        # 过滤无效保单
+        valid_policies = [p for p in policies if p.get("fields") and p.get("confidence", 0) > 0]
+        if not valid_policies:
             return jsonify({
                 "success": False, "file_name": file_name,
                 "error": "need_ocr", "invoices": [],
             })
 
-        # 保存识别记录到数据库
-        record_id, is_update = _save_manual_record(
-            file_name, policy, "pdfjs",
-            file_data_b64=file_data_b64, upload_cos=upload_cos)
+        # 逐条保存识别记录到数据库
+        record_ids = []
+        is_updates = []
+        for policy in valid_policies:
+            rid, is_upd = _save_manual_record(
+                file_name, policy, "pdfjs",
+                file_data_b64=file_data_b64, upload_cos=upload_cos)
+            record_ids.append(rid)
+            is_updates.append(is_upd)
 
         return jsonify({
             "success": True,
             "file_name": file_name,
-            "invoices": [policy],
+            "invoices": valid_policies,
             "char_count": len(text),
             "ocr_engine": "pdfjs",
-            "record_id": record_id,
-            "is_update": is_update,
+            "record_id": record_ids[0] if record_ids else None,
+            "record_ids": record_ids,
+            "is_update": is_updates[0] if is_updates else False,
         })
     except Exception as e:
         logger.exception("文本解析失败")
@@ -606,47 +614,54 @@ def manual_ocr():
                 "error": error_msg, "invoices": [],
             })
 
-        policy = parse_policy_text(extract_result["text"])
+        policies = parse_policy_text_multi(extract_result["text"])
 
-        # 质量不佳时降级百度 OCR
+        # 质量不佳时降级百度 OCR（用第一条保单判断质量）
+        first_policy = policies[0] if policies else {}
         need_fallback = (
-            not policy.get("fields")
-            or policy.get("doc_category") == "其他"
-            or policy.get("confidence", 0) == 0
+            not first_policy.get("fields")
+            or first_policy.get("doc_category") == "其他"
+            or first_policy.get("confidence", 0) == 0
         )
         if need_fallback and ocr_engine == "pdfplumber" and baidu_ocr_client:
             logger.info("[%s] pdfplumber 效果不佳(类型=%s, 置信度=%s), 降级百度OCR（多页）",
-                        file_name, policy.get("doc_category"), policy.get("confidence"))
+                        file_name, first_policy.get("doc_category"), first_policy.get("confidence"))
             pdf_bytes = base64.b64decode(file_data_b64)
             extract_result = baidu_ocr_client.recognize_pdf_multi_pages(
                 pdf_bytes, max_pages=6)
             ocr_engine = "baidu"
             if extract_result["success"]:
-                policy = parse_policy_text(extract_result["text"])
+                policies = parse_policy_text_multi(extract_result["text"])
 
-        if not policy.get("fields") or policy.get("confidence", 0) == 0:
+        # 过滤无效保单
+        valid_policies = [p for p in policies if p.get("fields") and p.get("confidence", 0) > 0]
+        if not valid_policies:
             return jsonify({
                 "success": False, "file_name": file_name,
                 "error": "未识别到任何保单关键字段", "invoices": [],
             })
 
-        # 同车牌保单字段互补
-        if _handler and policy.get("fields"):
-            _handler._cross_fill_by_plate(policy["fields"])
-
-        # 保存识别记录到数据库
-        record_id, is_update = _save_manual_record(
-            file_name, policy, ocr_engine,
-            file_data_b64=file_data_b64, upload_cos=upload_cos)
+        # 逐条处理：同车牌互补 + 保存记录
+        record_ids = []
+        is_updates = []
+        for policy in valid_policies:
+            if _handler and policy.get("fields"):
+                _handler._cross_fill_by_plate(policy["fields"])
+            rid, is_upd = _save_manual_record(
+                file_name, policy, ocr_engine,
+                file_data_b64=file_data_b64, upload_cos=upload_cos)
+            record_ids.append(rid)
+            is_updates.append(is_upd)
 
         return jsonify({
             "success": True,
             "file_name": file_name,
-            "invoices": [policy],
+            "invoices": valid_policies,
             "char_count": extract_result.get("char_count", 0),
             "ocr_engine": ocr_engine,
-            "record_id": record_id,
-            "is_update": is_update,
+            "record_id": record_ids[0] if record_ids else None,
+            "record_ids": record_ids,
+            "is_update": is_updates[0] if is_updates else False,
         })
     except Exception as e:
         logger.exception("手动上传识别失败")

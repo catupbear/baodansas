@@ -2793,6 +2793,22 @@ createApp({
             });
         }
 
+        // ========== 多保单展开：一个PDF多份保单拆为多条结果 ==========
+        function expandMultiPolicies(result) {
+            if (!result.success || !result.invoices || result.invoices.length <= 1) {
+                return [result];
+            }
+            // 多份保单：拆为多条结果，每条包含一个 invoice
+            return result.invoices.map((inv, i) => ({
+                ...result,
+                file_name: result.invoices.length > 1
+                    ? `${result.file_name}#${inv.type || (i + 1)}`
+                    : result.file_name,
+                invoices: [inv],
+                record_id: result.record_ids ? result.record_ids[i] : result.record_id,
+            }));
+        }
+
         // ========== 批量识别 ==========
         async function startRecognize() {
             isRecognizing.value = true; recognizedCount.value = 0; results.value = [];
@@ -2809,7 +2825,7 @@ createApp({
                     currentFileName.value = file.name;
                     try {
                         const result = await recognizeFile(file);
-                        results.value.push(result);
+                        results.value.push(...expandMultiPolicies(result));
                     } catch (e) {
                         results.value.push({ success: false, file_name: file.name, error: `网络错误: ${e.message}` });
                     }
@@ -3764,10 +3780,11 @@ createApp({
             previewShowRules.value = false;
             try {
                 const result = await recognizeFile(file);
-                // 更新 results 列表
-                const idx = results.value.findIndex(r => r.file_name === fileName);
-                if (idx >= 0) results.value.splice(idx, 1, result);
-                else results.value.push(result);
+                const expanded = expandMultiPolicies(result);
+                // 更新 results 列表（先删除同源文件名的旧结果）
+                const baseFileName = fileName.replace(/#.+$/, '');
+                results.value = results.value.filter(r => !r.file_name.startsWith(baseFileName));
+                results.value.push(...expanded);
                 // 刷新预览面板数据（保持列表面板打开）
                 loadPreviewRawText(fileName);
                 showMessage('重新识别完成', true);

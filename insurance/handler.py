@@ -25,7 +25,7 @@ from insurance.db import (
 from insurance.monitor_config_db import get_enabled_monitor_configs
 from insurance.field_mapping import apply_mapping
 from insurance.ocr_service import extract_text_from_pdf_bytes
-from insurance.policy_parser import parse_policy_text
+from insurance.policy_parser import parse_policy_text, parse_policy_text_multi
 
 logger = logging.getLogger(__name__)
 
@@ -377,34 +377,14 @@ class InsuranceHandler:
             if not ocr_result.get("success"):
                 raise RuntimeError(f"OCR 识别失败: {ocr_result.get('error', '未知错误')}")
 
-            policy = ocr_result.get("policy", {})
+            policies = ocr_result.get("policies", [])
             ocr_engine = ocr_result.get("ocr_engine", "pdfplumber")
-            parsed_fields = policy.get("fields", {})
-            doc_category = policy.get("doc_category", "")
-            confidence = policy.get("confidence", 0.0)
 
-            # 6. 同车牌保单字段互补
-            self._cross_fill_by_plate(parsed_fields, record_id)
-
-            # 7. 字段映射
-            company_short = parsed_fields.get("保险公司简称", "")
-            mapped_fields = apply_mapping(parsed_fields, company_short)
-
-            # 8. 更新记录为 done
-            raw_text = policy.get("raw_text", "")
-            updates = {
-                "status": "done",
-                "cos_url": cos_url,
-                "ocr_engine": ocr_engine,
-                "doc_category": doc_category,
-                "confidence": confidence,
-                "parsed_fields": parsed_fields,
-                "mapped_fields": mapped_fields,
-                "raw_text": raw_text,
-            }
-            update_insurance_record(self.db, record_id, updates)
-
-            logger.info("保单处理完成, record_id=%d filename=%s", record_id, filename)
+            if len(policies) > 1:
+                logger.info(
+                    "多保单PDF: filename=%s, 共%d份保单, record_id=%d",
+                    filename, len(policies), record_id,
+                )
 
             # 9. 同步前二次解析发送人名称（首次可能因缓存未命中返回ID）
             if sender and sender_name == sender and self.contacts:
@@ -412,50 +392,111 @@ class InsuranceHandler:
                     resolved = self.contacts.get_name(sender) or ""
                     if resolved and resolved != sender:
                         sender_name = resolved
-                        # 同步更新数据库记录中的发送人名称
-                        update_insurance_record(self.db, record_id, {"sender_name": sender_name})
                         logger.info("发送人名称二次解析成功: %s -> %s", sender, sender_name)
                 except Exception as e:
                     logger.warning("发送人名称二次解析失败: %s", e)
 
-            # 9. 非保单类型不同步钉钉，只记录日志
-            if doc_category and doc_category != "保单":
-                logger.info(
-                    "文档类型为「%s」（非保单），跳过钉钉同步, record_id=%d filename=%s",
-                    doc_category, record_id, filename,
-                )
-            else:
-                # 自动同步钉钉（按监控配置决定，复用之前匹配的监控列表）
-                try:
-                    for monitor in matched_monitors:
-                        if not (monitor.get("dingtalk_base_id") and monitor.get("dingtalk_sheet_id")):
-                            continue
-                        # 使用监控配置自身的字段映射（如果有），否则用全局映射结果
-                        monitor_mapping = monitor.get("field_mapping") or {}
-                        if monitor_mapping:
-                            from insurance.field_mapping import DEFAULT_MAPPING
-                            export_to_ocr = {v: k for k, v in DEFAULT_MAPPING.items() if v}
-                            sync_fields = {}
-                            for export_col, target_col in monitor_mapping.items():
-                                if not target_col:
-                                    continue
-                                ocr_field = export_to_ocr.get(export_col, export_col)
-                                if ocr_field in parsed_fields:
-                                    sync_fields[target_col] = parsed_fields[ocr_field]
-                                elif export_col in parsed_fields:
-                                    sync_fields[target_col] = parsed_fields[export_col]
-                        else:
-                            sync_fields = mapped_fields
+            # 6-9. 逐条处理每份保单（多保单PDF会产生多条记录）
+            for policy_idx, policy in enumerate(policies):
+                cur_record_id = record_id  # 第一条复用已创建的记录
 
-                        self._sync_to_dingtalk_v2(
-                            record_id, sync_fields,
-                            sender_name=sender_name,
-                            cos_url=cos_url,
-                            doc_category=doc_category,
-                            monitor=monitor,
+                if policy_idx > 0:
+                    # 多保单的第2条及之后，创建新记录
+                    extra_record = {
+                        "msg_seq": seq,
+                        "roomid": roomid,
+                        "room_name": room_name,
+                        "sender": sender,
+                        "sender_name": sender_name,
+                        "filename": filename,
+                        "filesize": filesize,
+                        "status": "processing",
+                        "source": "auto",
+                        "user_id": config_user_id,
+                        "file_md5": hashlib.md5(pdf_bytes).hexdigest() if pdf_bytes else None,
+                        "cos_url": cos_url,
+                    }
+                    try:
+                        cur_record_id = save_insurance_record(self.db, extra_record)
+                        logger.info(
+                            "多保单PDF第%d/%d条, 新建record_id=%d",
+                            policy_idx + 1, len(policies), cur_record_id,
                         )
-                except Exception as e:
-                    logger.error("自动同步钉钉失败, record_id=%d: %s", record_id, e)
+                    except Exception as e:
+                        logger.error("多保单创建第%d条记录失败: %s", policy_idx + 1, e)
+                        continue
+
+                parsed_fields = policy.get("fields", {})
+                doc_category = policy.get("doc_category", "")
+                confidence = policy.get("confidence", 0.0)
+
+                # 6. 同车牌保单字段互补
+                self._cross_fill_by_plate(parsed_fields, cur_record_id)
+
+                # 7. 字段映射
+                company_short = parsed_fields.get("保险公司简称", "")
+                mapped_fields = apply_mapping(parsed_fields, company_short)
+
+                # 8. 更新记录为 done
+                raw_text = policy.get("raw_text", "")
+                updates = {
+                    "status": "done",
+                    "cos_url": cos_url,
+                    "ocr_engine": ocr_engine,
+                    "doc_category": doc_category,
+                    "confidence": confidence,
+                    "parsed_fields": parsed_fields,
+                    "mapped_fields": mapped_fields,
+                    "raw_text": raw_text,
+                }
+                update_insurance_record(self.db, cur_record_id, updates)
+
+                # 更新发送人名称
+                if sender_name and sender_name != sender:
+                    update_insurance_record(self.db, cur_record_id, {"sender_name": sender_name})
+
+                logger.info(
+                    "保单处理完成, record_id=%d filename=%s (%d/%d)",
+                    cur_record_id, filename, policy_idx + 1, len(policies),
+                )
+
+                # 9. 非保单类型不同步钉钉，只记录日志
+                if doc_category and doc_category != "保单":
+                    logger.info(
+                        "文档类型为「%s」（非保单），跳过钉钉同步, record_id=%d filename=%s",
+                        doc_category, cur_record_id, filename,
+                    )
+                else:
+                    # 自动同步钉钉（按监控配置决定，复用之前匹配的监控列表）
+                    try:
+                        for monitor in matched_monitors:
+                            if not (monitor.get("dingtalk_base_id") and monitor.get("dingtalk_sheet_id")):
+                                continue
+                            monitor_mapping = monitor.get("field_mapping") or {}
+                            if monitor_mapping:
+                                from insurance.field_mapping import DEFAULT_MAPPING
+                                export_to_ocr = {v: k for k, v in DEFAULT_MAPPING.items() if v}
+                                sync_fields = {}
+                                for export_col, target_col in monitor_mapping.items():
+                                    if not target_col:
+                                        continue
+                                    ocr_field = export_to_ocr.get(export_col, export_col)
+                                    if ocr_field in parsed_fields:
+                                        sync_fields[target_col] = parsed_fields[ocr_field]
+                                    elif export_col in parsed_fields:
+                                        sync_fields[target_col] = parsed_fields[export_col]
+                            else:
+                                sync_fields = mapped_fields
+
+                            self._sync_to_dingtalk_v2(
+                                cur_record_id, sync_fields,
+                                sender_name=sender_name,
+                                cos_url=cos_url,
+                                doc_category=doc_category,
+                                monitor=monitor,
+                            )
+                    except Exception as e:
+                        logger.error("自动同步钉钉失败, record_id=%d: %s", cur_record_id, e)
 
         except Exception as e:
             logger.error("保单处理失败, record_id=%d filename=%s: %s", record_id, filename, e, exc_info=True)
@@ -700,6 +741,7 @@ class InsuranceHandler:
     def _do_ocr(self, pdf_bytes: bytes, filename: str) -> dict:
         """
         OCR 识别流水线：pdfplumber 提取文本 → 质量检查 → 降级百度 OCR → 解析保单字段。
+        支持一个 PDF 包含多份保单（如交强险+商业险），自动拆分为多条记录。
 
         Args:
             pdf_bytes: PDF 字节内容
@@ -708,7 +750,8 @@ class InsuranceHandler:
         Returns:
             {
                 "success":    bool,
-                "policy":     dict,   # parse_policy_text 的返回值
+                "policies":   list,   # parse_policy_text_multi 的返回值（多条保单列表）
+                "policy":     dict,   # 兼容：取第一条保单（向后兼容）
                 "ocr_engine": str,
                 "error":      str,
             }
@@ -783,26 +826,32 @@ class InsuranceHandler:
         if not text:
             return {
                 "success": False,
+                "policies": [],
                 "policy": {},
                 "ocr_engine": ocr_engine,
                 "error": "OCR 未能提取到任何文字",
             }
 
-        # --- 第三步：解析保单字段 ---
+        # --- 第三步：解析保单字段（支持多保单拆分） ---
         try:
-            policy = parse_policy_text(text)
+            policies = parse_policy_text_multi(text)
         except Exception as e:
             logger.error("保单字段解析失败: %s", e, exc_info=True)
             return {
                 "success": False,
+                "policies": [],
                 "policy": {},
                 "ocr_engine": ocr_engine,
                 "error": f"保单字段解析失败: {e}",
             }
 
+        if len(policies) > 1:
+            logger.info("检测到多保单PDF: %s, 共%d份保单", filename, len(policies))
+
         return {
             "success": True,
-            "policy": policy,
+            "policies": policies,
+            "policy": policies[0] if policies else {},  # 兼容旧代码
             "ocr_engine": ocr_engine,
             "error": "",
         }
