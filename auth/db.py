@@ -8,7 +8,12 @@ from datetime import datetime
 
 import pymysql
 import pymysql.cursors
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import generate_password_hash as _gen_hash, check_password_hash
+
+
+def generate_password_hash(password: str) -> str:
+    """使用 pbkdf2:sha256 生成密码哈希（兼容低配服务器，scrypt 可能极慢）"""
+    return _gen_hash(password, method="pbkdf2:sha256")
 
 logger = logging.getLogger(__name__)
 
