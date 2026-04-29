@@ -293,6 +293,20 @@
                     </svg>
                     设置
                 </a>
+                <!-- 账号管理（超管可见） -->
+                <a v-if="currentUser && currentUser.role === 'super_admin'" href="/admin/users"
+                   class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;text-decoration:none;"
+                   title="账号管理">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+                    </svg>
+                    账号
+                </a>
+                <!-- 当前用户 + 退出 -->
+                <span class="text-xs text-white text-opacity-70" v-if="currentUser">{{ currentUser.display_name || currentUser.username }}</span>
+                <button @click="doLogout()" class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;">
+                    退出
+                </button>
             </div>
         </div>
     </header>
@@ -1693,10 +1707,31 @@
 </div>
 
 <script>
+// ========== 鉴权工具 ==========
+function getToken() { return localStorage.getItem('token'); }
+function getUser() { try { return JSON.parse(localStorage.getItem('user')); } catch { return null; } }
+function checkAuth() { if (!getToken()) { window.location.href = '/login'; return false; } return true; }
+function doLogout() { localStorage.removeItem('token'); localStorage.removeItem('user'); window.location.href = '/login'; }
+function authHeaders() { return { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' }; }
+async function authFetch(url, options = {}) {
+    if (!options.headers) options.headers = {};
+    options.headers['Authorization'] = 'Bearer ' + getToken();
+    if (!options.headers['Content-Type'] && !(options.body instanceof FormData)) {
+        options.headers['Content-Type'] = 'application/json';
+    }
+    const resp = await fetch(url, options);
+    if (resp.status === 401) { doLogout(); throw new Error('未登录'); }
+    return resp;
+}
+// 进入页面检查登录
+if (!checkAuth()) throw new Error('redirect');
+
 const { createApp, ref, computed, reactive, onMounted } = Vue;
 
 createApp({
     setup() {
+        const currentUser = ref(getUser());
+
         // ========== 页面级 Tab ==========
         const pageTab = ref('upload');  // 'upload' | 'records'
 
@@ -1743,7 +1778,7 @@ createApp({
             }
             companiesLoading.value = true;
             try {
-                const resp = await fetch('/api/insurance/supported-companies');
+                const resp = await authFetch('/api/insurance/supported-companies');
                 const data = await resp.json();
                 if (data.code === 0) {
                     supportedCompaniesData.value = data.data.companies || [];
@@ -1784,7 +1819,7 @@ createApp({
 
         async function saveCompanyConfig() {
             try {
-                const resp = await fetch('/api/insurance/supported-companies/config', {
+                const resp = await authFetch('/api/insurance/supported-companies/config', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1967,7 +2002,7 @@ createApp({
         // 加载字段映射配置
         async function loadMappingConfig() {
             try {
-                const resp = await fetch('/api/insurance/mapping/config');
+                const resp = await authFetch('/api/insurance/mapping/config');
                 const raw = await resp.json();
                 // 兼容 {"code":0,"data":{...}} 和直接返回 {...} 两种格式
                 const data = raw.data || raw;
@@ -2035,7 +2070,7 @@ createApp({
         async function saveCurrentMapping() {
             const forward = buildForwardMapping(editingMapping);
             try {
-                const resp = await fetch('/api/insurance/mapping/save', {
+                const resp = await authFetch('/api/insurance/mapping/save', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -2123,7 +2158,7 @@ createApp({
             const company = mappingEditCompany.value;
             if (!company) return;
             try {
-                await fetch(`/api/insurance/mapping/company/${encodeURIComponent(company)}`, { method: 'DELETE' });
+                await authFetch(`/api/insurance/mapping/company/${encodeURIComponent(company)}`, { method: 'DELETE' });
                 await loadMappingConfig();
                 mappingEditCompany.value = '';
                 loadCompanyMapping();
@@ -2482,7 +2517,7 @@ createApp({
             const r = results.value.find(x => x.file_name === fileName && x.success);
             const companyShort = r?.invoices?.[0]?.fields?.['保险公司简称'] || '';
             try {
-                const resp = await fetch(`/api/insurance/extraction-rules?company_short=${encodeURIComponent(companyShort)}`);
+                const resp = await authFetch(`/api/insurance/extraction-rules?company_short=${encodeURIComponent(companyShort)}`);
                 if (resp.ok) extractionRules.value = await resp.json();
             } catch (e) { extractionRules.value = {}; }
         }
@@ -2548,7 +2583,7 @@ createApp({
             previewVisible.value = true;
             // 异步加载完整详情（含 parsed_fields）
             try {
-                const resp = await fetch(`/api/insurance/records/${record.id}`);
+                const resp = await authFetch(`/api/insurance/records/${record.id}`);
                 const json = await resp.json();
                 if (json.code === 0 && json.data) {
                     const detail = json.data;
@@ -2567,7 +2602,7 @@ createApp({
             const record = previewAutoRecord.value;
             if (!record || previewRawText.value) return;
             try {
-                const resp = await fetch(`/api/insurance/records/${record.id}/raw-text`);
+                const resp = await authFetch(`/api/insurance/records/${record.id}/raw-text`);
                 const data = await resp.json();
                 if (data.code === 0 && data.data.raw_text) {
                     previewRawText.value = data.data.raw_text;
@@ -2654,7 +2689,7 @@ createApp({
                         const parseBody = { text, file_name: file.name, upload_cos: uploadCos.value };
                         // 需要上传 COS 时附带文件数据
                         if (uploadCos.value) parseBody.file_data = file.base64;
-                        const resp = await fetch('/api/insurance/parse', {
+                        const resp = await authFetch('/api/insurance/parse', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(parseBody),
                         });
@@ -2667,7 +2702,7 @@ createApp({
 
             // 降级：串行发送完整文件到后端（避免多个大文件同时压垮服务器）
             return withOcrLock(async () => {
-                const resp = await fetch('/api/insurance/ocr', {
+                const resp = await authFetch('/api/insurance/ocr', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ file_data: file.base64, file_type: file.type, file_name: file.name, pdf_page: 0, upload_cos: uploadCos.value }),
                 });
@@ -2836,7 +2871,7 @@ createApp({
                 fileName = '识别失败清单.xlsx';
             }
             try {
-                const resp = await fetch('/api/insurance/export/excel', {
+                const resp = await authFetch('/api/insurance/export/excel', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ invoices: data, field_names: fieldNamesToUse, export_type: type }),
                 });
@@ -2870,7 +2905,7 @@ createApp({
         // 加载钉钉同步目标列表
         async function loadTargets() {
             try {
-                const resp = await fetch('/api/insurance/dingtalk/targets');
+                const resp = await authFetch('/api/insurance/dingtalk/targets');
                 const data = await resp.json();
                 targets.value = data.targets || [];
                 if (targets.value.length && !selectedTargetId.value) selectedTargetId.value = targets.value[0].id;
@@ -2881,7 +2916,7 @@ createApp({
         async function addTarget() {
             targetError.value = ''; addingTarget.value = true;
             try {
-                const resp = await fetch('/api/insurance/dingtalk/targets', {
+                const resp = await authFetch('/api/insurance/dingtalk/targets', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ doc_url: newTargetUrl.value, name: newTargetName.value }),
                 });
@@ -2897,7 +2932,7 @@ createApp({
         // 删除钉钉同步目标
         async function removeTarget(id) {
             try {
-                await fetch(`/api/insurance/dingtalk/targets/${id}`, { method: 'DELETE' });
+                await authFetch(`/api/insurance/dingtalk/targets/${id}`, { method: 'DELETE' });
                 if (selectedTargetId.value === id) selectedTargetId.value = '';
                 await loadTargets();
             } catch (e) { showMessage('删除失败', false); }
@@ -2926,7 +2961,7 @@ createApp({
             const invoicesWithName = buildMappedInvoices();
             // 检查重复保单
             try {
-                const checkResp = await fetch('/api/insurance/sync/check-duplicates', {
+                const checkResp = await authFetch('/api/insurance/sync/check-duplicates', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ invoices: invoicesWithName, target_id: selectedTargetId.value }),
                 });
@@ -2965,7 +3000,7 @@ createApp({
         // 实际执行同步请求
         async function doSync(invoices) {
             try {
-                const resp = await fetch('/api/insurance/sync/dingtalk', {
+                const resp = await authFetch('/api/insurance/sync/dingtalk', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         invoices, field_names: selectedFields.value, target_id: selectedTargetId.value,
@@ -3013,7 +3048,7 @@ createApp({
             if (!contactEditForm.name.trim()) { showMessage('请输入名称', false); return; }
             contactEditSaving.value = true;
             try {
-                const res = await fetch('/api/contacts/update', {
+                const res = await authFetch('/api/contacts/update', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -3077,7 +3112,7 @@ createApp({
             try {
                 const params = buildStatsFilterParams();
                 const qs = params.toString();
-                const resp = await fetch('/api/insurance/stats' + (qs ? '?' + qs : ''));
+                const resp = await authFetch('/api/insurance/stats' + (qs ? '?' + qs : ''));
                 const json = await resp.json();
                 const data = json.data || json;
                 const statusMap = {};
@@ -3170,7 +3205,7 @@ createApp({
                 batchProgress.currentFile = rec ? (rec.filename || `#${rid}`) : `#${rid}`;
 
                 try {
-                    const resp = await fetch('/api/insurance/batch-reocr-sync', {
+                    const resp = await authFetch('/api/insurance/batch-reocr-sync', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ record_ids: [rid] }),
@@ -3234,7 +3269,7 @@ createApp({
                 if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
                 if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
 
-                const listResp = await fetch(`/api/insurance/records?${params.toString()}`);
+                const listResp = await authFetch(`/api/insurance/records?${params.toString()}`);
                 const listJson = await listResp.json();
                 const allRecords = (listJson.data || listJson).records || [];
 
@@ -3250,7 +3285,7 @@ createApp({
                     });
                 if (!data.length) { showMessage('没有可导出的数据', false); return; }
 
-                const resp = await fetch('/api/insurance/export/excel', {
+                const resp = await authFetch('/api/insurance/export/excel', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ invoices: data, field_names: outputColumns.value, export_type: 'success' }),
                 });
@@ -3384,7 +3419,7 @@ createApp({
                 const roomMap = {};  // id → name
                 const userMap = {};
                 try {
-                    const statsResp = await fetch('/api/insurance/stats');
+                    const statsResp = await authFetch('/api/insurance/stats');
                     const statsJson = await statsResp.json();
                     const roomStats = (statsJson.data || statsJson).room_stats || [];
                     for (const r of roomStats) {
@@ -3396,7 +3431,7 @@ createApp({
 
                 // 从监控配置补充
                 try {
-                    const resp = await fetch('/api/monitor-configs');
+                    const resp = await authFetch('/api/monitor-configs');
                     const json = await resp.json();
                     const configs = (json.data || json || []).filter(c => c.enabled !== 0);
                     for (const cfg of configs) {
@@ -3418,7 +3453,7 @@ createApp({
                 const unresolvedUsers = Object.keys(userMap).filter(id => userMap[id] === id);
                 if (unresolvedRooms.length || unresolvedUsers.length) {
                     try {
-                        const resolveResp = await fetch('/api/contacts/resolve', {
+                        const resolveResp = await authFetch('/api/contacts/resolve', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ user_ids: unresolvedUsers, room_ids: unresolvedRooms }),
@@ -3488,7 +3523,7 @@ createApp({
                 if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
                 if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
                 if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
-                const resp = await fetch(`/api/insurance/records?${params.toString()}`);
+                const resp = await authFetch(`/api/insurance/records?${params.toString()}`);
                 const json = await resp.json();
                 // API 返回 {"code":0, "data": {"records":[], "total":N}}
                 const data = json.data || json;
@@ -3556,7 +3591,7 @@ createApp({
         async function retryRecord(record) {
             record._retrying = true;
             try {
-                const resp = await fetch(`/api/insurance/retry/${record.id}`, { method: 'POST' });
+                const resp = await authFetch(`/api/insurance/retry/${record.id}`, { method: 'POST' });
                 const data = await resp.json();
                 if (resp.ok && data.success) {
                     showMessage('重试已提交', true);
@@ -3579,7 +3614,7 @@ createApp({
             previewShowRaw.value = false;
             previewShowRules.value = false;
             try {
-                const resp = await fetch(`/api/insurance/reocr/${record.id}`, { method: 'POST' });
+                const resp = await authFetch(`/api/insurance/reocr/${record.id}`, { method: 'POST' });
                 const data = await resp.json();
                 if (data.code === 0) {
                     showMessage('重新识别完成，请确认后同步钉钉', true);
@@ -3633,7 +3668,7 @@ createApp({
         async function syncRecordToDingtalk(record) {
             record._syncing = true;
             try {
-                const resp = await fetch(`/api/insurance/sync/${record.id}`, { method: 'POST' });
+                const resp = await authFetch(`/api/insurance/sync/${record.id}`, { method: 'POST' });
                 const data = await resp.json();
                 if (data.code === 0) {
                     showMessage(record.dingtalk_synced ? '更新同步成功' : '同步成功', true);
@@ -3657,7 +3692,7 @@ createApp({
             currentRecord.value = { ...record };
             recordDetailVisible.value = true;
             try {
-                const resp = await fetch(`/api/insurance/records/${record.id}`);
+                const resp = await authFetch(`/api/insurance/records/${record.id}`);
                 const json = await resp.json();
                 if (json.code === 0 && json.data) {
                     const detail = json.data;
@@ -3678,7 +3713,7 @@ createApp({
         onMounted(async () => {
             // 加载配置状态
             try {
-                const resp = await fetch('/api/insurance/config/status');
+                const resp = await authFetch('/api/insurance/config/status');
                 configStatus.value = await resp.json();
             } catch (e) {}
             // 加载钉钉目标
@@ -3745,6 +3780,8 @@ createApp({
             // 联系人编辑
             contactEditVisible, contactEditSaving, contactEditForm, contactNameInput,
             openContactEdit, saveContactEdit,
+            // 鉴权
+            currentUser, doLogout,
             // 设置已迁移到 /monitor-config 页面
         };
     },

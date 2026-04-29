@@ -196,6 +196,20 @@
                     </svg>
                     新增监控
                 </button>
+                <!-- 账号管理（超管可见） -->
+                <a v-if="currentUser && currentUser.role === 'super_admin'" href="/admin/users"
+                   class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;text-decoration:none;"
+                   title="账号管理">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+                    </svg>
+                    账号
+                </a>
+                <!-- 当前用户 + 退出 -->
+                <span class="text-xs text-white text-opacity-70" v-if="currentUser">{{ currentUser.display_name || currentUser.username }}</span>
+                <button @click="doLogout()" class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;">
+                    退出
+                </button>
             </div>
         </div>
     </header>
@@ -397,6 +411,20 @@
                         <input v-model="form.dingtalk_doc_url" class="form-input" placeholder="请输入钉钉多维表格链接">
                     </div>
 
+                    <!-- 绑定账号 -->
+                    <div style="margin-bottom:20px;">
+                        <label class="form-label">绑定账号</label>
+                        <select v-model="form.bind_user_id" class="form-input" style="cursor:pointer;">
+                            <option value="">不绑定</option>
+                            <option v-for="u in bindUserOptions" :key="u.id" :value="u.id">
+                                {{ u.display_name || u.username }} ({{ u.username }})
+                            </option>
+                        </select>
+                        <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+                            绑定后，该账号登录时只能看到此配置相关的保单记录
+                        </p>
+                    </div>
+
                     <!-- 字段映射 -->
                     <div>
                         <label class="form-label">字段映射</label>
@@ -459,10 +487,45 @@
 </style>
 
 <script>
+// ========== 鉴权工具 ==========
+function getToken() { return localStorage.getItem('token'); }
+function getUser() { try { return JSON.parse(localStorage.getItem('user')); } catch { return null; } }
+function checkAuth() { if (!getToken()) { window.location.href = '/login'; return false; } return true; }
+function doLogout() { localStorage.removeItem('token'); localStorage.removeItem('user'); window.location.href = '/login'; }
+function authHeaders() { return { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' }; }
+async function authFetch(url, options = {}) {
+    if (!options.headers) options.headers = {};
+    options.headers['Authorization'] = 'Bearer ' + getToken();
+    if (!options.headers['Content-Type'] && !(options.body instanceof FormData)) {
+        options.headers['Content-Type'] = 'application/json';
+    }
+    const resp = await fetch(url, options);
+    if (resp.status === 401) { doLogout(); throw new Error('未登录'); }
+    return resp;
+}
+// 进入页面检查登录
+if (!checkAuth()) throw new Error('redirect');
+
 const { createApp, ref, computed, onMounted, nextTick } = Vue;
 
 createApp({
     setup() {
+        const currentUser = ref(getUser());
+
+        // 绑定账号选项
+        const bindUserOptions = ref([]);
+        async function loadBindUsers() {
+            try {
+                const res = await authFetch('/api/auth/users');
+                const data = await res.json();
+                if (data.code === 0) {
+                    bindUserOptions.value = (data.data || []).filter(u => u.user_type === 'employee' || u.user_type === 'enterprise');
+                }
+            } catch (e) {
+                console.error('加载绑定账号失败:', e);
+            }
+        }
+
         // 状态
         const configs = ref([]);
         const loading = ref(false);
@@ -483,6 +546,7 @@ createApp({
             room_ids: [],
             user_ids: [],
             dingtalk_doc_url: '',
+            bind_user_id: '',
         });
 
         // 默认输出列
@@ -535,7 +599,7 @@ createApp({
         async function loadConfigs() {
             loading.value = true;
             try {
-                const res = await fetch('/api/monitor-configs');
+                const res = await authFetch('/api/monitor-configs');
                 const data = await res.json();
                 if (data.code === 0) {
                     configs.value = data.data || [];
@@ -552,7 +616,7 @@ createApp({
         // 加载群聊和用户选项
         async function loadOptions() {
             try {
-                const res = await fetch('/api/insurance/rooms');
+                const res = await authFetch('/api/insurance/rooms');
                 const data = await res.json();
                 roomOptions.value = (data.rooms || []).filter(r => r.type === 'room');
                 userOptions.value = (data.users || []).filter(r => r.type === 'user');
@@ -566,7 +630,7 @@ createApp({
             refreshingOptions.value = true;
             try {
                 // 先调用同步通讯录接口刷新缓存
-                await fetch('/api/contacts/sync', { method: 'POST' });
+                await authFetch('/api/contacts/sync', { method: 'POST' });
                 // 再重新加载选项列表
                 await loadOptions();
                 showToast('数据刷新成功');
@@ -662,7 +726,7 @@ createApp({
         // 打开新增弹窗
         function openAddModal() {
             editingId.value = null;
-            form.value = { name: '', room_ids: [], user_ids: [], dingtalk_doc_url: '' };
+            form.value = { name: '', room_ids: [], user_ids: [], dingtalk_doc_url: '', bind_user_id: '' };
             initFieldMapping(null);
             showModal.value = true;
         }
@@ -675,6 +739,7 @@ createApp({
                 room_ids: Array.isArray(config.room_ids) ? [...config.room_ids] : [],
                 user_ids: Array.isArray(config.user_ids) ? [...config.user_ids] : [],
                 dingtalk_doc_url: config.dingtalk_doc_url || '',
+                bind_user_id: config.bind_user_id || '',
             };
             initFieldMapping(config.field_mapping);
             showModal.value = true;
@@ -703,13 +768,14 @@ createApp({
                 user_ids: form.value.user_ids,
                 dingtalk_doc_url: form.value.dingtalk_doc_url.trim(),
                 field_mapping: buildFieldMapping(),
+                bind_user_id: form.value.bind_user_id || null,
             };
             try {
                 const url = editingId.value
                     ? `/api/monitor-configs/${editingId.value}`
                     : '/api/monitor-configs';
                 const method = editingId.value ? 'PUT' : 'POST';
-                const res = await fetch(url, {
+                const res = await authFetch(url, {
                     method,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
@@ -732,7 +798,7 @@ createApp({
         // 切换启用/禁用
         async function toggleConfig(config) {
             try {
-                const res = await fetch(`/api/monitor-configs/${config.id}/toggle`, {
+                const res = await authFetch(`/api/monitor-configs/${config.id}/toggle`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                 });
@@ -752,7 +818,7 @@ createApp({
         async function deleteConfig(config) {
             if (!confirm(`确定要删除「${config.name}」吗？此操作不可撤销。`)) return;
             try {
-                const res = await fetch(`/api/monitor-configs/${config.id}`, { method: 'DELETE' });
+                const res = await authFetch(`/api/monitor-configs/${config.id}`, { method: 'DELETE' });
                 const data = await res.json();
                 if (data.code === 0) {
                     showToast('删除成功');
@@ -775,10 +841,11 @@ createApp({
 
         onMounted(async () => {
             document.addEventListener('click', handleClickOutside);
-            await Promise.all([loadConfigs(), loadOptions()]);
+            await Promise.all([loadConfigs(), loadOptions(), loadBindUsers()]);
         });
 
         return {
+            currentUser, doLogout, bindUserOptions,
             configs, loading, showModal, editingId, saving,
             form, roomSearch, userSearch, roomDropdownOpen, userDropdownOpen,
             fieldMappingRows, toast, refreshingOptions,
