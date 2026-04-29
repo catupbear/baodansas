@@ -1634,11 +1634,11 @@
                             <div v-for="item in previewFieldsList" :key="item.label">
                                 <!-- 承保公司字段上方：编辑提示 -->
                                 <div v-if="item.label === '承保公司' && previewAutoRecord"
-                                     class="flex items-center gap-1.5 mb-2 px-2 py-1.5 bg-orange-50 rounded-lg border border-orange-200">
-                                    <svg class="w-3.5 h-3.5 text-orange-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                     class="flex items-center gap-1.5 mb-2 px-2 py-1.5 rounded-lg" style="background: #ea580c;">
+                                    <svg class="w-3.5 h-3.5 text-white flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
                                     </svg>
-                                    <span class="text-xs text-orange-600 font-medium">识别有误？点击字段值即可修改</span>
+                                    <span class="text-xs text-white font-medium">识别有误？点击字段值即可修改</span>
                                 </div>
                                 <div class="flex items-center border-b border-gray-100 py-1.5 text-sm group">
                                 <span class="text-gray-500 w-24 flex-shrink-0 font-medium flex items-center gap-1">
@@ -1657,12 +1657,12 @@
                                                class="flex-1 px-2 py-0.5 text-sm border border-orange-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-400"
                                                :disabled="fieldSaving" />
                                         <button @click="saveEditField" :disabled="fieldSaving"
-                                                class="px-1.5 py-0.5 text-xs bg-orange-500 text-white rounded hover:bg-orange-600 cursor-pointer disabled:opacity-50">
-                                            {{ fieldSaving ? '...' : '✓' }}
+                                                class="px-2 py-1 text-xs bg-orange-500 text-white rounded hover:bg-orange-600 cursor-pointer disabled:opacity-50 font-medium">
+                                            {{ fieldSaving ? '保存中...' : '保存' }}
                                         </button>
                                         <button @click="cancelEditField" :disabled="fieldSaving"
-                                                class="px-1.5 py-0.5 text-xs bg-gray-200 text-gray-600 rounded hover:bg-gray-300 cursor-pointer disabled:opacity-50">
-                                            ✕
+                                                class="px-2 py-1 text-xs bg-gray-200 text-gray-600 rounded hover:bg-gray-300 cursor-pointer disabled:opacity-50">
+                                            取消
                                         </button>
                                     </div>
                                 </template>
