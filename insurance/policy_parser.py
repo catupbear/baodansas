@@ -1043,12 +1043,13 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
     lines = text.split('\n')
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if stripped == '被保险人' or re.match(r'^被保险人\s+(?:证件|信息|承保)', stripped):
+        if stripped == '被保险人' or re.match(r'^被保险人\s*(?:证件|信息|承保)', stripped):
             # 先查附近行的"名称 XXX"格式
             for j in range(max(0, i - 3), min(len(lines), i + 3)):
                 if j == i:
                     continue
-                m = re.match(r'名称\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+(?:[（(][^）)]+[）)])?)', lines[j].strip())
+                # 兼容"名称 XXX"和"名称：XXX"两种格式（华农等）
+                m = re.match(r'名称[：:\s]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+(?:[（(][^）)]+[）)])?)', lines[j].strip())
                 if m and _is_valid_person(m.group(1)):
                     fields["被保险人"] = m.group(1)
                     return
@@ -1194,7 +1195,8 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
             break
 
     # 永诚/中华联合等格式："投保人信息\n姓名：李飞" 或 "投保人信息\n姓名/名称：深圳XXX公司"
-    m = re.search(r"投保人信息[\s\n]*姓名(?:[/／]名称)?[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|$)", text)
+    # 华农格式："投保人信息\n名称：邹柳青"
+    m = re.search(r"投保人信息[\s\n]*(?:姓名(?:[/／]名称)?|名称)[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|$)", text)
     if m:
         val = _clean_person_name(m.group(1))
         if _is_valid_person(val):
@@ -1525,6 +1527,10 @@ def _extract_premium(text: str, fields: dict, company_short: str):
         r"总?保险?费[：:\s]*([\d,]+\.\d{2})",
     ]
 
+    # 华农格式："总保费（人民币：元）:240"（无小数点，优先于不含税保费匹配）
+    if company_short == "华农":
+        patterns.insert(0, r"总保费[^:\n]*[：:]\s*([\d,]+\.?\d*)(?:\s|$)")
+
     # 华泰/京东安联/安盛天平特殊格式："（¥： 1,850.00 元）"
     if company_short in ("华泰", "京东安联", "安盛天平", "永诚", "前海联合"):
         patterns.insert(0, r"保险费合计.*?[（(][￥¥][：:\s]*([\d,]+\.?\d{0,2})\s*(?:元)?[)）]")
@@ -1630,8 +1636,10 @@ def _extract_premium(text: str, fields: dict, company_short: str):
     if m:
         fields["不含税保费"] = m.group(1)
 
-    # 增值税额
+    # 增值税额：兼容"税额：10.88"和"增值税10.88元"（华农等无"额"字）
     m = re.search(r"(?:增值)?税额[总计：:\s]*([\d,]+\.\d{2})", text)
+    if not m:
+        m = re.search(r"增值税([\d,]+\.\d{2})\s*元", text)
     if m:
         fields["增值税额"] = m.group(1)
 
