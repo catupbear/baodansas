@@ -229,6 +229,19 @@ def create_app(config: dict) -> Flask:
             "insurance_handler": insurance_handler,
         }
 
+        # 启动时在后台补拉中断期间的消息 + 补扫漏掉的保单 PDF
+        def _startup_catch_up():
+            try:
+                logger.info("启动补拉：开始拉取中断期间的历史消息...")
+                fetcher.fetch_new_messages()
+                logger.info("启动补拉完成，开始补扫漏掉的保单 PDF...")
+                fetcher.rescan_missed_insurance(lookback_days=5)
+                logger.info("启动补扫完成")
+            except Exception as e:
+                logger.error("启动补拉/补扫失败: %s", e)
+
+        threading.Thread(target=_startup_catch_up, daemon=True).start()
+
         logger.info("应用初始化完成，回调地址: /callback，前端地址: /")
 
     except Exception as e:

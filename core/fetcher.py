@@ -75,6 +75,93 @@ class MessageFetcher:
 
         logger.info("本次共拉取 %d 条消息", total_count)
 
+    def rescan_missed_insurance(self, lookback_days: int = 5):
+        """
+        补扫历史消息中漏掉的保单 PDF。
+        查找最近 lookback_days 天内，在监控群/用户中的 PDF 文件消息，
+        且未在 insurance_records 表中生成记录的，重新入队识别。
+        """
+        handler = getattr(self, "insurance_handler", None)
+        if not handler:
+            logger.info("补扫跳过：insurance_handler 未绑定")
+            return
+
+        watch = handler.get_watch_config()
+        watch_rooms = watch.get("rooms", [])
+        watch_users = watch.get("users", [])
+        if not watch_rooms and not watch_users:
+            logger.info("补扫跳过：没有配置监控群/用户")
+            return
+
+        import time
+        cutoff_ms = int((time.time() - lookback_days * 86400) * 1000)
+
+        conn = self.db.pool.connection()
+        try:
+            import pymysql.cursors
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+            # 查找监控范围内的 PDF 文件消息
+            conditions = []
+            params = [cutoff_ms]
+
+            if watch_rooms:
+                placeholders = ",".join(["%s"] * len(watch_rooms))
+                conditions.append(f"m.roomid IN ({placeholders})")
+                params.extend(watch_rooms)
+
+            if watch_users:
+                placeholders = ",".join(["%s"] * len(watch_users))
+                conditions.append(f"(m.roomid = '' AND m.sender IN ({placeholders}))")
+                params.extend(watch_users)
+
+            where_source = " OR ".join(conditions)
+
+            sql = f"""
+                SELECT m.seq, m.roomid, m.sender, m.parsed_content
+                FROM messages m
+                LEFT JOIN insurance_records ir ON ir.msg_seq = m.seq
+                WHERE m.msgtime >= %s
+                  AND m.msgtype = 'file'
+                  AND ({where_source})
+                  AND ir.id IS NULL
+                ORDER BY m.seq ASC
+            """
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
+        finally:
+            conn.close()
+
+        if not rows:
+            logger.info("补扫完成：没有遗漏的保单 PDF")
+            return
+
+        import json
+        enqueued = 0
+        for row in rows:
+            try:
+                content = json.loads(row.get("parsed_content", "{}"))
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+            filename = content.get("filename", "")
+            if not filename.lower().endswith(".pdf"):
+                continue
+
+            logger.info("补扫入队: seq=%d, room=%s, file=%s",
+                        row["seq"], row["roomid"], filename)
+            handler.enqueue({
+                "seq": row["seq"],
+                "roomid": row["roomid"],
+                "sender": row["sender"],
+                "filename": filename,
+                "sdkfileid": content.get("sdkfileid", ""),
+                "filesize": content.get("filesize", 0),
+            })
+            enqueued += 1
+
+        logger.info("补扫完成：共 %d 条遗漏 PDF 已入队", enqueued)
+
     def _process_item(self, item: dict):
         """处理单条加密消息"""
         msg_seq = item.get("seq", 0)
