@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>保单识别系统</title>
+    <title>AI保单台账系统</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script>window.pdfjsLib = null;</script>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
@@ -261,7 +261,7 @@
                                   d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
                     </div>
-                    <h1 class="text-lg font-bold text-white tracking-tight">保单识别系统</h1>
+                    <h1 class="text-lg font-bold text-white tracking-tight">AI保单台账系统</h1>
                 </div>
                 <!-- 页面级 Tab 切换 -->
                 <div class="flex items-center gap-1 ml-4">
@@ -608,8 +608,8 @@
                             <th class="px-3 py-2 text-gray-600 font-medium" style="min-width:70px;">文档类型</th>
                             <th v-for="col in outputColumns" :key="col"
                                 class="px-3 py-2 text-gray-600 font-medium">{{ col }}</th>
-                            <th class="px-3 py-2 text-gray-600 font-medium" style="min-width:70px;">识别方式</th>
-                            <th class="px-3 py-2 text-gray-600 font-medium">置信度</th>
+                            <th v-if="isSuperAdmin" class="px-3 py-2 text-gray-600 font-medium" style="min-width:70px;">识别方式</th>
+                            <th v-if="isSuperAdmin" class="px-3 py-2 text-gray-600 font-medium">置信度</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -632,13 +632,13 @@
                                 <td v-for="col in outputColumns" :key="col" class="px-3 py-2 text-gray-700">
                                     {{ getMappedValue(r, col) }}
                                 </td>
-                                <td class="px-3 py-2">
+                                <td v-if="isSuperAdmin" class="px-3 py-2">
                                     <span class="badge text-xs"
                                           :class="r.ocr_engine === 'baidu' ? 'badge-info' : r.ocr_engine === 'volc' ? 'badge-warning' : 'badge-success'">
                                         {{ r.ocr_engine === 'baidu' ? '百度OCR' : r.ocr_engine === 'volc' ? '火山引擎' : 'PDF提取' }}
                                     </span>
                                 </td>
-                                <td class="px-3 py-2">
+                                <td v-if="isSuperAdmin" class="px-3 py-2">
                                     <span v-if="r.invoices && r.invoices[0]"
                                           class="badge text-xs"
                                           :class="r.invoices[0].confidence >= 0.75 ? 'badge-success'
@@ -666,8 +666,8 @@
                             <th class="px-3 py-2 text-orange-700 font-medium" style="min-width:70px;">文档类型</th>
                             <th v-for="col in outputColumns" :key="col"
                                 class="px-3 py-2 text-orange-700 font-medium">{{ col }}</th>
-                            <th class="px-3 py-2 text-orange-700 font-medium" style="min-width:70px;">识别方式</th>
-                            <th class="px-3 py-2 text-orange-700 font-medium">置信度</th>
+                            <th v-if="isSuperAdmin" class="px-3 py-2 text-orange-700 font-medium" style="min-width:70px;">识别方式</th>
+                            <th v-if="isSuperAdmin" class="px-3 py-2 text-orange-700 font-medium">置信度</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -689,13 +689,13 @@
                                 :class="getMappedValue(r, col) ? 'text-gray-700' : 'text-red-400 bg-red-50'">
                                 {{ getMappedValue(r, col) || '—' }}
                             </td>
-                            <td class="px-3 py-2">
+                            <td v-if="isSuperAdmin" class="px-3 py-2">
                                 <span class="badge text-xs"
                                       :class="r.ocr_engine === 'baidu' ? 'badge-info' : r.ocr_engine === 'volc' ? 'badge-warning' : 'badge-success'">
                                     {{ r.ocr_engine === 'baidu' ? '百度OCR' : r.ocr_engine === 'volc' ? '火山引擎' : 'PDF提取' }}
                                 </span>
                             </td>
-                            <td class="px-3 py-2">
+                            <td v-if="isSuperAdmin" class="px-3 py-2">
                                 <span v-if="r.invoices && r.invoices[0]"
                                       class="badge text-xs"
                                       :class="r.invoices[0].confidence >= 0.75 ? 'badge-success'
@@ -1037,7 +1037,7 @@
                             <option v-for="dt in recordDocTypes" :key="dt.name" :value="dt.name">{{ dt.name }} ({{ dt.cnt }})</option>
                         </select>
                     </div>
-                    <div class="flex items-center gap-1.5">
+                    <div v-if="isSuperAdmin" class="flex items-center gap-1.5">
                         <span class="text-xs text-gray-500 font-medium">识别方式:</span>
                         <select v-model="recordFilter.ocr_engine" @change="loadRecords()"
                                 class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
@@ -1093,8 +1093,8 @@
                             <th style="min-width:150px;">文件名</th>
                             <th style="min-width:70px;">文档类型</th>
                             <th v-for="col in outputColumns" :key="col" class="text-gray-600 font-medium" style="min-width:80px;">{{ col }}</th>
-                            <th style="min-width:70px;">识别方式</th>
-                            <th style="min-width:60px;">置信度</th>
+                            <th v-if="isSuperAdmin" style="min-width:70px;">识别方式</th>
+                            <th v-if="isSuperAdmin" style="min-width:60px;">置信度</th>
                             <th style="min-width:80px;">状态</th>
                             <!-- <th style="min-width:80px;">钉钉同步</th> -->
                             <th style="min-width:150px;">时间</th>
@@ -1121,7 +1121,10 @@
                                 <span v-else class="text-gray-600 text-sm truncate block" style="max-width:180px;" :title="record.filename">
                                     {{ record.filename || '—' }}
                                 </span>
+                                <span v-if="record.policy_count > 1" class="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">多保单 {{ record.policy_index }}/{{ record.policy_count }}</span>
+                                <span v-if="record.page_range" class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">第{{ record.page_range }}页</span>
                                 <span v-if="record.hint" class="text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">{{ record.hint }}</span>
+                                <span v-if="record.abnormal_override_reason" class="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">已标记正常: {{ record.abnormal_override_reason }}</span>
                             </td>
                             <!-- 文档类型 -->
                             <td>
@@ -1138,8 +1141,8 @@
                                 <template v-if="listEditing.recordId === record.id && listEditing.col === col">
                                     <div class="flex items-center gap-1">
                                         <input v-model="listEditing.value" type="text"
-                                               class="text-xs border border-orange-300 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-orange-300"
-                                               style="width:100px;"
+                                               class="text-sm border border-orange-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-orange-300"
+                                               style="width:160px;"
                                                @keyup.enter="saveListEdit(record)"
                                                @keyup.escape="cancelListEdit()"
                                                ref="listEditInput">
@@ -1158,16 +1161,16 @@
                                     </span>
                                 </template>
                             </td>
-                            <!-- 识别方式 -->
-                            <td>
+                            <!-- 识别方式（仅超管可见） -->
+                            <td v-if="isSuperAdmin">
                                 <span v-if="record.ocr_engine" class="badge text-xs"
                                       :class="record.ocr_engine === 'baidu' ? 'badge-info' : record.ocr_engine === 'volc' ? 'badge-warning' : 'badge-success'">
                                     {{ record.ocr_engine === 'baidu' ? '百度OCR' : record.ocr_engine === 'volc' ? '火山引擎' : 'PDF提取' }}
                                 </span>
                                 <span v-else class="text-gray-400 text-sm">—</span>
                             </td>
-                            <!-- 置信度 -->
-                            <td>
+                            <!-- 置信度（仅超管可见） -->
+                            <td v-if="isSuperAdmin">
                                 <span v-if="record.confidence" class="badge text-xs"
                                       :class="record.confidence >= 0.75 ? 'badge-success'
                                             : record.confidence >= 0.5 ? 'badge-warning' : 'badge-danger'">
@@ -1236,6 +1239,18 @@
                                             class="btn btn-primary" style="padding:3px 8px;font-size:11px;">
                                         {{ record._retrying ? '重试中...' : '重试' }}
                                     </button>
+                                    <!-- 标记正常（提取异常记录） -->
+                                    <button v-if="record.is_abnormal && !record.abnormal_override_reason"
+                                            @click="openMarkNormal(record)"
+                                            class="btn" style="padding:3px 8px;font-size:11px;background:#fef3c7;border:1px solid #fbbf24;color:#92400e;">
+                                        标记正常
+                                    </button>
+                                    <!-- 已标记正常，显示撤销 -->
+                                    <span v-if="record.abnormal_override_reason"
+                                          class="inline-flex items-center gap-1 text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+                                        已标记正常
+                                        <button @click="undoMarkNormal(record)" class="text-gray-400 hover:text-red-500 cursor-pointer" title="撤销标记">&times;</button>
+                                    </span>
                                     <!-- 同步钉钉（已注释）
                                     <button v-if="record.status === 'done' || record.status === 'success'"
                                             @click="syncRecordToDingtalk(record)"
@@ -1304,6 +1319,41 @@
                     <button @click="contactEditVisible = false" class="btn btn-outline" style="padding:6px 16px;font-size:13px;">取消</button>
                     <button @click="saveContactEdit" :disabled="contactEditSaving" class="btn btn-primary" style="padding:6px 16px;font-size:13px;">
                         {{ contactEditSaving ? '保存中...' : '保存' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </transition>
+
+    <!-- 标记正常弹窗 -->
+    <transition name="fade">
+        <div v-if="markNormalVisible" class="fixed inset-0 z-50 modal-mask flex items-center justify-center"
+             @click.self="markNormalVisible = false">
+            <div class="bg-white rounded-xl shadow-2xl" style="width:420px;max-width:90vw;" @click.stop>
+                <div class="px-5 py-4 border-b flex items-center justify-between">
+                    <h3 class="text-base font-semibold text-gray-800">标记为正常</h3>
+                    <button @click="markNormalVisible = false" class="text-gray-400 hover:text-gray-600 text-xl leading-none cursor-pointer">&times;</button>
+                </div>
+                <div class="px-5 py-4 space-y-3">
+                    <p class="text-sm text-gray-500">请选择或输入标记原因：</p>
+                    <div class="flex flex-wrap gap-2">
+                        <button v-for="reason in getQuickReasons(markNormalRecord)" :key="reason"
+                                @click="markNormalReason = reason"
+                                class="text-xs px-3 py-1.5 rounded-lg border transition-colors cursor-pointer"
+                                :class="markNormalReason === reason
+                                    ? 'bg-orange-50 border-orange-400 text-orange-700'
+                                    : 'bg-white border-gray-200 text-gray-600 hover:border-orange-300 hover:text-orange-600'">
+                            {{ reason }}
+                        </button>
+                    </div>
+                    <input v-model="markNormalReason" type="text" placeholder="或手动输入原因..."
+                           class="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400">
+                </div>
+                <div class="px-5 py-3 border-t flex justify-end gap-2">
+                    <button @click="markNormalVisible = false" class="btn btn-outline" style="padding:6px 16px;font-size:13px;">取消</button>
+                    <button @click="confirmMarkNormal" :disabled="markNormalSaving || !markNormalReason.trim()"
+                            class="btn btn-primary" style="padding:6px 16px;font-size:13px;">
+                        {{ markNormalSaving ? '保存中...' : '确认标记' }}
                     </button>
                 </div>
             </div>
@@ -1686,7 +1736,15 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                         </svg>
                         <h3 class="text-sm font-semibold text-gray-700">{{ previewFileName }}</h3>
-                        <span v-if="previewOcrEngine" class="badge text-xs"
+                        <span v-if="previewAutoRecord && previewAutoRecord.policy_count > 1"
+                              class="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-medium">
+                            多保单 {{ previewAutoRecord.policy_index }}/{{ previewAutoRecord.policy_count }}
+                        </span>
+                        <span v-if="previewAutoRecord && previewAutoRecord.page_range"
+                              class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                            第{{ previewAutoRecord.page_range }}页
+                        </span>
+                        <span v-if="isSuperAdmin && previewOcrEngine" class="badge text-xs"
                               :class="previewOcrEngine === 'baidu' ? 'badge-info' : previewOcrEngine === 'volc' ? 'badge-warning' : 'badge-success'">
                             {{ previewOcrEngine === 'baidu' ? '百度OCR' : previewOcrEngine === 'volc' ? '火山引擎' : 'PDF提取' }}
                         </span>
@@ -1710,6 +1768,17 @@
                             {{ previewShowRaw ? '隐藏原文' : '查看原文' }}
                         </button>
                         <!-- 查看规则按钮已隐藏 -->
+                        <!-- 标记正常（预览弹窗内，仅异常记录显示） -->
+                        <button v-if="previewAutoRecord && previewAutoRecord.is_abnormal && !previewAutoRecord.abnormal_override_reason"
+                                @click="openMarkNormal(previewAutoRecord)"
+                                class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;background:#fef3c7;border:1px solid #fbbf24;color:#92400e;">
+                            标记正常
+                        </button>
+                        <span v-if="previewAutoRecord && previewAutoRecord.abnormal_override_reason"
+                              class="inline-flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
+                            已标记正常
+                            <button @click="undoMarkNormal(previewAutoRecord)" class="text-gray-400 hover:text-red-500 cursor-pointer" title="撤销标记">&times;</button>
+                        </span>
                         <button @click="previewAutoRecord ? reocrRecord(previewAutoRecord) : reocrPreviewFile()"
                                 :disabled="previewAutoRecord ? previewAutoRecord._reocring : previewReocring"
                                 class="btn btn-outline cursor-pointer" style="padding:5px 12px;font-size:12px;color:#f59e0b;border-color:#f59e0b;">
@@ -1979,6 +2048,7 @@ const { createApp, ref, computed, reactive, onMounted } = Vue;
 createApp({
     setup() {
         const currentUser = ref(getUser());
+        const isSuperAdmin = computed(() => currentUser.value && currentUser.value.role === 'super_admin');
 
         // ========== 页面级 Tab ==========
         const pageTab = ref('records');  // 'records' | 'upload'
@@ -3522,6 +3592,7 @@ createApp({
             if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
             if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
             if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+            if (recordFilter.dedup) params.set('dedup', '1');
             _appendAdvancedParams(params);
             return params;
         }
@@ -4253,6 +4324,81 @@ createApp({
             }
         }
 
+        // ===== 标记正常 =====
+        const markNormalVisible = ref(false);
+        const markNormalRecord = ref(null);
+        const markNormalReason = ref('');
+        const markNormalSaving = ref(false);
+        // 根据记录缺失字段动态生成快捷原因
+        function getQuickReasons(record) {
+            if (!record) return [];
+            const pf = record.parsed_fields || record.display_fields || {};
+            const reasons = [];
+            for (const col of REQUIRED_FIELDS) {
+                let hasVal = !!pf[col];
+                if (!hasVal) {
+                    const ocrKeys = EXPORT_TO_OCR[col] || [];
+                    hasVal = ocrKeys.some(k => !!pf[k]);
+                }
+                if (!hasVal) {
+                    reasons.push(`保单内无${col}数据`);
+                }
+            }
+            if (reasons.length === 0) reasons.push('数据正确，无需修改');
+            return reasons;
+        }
+        function openMarkNormal(record) {
+            markNormalRecord.value = record;
+            markNormalReason.value = '';
+            markNormalVisible.value = true;
+        }
+        async function confirmMarkNormal() {
+            const reason = markNormalReason.value.trim();
+            if (!reason) { showMessage('请选择或输入标记原因', false); return; }
+            const record = markNormalRecord.value;
+            markNormalSaving.value = true;
+            try {
+                const resp = await authFetch(`/api/insurance/records/${record.id}/mark-normal`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showMessage('已标记为正常', true);
+                    record.is_abnormal = 0;
+                    record.abnormal_override_reason = reason;
+                    markNormalVisible.value = false;
+                    // 刷新列表统计
+                    loadRecordStats();
+                } else {
+                    showMessage(data.msg || '标记失败', false);
+                }
+            } catch (e) {
+                showMessage(`标记失败: ${e.message}`, false);
+            } finally {
+                markNormalSaving.value = false;
+            }
+        }
+        async function undoMarkNormal(record) {
+            try {
+                const resp = await authFetch(`/api/insurance/records/${record.id}/undo-mark-normal`, {
+                    method: 'PUT',
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showMessage('已撤销标记', true);
+                    record.is_abnormal = 1;
+                    record.abnormal_override_reason = null;
+                    loadRecordStats();
+                } else {
+                    showMessage(data.msg || '撤销失败', false);
+                }
+            } catch (e) {
+                showMessage(`撤销失败: ${e.message}`, false);
+            }
+        }
+
         // 手动上传文件重新识别
         async function reocrPreviewFile() {
             const fileName = previewFileName.value;
@@ -4395,6 +4541,7 @@ createApp({
             recordCompanyList, recordDocTypes, exportRecordsExcel,
             loadRecords, loadRecordStats, gotoRecordPage, getParsedField, getRecordMappedValue, formatTime,
             retryRecord, reocrRecord, reocrPreviewFile, previewReocring, syncRecordToDingtalk, previewRecord, previewAutoRecord, loadAutoRecordRawText,
+            markNormalVisible, markNormalRecord, markNormalReason, markNormalSaving, getQuickReasons, openMarkNormal, confirmMarkNormal, undoMarkNormal,
             editingField, editingValue, fieldSaving, startEditField, cancelEditField, saveEditField, isManualField,
             listEditing, startListEdit, cancelListEdit, saveListEdit,
             recordDetailVisible, currentRecord, openRecordDetail,
@@ -4402,7 +4549,7 @@ createApp({
             contactEditVisible, contactEditSaving, contactEditForm, contactNameInput,
             openContactEdit, saveContactEdit,
             // 鉴权
-            currentUser, doLogout,
+            currentUser, isSuperAdmin, doLogout,
             // 设置已迁移到 /monitor-config 页面
         };
     },

@@ -296,6 +296,10 @@ def init_insurance_tables(db):
             ("user_id", "INT DEFAULT NULL COMMENT '所属用户ID'"),
             ("enterprise_id", "INT DEFAULT NULL COMMENT '所属企业ID（关联 enterprises 表）'"),
             ("manual_fields", "LONGTEXT COMMENT '手动修改过的字段名列表JSON'"),
+            ("abnormal_override_reason", "VARCHAR(128) DEFAULT NULL COMMENT '手动标记正常的原因（非NULL时强制is_abnormal=0）'"),
+            ("policy_count", "TINYINT DEFAULT 1 COMMENT '同一PDF中的保单总数'"),
+            ("policy_index", "TINYINT DEFAULT 1 COMMENT '当前记录在同一PDF中的序号（从1开始）'"),
+            ("page_range", "VARCHAR(32) DEFAULT '' COMMENT '提取数据来源页码范围（如1-2）'"),
         ]
         for col_name, col_def in new_columns:
             try:
@@ -515,11 +519,16 @@ _EXPORT_TO_OCR = {
 }
 
 
-def _compute_abnormal(parsed_fields: dict, status: str, doc_category: str) -> tuple:
+def _compute_abnormal(parsed_fields: dict, status: str, doc_category: str,
+                      abnormal_override_reason: str = None) -> tuple:
     """
     计算记录是否异常，返回 (is_abnormal: bool, hint: str)。
     逻辑与前端 isRecordAbnormal / getRecordHint 保持一致。
+    如果 abnormal_override_reason 不为空，强制返回正常。
     """
+    # 手动标记正常的记录，直接返回正常
+    if abnormal_override_reason:
+        return False, ''
     if status not in ('done', 'success'):
         return False, ''
     cat = doc_category or ''
@@ -728,9 +737,9 @@ def update_insurance_record(db, record_id: int, updates: dict):
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
         # 如果更新了影响异常判断的字段，需先读取现有值补全上下文
-        if any(k in updates for k in ("parsed_fields", "status", "doc_category")):
+        if any(k in updates for k in ("parsed_fields", "status", "doc_category", "abnormal_override_reason")):
             cursor.execute(
-                "SELECT parsed_fields, status, doc_category FROM insurance_records WHERE id = %s",
+                "SELECT parsed_fields, status, doc_category, abnormal_override_reason FROM insurance_records WHERE id = %s",
                 (record_id,)
             )
             existing = cursor.fetchone() or {}
@@ -740,10 +749,14 @@ def update_insurance_record(db, record_id: int, updates: dict):
                     pf_raw = json.loads(pf_raw)
                 except (TypeError, json.JSONDecodeError):
                     pf_raw = {}
+            # 获取 override reason：优先取本次更新值，否则取现有值
+            override_reason = updates.get("abnormal_override_reason",
+                                          existing.get("abnormal_override_reason"))
             abnormal, hint = _compute_abnormal(
                 pf_raw if isinstance(pf_raw, dict) else {},
                 updates.get("status") or existing.get("status", ""),
                 updates.get("doc_category") or existing.get("doc_category", ""),
+                abnormal_override_reason=override_reason,
             )
             data["is_abnormal"] = 1 if abnormal else 0
             data["hint"] = hint
@@ -1030,7 +1043,8 @@ def query_insurance_records(
                 "id, roomid, room_name, sender, sender_name, "
                 "filename, cos_url, ocr_engine, doc_category, confidence, "
                 "dingtalk_synced, status, source, created_at, "
-                "company_short, is_abnormal, hint, display_fields"
+                "company_short, is_abnormal, hint, display_fields, "
+                "abnormal_override_reason"
             )
             cursor.execute(
                 f"SELECT {select_cols} FROM insurance_records "
@@ -1213,6 +1227,7 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
                    end_date_start, end_date_end
     """
     filters = filters or {}
+    dedup = filters.get("dedup", False)
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -1225,7 +1240,7 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
             "start_date_start", "start_date_end",
             "end_date_start", "end_date_end",
         ]
-        need_join = any(filters.get(k) for k in _pf_keys)
+        need_join = dedup or any(filters.get(k) for k in _pf_keys)
         col_prefix = "r." if need_join else ""
 
         # 构建 WHERE 条件
@@ -1312,17 +1327,40 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
             from_sql = "insurance_records"
 
         # 单次扫描统计
-        cursor.execute(f"""
-            SELECT
-                COUNT(*) as total,
-                SUM({col_prefix}status = 'done' OR {col_prefix}status = 'success') as done_cnt,
-                SUM({col_prefix}status = 'failed') as failed_cnt,
-                SUM({col_prefix}status = 'pending') as pending_cnt,
-                SUM({col_prefix}status = 'processing') as processing_cnt,
-                SUM(({col_prefix}status = 'done' OR {col_prefix}status = 'success') AND {col_prefix}is_abnormal = 1) as abnormal_cnt,
-                SUM(({col_prefix}status = 'done' OR {col_prefix}status = 'success') AND {col_prefix}doc_category != '' AND {col_prefix}doc_category != '保单') as nonpolicy_cnt
-            FROM {from_sql}{where_sql}
-        """, params)
+        if dedup:
+            # 去重模式：按保单号分组取最新记录的 id，空保单号全部保留
+            dedup_cond = "pf.policy_no IS NOT NULL AND pf.policy_no != ''"
+            full_where = f"{where_sql} AND {dedup_cond}" if where_sql else f" WHERE {dedup_cond}"
+            empty_where = f"{where_sql} AND (pf.policy_no IS NULL OR pf.policy_no = '')" if where_sql else " WHERE (pf.policy_no IS NULL OR pf.policy_no = '')"
+            dedup_ids_sql = (
+                f"SELECT MAX({col_prefix}id) as id FROM {from_sql}{full_where} GROUP BY pf.policy_no "
+                f"UNION ALL "
+                f"SELECT {col_prefix}id as id FROM {from_sql}{empty_where}"
+            )
+            cursor.execute(f"""
+                SELECT
+                    COUNT(*) as total,
+                    SUM(status = 'done' OR status = 'success') as done_cnt,
+                    SUM(status = 'failed') as failed_cnt,
+                    SUM(status = 'pending') as pending_cnt,
+                    SUM(status = 'processing') as processing_cnt,
+                    SUM((status = 'done' OR status = 'success') AND is_abnormal = 1) as abnormal_cnt,
+                    SUM((status = 'done' OR status = 'success') AND doc_category != '' AND doc_category != '保单') as nonpolicy_cnt
+                FROM insurance_records
+                WHERE id IN ({dedup_ids_sql})
+            """, params + params)
+        else:
+            cursor.execute(f"""
+                SELECT
+                    COUNT(*) as total,
+                    SUM({col_prefix}status = 'done' OR {col_prefix}status = 'success') as done_cnt,
+                    SUM({col_prefix}status = 'failed') as failed_cnt,
+                    SUM({col_prefix}status = 'pending') as pending_cnt,
+                    SUM({col_prefix}status = 'processing') as processing_cnt,
+                    SUM(({col_prefix}status = 'done' OR {col_prefix}status = 'success') AND {col_prefix}is_abnormal = 1) as abnormal_cnt,
+                    SUM(({col_prefix}status = 'done' OR {col_prefix}status = 'success') AND {col_prefix}doc_category != '' AND {col_prefix}doc_category != '保单') as nonpolicy_cnt
+                FROM {from_sql}{where_sql}
+            """, params)
         summary = cursor.fetchone()
         total = summary["total"] or 0
 
@@ -1333,11 +1371,19 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
                 status_stats.append({"status": s, "cnt": int(c)})
 
         # 按识别方式统计
-        cursor.execute(
-            f"SELECT {col_prefix}ocr_engine AS ocr_engine, COUNT(*) as cnt "
-            f"FROM {from_sql}{where_sql} GROUP BY {col_prefix}ocr_engine ORDER BY cnt DESC",
-            params
-        )
+        if dedup:
+            cursor.execute(f"""
+                SELECT ocr_engine, COUNT(*) as cnt
+                FROM insurance_records
+                WHERE id IN ({dedup_ids_sql})
+                GROUP BY ocr_engine ORDER BY cnt DESC
+            """, params + params)
+        else:
+            cursor.execute(
+                f"SELECT {col_prefix}ocr_engine AS ocr_engine, COUNT(*) as cnt "
+                f"FROM {from_sql}{where_sql} GROUP BY {col_prefix}ocr_engine ORDER BY cnt DESC",
+                params
+            )
         engine_stats = list(cursor.fetchall())
 
         # 按群统计（始终返回，按账号/企业权限过滤）

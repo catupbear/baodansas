@@ -2251,6 +2251,25 @@ def _find_policy_boundaries(text: str) -> List[dict]:
     return found
 
 
+def _extract_page_range(text: str) -> str:
+    """
+    从文本中提取页码标记 [PAGE:N]，返回页码范围字符串。
+    例如：文本包含 [PAGE:1] 和 [PAGE:2] → 返回 "1-2"
+    只有一页 [PAGE:3] → 返回 "3"
+    无页码标记 → 返回空字符串
+    """
+    pages = sorted(set(int(m) for m in re.findall(r'\[PAGE:(\d+)\]', text)))
+    if not pages:
+        return ""
+    if len(pages) == 1:
+        return str(pages[0])
+    # 连续页码用"-"连接，如 1,2,3 → "1-3"
+    if pages[-1] - pages[0] == len(pages) - 1:
+        return f"{pages[0]}-{pages[-1]}"
+    # 不连续则逗号分隔
+    return ",".join(str(p) for p in pages)
+
+
 def parse_policy_text_multi(text: str) -> List[Dict[str, Any]]:
     """
     从保单文本中提取所有保单——支持一个 PDF 包含多份保单的情况。
@@ -2271,7 +2290,12 @@ def parse_policy_text_multi(text: str) -> List[Dict[str, Any]]:
 
     if len(boundaries) <= 1:
         # 未检测到多个保单标题，直接单条解析
-        return [parse_policy_text(text)]
+        page_range = _extract_page_range(text)
+        # 清除页码标记后再解析
+        clean = re.sub(r'\[PAGE:\d+\]\n?', '', text)
+        result = parse_policy_text(clean)
+        result["page_range"] = page_range
+        return [result]
 
     # 检测到多个保单标题，按边界拆分文本并分别解析
     policies = []
@@ -2298,14 +2322,23 @@ def parse_policy_text_multi(text: str) -> List[Dict[str, Any]]:
         if not segment:
             continue
 
-        policy = parse_policy_text(segment)
+        # 提取该段对应的页码范围（在清除标记前）
+        page_range = _extract_page_range(segment)
+        # 清除页码标记后再解析
+        clean_segment = re.sub(r'\[PAGE:\d+\]\n?', '', segment)
+        policy = parse_policy_text(clean_segment)
         # 只保留有效的保单（有字段且置信度>0）
         if policy.get("fields") and policy.get("confidence", 0) > 0:
+            policy["page_range"] = page_range
             policies.append(policy)
 
     # 如果拆分后没有有效结果，退化为单条解析
     if not policies:
-        return [parse_policy_text(text)]
+        page_range = _extract_page_range(text)
+        clean = re.sub(r'\[PAGE:\d+\]\n?', '', text)
+        result = parse_policy_text(clean)
+        result["page_range"] = page_range
+        return [result]
 
     return policies
 

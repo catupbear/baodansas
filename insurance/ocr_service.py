@@ -48,10 +48,12 @@ def _extract_from_file_obj(pdf_file: io.BytesIO, pdf_page: int = 0) -> Dict[str,
             pages_to_extract = pdf.pages
 
         all_texts = []
-        for page in pages_to_extract:
+        for i, page in enumerate(pages_to_extract):
             raw_text = page.extract_text()
             if raw_text:
-                all_texts.append(raw_text)
+                # 插入页码标记，供多保单拆分时追踪页码
+                page_num = (pdf_page if pdf_page > 0 else i + 1)
+                all_texts.append(f"[PAGE:{page_num}]\n{raw_text}")
 
         # 无文本层（扫描件）时返回失败结果
         if not all_texts:

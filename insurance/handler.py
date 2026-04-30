@@ -402,6 +402,7 @@ class InsuranceHandler:
                     logger.warning("发送人名称二次解析失败: %s", e)
 
             # 6-9. 逐条处理每份保单（多保单PDF会产生多条记录）
+            total_policies = len(policies)
             for policy_idx, policy in enumerate(policies):
                 cur_record_id = record_id  # 第一条复用已创建的记录
 
@@ -421,6 +422,8 @@ class InsuranceHandler:
                         "enterprise_id": config_enterprise_id,
                         "file_md5": hashlib.md5(pdf_bytes).hexdigest() if pdf_bytes else None,
                         "cos_url": cos_url,
+                        "policy_count": total_policies,
+                        "policy_index": policy_idx + 1,
                     }
                     try:
                         cur_record_id = save_insurance_record(self.db, extra_record)
@@ -445,6 +448,7 @@ class InsuranceHandler:
 
                 # 8. 更新记录为 done
                 raw_text = policy.get("raw_text", "")
+                page_range = policy.get("page_range", "")
                 updates = {
                     "status": "done",
                     "cos_url": cos_url,
@@ -454,6 +458,9 @@ class InsuranceHandler:
                     "parsed_fields": parsed_fields,
                     "mapped_fields": mapped_fields,
                     "raw_text": raw_text,
+                    "policy_count": total_policies,
+                    "policy_index": policy_idx + 1,
+                    "page_range": page_range,
                 }
                 update_insurance_record(self.db, cur_record_id, updates)
 

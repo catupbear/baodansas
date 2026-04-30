@@ -300,6 +300,51 @@ def update_record_fields(record_id):
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
+@insurance_bp.route("/api/insurance/records/<int:record_id>/mark-normal", methods=["PUT"])
+def mark_record_normal(record_id):
+    """手动标记提取异常记录为正常，需提供原因"""
+    _require_login()
+    try:
+        record = get_insurance_record(_db, record_id)
+        if not record:
+            return jsonify({"code": 404, "msg": "记录不存在"}), 404
+
+        data = request.get_json(force=True)
+        reason = (data.get("reason") or "").strip()
+        if not reason:
+            return jsonify({"code": 400, "msg": "请提供标记原因"}), 400
+
+        # 更新 abnormal_override_reason，触发 is_abnormal 重算
+        update_insurance_record(_db, record_id, {
+            "abnormal_override_reason": reason,
+        })
+
+        return jsonify({"code": 0, "msg": "已标记为正常"})
+    except Exception as e:
+        logger.exception("标记正常失败 record_id=%d", record_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/records/<int:record_id>/undo-mark-normal", methods=["PUT"])
+def undo_mark_record_normal(record_id):
+    """撤销手动标记正常"""
+    _require_login()
+    try:
+        record = get_insurance_record(_db, record_id)
+        if not record:
+            return jsonify({"code": 404, "msg": "记录不存在"}), 404
+
+        # 清除 override，重算异常状态
+        update_insurance_record(_db, record_id, {
+            "abnormal_override_reason": None,
+        })
+
+        return jsonify({"code": 0, "msg": "已撤销标记"})
+    except Exception as e:
+        logger.exception("撤销标记失败 record_id=%d", record_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
 @insurance_bp.route("/api/insurance/records/<int:record_id>/preview", methods=["GET"])
 def preview_record_file(record_id):
     """代理预览保单文件（避免 COS 直接下载）"""
@@ -404,6 +449,8 @@ def get_stats():
             val = request.args.get(key, "").strip()
             if val:
                 filters[key] = val
+        if request.args.get("dedup") == "1":
+            filters["dedup"] = True
         # 按账号权限过滤
         user_ids = _get_user_ids_filter()
         if user_ids is not None:
@@ -508,7 +555,8 @@ def update_supported_companies_config():
 # 手动上传识别
 # ============================================================
 
-def _save_manual_record(file_name, policy, ocr_engine, file_data_b64=None, upload_cos=False):
+def _save_manual_record(file_name, policy, ocr_engine, file_data_b64=None, upload_cos=False,
+                        policy_count=1, policy_index=1):
     """
     保存手动识别记录到数据库（按保单号去重：存在则更新，否则新建）。
     upload_cos=True 时上传文件到 COS。
@@ -552,6 +600,7 @@ def _save_manual_record(file_name, policy, ocr_engine, file_data_b64=None, uploa
     current_user_id = g.current_user["user_id"] if hasattr(g, "current_user") else None
     current_enterprise_id = g.current_user.get("parent_id") if hasattr(g, "current_user") else None
 
+    page_range = policy.get("page_range", "")
     record = {
         "filename": file_name,
         "cos_url": cos_url,
@@ -564,6 +613,9 @@ def _save_manual_record(file_name, policy, ocr_engine, file_data_b64=None, uploa
         "source": "manual",
         "user_id": current_user_id,
         "enterprise_id": current_enterprise_id,
+        "policy_count": policy_count,
+        "policy_index": policy_index,
+        "page_range": page_range,
     }
     if file_md5:
         record["file_md5"] = file_md5
@@ -610,12 +662,14 @@ def parse_text_only():
             })
 
         # 逐条保存识别记录到数据库
+        total = len(valid_policies)
         record_ids = []
         is_updates = []
-        for policy in valid_policies:
+        for idx, policy in enumerate(valid_policies):
             rid, is_upd = _save_manual_record(
                 file_name, policy, "pdfjs",
-                file_data_b64=file_data_b64, upload_cos=upload_cos)
+                file_data_b64=file_data_b64, upload_cos=upload_cos,
+                policy_count=total, policy_index=idx + 1)
             record_ids.append(rid)
             is_updates.append(is_upd)
 
@@ -720,14 +774,16 @@ def manual_ocr():
             })
 
         # 逐条处理：同车牌互补 + 保存记录
+        total = len(valid_policies)
         record_ids = []
         is_updates = []
-        for policy in valid_policies:
+        for idx, policy in enumerate(valid_policies):
             if _handler and policy.get("fields"):
                 _handler._cross_fill_by_plate(policy["fields"])
             rid, is_upd = _save_manual_record(
                 file_name, policy, ocr_engine,
-                file_data_b64=file_data_b64, upload_cos=upload_cos)
+                file_data_b64=file_data_b64, upload_cos=upload_cos,
+                policy_count=total, policy_index=idx + 1)
             record_ids.append(rid)
             is_updates.append(is_upd)
 
@@ -869,55 +925,54 @@ def reocr_record(record_id):
 
         from insurance.field_mapping import apply_mapping
 
-        # 逐条处理：第1条更新原记录，后续创建新记录
-        extra_record_ids = []
-        for idx, policy in enumerate(policies):
-            parsed_fields = policy.get("fields", {})
-            doc_category = policy.get("doc_category", "")
-            confidence = policy.get("confidence", 0.0)
+        # 重新识别：只更新当前记录，不创建新记录
+        # 如果 PDF 含多份保单，选择与原记录最匹配的一份
+        # （通过保单号匹配，匹配不到则取第一条）
+        original_policy_no = ""
+        try:
+            orig_fields = record.get("parsed_fields", {})
+            if isinstance(orig_fields, str):
+                orig_fields = json.loads(orig_fields) if orig_fields else {}
+            original_policy_no = orig_fields.get("保单号", "")
+        except (TypeError, json.JSONDecodeError):
+            pass
 
-            cur_record_id = record_id
-            if idx > 0:
-                # 多保单：为第2条及之后创建新记录
-                new_record = {
-                    "msg_seq": record.get("msg_seq"),
-                    "roomid": record.get("roomid", ""),
-                    "room_name": record.get("room_name", ""),
-                    "sender": record.get("sender", ""),
-                    "sender_name": record.get("sender_name", ""),
-                    "filename": filename,
-                    "filesize": record.get("filesize", 0),
-                    "status": "processing",
-                    "source": record.get("source", "auto"),
-                    "user_id": record.get("user_id"),
-                    "enterprise_id": record.get("enterprise_id"),
-                    "file_md5": record.get("file_md5"),
-                    "cos_url": cos_url,
-                }
-                cur_record_id = save_insurance_record(_db, new_record)
-                extra_record_ids.append(cur_record_id)
+        best_policy = policies[0]
+        if original_policy_no and len(policies) > 1:
+            for p in policies:
+                if p.get("fields", {}).get("保单号", "") == original_policy_no:
+                    best_policy = p
+                    break
 
-            # 同车牌保单字段互补
-            _handler._cross_fill_by_plate(parsed_fields, cur_record_id)
+        parsed_fields = best_policy.get("fields", {})
+        doc_category = best_policy.get("doc_category", "")
+        confidence = best_policy.get("confidence", 0.0)
 
-            # 字段映射
-            company_short = parsed_fields.get("保险公司简称", "")
-            mapped_fields = apply_mapping(parsed_fields, company_short)
+        # 同车牌保单字段互补
+        _handler._cross_fill_by_plate(parsed_fields, record_id)
 
-            # 更新记录
-            raw_text = policy.get("raw_text", "")
-            updates = {
-                "status": "done",
-                "ocr_engine": ocr_engine,
-                "doc_category": doc_category,
-                "confidence": confidence,
-                "parsed_fields": parsed_fields,
-                "mapped_fields": mapped_fields,
-                "raw_text": raw_text,
-                "error_message": "",
-                "cos_url": cos_url,
-            }
-            update_insurance_record(_db, cur_record_id, updates)
+        # 字段映射
+        company_short = parsed_fields.get("保险公司简称", "")
+        mapped_fields = apply_mapping(parsed_fields, company_short)
+
+        # 更新记录
+        raw_text = best_policy.get("raw_text", "")
+        page_range = best_policy.get("page_range", "")
+        updates = {
+            "status": "done",
+            "ocr_engine": ocr_engine,
+            "doc_category": doc_category,
+            "confidence": confidence,
+            "parsed_fields": parsed_fields,
+            "mapped_fields": mapped_fields,
+            "raw_text": raw_text,
+            "error_message": "",
+            "cos_url": cos_url,
+            "policy_count": len(policies),
+            "policy_index": (policies.index(best_policy) + 1) if best_policy in policies else 1,
+            "page_range": page_range,
+        }
+        update_insurance_record(_db, record_id, updates)
 
         # 返回更新后的主记录
         updated = get_insurance_record(_db, record_id)
@@ -932,14 +987,11 @@ def reocr_record(record_id):
                 updated[ts_field] = str(updated[ts_field])
 
         msg = "重新识别完成，请预览确认后同步钉钉"
-        if extra_record_ids:
-            msg = f"重新识别完成，检测到{len(policies)}份保单，已创建{len(extra_record_ids)}条新记录"
 
         return jsonify({
             "code": 0,
             "data": updated,
             "msg": msg,
-            "extra_record_ids": extra_record_ids,
         })
     except Exception as e:
         logger.exception("重新识别保单记录 %d 失败", record_id)
@@ -1075,11 +1127,34 @@ def batch_reocr_sync():
                     results["reocr_failed"] += 1
                     continue
 
-                policy = ocr_result.get("policy", {})
+                policies = ocr_result.get("policies", [])
                 ocr_engine = ocr_result.get("ocr_engine", "pdfplumber")
-                parsed_fields = policy.get("fields", {})
-                doc_category = policy.get("doc_category", "")
-                confidence = policy.get("confidence", 0.0)
+
+                if not policies:
+                    results["errors"].append({"id": rid, "error": "OCR 未解析到任何保单"})
+                    results["reocr_failed"] += 1
+                    continue
+
+                # 匹配原记录对应的保单
+                original_policy_no = ""
+                try:
+                    orig_fields = record.get("parsed_fields", {})
+                    if isinstance(orig_fields, str):
+                        orig_fields = json.loads(orig_fields) if orig_fields else {}
+                    original_policy_no = orig_fields.get("保单号", "")
+                except (TypeError, json.JSONDecodeError):
+                    pass
+
+                best_policy = policies[0]
+                if original_policy_no and len(policies) > 1:
+                    for p in policies:
+                        if p.get("fields", {}).get("保单号", "") == original_policy_no:
+                            best_policy = p
+                            break
+
+                parsed_fields = best_policy.get("fields", {})
+                doc_category = best_policy.get("doc_category", "")
+                confidence = best_policy.get("confidence", 0.0)
 
                 # 同车牌互补
                 _handler._cross_fill_by_plate(parsed_fields, rid)
@@ -1089,7 +1164,8 @@ def batch_reocr_sync():
                 mapped_fields = apply_mapping(parsed_fields, company_short)
 
                 # 更新记录
-                raw_text = policy.get("raw_text", "")
+                raw_text = best_policy.get("raw_text", "")
+                page_range = best_policy.get("page_range", "")
                 update_insurance_record(_db, rid, {
                     "status": "done",
                     "ocr_engine": ocr_engine,
@@ -1099,6 +1175,9 @@ def batch_reocr_sync():
                     "mapped_fields": mapped_fields,
                     "raw_text": raw_text,
                     "error_message": "",
+                    "policy_count": len(policies),
+                    "policy_index": (policies.index(best_policy) + 1) if best_policy in policies else 1,
+                    "page_range": page_range,
                 })
                 results["reocr_success"] += 1
 
