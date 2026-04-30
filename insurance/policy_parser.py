@@ -523,7 +523,10 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
         if m:
             # 合并OCR空格后取值
             val = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', m.group(1).strip())
-            if val and len(val) >= 2:
+            # 截掉尾部紧跟的日期（如"杨晓棠2026年4月27日..."）
+            val = re.sub(r'\d{4}年.*$', '', val).strip()
+            # 过滤承保公司名的误匹配（如"中国平安人寿"），但保留代理公司名
+            if val and len(val) >= 2 and not re.search(r'中国平安|平安财产|平安人寿|人寿保险', val):
                 fields["业务员"] = val
 
     # 经办人兜底为业务员；经办人无效时用制单人兜底
