@@ -4383,7 +4383,7 @@ createApp({
                 const resp = await authFetch(`/api/insurance/reocr/${record.id}`, { method: 'POST' });
                 const data = await resp.json();
                 if (data.code === 0) {
-                    showMessage('重新识别完成，请确认后同步钉钉', true);
+                    showMessage(data.msg || '重新识别完成', true);
                     const updated = data.data;
                     Object.assign(record, {
                         ...updated,
@@ -4394,6 +4394,8 @@ createApp({
                     });
                     // 刷新预览面板数据（保持列表面板打开）
                     previewAutoRecord.value = record;
+                    // 刷新列表数据和统计（兄弟记录可能也被更新了）
+                    loadRecords(false);
                 } else {
                     showMessage(data.msg || '重新识别失败', false);
                 }
