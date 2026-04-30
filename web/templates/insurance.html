@@ -1120,9 +1120,30 @@
                                 </span>
                                 <span v-else class="text-gray-400 text-sm">—</span>
                             </td>
-                            <!-- 动态字段列（使用预计算的 display_fields） -->
+                            <!-- 动态字段列（使用预计算的 display_fields，可点击编辑） -->
                             <td v-for="col in outputColumns" :key="col" class="text-gray-700 text-sm">
-                                {{ (record.display_fields || {})[col] || '—' }}
+                                <template v-if="listEditing.recordId === record.id && listEditing.col === col">
+                                    <div class="flex items-center gap-1">
+                                        <input v-model="listEditing.value" type="text"
+                                               class="text-xs border border-orange-300 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-orange-300"
+                                               style="width:100px;"
+                                               @keyup.enter="saveListEdit(record)"
+                                               @keyup.escape="cancelListEdit()"
+                                               ref="listEditInput">
+                                        <button @click="saveListEdit(record)" :disabled="listEditing.saving"
+                                                class="text-xs text-white rounded px-1.5 py-0.5 cursor-pointer"
+                                                style="background:#f97316;">{{ listEditing.saving ? '..' : '✓' }}</button>
+                                        <button @click="cancelListEdit()"
+                                                class="text-xs text-gray-400 hover:text-gray-600 cursor-pointer">✕</button>
+                                    </div>
+                                </template>
+                                <template v-else>
+                                    <span class="cursor-pointer hover:text-orange-600 hover:bg-orange-50 px-1 py-0.5 rounded transition-colors"
+                                          @click="startListEdit(record, col)"
+                                          :title="'点击编辑'">
+                                        {{ (record.display_fields || {})[col] || '—' }}
+                                    </span>
+                                </template>
                             </td>
                             <!-- 识别方式 -->
                             <td>
@@ -2899,6 +2920,68 @@ createApp({
             return mf.includes(label);
         }
 
+        // ========== 列表内联编辑 ==========
+        // 导出列名 → OCR 字段名的反向映射
+        const _colToOcrField = {
+            '承保公司': '保险公司', '保单号': '保单号', '险种': '险种类型',
+            '车牌': '车牌号', '投保人': '投保人', '被保人': '被保险人',
+            '签单日期': '签单日期', '起保日期': '保险起期', '终保日期': '保险止期',
+            '保费': '保费合计', '车船税': '车船税', '业务员': '业务员',
+        };
+        const listEditing = reactive({ recordId: null, col: '', value: '', saving: false });
+
+        function startListEdit(record, col) {
+            listEditing.recordId = record.id;
+            listEditing.col = col;
+            listEditing.value = (record.display_fields || {})[col] || '';
+            listEditing.saving = false;
+            // 下一帧聚焦输入框
+            Vue.nextTick(() => {
+                const inp = document.querySelector('input[ref="listEditInput"]');
+                if (inp) inp.focus();
+            });
+        }
+
+        function cancelListEdit() {
+            listEditing.recordId = null;
+            listEditing.col = '';
+            listEditing.value = '';
+        }
+
+        async function saveListEdit(record) {
+            if (listEditing.saving) return;
+            const col = listEditing.col;
+            const newValue = listEditing.value.trim();
+            // 映射回 OCR 字段名，如果无映射则直接用列名
+            const ocrField = _colToOcrField[col] || col;
+
+            listEditing.saving = true;
+            try {
+                const resp = await authFetch(`/api/insurance/records/${record.id}/fields`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ fields: { [ocrField]: newValue } }),
+                });
+                if (!resp.ok) {
+                    showMessage('保存失败', false);
+                    return;
+                }
+                const json = await resp.json();
+                if (json.code === 0) {
+                    // 更新本地 display_fields
+                    if (!record.display_fields) record.display_fields = {};
+                    record.display_fields[col] = newValue;
+                    showMessage('已保存', true);
+                } else {
+                    showMessage(json.msg || '保存失败', false);
+                }
+            } catch (e) {
+                showMessage('保存失败: ' + e.message, false);
+            } finally {
+                listEditing.saving = false;
+                cancelListEdit();
+            }
+        }
+
         function hasRawText(fileName) {
             const r = results.value.find(x => x.file_name === fileName && x.success);
             return !!(r && r.invoices && r.invoices[0] && r.invoices[0].raw_text);
@@ -4310,6 +4393,7 @@ createApp({
             loadRecords, loadRecordStats, gotoRecordPage, getParsedField, getRecordMappedValue, formatTime,
             retryRecord, reocrRecord, reocrPreviewFile, previewReocring, syncRecordToDingtalk, previewRecord, previewAutoRecord, loadAutoRecordRawText,
             editingField, editingValue, fieldSaving, startEditField, cancelEditField, saveEditField, isManualField,
+            listEditing, startListEdit, cancelListEdit, saveListEdit,
             recordDetailVisible, currentRecord, openRecordDetail,
             // 联系人编辑
             contactEditVisible, contactEditSaving, contactEditForm, contactNameInput,
