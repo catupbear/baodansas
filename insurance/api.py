@@ -705,6 +705,10 @@ def parse_text_only():
                 "error": "need_ocr", "invoices": [],
             })
 
+        # 同一 PDF 多保单互补基础字段
+        if len(valid_policies) > 1 and _handler:
+            _handler._cross_fill_same_pdf(valid_policies)
+
         # 逐条保存识别记录到数据库
         total = len(valid_policies)
         record_ids = []
@@ -816,6 +820,10 @@ def manual_ocr():
                 "success": False, "file_name": file_name,
                 "error": "未识别到任何保单关键字段", "invoices": [],
             })
+
+        # 同一 PDF 多保单互补基础字段
+        if len(valid_policies) > 1 and _handler:
+            _handler._cross_fill_same_pdf(valid_policies)
 
         # 逐条处理：同车牌互补 + 保存记录
         total = len(valid_policies)

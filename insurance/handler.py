@@ -401,6 +401,10 @@ class InsuranceHandler:
                 except Exception as e:
                     logger.warning("发送人名称二次解析失败: %s", e)
 
+            # 同一 PDF 多保单之间字段互补（车牌、投保人等基础字段）
+            if len(policies) > 1:
+                self._cross_fill_same_pdf(policies)
+
             # 6-9. 逐条处理每份保单（多保单PDF会产生多条记录）
             total_policies = len(policies)
             for policy_idx, policy in enumerate(policies):
@@ -584,6 +588,47 @@ class InsuranceHandler:
         except Exception as e:
             logger.error("下载媒体文件异常, sdkfileid=%s: %s", sdkfileid, e, exc_info=True)
             return b""
+
+    # ------------------------------------------------------------------ #
+    # 同一 PDF 多保单互补
+    # ------------------------------------------------------------------ #
+
+    # 同一 PDF 内多保单可互补的基础字段
+    SAME_PDF_FILL_FIELDS = [
+        "车牌号", "投保人", "被保险人", "车主", "证件号码",
+        "车架号VIN", "发动机号", "厂牌型号",
+    ]
+
+    def _cross_fill_same_pdf(self, policies: list):
+        """
+        同一 PDF 内多份保单之间互补基础字段。
+        例如：第1份保单有车牌号和投保人，第2份保单缺失这些字段时自动补充。
+        """
+        # 收集所有保单中已有的字段值（取第一个非空值）
+        merged = {}
+        for policy in policies:
+            fields = policy.get("fields", {})
+            for f in self.SAME_PDF_FILL_FIELDS:
+                if f not in merged and fields.get(f):
+                    merged[f] = fields[f]
+
+        if not merged:
+            return
+
+        # 回填到每份保单的缺失字段
+        for policy in policies:
+            fields = policy.get("fields", {})
+            filled = []
+            for f, val in merged.items():
+                if not fields.get(f):
+                    fields[f] = val
+                    filled.append(f"{f}={val}")
+            if filled:
+                logger.info(
+                    "同PDF互补: 险种=%s, 补充=%s",
+                    fields.get("险种类型", "未知"),
+                    ", ".join(filled),
+                )
 
     # ------------------------------------------------------------------ #
     # 同车牌保单字段互补
