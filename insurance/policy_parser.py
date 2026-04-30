@@ -2162,7 +2162,9 @@ def _find_policy_boundaries(text: str) -> List[dict]:
     """
     在文本中查找保单标题行的位置，作为多保单拆分的边界。
 
-    只匹配包含"保险单/电子保单"的标题行，避免将正文/条款中的关键词误判为新保单。
+    策略：
+    1. 优先用已知的保单标题 pattern 匹配
+    2. 如果标题匹配不足，兜底检测多个不同的"保单号"来发现多保单
 
     Returns:
         [{"pos": int, "type_code": str, "match": str}, ...]
@@ -2185,6 +2187,33 @@ def _find_policy_boundaries(text: str) -> List[dict]:
 
     # 按位置排序
     found.sort(key=lambda x: x["pos"])
+
+    # ===== 兜底：通过多个不同"保单号"自动检测多保单 =====
+    # 当标题匹配不足时，检查是否存在多个不同的保单号
+    if len(found) <= 1:
+        # 匹配所有"保单号"/"保险单号"及其值
+        policy_no_pattern = r"保[险]?单号[：:\s]*([A-Za-z0-9]{10,30})"
+        policy_nos = []
+        for m in re.finditer(policy_no_pattern, text):
+            no_val = m.group(1)
+            pos = m.start()
+            # 排除重复的保单号（同一号码可能出现多次）
+            if no_val not in [p["no"] for p in policy_nos]:
+                # 排除与已有标题边界距离太近的（已被标题覆盖）
+                if not any(abs(pos - sp) < 200 for sp in seen_positions):
+                    policy_nos.append({"pos": pos, "no": no_val})
+
+        if len(policy_nos) + len(found) > 1:
+            # 有多个不同的保单号，将它们作为额外的边界
+            for pn in policy_nos:
+                found.append({
+                    "pos": pn["pos"],
+                    "type_code": "auto",
+                    "match": f"保单号：{pn['no']}",
+                })
+                seen_positions.add(pn["pos"])
+            found.sort(key=lambda x: x["pos"])
+
     return found
 
 
