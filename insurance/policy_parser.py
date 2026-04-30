@@ -364,6 +364,11 @@ def _identify_policy_type(text: str) -> Optional[str]:
             if re.search(r"Accidental|意外.*身故|意外.*伤残|驾乘", text):
                 return "驾乘人员意外伤害保险"
 
+    # 合同条款格式：投保人已向本保险人投保"网约车道路客运承运人责任险"
+    m = re.search(r'投保["\u201c]([^"\u201d]+(?:险|保险))["\u201d]', text)
+    if m:
+        return m.group(1)
+
     # 兜底：从标题提取，如"道路危险货物承运人责任险保险单"
     m = re.search(r"([\u4e00-\u9fff]+(?:责任险|保险|意外险|综合险))保险单", text[:500])
     if m:
@@ -388,6 +393,8 @@ def _get_policy_type_code(policy_type: str) -> tuple:
     if "驾乘" in policy_type or "意外" in policy_type or "出行险" in policy_type or "出行无忧" in policy_type or "安心行" in policy_type or "E车无忧" in policy_type or "卓越全意保" in policy_type:
         return "accident", "驾乘/意外险"
     if "账户" in policy_type or "资金安全" in policy_type or "信用卡" in policy_type or "盗用" in policy_type:
+        return "non_vehicle", "非车险"
+    if "承运人" in policy_type or "货运" in policy_type or "货物" in policy_type or "责任险" in policy_type:
         return "non_vehicle", "非车险"
     return "unknown", policy_type
 
