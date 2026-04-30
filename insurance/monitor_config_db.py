@@ -172,10 +172,12 @@ def update_monitor_config(db, config_id: int, data: dict) -> bool:
             values
         )
         conn.commit()
-        affected = cursor.rowcount
-        if affected > 0:
+        # 检查记录是否存在（rowcount=0 可能是数据未变化，不代表不存在）
+        cursor.execute("SELECT id FROM monitor_configs WHERE id = %s", (config_id,))
+        exists = cursor.fetchone() is not None
+        if exists:
             logger.info("监控配置已更新, id=%d", config_id)
-        return affected > 0
+        return exists
     finally:
         conn.close()
 
