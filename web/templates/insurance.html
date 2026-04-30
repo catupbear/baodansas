@@ -4061,7 +4061,7 @@ createApp({
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 const dateStr = new Date().toISOString().slice(0, 10);
-                a.href = url; a.download = `识别记录_${dateStr}.xlsx`;
+                a.href = url; a.download = `保单识别记录_${dateStr}.xlsx`;
                 document.body.appendChild(a); a.click(); document.body.removeChild(a);
                 URL.revokeObjectURL(url);
                 showMessage(`导出成功，共 ${data.length} 条`, true);
