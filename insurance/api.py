@@ -556,39 +556,34 @@ def update_supported_companies_config():
 
 
 def _get_sibling_records(db, file_md5: str, exclude_id: int) -> list:
-    """查询同一 PDF（相同 file_md5）的其他保单记录摘要"""
+    """查询同一 PDF（相同 file_md5）的其他保单记录摘要，每个 policy_index 只保留最新一条"""
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        # 按 policy_index 分组，取最新（id 最大）的记录
         cursor.execute(
-            "SELECT id, policy_index, policy_count, page_range, doc_category, status "
-            "FROM insurance_records WHERE file_md5 = %s AND id != %s "
-            "ORDER BY policy_index",
+            "SELECT r.id, r.policy_index, r.policy_count, r.page_range, "
+            "       r.doc_category, r.status, r.parsed_fields "
+            "FROM insurance_records r "
+            "INNER JOIN ("
+            "  SELECT MAX(id) AS max_id FROM insurance_records "
+            "  WHERE file_md5 = %s AND id != %s "
+            "  GROUP BY COALESCE(NULLIF(policy_index, 0), id)"
+            ") latest ON r.id = latest.max_id "
+            "ORDER BY r.policy_index",
             (file_md5, exclude_id)
         )
         rows = cursor.fetchall()
-        # 补充 display_fields 中的关键信息
         result = []
         for row in rows:
-            cursor.execute(
-                "SELECT display_fields, parsed_fields FROM insurance_records WHERE id = %s",
-                (row["id"],)
-            )
-            detail = cursor.fetchone()
-            display = {}
-            if detail and detail.get("display_fields"):
-                try:
-                    display = json.loads(detail["display_fields"]) if isinstance(detail["display_fields"], str) else detail["display_fields"]
-                except (TypeError, json.JSONDecodeError):
-                    pass
-            # 取几个关键字段作为摘要
             parsed = {}
-            if detail and detail.get("parsed_fields"):
+            if row.get("parsed_fields"):
                 try:
-                    parsed = json.loads(detail["parsed_fields"]) if isinstance(detail["parsed_fields"], str) else detail["parsed_fields"]
+                    parsed = json.loads(row["parsed_fields"]) if isinstance(row["parsed_fields"], str) else row["parsed_fields"]
                 except (TypeError, json.JSONDecodeError):
                     pass
             row["summary"] = parsed.get("险种类型", "") or parsed.get("保单号", "") or row.get("doc_category", "")
+            row.pop("parsed_fields", None)
             result.append(dict(row))
         return result
     finally:
