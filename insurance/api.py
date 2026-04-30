@@ -1115,6 +1115,29 @@ def reocr_record(record_id):
             _apply_policy_to_record(sib["id"], policies[matched_idx], matched_idx)
             updated_count += 1
 
+        # 最终互补：所有记录已写入数据库，再做一轮兄弟互补
+        # 确保未匹配到 policy 的记录也能从已更新的兄弟记录中获取字段
+        if file_md5:
+            all_ids = [record_id] + [s["id"] for s in sibling_records]
+            for rid in all_ids:
+                rec = get_insurance_record(_db, rid)
+                if not rec or rec.get("status") != "done":
+                    continue
+                pf = rec.get("parsed_fields", {})
+                if isinstance(pf, str):
+                    try: pf = json.loads(pf) if pf else {}
+                    except: continue
+                before = {f: pf.get(f, "") for f in _handler.SAME_PDF_FILL_FIELDS}
+                _cross_fill_from_siblings(_db, rid, file_md5, pf)
+                after = {f: pf.get(f, "") for f in _handler.SAME_PDF_FILL_FIELDS}
+                if before != after:
+                    cs = pf.get("保险公司简称", "")
+                    mf = apply_mapping(pf, cs)
+                    update_insurance_record(_db, rid, {
+                        "parsed_fields": pf,
+                        "mapped_fields": mf,
+                    })
+
         # 返回更新后的主记录
         updated = get_insurance_record(_db, record_id)
         for field in ("parsed_fields", "mapped_fields"):
