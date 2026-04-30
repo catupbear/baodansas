@@ -1201,7 +1201,7 @@ def get_company_stats(db) -> list:
 def get_insurance_stats(db, filters: dict = None) -> dict:
     """
     获取保单识别统计信息，支持筛选条件。
-    filters 支持: roomid, source_type, sender, keyword, company_short,
+    filters 支持: roomid, source_type, source, sender, keyword, company_short,
                    ocr_engine, date_start, date_end,
                    search_company, search_policy_no, search_plate_no,
                    search_applicant, search_insured, search_salesperson,
@@ -1234,6 +1234,9 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
             where_parts.append(f"({col_prefix}roomid IS NULL OR {col_prefix}roomid = '')")
         elif filters.get("source_type") == "room":
             where_parts.append(f"{col_prefix}roomid IS NOT NULL AND {col_prefix}roomid != ''")
+        if filters.get("source"):
+            where_parts.append(f"{col_prefix}source = %s")
+            params.append(filters["source"])
         if filters.get("sender"):
             where_parts.append(f"{col_prefix}sender = %s")
             params.append(filters["sender"])

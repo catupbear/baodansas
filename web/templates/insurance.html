@@ -202,7 +202,7 @@
         .toggle-switch input:checked + .toggle-track { background: var(--primary); }
         .toggle-switch input:checked + .toggle-track::after { transform: translateX(20px); }
 
-        /* 自动识别记录表格 */
+        /* 识别记录表格 */
         .records-table { font-size: 13px; border-collapse: collapse; width: 100%; }
         .records-table th, .records-table td {
             white-space: nowrap; border-bottom: 1px solid var(--border-light);
@@ -265,11 +265,11 @@
                 </div>
                 <!-- 页面级 Tab 切换 -->
                 <div class="flex items-center gap-1 ml-4">
+                    <button @click="pageTab = 'records'; loadRecords(); loadRecordStats()" :class="pageTab === 'records' ? 'active' : ''" class="page-tab-btn">
+                        识别记录
+                    </button>
                     <button @click="pageTab = 'upload'" :class="pageTab === 'upload' ? 'active' : ''" class="page-tab-btn">
                         手动上传
-                    </button>
-                    <button @click="pageTab = 'records'; loadRecords(); loadRecordStats()" :class="pageTab === 'records' ? 'active' : ''" class="page-tab-btn">
-                        自动识别记录
                     </button>
                 </div>
             </div>
@@ -808,7 +808,7 @@
         </transition>
     </main>
 
-    <!-- ========== 自动识别记录 Tab ========== -->
+    <!-- ========== 识别记录 Tab ========== -->
     <main v-if="pageTab === 'records'" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5">
         <!-- 筛选栏 -->
         <div class="card p-4">
@@ -822,10 +822,11 @@
                         <option value="">全部</option>
                         <option value="room">群聊</option>
                         <option value="user">私聊</option>
+                        <option value="manual">手动上传</option>
                     </select>
                 </div>
                 <!-- 群名/用户下拉框 -->
-                <div v-if="recordFilter.source_type !== 'user'" class="flex items-center gap-1.5">
+                <div v-if="recordFilter.source_type !== 'user' && recordFilter.source_type !== 'manual'" class="flex items-center gap-1.5">
                     <span class="text-xs text-gray-500 font-medium whitespace-nowrap">群名:</span>
                     <select v-model="recordFilter.roomid"
                             class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer"
@@ -1980,7 +1981,7 @@ createApp({
         const currentUser = ref(getUser());
 
         // ========== 页面级 Tab ==========
-        const pageTab = ref('upload');  // 'upload' | 'records'
+        const pageTab = ref('records');  // 'records' | 'upload'
 
         // ========== 配置状态 ==========
         const configStatus = ref({ pdf_extract: true, dingtalk: false });
@@ -2093,7 +2094,7 @@ createApp({
         const previewSrc = ref('');
         const previewType = ref('pdf');
         const previewFileName = ref('');
-        // 自动识别记录预览时存储当前记录（用于右侧字段面板）
+        // 识别记录预览时存储当前记录（用于右侧字段面板）
         const previewAutoRecord = ref(null);
         const previewHasRawText = ref(false);
         const previewShowRaw = ref(false);
@@ -2131,7 +2132,7 @@ createApp({
 
         // 当前预览文件的识别方式
         const previewOcrEngine = computed(() => {
-            // 自动识别记录
+            // 识别记录
             if (previewAutoRecord.value) return previewAutoRecord.value.ocr_engine || '';
             // 手动上传
             const r = results.value.find(x => x.file_name === previewFileName.value && x.success);
@@ -2140,7 +2141,7 @@ createApp({
 
         // 当前预览文件的映射后字段列表
         const previewFieldsList = computed(() => {
-            // 自动识别记录预览：直接用 parsed_fields
+            // 识别记录预览：直接用 parsed_fields
             if (previewAutoRecord.value) {
                 const fields = previewAutoRecord.value.parsed_fields || {};
                 return outputColumns.value.map(col => {
@@ -2525,7 +2526,7 @@ createApp({
         // 不参与异常检测：车船税、佣金率、佣金、业务员、采购费率、公司利润、跟单人、跟单人利润、出单渠道
         const REQUIRED_FIELDS = ['承保公司', '保单号', '险种', '车牌', '投保人', '被保人', '签单日期', '起保日期', '终保日期', '保费'];
 
-        // 导出列名 → OCR字段名 的反向映射（用于自动识别记录的字段检测）
+        // 导出列名 → OCR字段名 的反向映射（用于识别记录的字段检测）
         const EXPORT_TO_OCR = {
             '承保公司': ['保险公司', '保险公司简称'],
             '保单号': ['保单号'],
@@ -2539,7 +2540,7 @@ createApp({
             '保费': ['保费合计'],
         };
 
-        // 检查自动识别记录是否提取异常（parsed_fields 使用 OCR 字段名）
+        // 检查识别记录是否提取异常（parsed_fields 使用 OCR 字段名）
         function isRecordAbnormal(record) {
             if (!record || (record.status !== 'done' && record.status !== 'success')) return false;
             const cat = record.doc_category || '';
@@ -2560,7 +2561,7 @@ createApp({
             return true;
         }
 
-        // 获取自动识别记录的提示信息
+        // 获取识别记录的提示信息
         function getRecordHint(record) {
             if (!record) return '';
             const fields = record.parsed_fields || {};
@@ -2818,7 +2819,7 @@ createApp({
             }
         }
 
-        // 自动识别记录文件预览（通过代理接口避免 COS 下载）
+        // 识别记录文件预览（通过代理接口避免 COS 下载）
         async function previewRecord(record) {
             if (!record.cos_url || !record.id) return;
             previewAutoRecord.value = { ...record };
@@ -2852,7 +2853,7 @@ createApp({
             }
         }
 
-        // 懒加载自动识别记录的 OCR 原文
+        // 懒加载识别记录的 OCR 原文
         async function loadAutoRecordRawText() {
             const record = previewAutoRecord.value;
             if (!record || previewRawText.value) return;
@@ -3473,7 +3474,7 @@ createApp({
             }
         }
 
-        // ========== 自动识别记录 Tab ==========
+        // ========== 识别记录 Tab ==========
         const records = ref([]);
         const isLoadingRecords = ref(false);
         const selectedRecordIds = ref([]);
@@ -3511,6 +3512,8 @@ createApp({
             } else if (recordFilter.source_type === 'room') {
                 params.set('source_type', 'room');
                 if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
+            } else if (recordFilter.source_type === 'manual') {
+                params.set('source', 'manual');
             } else {
                 if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
             }
@@ -3829,7 +3832,7 @@ createApp({
             if (_downloadPollTimer) { clearInterval(_downloadPollTimer); _downloadPollTimer = null; }
         }
 
-        // 导出自动识别记录
+        // 导出识别记录
         async function exportRecordsExcel() {
             // 用当前筛选条件请求全部数据（不限分页），导出完整结果
             try {
@@ -3842,6 +3845,8 @@ createApp({
                 } else if (recordFilter.source_type === 'room') {
                     params.set('source_type', 'room');
                     if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
+                } else if (recordFilter.source_type === 'manual') {
+                    params.set('source', 'manual');
                 } else {
                     if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
                 }
@@ -3894,7 +3899,7 @@ createApp({
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 const dateStr = new Date().toISOString().slice(0, 10);
-                a.href = url; a.download = `自动识别记录_${dateStr}.xlsx`;
+                a.href = url; a.download = `识别记录_${dateStr}.xlsx`;
                 document.body.appendChild(a); a.click(); document.body.removeChild(a);
                 URL.revokeObjectURL(url);
                 showMessage(`导出成功，共 ${data.length} 条`, true);
@@ -3906,7 +3911,7 @@ createApp({
         const monitorUsers = ref([]);  // 监控用户列表
         const recordFilter = reactive({
             dedup: true,      // 按保单号去重，默认开启
-            source_type: '',  // '': 全部, 'room': 群聊, 'user': 私聊
+            source_type: '',  // '': 全部, 'room': 群聊, 'user': 私聊, 'manual': 手动上传
             roomid: '',
             userid: '',
             status: '',
@@ -4106,7 +4111,7 @@ createApp({
             }
         }
 
-        // 加载自动识别记录
+        // 加载识别记录
         async function loadRecords(resetPage = true) {
             if (resetPage) recordPagination.page = 1;
             isLoadingRecords.value = true;
@@ -4121,6 +4126,8 @@ createApp({
                 } else if (recordFilter.source_type === 'room') {
                     params.set('source_type', 'room');
                     if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
+                } else if (recordFilter.source_type === 'manual') {
+                    params.set('source', 'manual');
                 } else {
                     if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
                 }
@@ -4191,7 +4198,7 @@ createApp({
             return pf[fieldName] || '';
         }
 
-        // 自动识别记录：通过字段映射获取导出列的值
+        // 识别记录：通过字段映射获取导出列的值
         function getRecordMappedValue(record, outCol) {
             const fields = record.parsed_fields;
             if (!fields || typeof fields !== 'object') return '';
@@ -4219,7 +4226,7 @@ createApp({
             return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
         }
 
-        // 重试单条自动识别记录
+        // 重试单条识别记录
         async function retryRecord(record) {
             record._retrying = true;
             try {
@@ -4359,6 +4366,9 @@ createApp({
             await loadRoomList();
             // 初始化 IndexedDB
             try { await openDB(); } catch (e) {}
+            // 默认加载识别记录
+            loadRecords();
+            loadRecordStats();
         });
 
         return {
@@ -4399,7 +4409,7 @@ createApp({
             selectedFields, isAllFieldsSelected, toggleAllFields,
             // 重复保单
             duplicateVisible, duplicateList, confirmSyncSkipDuplicates, confirmSyncUpdateDuplicates, cancelSync,
-            // 自动识别记录
+            // 识别记录
             records, filteredRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
             isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask,
             roomList, monitorRooms, monitorUsers,

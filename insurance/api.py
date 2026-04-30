@@ -389,7 +389,7 @@ def get_stats():
     """获取保单识别统计信息，支持与列表相同的筛选参数"""
     try:
         filters = {}
-        for key in ("roomid", "source_type", "sender", "keyword",
+        for key in ("roomid", "source_type", "source", "sender", "keyword",
                      "company_short", "ocr_engine", "date_start", "date_end",
                      "search_company", "search_policy_no", "search_plate_no",
                      "search_applicant", "search_insured", "search_salesperson",
