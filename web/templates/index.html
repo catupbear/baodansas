@@ -798,6 +798,19 @@
 </div>
 
 <script>
+// ===== 鉴权工具 =====
+function getToken() { return localStorage.getItem('token'); }
+function checkAuth() { if (!getToken()) { window.location.href = '/login'; return false; } return true; }
+function doLogout() { localStorage.removeItem('token'); localStorage.removeItem('user'); window.location.href = '/login'; }
+async function authFetch(url, options = {}) {
+    if (!options.headers) options.headers = {};
+    options.headers['Authorization'] = 'Bearer ' + getToken();
+    const resp = await fetch(url, options);
+    if (resp.status === 401) { doLogout(); throw new Error('未登录'); }
+    return resp;
+}
+if (!checkAuth()) throw new Error('redirect');
+
 // ===== 全局状态 =====
 let conversations = [];
 let currentConv = null;       // 当前选中的会话 conversation_id
@@ -881,7 +894,7 @@ const TAG_CLASS = {
 // ===== 统计 =====
 async function loadStats() {
     try {
-        const res = await fetch("/api/stats");
+        const res = await authFetch("/api/stats");
         const data = await res.json();
         document.getElementById("statTotal").textContent = data.total_messages.toLocaleString();
         document.getElementById("statSeq").textContent = data.current_seq.toLocaleString();
@@ -893,7 +906,7 @@ async function loadStats() {
 async function loadConversations(keyword) {
     const params = keyword ? `?keyword=${encodeURIComponent(keyword)}` : "";
     try {
-        const res = await fetch(`/api/conversations${params}`);
+        const res = await authFetch(`/api/conversations${params}`);
         conversations = await res.json();
         renderConversations();
     } catch(e) {
@@ -980,7 +993,7 @@ async function loadChatMessages(initial) {
     }
 
     try {
-        const res = await fetch(`/api/messages?${params}`);
+        const res = await authFetch(`/api/messages?${params}`);
         const data = await res.json();
         chatTotal = data.total;
         chatPages = data.pages;
@@ -1254,7 +1267,7 @@ async function saveContact() {
     btn.textContent = "保存中...";
 
     try {
-        const res = await fetch("/api/contacts/update", {
+        const res = await authFetch("/api/contacts/update", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id, name, type }),
@@ -1282,7 +1295,7 @@ async function syncContacts() {
     btn.textContent = "同步中...";
 
     try {
-        const res = await fetch("/api/contacts/sync", { method: "POST" });
+        const res = await authFetch("/api/contacts/sync", { method: "POST" });
         const data = await res.json();
         if (res.ok && data.success) {
             btn.textContent = data.message;
@@ -1308,12 +1321,12 @@ async function manualFetch() {
     btn.textContent = "拉取中...";
 
     try {
-        const res = await fetch("/api/fetch", { method: "POST" });
+        const res = await authFetch("/api/fetch", { method: "POST" });
         const data = await res.json();
         if (res.ok) {
             const pollInterval = setInterval(async () => {
                 try {
-                    const statsRes = await fetch("/api/stats");
+                    const statsRes = await authFetch("/api/stats");
                     const stats = await statsRes.json();
                     if (!stats.fetching) {
                         clearInterval(pollInterval);
@@ -1384,7 +1397,7 @@ async function refreshChat() {
     }
 
     try {
-        const res = await fetch(`/api/messages?${params}`);
+        const res = await authFetch(`/api/messages?${params}`);
         const data = await res.json();
         if (data.total > chatTotal) {
             // 有新消息，重新加载
