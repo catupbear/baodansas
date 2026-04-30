@@ -1326,89 +1326,56 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
         else:
             from_sql = "insurance_records"
 
-        # 单次扫描统计
-        if dedup:
-            # 去重模式：按保单号分组取最新记录的 id，空保单号全部保留
-            dedup_cond = "pf.policy_no IS NOT NULL AND pf.policy_no != ''"
-            full_where = f"{where_sql} AND {dedup_cond}" if where_sql else f" WHERE {dedup_cond}"
-            empty_where = f"{where_sql} AND (pf.policy_no IS NULL OR pf.policy_no = '')" if where_sql else " WHERE (pf.policy_no IS NULL OR pf.policy_no = '')"
-            dedup_ids_sql = (
-                f"SELECT MAX({col_prefix}id) as id FROM {from_sql}{full_where} GROUP BY pf.policy_no "
-                f"UNION ALL "
-                f"SELECT {col_prefix}id as id FROM {from_sql}{empty_where}"
-            )
-            cursor.execute(f"""
-                SELECT
-                    COUNT(*) as total,
-                    SUM(status = 'done' OR status = 'success') as done_cnt,
-                    SUM(status = 'failed') as failed_cnt,
-                    SUM(status = 'pending') as pending_cnt,
-                    SUM(status = 'processing') as processing_cnt
-                FROM insurance_records
-                WHERE id IN ({dedup_ids_sql})
-            """, params + params)
-            summary = cursor.fetchone() or {"total": 0, "done_cnt": 0, "failed_cnt": 0, "pending_cnt": 0, "processing_cnt": 0}
-            # 异常/非保单数量需要"先过滤再去重"，与列表查询逻辑一致
-            done_cond = f" AND ({col_prefix}status = 'done' OR {col_prefix}status = 'success')"
-            # 提取异常：status=done AND is_abnormal=1，然后去重
-            ab_cond = f"{done_cond} AND {col_prefix}is_abnormal = 1"
-            ab_full = f"{full_where}{ab_cond}"
-            ab_empty = f"{empty_where}{ab_cond}"
-            cursor.execute(
-                f"SELECT COUNT(*) as cnt FROM ("
-                f"  SELECT MAX({col_prefix}id) FROM {from_sql}{ab_full} GROUP BY pf.policy_no"
-                f") t", params)
-            ab_dedup = cursor.fetchone()["cnt"]
-            cursor.execute(f"SELECT COUNT(*) as cnt FROM {from_sql}{ab_empty}", params)
-            ab_empty_cnt = cursor.fetchone()["cnt"]
-            summary["abnormal_cnt"] = ab_dedup + ab_empty_cnt
-            # 非保单：status=done AND doc_category != '保单'，然后去重
-            np_cond = f"{done_cond} AND {col_prefix}doc_category != '' AND {col_prefix}doc_category != '保单'"
-            np_full = f"{full_where}{np_cond}"
-            np_empty = f"{empty_where}{np_cond}"
-            cursor.execute(
-                f"SELECT COUNT(*) as cnt FROM ("
-                f"  SELECT MAX({col_prefix}id) FROM {from_sql}{np_full} GROUP BY pf.policy_no"
-                f") t", params)
-            np_dedup = cursor.fetchone()["cnt"]
-            cursor.execute(f"SELECT COUNT(*) as cnt FROM {from_sql}{np_empty}", params)
-            np_empty_cnt = cursor.fetchone()["cnt"]
-            summary["nonpolicy_cnt"] = np_dedup + np_empty_cnt
-        else:
-            cursor.execute(f"""
-                SELECT
-                    COUNT(*) as total,
-                    SUM({col_prefix}status = 'done' OR {col_prefix}status = 'success') as done_cnt,
-                    SUM({col_prefix}status = 'failed') as failed_cnt,
-                    SUM({col_prefix}status = 'pending') as pending_cnt,
-                    SUM({col_prefix}status = 'processing') as processing_cnt,
-                    SUM(({col_prefix}status = 'done' OR {col_prefix}status = 'success') AND {col_prefix}is_abnormal = 1) as abnormal_cnt,
-                    SUM(({col_prefix}status = 'done' OR {col_prefix}status = 'success') AND {col_prefix}doc_category != '' AND {col_prefix}doc_category != '保单') as nonpolicy_cnt
-                FROM {from_sql}{where_sql}
-            """, params)
-        summary = cursor.fetchone() or {"total": 0, "done_cnt": 0, "failed_cnt": 0, "pending_cnt": 0, "processing_cnt": 0, "abnormal_cnt": 0, "nonpolicy_cnt": 0}
-        total = summary["total"] or 0
+        # 复用与 query_insurance_records 完全一致的计数方式
+        def _count(extra_where="", extra_params=None):
+            """计算符合条件的记录数，去重模式与列表查询逻辑完全一致"""
+            ep = list(extra_params or [])
+            w = where_sql
+            if extra_where:
+                w = f"{w} AND {extra_where}" if w else f" WHERE {extra_where}"
+            all_params = params + ep
+            if dedup:
+                dedup_cond = "pf.policy_no IS NOT NULL AND pf.policy_no != ''"
+                fw = f"{w} AND {dedup_cond}" if w else f" WHERE {dedup_cond}"
+                ew = f"{w} AND (pf.policy_no IS NULL OR pf.policy_no = '')" if w else " WHERE (pf.policy_no IS NULL OR pf.policy_no = '')"
+                cursor.execute(
+                    f"SELECT COUNT(*) as cnt FROM ("
+                    f"  SELECT MAX({col_prefix}id) FROM {from_sql}{fw} GROUP BY pf.policy_no"
+                    f") t", all_params)
+                c1 = cursor.fetchone()["cnt"]
+                cursor.execute(f"SELECT COUNT(*) as cnt FROM {from_sql}{ew}", all_params)
+                c2 = cursor.fetchone()["cnt"]
+                return c1 + c2
+            else:
+                cursor.execute(f"SELECT COUNT(*) as cnt FROM {from_sql}{w}", all_params)
+                return cursor.fetchone()["cnt"]
+
+        done_where = f"({col_prefix}status = 'done' OR {col_prefix}status = 'success')"
+        total = _count()
+        done_cnt = _count(done_where)
+        failed_cnt = _count(f"{col_prefix}status = 'failed'")
+        pending_cnt = _count(f"{col_prefix}status = 'pending'")
+        processing_cnt = _count(f"{col_prefix}status = 'processing'")
+        abnormal_cnt = _count(f"{done_where} AND {col_prefix}is_abnormal = 1")
+        nonpolicy_cnt = _count(f"{done_where} AND {col_prefix}doc_category != '' AND {col_prefix}doc_category != '保单'")
+        summary = {
+            "total": total, "done_cnt": done_cnt, "failed_cnt": failed_cnt,
+            "pending_cnt": pending_cnt, "processing_cnt": processing_cnt,
+            "abnormal_cnt": abnormal_cnt, "nonpolicy_cnt": nonpolicy_cnt,
+        }
 
         status_stats = []
-        for s, c in [("done", summary["done_cnt"]), ("failed", summary["failed_cnt"]),
-                      ("pending", summary["pending_cnt"]), ("processing", summary["processing_cnt"])]:
+        for s, c in [("done", done_cnt), ("failed", failed_cnt),
+                      ("pending", pending_cnt), ("processing", processing_cnt)]:
             if c:
                 status_stats.append({"status": s, "cnt": int(c)})
 
         # 按识别方式统计
-        if dedup:
-            cursor.execute(f"""
-                SELECT ocr_engine, COUNT(*) as cnt
-                FROM insurance_records
-                WHERE id IN ({dedup_ids_sql})
-                GROUP BY ocr_engine ORDER BY cnt DESC
-            """, params + params)
-        else:
-            cursor.execute(
-                f"SELECT {col_prefix}ocr_engine AS ocr_engine, COUNT(*) as cnt "
-                f"FROM {from_sql}{where_sql} GROUP BY {col_prefix}ocr_engine ORDER BY cnt DESC",
-                params
-            )
+        cursor.execute(
+            f"SELECT {col_prefix}ocr_engine AS ocr_engine, COUNT(*) as cnt "
+            f"FROM {from_sql}{where_sql} GROUP BY {col_prefix}ocr_engine ORDER BY cnt DESC",
+            params
+        )
         engine_stats = list(cursor.fetchall())
 
         # 按群统计（始终返回，按账号/企业权限过滤）
