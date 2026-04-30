@@ -1744,6 +1744,17 @@
                               class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
                             第{{ previewAutoRecord.page_range }}页
                         </span>
+                        <!-- 同一PDF其他保单切换 -->
+                        <template v-if="previewSiblings.length > 0">
+                            <span class="text-gray-300 mx-1">|</span>
+                            <span v-for="sib in previewSiblings" :key="sib.id"
+                                  class="text-xs text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                                  @click="switchToSibling(sib.id)"
+                                  :title="'切换到第' + sib.policy_index + '份保单'">
+                                第{{ sib.policy_index }}份<span v-if="sib.summary">·{{ sib.summary }}</span>
+                                <span v-if="sib.page_range" class="text-gray-400 ml-0.5">(P{{ sib.page_range }})</span>
+                            </span>
+                        </template>
                         <span v-if="isSuperAdmin && previewOcrEngine" class="badge text-xs"
                               :class="previewOcrEngine === 'baidu' ? 'badge-info' : previewOcrEngine === 'volc' ? 'badge-warning' : 'badge-success'">
                             {{ previewOcrEngine === 'baidu' ? '百度OCR' : previewOcrEngine === 'volc' ? '火山引擎' : 'PDF提取' }}
@@ -2166,6 +2177,7 @@ createApp({
         const previewFileName = ref('');
         // 识别记录预览时存储当前记录（用于右侧字段面板）
         const previewAutoRecord = ref(null);
+        const previewSiblings = ref([]);  // 同一 PDF 的其他保单记录
         const previewHasRawText = ref(false);
         const previewShowRaw = ref(false);
         const previewShowFields = ref(false);
@@ -2897,6 +2909,7 @@ createApp({
             previewShowRaw.value = false;
             previewShowFields.value = true;  // 自动展开列表信息
             previewShowRules.value = false;
+            previewSiblings.value = [];
             const ext = (record.filename || '').split('.').pop().toLowerCase();
             previewType.value = ext || 'pdf';
             previewSrc.value = `/api/insurance/records/${record.id}/preview?token=${getToken()}`;
@@ -2904,7 +2917,7 @@ createApp({
             previewHasRawText.value = (ext === 'pdf');
             previewRawText.value = '';
             previewVisible.value = true;
-            // 异步加载完整详情（含 parsed_fields）
+            // 异步加载完整详情（含 parsed_fields 和兄弟记录）
             try {
                 const resp = await authFetch(`/api/insurance/records/${record.id}`);
                 const json = await resp.json();
@@ -2917,9 +2930,36 @@ createApp({
                         try { detail.manual_fields = JSON.parse(detail.manual_fields); } catch { detail.manual_fields = []; }
                     }
                     previewAutoRecord.value = detail;
+                    // 同一 PDF 的其他保单记录
+                    if (json.siblings && json.siblings.length > 0) {
+                        previewSiblings.value = json.siblings;
+                    }
                 }
             } catch (e) {
                 console.error('加载预览详情失败', e);
+            }
+        }
+
+        // 切换到同一PDF的其他保单
+        async function switchToSibling(siblingId) {
+            try {
+                const resp = await authFetch(`/api/insurance/records/${siblingId}`);
+                const json = await resp.json();
+                if (json.code === 0 && json.data) {
+                    const detail = json.data;
+                    if (typeof detail.parsed_fields === 'string') {
+                        try { detail.parsed_fields = JSON.parse(detail.parsed_fields); } catch { detail.parsed_fields = {}; }
+                    }
+                    if (typeof detail.manual_fields === 'string') {
+                        try { detail.manual_fields = JSON.parse(detail.manual_fields); } catch { detail.manual_fields = []; }
+                    }
+                    previewAutoRecord.value = detail;
+                    previewRawText.value = '';
+                    // 更新兄弟列表（排除当前记录）
+                    previewSiblings.value = json.siblings || [];
+                }
+            } catch (e) {
+                console.error('切换保单失败', e);
             }
         }
 
@@ -4540,7 +4580,7 @@ createApp({
             recordActiveTab, recordTabs, recordCompanyFilter, recordDocTypeFilter,
             recordCompanyList, recordDocTypes, exportRecordsExcel,
             loadRecords, loadRecordStats, gotoRecordPage, getParsedField, getRecordMappedValue, formatTime,
-            retryRecord, reocrRecord, reocrPreviewFile, previewReocring, syncRecordToDingtalk, previewRecord, previewAutoRecord, loadAutoRecordRawText,
+            retryRecord, reocrRecord, reocrPreviewFile, previewReocring, syncRecordToDingtalk, previewRecord, previewAutoRecord, previewSiblings, switchToSibling, loadAutoRecordRawText,
             markNormalVisible, markNormalRecord, markNormalReason, markNormalSaving, getQuickReasons, openMarkNormal, confirmMarkNormal, undoMarkNormal,
             editingField, editingValue, fieldSaving, startEditField, cancelEditField, saveEditField, isManualField,
             listEditing, startListEdit, cancelListEdit, saveListEdit,
