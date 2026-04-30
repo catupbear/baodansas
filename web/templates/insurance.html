@@ -1755,26 +1755,21 @@
                             </button>
                             <div v-if="siblingDropdownOpen"
                                  class="absolute left-0 top-full mt-1 bg-white border rounded-lg shadow-lg z-50 py-1"
-                                 style="min-width:300px;">
+                                 style="min-width:300px; max-width:400px;">
                                 <!-- 当前保单 -->
-                                <div class="px-3 py-2 text-xs flex items-center justify-between gap-2 bg-blue-50 border-b border-blue-100">
-                                    <span class="text-blue-700">
-                                        <span class="font-medium">第{{ previewAutoRecord.policy_index }}份</span>
-                                        <span class="ml-1">{{ (previewAutoRecord.parsed_fields || {})['险种类型'] || (previewAutoRecord.parsed_fields || {})['保单号'] || previewAutoRecord.doc_category || '' }}</span>
-                                    </span>
-                                    <span class="flex items-center gap-2">
-                                        <span v-if="previewAutoRecord.page_range" class="text-blue-400">P{{ previewAutoRecord.page_range }}</span>
-                                        <span class="text-blue-400 text-[10px] border border-blue-300 rounded px-1">当前</span>
-                                    </span>
+                                <div class="px-3 py-2 text-xs flex items-center gap-2 bg-blue-50 border-b border-blue-100" style="white-space:nowrap;">
+                                    <span class="font-medium text-blue-700">第{{ previewAutoRecord.policy_index }}份</span>
+                                    <span class="text-blue-700 truncate flex-1" style="min-width:0;">{{ (previewAutoRecord.parsed_fields || {})['险种类型'] || (previewAutoRecord.parsed_fields || {})['保单号'] || previewAutoRecord.doc_category || '' }}</span>
+                                    <span v-if="previewAutoRecord.page_range" class="text-blue-400 flex-shrink-0">P{{ previewAutoRecord.page_range }}</span>
+                                    <span class="text-blue-400 border border-blue-300 rounded px-1 flex-shrink-0" style="font-size:10px;">当前</span>
                                 </div>
                                 <!-- 兄弟保单 -->
                                 <div v-for="sib in previewSiblings" :key="sib.id"
-                                     class="px-3 py-2 text-xs hover:bg-blue-50 cursor-pointer flex items-center justify-between gap-2 transition-colors"
+                                     class="px-3 py-2 text-xs hover:bg-blue-50 cursor-pointer flex items-center gap-2 transition-colors"
+                                     style="white-space:nowrap;"
                                      @click="switchToSibling(sib.id); siblingDropdownOpen = false">
-                                    <span class="text-gray-700">
-                                        <span class="font-medium text-blue-600">第{{ sib.policy_index }}份</span>
-                                        <span v-if="sib.summary" class="ml-1">{{ sib.summary }}</span>
-                                    </span>
+                                    <span class="font-medium text-blue-600">第{{ sib.policy_index }}份</span>
+                                    <span v-if="sib.summary" class="text-gray-700 truncate flex-1" style="min-width:0;">{{ sib.summary }}</span>
                                     <span v-if="sib.page_range" class="text-gray-400 flex-shrink-0">P{{ sib.page_range }}</span>
                                 </div>
                             </div>
@@ -2964,9 +2959,10 @@ createApp({
                         try { detail.manual_fields = JSON.parse(detail.manual_fields); } catch { detail.manual_fields = []; }
                     }
                     previewAutoRecord.value = detail;
-                    // 同一 PDF 的其他保单记录
+                    // 同一 PDF 的其他保单记录（排除与当前相同 policy_index 的）
                     if (json.siblings && json.siblings.length > 0) {
-                        previewSiblings.value = json.siblings;
+                        const curIdx = detail.policy_index || 0;
+                        previewSiblings.value = json.siblings.filter(s => s.policy_index !== curIdx);
                     }
                 }
             } catch (e) {
@@ -2998,8 +2994,9 @@ createApp({
                             iframe.src = base + `#page=${startPage}`;
                         }
                     });
-                    // 更新兄弟列表（排除当前记录）
-                    previewSiblings.value = json.siblings || [];
+                    // 更新兄弟列表（排除与当前相同 policy_index 的）
+                    const curIdx = detail.policy_index || 0;
+                    previewSiblings.value = (json.siblings || []).filter(s => s.policy_index !== curIdx);
                 }
             } catch (e) {
                 console.error('切换保单失败', e);
