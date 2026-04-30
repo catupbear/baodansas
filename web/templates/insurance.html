@@ -1327,7 +1327,7 @@
 
     <!-- 标记正常弹窗 -->
     <transition name="fade">
-        <div v-if="markNormalVisible" class="fixed inset-0 z-50 modal-mask flex items-center justify-center"
+        <div v-if="markNormalVisible" class="fixed inset-0 modal-mask flex items-center justify-center" style="z-index:60;"
              @click.self="markNormalVisible = false">
             <div class="bg-white rounded-xl shadow-2xl" style="width:420px;max-width:90vw;" @click.stop>
                 <div class="px-5 py-4 border-b flex items-center justify-between">
