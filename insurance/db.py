@@ -1343,12 +1343,37 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
                     SUM(status = 'done' OR status = 'success') as done_cnt,
                     SUM(status = 'failed') as failed_cnt,
                     SUM(status = 'pending') as pending_cnt,
-                    SUM(status = 'processing') as processing_cnt,
-                    SUM((status = 'done' OR status = 'success') AND is_abnormal = 1) as abnormal_cnt,
-                    SUM((status = 'done' OR status = 'success') AND doc_category != '' AND doc_category != '保单') as nonpolicy_cnt
+                    SUM(status = 'processing') as processing_cnt
                 FROM insurance_records
                 WHERE id IN ({dedup_ids_sql})
             """, params + params)
+            summary = cursor.fetchone()
+            # 异常/非保单数量需要"先过滤再去重"，与列表查询逻辑一致
+            done_cond = f" AND ({col_prefix}status = 'done' OR {col_prefix}status = 'success')"
+            # 提取异常：status=done AND is_abnormal=1，然后去重
+            ab_cond = f"{done_cond} AND {col_prefix}is_abnormal = 1"
+            ab_full = f"{full_where}{ab_cond}"
+            ab_empty = f"{empty_where}{ab_cond}"
+            cursor.execute(
+                f"SELECT COUNT(*) as cnt FROM ("
+                f"  SELECT MAX({col_prefix}id) FROM {from_sql}{ab_full} GROUP BY pf.policy_no"
+                f") t", params)
+            ab_dedup = cursor.fetchone()["cnt"]
+            cursor.execute(f"SELECT COUNT(*) as cnt FROM {from_sql}{ab_empty}", params)
+            ab_empty_cnt = cursor.fetchone()["cnt"]
+            summary["abnormal_cnt"] = ab_dedup + ab_empty_cnt
+            # 非保单：status=done AND doc_category != '保单'，然后去重
+            np_cond = f"{done_cond} AND {col_prefix}doc_category != '' AND {col_prefix}doc_category != '保单'"
+            np_full = f"{full_where}{np_cond}"
+            np_empty = f"{empty_where}{np_cond}"
+            cursor.execute(
+                f"SELECT COUNT(*) as cnt FROM ("
+                f"  SELECT MAX({col_prefix}id) FROM {from_sql}{np_full} GROUP BY pf.policy_no"
+                f") t", params)
+            np_dedup = cursor.fetchone()["cnt"]
+            cursor.execute(f"SELECT COUNT(*) as cnt FROM {from_sql}{np_empty}", params)
+            np_empty_cnt = cursor.fetchone()["cnt"]
+            summary["nonpolicy_cnt"] = np_dedup + np_empty_cnt
         else:
             cursor.execute(f"""
                 SELECT

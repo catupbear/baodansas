@@ -867,40 +867,13 @@
                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
                            style="width:100px;" @input="debounceLoadRecords()">
                 </div>
-                <!-- 去重 + 保司 + 文档类型 + 识别方式 -->
-                <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-500 font-medium select-none" @click.prevent="recordFilter.dedup = !recordFilter.dedup; loadRecords()">
-                    按保单号去重
-                    <span class="relative inline-block" style="width:32px;height:18px;">
-                        <span style="position:absolute;inset:0;border-radius:9px;transition:background .2s;"
-                              :style="{ background: recordFilter.dedup ? '#f97316' : '#d1d5db' }"></span>
-                        <span style="position:absolute;top:2px;width:14px;height:14px;border-radius:50%;background:white;transition:left .2s;box-shadow:0 1px 2px rgba(0,0,0,.2);"
-                              :style="{ left: recordFilter.dedup ? '16px' : '2px' }"></span>
-                    </span>
-                </label>
+                <!-- 保司筛选 -->
                 <div class="flex items-center gap-1.5">
                     <span class="text-xs text-gray-500 font-medium">保司:</span>
                     <select v-model="recordCompanyFilter" @change="loadRecords()"
                             class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
                         <option value="">全部</option>
                         <option v-for="c in recordCompanyList" :key="c" :value="c">{{ c }}</option>
-                    </select>
-                </div>
-                <div class="flex items-center gap-1.5">
-                    <span class="text-xs text-gray-500 font-medium">文档类型:</span>
-                    <select v-model="recordDocTypeFilter" @change="loadRecords()"
-                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
-                        <option value="">全部 ({{ recordStats.total }})</option>
-                        <option v-for="dt in recordDocTypes" :key="dt.name" :value="dt.name">{{ dt.name }} ({{ dt.cnt }})</option>
-                    </select>
-                </div>
-                <div v-if="isSuperAdmin" class="flex items-center gap-1.5">
-                    <span class="text-xs text-gray-500 font-medium">识别方式:</span>
-                    <select v-model="recordFilter.ocr_engine" @change="loadRecords()"
-                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
-                        <option value="">全部</option>
-                        <option v-for="eng in recordStats.engines" :key="eng.name" :value="eng.name">
-                            {{ eng.name === 'pdfplumber' ? 'PDF提取' : eng.name === 'baidu' ? '百度OCR' : eng.name === 'volc' ? '火山引擎' : eng.name }} ({{ eng.cnt }})
-                        </option>
                     </select>
                 </div>
                 <!-- 清空所有筛选 -->
@@ -946,6 +919,36 @@
             </div>
             <!-- 高级搜索面板 -->
             <div v-if="showAdvancedSearch" class="mt-3 pt-3 border-t border-gray-100">
+                <!-- 去重 + 文档类型 + 识别方式 -->
+                <div class="flex flex-wrap items-center gap-3 mb-2">
+                    <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-500 font-medium select-none" @click.prevent="recordFilter.dedup = !recordFilter.dedup; loadRecords()">
+                        按保单号去重
+                        <span class="relative inline-block" style="width:32px;height:18px;">
+                            <span style="position:absolute;inset:0;border-radius:9px;transition:background .2s;"
+                                  :style="{ background: recordFilter.dedup ? '#f97316' : '#d1d5db' }"></span>
+                            <span style="position:absolute;top:2px;width:14px;height:14px;border-radius:50%;background:white;transition:left .2s;box-shadow:0 1px 2px rgba(0,0,0,.2);"
+                                  :style="{ left: recordFilter.dedup ? '16px' : '2px' }"></span>
+                        </span>
+                    </label>
+                    <div class="flex items-center gap-1">
+                        <span class="text-xs text-gray-500 font-medium whitespace-nowrap">文档类型:</span>
+                        <select v-model="recordDocTypeFilter" @change="loadRecords()"
+                                class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
+                            <option value="">全部 ({{ recordStats.total }})</option>
+                            <option v-for="dt in recordDocTypes" :key="dt.name" :value="dt.name">{{ dt.name }} ({{ dt.cnt }})</option>
+                        </select>
+                    </div>
+                    <div v-if="isSuperAdmin" class="flex items-center gap-1">
+                        <span class="text-xs text-gray-500 font-medium whitespace-nowrap">识别方式:</span>
+                        <select v-model="recordFilter.ocr_engine" @change="loadRecords()"
+                                class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
+                            <option value="">全部</option>
+                            <option v-for="eng in recordStats.engines" :key="eng.name" :value="eng.name">
+                                {{ eng.name === 'pdfplumber' ? 'PDF提取' : eng.name === 'baidu' ? '百度OCR' : eng.name === 'volc' ? '火山引擎' : eng.name }} ({{ eng.cnt }})
+                            </option>
+                        </select>
+                    </div>
+                </div>
                 <!-- 字段模糊搜索（仅保留顶部未展示的字段） -->
                 <div class="flex flex-wrap items-center gap-2 mb-2">
                     <div class="flex items-center gap-1">
@@ -1010,10 +1013,10 @@
         <!-- 状态 Tab + 操作按钮 + 筛选 -->
         <div v-if="recordStats.total > 0" class="card">
             <!-- 状态 Tab 栏 + 操作按钮 -->
-            <div class="flex items-center border-b px-4" style="gap:0;">
+            <div class="flex items-center px-4" style="gap:0;min-height:48px;">
                 <button v-for="tab in recordTabs" :key="tab.key"
                         @click="recordActiveTab = tab.key; loadRecords()"
-                        class="px-4 py-2.5 text-sm font-medium transition-colors relative flex-shrink-0"
+                        class="px-4 py-3 text-sm font-medium transition-colors relative flex-shrink-0"
                         :class="recordActiveTab === tab.key
                             ? 'text-orange-600'
                             : 'text-gray-500 hover:text-gray-700'"
@@ -1024,22 +1027,22 @@
                         {{ tab.count }}
                     </span>
                 </button>
-                <!-- 操作按钮 + 筛选 -->
-                <div class="ml-auto flex items-center gap-2 py-1.5">
-                    <button @click="exportRecordsExcel" class="btn btn-success" style="padding:4px 10px;font-size:12px;">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <!-- 操作按钮 -->
+                <div class="ml-auto flex items-center gap-2">
+                    <button @click="exportRecordsExcel" class="btn btn-success" style="padding:6px 14px;font-size:13px;">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
                         导出Excel
                     </button>
-                    <button @click="batchDownload" class="btn" style="padding:4px 10px;font-size:12px;background:#f0fdf4;border:1px solid #86efac;color:#16a34a;">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button @click="batchDownload" class="btn" style="padding:6px 14px;font-size:13px;background:#f0fdf4;border:1px solid #86efac;color:#16a34a;">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                         </svg>
                         批量导出保单{{ selectedRecordIds.length ? ` (${selectedRecordIds.length})` : '' }}
                     </button>
-                    <button @click="batchReocrSync" :disabled="batchProcessing" class="btn btn-primary" style="padding:4px 10px;font-size:12px;">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button @click="batchReocrSync" :disabled="batchProcessing" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                         </svg>
                         {{ batchProcessing ? '处理中...' : '批量重新识别' }}{{ !batchProcessing && selectedRecordIds.length ? ` (${selectedRecordIds.length})` : '' }}
