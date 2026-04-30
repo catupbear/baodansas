@@ -555,6 +555,48 @@ def update_supported_companies_config():
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
+def _cross_fill_from_siblings(db, record_id: int, file_md5: str, parsed_fields: dict):
+    """从同一 PDF（相同 file_md5）的兄弟记录中互补缺失的基础字段"""
+    fill_fields = ["车牌号", "投保人", "被保险人", "车主", "证件号码",
+                   "车架号VIN", "发动机号", "厂牌型号"]
+    # 检查当前记录是否有缺失字段
+    missing = [f for f in fill_fields if not parsed_fields.get(f)]
+    if not missing:
+        return
+
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT parsed_fields FROM insurance_records "
+            "WHERE file_md5 = %s AND id != %s AND status = 'done'",
+            (file_md5, record_id)
+        )
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
+
+    filled = []
+    for row in rows:
+        pf = row.get("parsed_fields", {})
+        if isinstance(pf, str):
+            try:
+                pf = json.loads(pf) if pf else {}
+            except (TypeError, json.JSONDecodeError):
+                continue
+        for f in list(missing):
+            val = pf.get(f, "")
+            if val:
+                parsed_fields[f] = val
+                filled.append(f"{f}={val}")
+                missing.remove(f)
+        if not missing:
+            break
+
+    if filled:
+        logger.info("兄弟记录互补: record_id=%d, 补充=%s", record_id, ", ".join(filled))
+
+
 def _get_sibling_records(db, file_md5: str, exclude_id: int) -> list:
     """查询同一 PDF（相同 file_md5）的其他保单记录摘要，每个 policy_index 只保留最新一条"""
     conn = db.pool.connection()
@@ -995,6 +1037,17 @@ def reocr_record(record_id):
         doc_category = best_policy.get("doc_category", "")
         confidence = best_policy.get("confidence", 0.0)
 
+        # 同一 PDF 多保单互补（从 policies 列表中互补）
+        if len(policies) > 1:
+            _handler._cross_fill_same_pdf(policies)
+            # 重新取互补后的字段
+            parsed_fields = best_policy.get("fields", {})
+
+        # 同 file_md5 兄弟记录互补（从数据库中已有的兄弟记录互补）
+        file_md5 = record.get("file_md5", "")
+        if file_md5:
+            _cross_fill_from_siblings(_db, record_id, file_md5, parsed_fields)
+
         # 同车牌保单字段互补
         _handler._cross_fill_by_plate(parsed_fields, record_id)
 
@@ -1202,6 +1255,16 @@ def batch_reocr_sync():
                 parsed_fields = best_policy.get("fields", {})
                 doc_category = best_policy.get("doc_category", "")
                 confidence = best_policy.get("confidence", 0.0)
+
+                # 同一 PDF 多保单互补
+                if len(policies) > 1:
+                    _handler._cross_fill_same_pdf(policies)
+                    parsed_fields = best_policy.get("fields", {})
+
+                # 同 file_md5 兄弟记录互补
+                rec_md5 = record.get("file_md5", "")
+                if rec_md5:
+                    _cross_fill_from_siblings(_db, rid, rec_md5, parsed_fields)
 
                 # 同车牌互补
                 _handler._cross_fill_by_plate(parsed_fields, rid)
