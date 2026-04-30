@@ -51,6 +51,7 @@ COMPANY_BASES = [
     "鼎和财产保险股份有限公司",
     "众诚汽车保险股份有限公司",
     "安诚财产保险股份有限公司",
+    "国任财产保险股份有限公司",
 ]
 
 # 保司简称映射
@@ -84,6 +85,7 @@ COMPANY_SHORT_MAP = {
     "鼎和财产": "鼎和",
     "众诚汽车": "众诚",
     "安诚财产": "安诚",
+    "国任财产": "国任",
 }
 
 # 通过特征关键词辅助识别保司（当公司名未直接出现时的兜底）
@@ -109,6 +111,7 @@ COMPANY_FALLBACK_SIGNALS = [
     (r"鼎和财产|鼎和保险", "鼎和财产保险股份有限公司"),
     (r"4008600600|众诚汽车|众诚保险|urtrust\.com", "众诚汽车保险股份有限公司"),
     (r"95544|安诚财产|安诚保险", "安诚财产保险股份有限公司"),
+    (r"956030|guorenpcic|国任财产|国任保险", "国任财产保险股份有限公司"),
 ]
 
 
@@ -288,6 +291,7 @@ def _identify_company(text: str) -> Dict[str, str]:
                 (r'^BSHZ', "中国太平洋财产保险股份有限公司"),          # 太平洋批单
                 (r'^P432', "太平财产保险有限公司"),                   # 太平
                 (r'^6203', "申能财产保险股份有限公司"),                # 申能
+                (r'^6260', "国任财产保险股份有限公司"),                # 国任
             ]
             for prefix_pat, company_name in prefix_map:
                 if re.match(prefix_pat, pno):
@@ -338,6 +342,8 @@ def _identify_policy_type(text: str) -> Optional[str]:
         r"(守护出行无忧[\d.]*(?:[（(]\S+?[)）])?)",  # 太平守护出行无忧3.0
         r"(安心行\S*驾乘意外险)",          # 京东安联安心行驾乘意外险
         r"(卓越全意保\S*保险)",            # 安盛天平卓越全意保
+        r"(个人账户资金安全险)",            # 国任非车险
+        r"(信用卡盗用保险)",               # 国任非车险
     ]:
         m = re.search(p, text)
         if m:
@@ -381,6 +387,8 @@ def _get_policy_type_code(policy_type: str) -> tuple:
         return "commercial", "商业险"
     if "驾乘" in policy_type or "意外" in policy_type or "出行险" in policy_type or "出行无忧" in policy_type or "安心行" in policy_type or "E车无忧" in policy_type or "卓越全意保" in policy_type:
         return "accident", "驾乘/意外险"
+    if "账户" in policy_type or "资金安全" in policy_type or "信用卡" in policy_type or "盗用" in policy_type:
+        return "non_vehicle", "非车险"
     return "unknown", policy_type
 
 
@@ -598,6 +606,7 @@ def _extract_policy_no(text: str, fields: dict, company_short: str, policy_type:
         r"保单号[码]?[：:\s]\s*(\S+)",
         r"保险单\s*号[码]?[：:\s]\s*(\S+)",
         r"保险凭证号[：:\s]\s*(\S+)",
+        r"保险号[码]?[：:\s]\s*(\S+)",       # 国任等格式
     ]:
         m = re.search(p, text)
         if m:
@@ -1173,8 +1182,8 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
                     return
             break
 
-    # 华泰等表格格式："姓名\n付琴\n联系电话\n...\n投保人\n证件类型"
-    # "投保人"是区域标题，投保人姓名在前面"姓名"字段的下一行
+    # 华泰/国任等表格格式："姓名\n付琴\n联系电话\n...\n投保人\n证件类型"
+    # "投保人"是区域标题，投保人姓名在前面"姓名"字段的下一行或同一行
     for i, line in enumerate(lines):
         stripped = line.strip()
         if stripped == '投保人' and i >= 2:
@@ -1183,6 +1192,13 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
                 if lines[j].strip() == '姓名' and j + 1 < i:
                     val = lines[j + 1].strip()
                     if val and _is_valid_person(val):
+                        fields["投保人"] = val
+                        return
+                # 国任等格式："姓名 倪于华 联系方式 15919735986"（姓名和值在同一行）
+                m_name = re.match(r'姓名\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|$)', lines[j].strip())
+                if m_name:
+                    val = _clean_person_name(m_name.group(1))
+                    if _is_valid_person(val):
                         fields["投保人"] = val
                         return
             # 众诚等格式：向前找"名称 XXX 手机号"行
@@ -1855,6 +1871,14 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
                     return
             break
 
+    # 国任等格式："2026/05/22 00:00:00 - 2027/05/21 23:59:59"（用 - 分隔，HH:MM:SS格式）
+    m = re.search(r"(\d{4}/\d{2}/\d{2})\s*\d{2}:\d{2}:\d{2}\s*-\s*(\d{4}/\d{2}/\d{2})", text)
+    if m:
+        fields["保险起期"] = m.group(1)
+        fields["保险止期"] = m.group(2)
+        fields["保险期间"] = f"{m.group(1)} 至 {m.group(2)}"
+        return
+
     # 缴款通知表格格式："2026/05/01 00时至2027/05/01 00时" 可能跨行
     m = re.search(r"(\d{4}/\d{2}/\d{2})\s*\d{2}时[\s\S]{0,50}?至\s*(\d{4}/\d{2}/\d{2})", text)
     if m:
@@ -2194,11 +2218,13 @@ def _find_policy_boundaries(text: str) -> List[dict]:
         # 匹配所有"保单号"/"保险单号"及其值
         policy_no_pattern = r"保[险]?单号[：:\s]*([A-Za-z0-9]{10,30})"
         policy_nos = []
+        seen_nos = set()  # 记录所有见过的保单号（含被跳过的），防止同一号码远距离重复出现被误判为新保单
         for m in re.finditer(policy_no_pattern, text):
             no_val = m.group(1)
             pos = m.start()
-            # 排除重复的保单号（同一号码可能出现多次）
-            if no_val not in [p["no"] for p in policy_nos]:
+            # 排除重复的保单号（同一号码可能出现多次，如第2页重复打印保单号）
+            if no_val not in seen_nos:
+                seen_nos.add(no_val)
                 # 排除与已有标题边界距离太近的（已被标题覆盖）
                 if not any(abs(pos - sp) < 200 for sp in seen_positions):
                     policy_nos.append({"pos": pos, "no": no_val})
