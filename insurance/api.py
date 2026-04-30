@@ -212,8 +212,13 @@ def list_records():
 
         return jsonify({"code": 0, "data": result})
     except Exception as e:
+        err_msg = str(e)
+        # MySQL 查询超时（MAX_EXECUTION_TIME）返回友好提示
+        if "3024" in err_msg or "MAX_EXECUTION_TIME" in err_msg:
+            logger.warning("查询保单记录超时: %s", err_msg)
+            return jsonify({"code": 504, "msg": "查询超时，请缩小筛选范围后重试"}), 504
         logger.exception("查询保单记录失败")
-        return jsonify({"code": 500, "msg": str(e)}), 500
+        return jsonify({"code": 500, "msg": err_msg}), 500
 
 
 @insurance_bp.route("/api/insurance/records/<int:record_id>", methods=["GET"])

@@ -4049,7 +4049,7 @@ createApp({
         // 加载群和用户列表（从已有识别记录 + 监控配置合并，用于筛选下拉）
         async function loadRoomList() {
             try {
-                // 从识别记录统计中获取已有群（最可靠的数据来源）
+                // 从识别记录统计中获取当前账号/企业关联的群（不带日期筛选）
                 const roomMap = {};  // id → name
                 const userMap = {};
                 try {
@@ -4063,47 +4063,23 @@ createApp({
                     }
                 } catch (e) {}
 
-                // 从监控配置补充
-                try {
-                    const resp = await authFetch('/api/monitor-configs');
-                    const json = await resp.json();
-                    const configs = (json.data || json || []).filter(c => c.enabled !== 0);
-                    for (const cfg of configs) {
-                        for (const r of (cfg.rooms || [])) {
-                            const id = typeof r === 'string' ? r : (r.id || '');
-                            const name = typeof r === 'object' ? (r.name || '') : '';
-                            if (id && !roomMap[id]) roomMap[id] = name || id;
-                        }
-                        for (const u of (cfg.users || [])) {
-                            const id = typeof u === 'string' ? u : (u.id || '');
-                            const name = typeof u === 'object' ? (u.name || '') : '';
-                            if (id && !userMap[id]) userMap[id] = name || id;
-                        }
-                    }
-                } catch (e) {}
-
-                // 对未解析的名称批量解析
+                // 对未解析的名称（room_name 等于 roomid 的）批量解析
                 const unresolvedRooms = Object.keys(roomMap).filter(id => roomMap[id] === id);
-                const unresolvedUsers = Object.keys(userMap).filter(id => userMap[id] === id);
-                if (unresolvedRooms.length || unresolvedUsers.length) {
+                if (unresolvedRooms.length) {
                     try {
                         const resolveResp = await authFetch('/api/contacts/resolve', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ user_ids: unresolvedUsers, room_ids: unresolvedRooms }),
+                            body: JSON.stringify({ user_ids: [], room_ids: unresolvedRooms }),
                         });
                         const names = await resolveResp.json();
                         for (const [id, name] of Object.entries(names.rooms || {})) {
                             if (name) roomMap[id] = name;
                         }
-                        for (const [id, name] of Object.entries(names.users || {})) {
-                            if (name) userMap[id] = name;
-                        }
                     } catch (e) {}
                 }
 
                 monitorRooms.value = Object.entries(roomMap).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-                monitorUsers.value = Object.entries(userMap).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
             } catch (e) {
                 console.error('加载筛选列表失败', e);
                 monitorRooms.value = [];
@@ -4366,8 +4342,8 @@ createApp({
             await loadRoomList();
             // 初始化 IndexedDB
             try { await openDB(); } catch (e) {}
-            // 默认加载识别记录
-            loadRecords();
+            // 默认筛选今天
+            setDateShortcut('today');
             loadRecordStats();
         });
 

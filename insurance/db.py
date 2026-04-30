@@ -307,6 +307,8 @@ def init_insurance_tables(db):
         for idx_sql in [
             "CREATE INDEX idx_insurance_company_short ON insurance_records(company_short)",
             "CREATE INDEX idx_insurance_is_abnormal ON insurance_records(is_abnormal)",
+            # 复合索引：加速列表页常见筛选组合（status + is_abnormal + created_at 范围）
+            "CREATE INDEX idx_insurance_status_abnormal_created ON insurance_records(status, is_abnormal, created_at)",
             "CREATE UNIQUE INDEX idx_insurance_file_md5 ON insurance_records(file_md5)",
             "CREATE INDEX idx_insurance_user_id ON insurance_records(user_id)",
             "CREATE INDEX idx_insurance_enterprise_id ON insurance_records(enterprise_id)",
@@ -973,6 +975,8 @@ def query_insurance_records(
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        # 设置查询超时 30 秒，避免慢查询长时间占用连接池
+        cursor.execute("SET SESSION MAX_EXECUTION_TIME = 30000")
 
         # 去重模式：按保单号分组，取每组最新记录
         if dedup:
@@ -1336,14 +1340,28 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
         )
         engine_stats = list(cursor.fetchall())
 
-        # 按群统计（仅无筛选时返回，有筛选时不需要）
-        room_stats = []
-        if not filters:
-            cursor.execute(
-                "SELECT roomid, MAX(room_name) as room_name, COUNT(*) as cnt "
-                "FROM insurance_records GROUP BY roomid ORDER BY cnt DESC LIMIT 20"
-            )
-            room_stats = list(cursor.fetchall())
+        # 按群统计（始终返回，按账号/企业权限过滤）
+        room_where_parts = []
+        room_params = []
+        if filters.get("user_ids") is not None:
+            uid_list = filters["user_ids"]
+            if uid_list:
+                ph = ",".join(["%s"] * len(uid_list))
+                room_where_parts.append(f"user_id IN ({ph})")
+                room_params.extend(uid_list)
+            else:
+                room_where_parts.append("0")
+        if filters.get("enterprise_id") is not None:
+            room_where_parts.append("enterprise_id = %s")
+            room_params.append(filters["enterprise_id"])
+        room_where_sql = (" WHERE " + " AND ".join(room_where_parts)) if room_where_parts else ""
+        cursor.execute(
+            f"SELECT roomid, MAX(room_name) as room_name, COUNT(*) as cnt "
+            f"FROM insurance_records{room_where_sql} "
+            f"GROUP BY roomid ORDER BY cnt DESC LIMIT 50",
+            room_params
+        )
+        room_stats = list(cursor.fetchall())
 
         return {
             "total": total,
