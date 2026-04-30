@@ -1011,13 +1011,13 @@
                 <div class="ml-auto flex items-center gap-3">
                     <div class="flex items-center gap-1.5">
                         <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-500 font-medium select-none" @click.prevent="recordFilter.dedup = !recordFilter.dedup; loadRecords()">
+                            保单号去重
                             <span class="relative inline-block" style="width:32px;height:18px;">
                                 <span style="position:absolute;inset:0;border-radius:9px;transition:background .2s;"
                                       :style="{ background: recordFilter.dedup ? '#f97316' : '#d1d5db' }"></span>
                                 <span style="position:absolute;top:2px;width:14px;height:14px;border-radius:50%;background:white;transition:left .2s;box-shadow:0 1px 2px rgba(0,0,0,.2);"
                                       :style="{ left: recordFilter.dedup ? '16px' : '2px' }"></span>
                             </span>
-                            保单号去重
                         </label>
                     </div>
                     <div class="flex items-center gap-1.5">
@@ -1087,7 +1087,7 @@
                             <th style="min-width:70px;">识别方式</th>
                             <th style="min-width:60px;">置信度</th>
                             <th style="min-width:80px;">状态</th>
-                            <th style="min-width:80px;">钉钉同步</th>
+                            <!-- <th style="min-width:80px;">钉钉同步</th> -->
                             <th style="min-width:150px;">时间</th>
                             <th style="min-width:100px;">群名</th>
                             <th style="min-width:80px;">发送人</th>
@@ -1176,13 +1176,14 @@
                                     {{ statusLabel(record.status) }}
                                 </span>
                             </td>
-                            <!-- 钉钉同步 -->
+                            <!-- 钉钉同步（已注释）
                             <td>
                                 <span class="badge text-xs"
                                       :class="record.dingtalk_synced ? 'badge-success' : 'badge-gray'">
                                     {{ record.dingtalk_synced ? '已同步' : '未同步' }}
                                 </span>
                             </td>
+                            -->
                             <!-- 时间 -->
                             <td class="text-gray-500 text-xs">{{ formatTime(record.created_at) }}</td>
                             <!-- 群名（可点击编辑） -->
@@ -1226,13 +1227,14 @@
                                             class="btn btn-primary" style="padding:3px 8px;font-size:11px;">
                                         {{ record._retrying ? '重试中...' : '重试' }}
                                     </button>
-                                    <!-- 同步钉钉（已完成的记录，已同步的显示"更新同步"） -->
+                                    <!-- 同步钉钉（已注释）
                                     <button v-if="record.status === 'done' || record.status === 'success'"
                                             @click="syncRecordToDingtalk(record)"
                                             :disabled="record._syncing"
                                             class="btn btn-warning" style="padding:3px 8px;font-size:11px;">
                                         {{ record._syncing ? '同步中...' : (record.dingtalk_synced ? '更新同步' : '同步') }}
                                     </button>
+                                    -->
                                 </div>
                             </td>
                         </tr>
@@ -1902,10 +1904,12 @@
                             <label class="text-xs text-gray-500 font-medium">险种</label>
                             <p class="text-sm text-gray-800 mt-0.5">{{ currentRecord?.doc_category || '—' }}</p>
                         </div>
+                        <!-- 钉钉同步（已注释）
                         <div>
                             <label class="text-xs text-gray-500 font-medium">钉钉同步</label>
                             <p class="text-sm text-gray-800 mt-0.5">{{ currentRecord?.dingtalk_synced ? '已同步' : '未同步' }}</p>
                         </div>
+                        -->
                         <div>
                             <label class="text-xs text-gray-500 font-medium">创建时间</label>
                             <p class="text-sm text-gray-800 mt-0.5">{{ formatTime(currentRecord?.created_at) }}</p>
