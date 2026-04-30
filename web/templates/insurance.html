@@ -4152,7 +4152,8 @@ createApp({
                 if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
                 if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
                 if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
-                if (recordFilter.dedup) params.set('dedup', '1');
+                // 失败/待处理 tab 下不去重，避免记录被过滤掉
+                if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');
                 _appendAdvancedParams(params);
                 const resp = await authFetch(`/api/insurance/records?${params.toString()}`);
                 const json = await resp.json();
