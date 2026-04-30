@@ -981,7 +981,7 @@ def query_insurance_records(
 
     # 构建 FROM 子句（有关联搜索时 JOIN）
     if need_join:
-        from_clause = "insurance_records r INNER JOIN insurance_policy_fields pf ON r.id = pf.record_id"
+        from_clause = "insurance_records r LEFT JOIN insurance_policy_fields pf ON r.id = pf.record_id"
     else:
         from_clause = "insurance_records"
 
@@ -1322,7 +1322,7 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
 
         where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
         if need_join:
-            from_sql = "insurance_records r INNER JOIN insurance_policy_fields pf ON r.id = pf.record_id"
+            from_sql = "insurance_records r LEFT JOIN insurance_policy_fields pf ON r.id = pf.record_id"
         else:
             from_sql = "insurance_records"
 
