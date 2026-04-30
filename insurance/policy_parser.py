@@ -2233,13 +2233,14 @@ def _find_policy_boundaries(text: str) -> List[dict]:
         # 匹配所有"保单号"/"保险单号"及其值
         policy_no_pattern = r"保[险]?单号[：:\s]*([A-Za-z0-9]{10,30})"
         policy_nos = []
-        seen_nos = set()  # 记录所有见过的保单号（含被跳过的），防止同一号码远距离重复出现被误判为新保单
+        seen_nos = []  # 记录所有见过的保单号（含被跳过的），防止同一号码远距离重复出现被误判为新保单
         for m in re.finditer(policy_no_pattern, text):
             no_val = m.group(1)
             pos = m.start()
-            # 排除重复的保单号（同一号码可能出现多次，如第2页重复打印保单号）
-            if no_val not in seen_nos:
-                seen_nos.add(no_val)
+            # 排除重复/近似的保单号（互为前缀关系视为同一保单号，如 OCR 截断差异）
+            is_dup = any(no_val.startswith(sn) or sn.startswith(no_val) for sn in seen_nos)
+            if not is_dup:
+                seen_nos.append(no_val)
                 # 排除与已有标题边界距离太近的（已被标题覆盖）
                 if not any(abs(pos - sp) < 200 for sp in seen_positions):
                     policy_nos.append({"pos": pos, "no": no_val})
