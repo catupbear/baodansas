@@ -287,6 +287,23 @@
                             <span v-else style="font-size:13px;color:var(--text-muted);">未配置</span>
                         </div>
 
+                        <!-- 关联账号 -->
+                        <div class="flex items-center gap-2 mb-2">
+                            <span style="font-size:13px;color:var(--text-muted);min-width:65px;">关联账号:</span>
+                            <template v-if="config.bind_user_id">
+                                <span class="badge badge-blue">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="flex-shrink:0;">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                    </svg>
+                                    {{ config.bind_user_info?.name || config.bind_user_info?.phone || '未知' }}
+                                </span>
+                                <span v-if="config.bind_enterprise_name" class="badge badge-green">
+                                    {{ config.bind_enterprise_name }}
+                                </span>
+                            </template>
+                            <span v-else style="font-size:13px;color:var(--text-muted);">未绑定</span>
+                        </div>
+
                         <!-- 字段映射 -->
                         <div class="flex items-center gap-2">
                             <span style="font-size:13px;color:var(--text-muted);min-width:65px;">字段映射:</span>
@@ -519,7 +536,7 @@ createApp({
                 const res = await authFetch('/api/auth/users');
                 const data = await res.json();
                 if (data.code === 0) {
-                    bindUserOptions.value = (data.data || []).filter(u => u.user_type === 'employee' || u.user_type === 'enterprise');
+                    bindUserOptions.value = (data.data || []).filter(u => u.role === 'employee' || u.role === 'enterprise');
                 }
             } catch (e) {
                 console.error('加载绑定账号失败:', e);

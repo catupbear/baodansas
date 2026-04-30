@@ -2124,12 +2124,35 @@ def list_monitor_configs_api():
     """获取全部监控配置"""
     try:
         configs = list_monitor_configs(_db)
+        # 批量查询关联账号信息
+        from auth.db import get_user_by_id as _get_user, get_enterprise_by_id as _get_ent
+        user_cache = {}
+        ent_cache = {}
         for c in configs:
             for ts_field in ("created_at", "updated_at"):
                 if c.get(ts_field) and not isinstance(c[ts_field], str):
                     c[ts_field] = str(c[ts_field])
             # 前端期望 room_ids/user_ids（纯ID数组）
             _add_id_fields(c)
+            # 填充关联账号信息
+            uid = c.get("user_id")
+            if uid:
+                c["bind_user_id"] = uid
+                if uid not in user_cache:
+                    u = _get_user(_db, uid)
+                    user_cache[uid] = {"name": u.get("name", ""), "phone": u.get("phone", "")} if u else {}
+                c["bind_user_info"] = user_cache[uid]
+            else:
+                c["bind_user_id"] = None
+                c["bind_user_info"] = {}
+            eid = c.get("enterprise_id")
+            if eid:
+                if eid not in ent_cache:
+                    ent = _get_ent(_db, eid)
+                    ent_cache[eid] = ent.get("name", "") if ent else ""
+                c["bind_enterprise_name"] = ent_cache[eid]
+            else:
+                c["bind_enterprise_name"] = ""
         return jsonify({"code": 0, "data": configs})
     except Exception as e:
         logger.exception("获取监控配置列表失败")
@@ -2150,6 +2173,15 @@ def create_monitor_config_api():
         if doc_url:
             base_id, sheet_id = parse_dingtalk_doc_url(doc_url)
 
+        # 绑定账号：从 bind_user_id 获取 user_id 和 enterprise_id
+        bind_user_id = body.get("bind_user_id")
+        bind_enterprise_id = None
+        if bind_user_id:
+            from auth.db import get_user_by_id as _get_bind_user
+            bind_user = _get_bind_user(_db, int(bind_user_id))
+            if bind_user:
+                bind_enterprise_id = bind_user.get("parent_id")
+
         config_id = create_monitor_config(_db, {
             "name": name,
             "enabled": 1 if body.get("enabled", True) else 0,
@@ -2159,6 +2191,8 @@ def create_monitor_config_api():
             "dingtalk_base_id": base_id,
             "dingtalk_sheet_id": sheet_id,
             "field_mapping": body.get("field_mapping", {}),
+            "user_id": int(bind_user_id) if bind_user_id else None,
+            "enterprise_id": bind_enterprise_id,
         })
 
         config = get_monitor_config(_db, config_id)
@@ -2198,6 +2232,18 @@ def update_monitor_config_api(config_id):
             else:
                 updates["dingtalk_base_id"] = ""
                 updates["dingtalk_sheet_id"] = ""
+
+        # 绑定账号
+        if "bind_user_id" in body:
+            bind_user_id = body["bind_user_id"]
+            if bind_user_id:
+                from auth.db import get_user_by_id as _get_bind_user
+                bind_user = _get_bind_user(_db, int(bind_user_id))
+                updates["user_id"] = int(bind_user_id)
+                updates["enterprise_id"] = bind_user.get("parent_id") if bind_user else None
+            else:
+                updates["user_id"] = None
+                updates["enterprise_id"] = None
 
         ok = update_monitor_config(_db, config_id, updates)
         if not ok:
