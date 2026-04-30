@@ -174,7 +174,8 @@ class BaiduOCR:
                     # 检测是否为条款页（含大量法律条文特征词），是则停止
                     if page > 1 and _is_clause_page(page_text):
                         break
-                    all_texts.append(page_text)
+                    # 插入页码标记，供多保单拆分时追踪页码
+                    all_texts.append(f"[PAGE:{page}]\n{page_text}")
             except Exception:
                 break
 

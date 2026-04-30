@@ -236,7 +236,8 @@ class VolcOCR:
                     page_text = result.get("text", "")
                     if page > 1 and _is_clause_page(page_text):
                         break
-                    all_texts.append(page_text)
+                    # 插入页码标记，供多保单拆分时追踪页码
+                    all_texts.append(f"[PAGE:{page}]\n{page_text}")
             except Exception as e:
                 logger.warning("火山引擎OCR第%d页识别失败: %s", page, e)
                 break
