@@ -583,6 +583,41 @@ def check_file_md5_exists(db, file_md5: str) -> dict | None:
         conn.close()
 
 
+def backfill_records_by_sources(db, room_ids: list, user_ids: list,
+                                new_user_id: int = None, new_enterprise_id: int = None) -> int:
+    """
+    回填历史保单记录的 user_id 和 enterprise_id。
+    根据监控配置的群聊/私聊来源匹配 insurance_records 中的记录并更新。
+    返回受影响的行数。
+    """
+    if not room_ids and not user_ids:
+        return 0
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        conditions = []
+        params = []
+        if room_ids:
+            ph = ",".join(["%s"] * len(room_ids))
+            conditions.append(f"roomid IN ({ph})")
+            params.extend(room_ids)
+        if user_ids:
+            ph = ",".join(["%s"] * len(user_ids))
+            conditions.append(f"(sender IN ({ph}) AND (roomid IS NULL OR roomid = ''))")
+            params.extend(user_ids)
+        where = " OR ".join(conditions)
+        sql = f"UPDATE insurance_records SET user_id = %s, enterprise_id = %s WHERE ({where})"
+        cursor.execute(sql, [new_user_id, new_enterprise_id] + params)
+        conn.commit()
+        affected = cursor.rowcount
+        if affected > 0:
+            logger.info("回填历史记录 user_id=%s enterprise_id=%s，影响 %d 条",
+                        new_user_id, new_enterprise_id, affected)
+        return affected
+    finally:
+        conn.close()
+
+
 def save_insurance_record(db, record: dict) -> int:
     """
     插入一条保单识别记录，返回新记录的 id。

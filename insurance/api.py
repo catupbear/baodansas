@@ -16,6 +16,7 @@ import pymysql.cursors
 from flask import Blueprint, jsonify, request, send_file
 
 from .db import (
+    backfill_records_by_sources,
     get_all_insurance_config,
     get_company_stats,
     get_insurance_config,
@@ -2197,6 +2198,20 @@ def create_monitor_config_api():
 
         config = get_monitor_config(_db, config_id)
         _add_id_fields(config)
+
+        # 回填历史记录
+        if bind_user_id:
+            src_rooms = body.get("room_ids", body.get("rooms", []))
+            src_users = body.get("user_ids", body.get("users", []))
+            # 提取纯 ID
+            r_ids = [r["id"] if isinstance(r, dict) else r for r in src_rooms]
+            u_ids = [u["id"] if isinstance(u, dict) else u for u in src_users]
+            backfill_records_by_sources(
+                _db, r_ids, u_ids,
+                new_user_id=int(bind_user_id),
+                new_enterprise_id=bind_enterprise_id,
+            )
+
         return jsonify({"code": 0, "data": config, "msg": "监控配置已创建"})
     except Exception as e:
         logger.exception("创建监控配置失败")
@@ -2251,6 +2266,19 @@ def update_monitor_config_api(config_id):
 
         config = get_monitor_config(_db, config_id)
         _add_id_fields(config)
+
+        # 绑定账号变更时回填历史记录
+        if "bind_user_id" in body:
+            src_rooms = config.get("rooms", [])
+            src_users = config.get("users", [])
+            r_ids = [r["id"] if isinstance(r, dict) else r for r in src_rooms]
+            u_ids = [u["id"] if isinstance(u, dict) else u for u in src_users]
+            backfill_records_by_sources(
+                _db, r_ids, u_ids,
+                new_user_id=config.get("user_id"),
+                new_enterprise_id=config.get("enterprise_id"),
+            )
+
         return jsonify({"code": 0, "data": config, "msg": "监控配置已更新"})
     except Exception as e:
         logger.exception("更新监控配置 %d 失败", config_id)
