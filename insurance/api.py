@@ -241,9 +241,9 @@ def get_record(record_id):
             if record.get(ts_field) and not isinstance(record[ts_field], str):
                 record[ts_field] = str(record[ts_field])
 
-        # 多保单时附带同一 PDF 的兄弟记录摘要
+        # 同一 PDF 的兄弟记录摘要（有 file_md5 就查）
         siblings = []
-        if record.get("policy_count", 1) > 1 and record.get("file_md5"):
+        if record.get("file_md5"):
             siblings = _get_sibling_records(_db, record["file_md5"], record_id)
         return jsonify({"code": 0, "data": record, "siblings": siblings})
     except Exception as e:
