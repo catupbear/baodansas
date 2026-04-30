@@ -1014,65 +1014,100 @@ def reocr_record(record_id):
 
         from insurance.field_mapping import apply_mapping
 
-        # 重新识别：只更新当前记录，不创建新记录
-        # 如果 PDF 含多份保单，选择与原记录最匹配的一份
-        # （通过保单号匹配，匹配不到则取第一条）
-        original_policy_no = ""
-        try:
-            orig_fields = record.get("parsed_fields", {})
-            if isinstance(orig_fields, str):
-                orig_fields = json.loads(orig_fields) if orig_fields else {}
-            original_policy_no = orig_fields.get("保单号", "")
-        except (TypeError, json.JSONDecodeError):
-            pass
-
-        best_policy = policies[0]
-        if original_policy_no and len(policies) > 1:
-            for p in policies:
-                if p.get("fields", {}).get("保单号", "") == original_policy_no:
-                    best_policy = p
-                    break
-
-        parsed_fields = best_policy.get("fields", {})
-        doc_category = best_policy.get("doc_category", "")
-        confidence = best_policy.get("confidence", 0.0)
-
-        # 同一 PDF 多保单互补（从 policies 列表中互补）
+        # 同一 PDF 多保单互补
         if len(policies) > 1:
             _handler._cross_fill_same_pdf(policies)
-            # 重新取互补后的字段
-            parsed_fields = best_policy.get("fields", {})
 
-        # 同 file_md5 兄弟记录互补（从数据库中已有的兄弟记录互补）
+        total_policies = len(policies)
+
+        # 收集同一 PDF 的所有记录（当前 + 兄弟），统一分配 policy
         file_md5 = record.get("file_md5", "")
+        all_records = [record]
         if file_md5:
-            _cross_fill_from_siblings(_db, record_id, file_md5, parsed_fields)
+            conn = _db.pool.connection()
+            try:
+                cursor = conn.cursor(pymysql.cursors.DictCursor)
+                cursor.execute(
+                    "SELECT * FROM insurance_records WHERE file_md5 = %s AND id != %s",
+                    (file_md5, record_id)
+                )
+                siblings = cursor.fetchall()
+                for sib in siblings:
+                    for f in ("parsed_fields", "mapped_fields"):
+                        if isinstance(sib.get(f), str):
+                            try: sib[f] = json.loads(sib[f])
+                            except: sib[f] = {}
+                    all_records.append(dict(sib))
+            finally:
+                conn.close()
 
-        # 同车牌保单字段互补
-        _handler._cross_fill_by_plate(parsed_fields, record_id)
+        # 按 policy_index 去重，每个 index 只保留最新（id 最大）的记录
+        best_by_index = {}
+        for rec in all_records:
+            idx = rec.get("policy_index", 0) or 0
+            if idx not in best_by_index or rec["id"] > best_by_index[idx]["id"]:
+                best_by_index[idx] = rec
+        unique_records = sorted(best_by_index.values(), key=lambda r: r.get("policy_index", 0))
 
-        # 字段映射
-        company_short = parsed_fields.get("保险公司简称", "")
-        mapped_fields = apply_mapping(parsed_fields, company_short)
+        # 为每条记录匹配最佳 policy（通过保单号匹配）
+        used_policies = set()
+        updated_count = 0
+        for rec in unique_records:
+            # 获取原保单号
+            orig_pf = rec.get("parsed_fields", {})
+            if isinstance(orig_pf, str):
+                try: orig_pf = json.loads(orig_pf) if orig_pf else {}
+                except: orig_pf = {}
+            orig_no = orig_pf.get("保单号", "")
 
-        # 更新记录
-        raw_text = best_policy.get("raw_text", "")
-        page_range = best_policy.get("page_range", "")
-        updates = {
-            "status": "done",
-            "ocr_engine": ocr_engine,
-            "doc_category": doc_category,
-            "confidence": confidence,
-            "parsed_fields": parsed_fields,
-            "mapped_fields": mapped_fields,
-            "raw_text": raw_text,
-            "error_message": "",
-            "cos_url": cos_url,
-            "policy_count": len(policies),
-            "policy_index": (policies.index(best_policy) + 1) if best_policy in policies else 1,
-            "page_range": page_range,
-        }
-        update_insurance_record(_db, record_id, updates)
+            # 匹配 policy
+            matched = None
+            if orig_no:
+                for i, p in enumerate(policies):
+                    if i not in used_policies and p.get("fields", {}).get("保单号", "") == orig_no:
+                        matched = (i, p)
+                        break
+            # 未匹配到则取第一个未使用的
+            if matched is None:
+                for i, p in enumerate(policies):
+                    if i not in used_policies:
+                        matched = (i, p)
+                        break
+            if matched is None:
+                continue
+
+            policy_idx, policy = matched
+            used_policies.add(policy_idx)
+
+            pf = policy.get("fields", {})
+            doc_cat = policy.get("doc_category", "")
+            conf = policy.get("confidence", 0.0)
+
+            # 兄弟记录互补
+            if file_md5:
+                _cross_fill_from_siblings(_db, rec["id"], file_md5, pf)
+            # 同车牌互补
+            _handler._cross_fill_by_plate(pf, rec["id"])
+
+            cs = pf.get("保险公司简称", "")
+            mf = apply_mapping(pf, cs)
+
+            updates = {
+                "status": "done",
+                "ocr_engine": ocr_engine,
+                "doc_category": doc_cat,
+                "confidence": conf,
+                "parsed_fields": pf,
+                "mapped_fields": mf,
+                "raw_text": policy.get("raw_text", ""),
+                "error_message": "",
+                "cos_url": cos_url,
+                "policy_count": total_policies,
+                "policy_index": policy_idx + 1,
+                "page_range": policy.get("page_range", ""),
+            }
+            update_insurance_record(_db, rec["id"], updates)
+            updated_count += 1
 
         # 返回更新后的主记录
         updated = get_insurance_record(_db, record_id)
@@ -1087,6 +1122,8 @@ def reocr_record(record_id):
                 updated[ts_field] = str(updated[ts_field])
 
         msg = "重新识别完成，请预览确认后同步钉钉"
+        if updated_count > 1:
+            msg = f"重新识别完成，已同步更新 {updated_count} 条记录"
 
         return jsonify({
             "code": 0,
