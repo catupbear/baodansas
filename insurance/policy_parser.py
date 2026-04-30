@@ -1879,6 +1879,14 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
         fields["保险期间"] = f"{m.group(1)} 至 {m.group(2)}"
         return
 
+    # 国任等格式："2026年05月22日00:00:00 - 2027年05月21日23:59:59"（中文年月日 + HH:MM:SS + - 分隔）
+    m = re.search(r"(\d{4}年\d{1,2}月\d{1,2}日)\s*\d{2}:\d{2}:\d{2}\s*-\s*(\d{4}年\d{1,2}月\d{1,2}日)\s*\d{2}:\d{2}:\d{2}", text)
+    if m:
+        fields["保险起期"] = m.group(1)
+        fields["保险止期"] = m.group(2)
+        fields["保险期间"] = f"{m.group(1)} 至 {m.group(2)}"
+        return
+
     # 缴款通知表格格式："2026/05/01 00时至2027/05/01 00时" 可能跨行
     m = re.search(r"(\d{4}/\d{2}/\d{2})\s*\d{2}时[\s\S]{0,50}?至\s*(\d{4}/\d{2}/\d{2})", text)
     if m:
