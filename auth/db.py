@@ -171,6 +171,102 @@ def reset_password(db, user_id: int, new_password: str):
         conn.close()
 
 
+def init_enterprises_table(db):
+    """
+    创建 enterprises 表（幂等）。
+    db 是 storage.db.Database 实例。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS enterprises (
+                id             INT PRIMARY KEY AUTO_INCREMENT,
+                name           VARCHAR(128) NOT NULL COMMENT '企业名称',
+                contact_person VARCHAR(64) DEFAULT '' COMMENT '联系人',
+                contact_phone  VARCHAR(64) DEFAULT '' COMMENT '联系电话',
+                enabled        TINYINT NOT NULL DEFAULT 1,
+                created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_enterprises_name (name)
+            )
+        """)
+        conn.commit()
+        logger.info("enterprises 表初始化完成")
+    finally:
+        conn.close()
+
+
+def list_enterprises(db, enabled: int = None) -> list:
+    """查询企业列表，可按启用状态筛选"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        sql = "SELECT * FROM enterprises WHERE 1=1"
+        params = []
+        if enabled is not None:
+            sql += " AND enabled = %s"
+            params.append(enabled)
+        sql += " ORDER BY created_at DESC"
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        for row in rows:
+            for f in ("created_at", "updated_at"):
+                if row.get(f) and not isinstance(row[f], str):
+                    row[f] = str(row[f])
+        return rows
+    finally:
+        conn.close()
+
+
+def get_enterprise_by_id(db, enterprise_id: int) -> dict | None:
+    """根据 ID 查找企业"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT * FROM enterprises WHERE id = %s", (enterprise_id,))
+        row = cursor.fetchone()
+        if row:
+            for f in ("created_at", "updated_at"):
+                if row.get(f) and not isinstance(row[f], str):
+                    row[f] = str(row[f])
+        return row
+    finally:
+        conn.close()
+
+
+def create_enterprise(db, name: str, contact_person: str = "", contact_phone: str = "") -> int:
+    """创建企业，返回新企业 ID"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "INSERT INTO enterprises (name, contact_person, contact_phone) VALUES (%s, %s, %s)",
+            (name, contact_person, contact_phone),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def update_enterprise(db, enterprise_id: int, data: dict):
+    """更新企业信息（支持 name, contact_person, contact_phone, enabled）"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        allowed = {"name", "contact_person", "contact_phone", "enabled"}
+        fields = {k: v for k, v in data.items() if k in allowed}
+        if not fields:
+            return
+        set_clause = ", ".join(f"{k} = %s" for k in fields)
+        values = list(fields.values()) + [enterprise_id]
+        cursor.execute(f"UPDATE enterprises SET {set_clause} WHERE id = %s", values)
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def get_enterprise_employee_ids(db, enterprise_id: int) -> list[int]:
     """获取企业下所有员工 ID（含企业自身）"""
     conn = db.pool.connection()

@@ -46,6 +46,13 @@ def init_monitor_config_table(db):
         except Exception:
             pass  # 列已存在
 
+        # 添加 enterprise_id 列（幂等，已存在则跳过）
+        try:
+            cursor.execute("ALTER TABLE monitor_configs ADD COLUMN enterprise_id INT DEFAULT NULL COMMENT '绑定的企业ID'")
+            cursor.execute("CREATE INDEX idx_mc_enterprise_id ON monitor_configs(enterprise_id)")
+        except Exception:
+            pass  # 列已存在
+
         conn.commit()
         logger.info("monitor_configs 表初始化完成")
     finally:

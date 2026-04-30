@@ -45,7 +45,7 @@ from .field_mapping import (
 from .policy_parser import get_extraction_rules, parse_policy_text, parse_policy_text_multi
 from .ocr_service import extract_text_from_pdf
 from auth.decorators import login_required
-from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, get_enterprise_employee_ids
+from auth.db import ROLE_SUPER_ADMIN
 
 logger = logging.getLogger(__name__)
 
@@ -110,10 +110,17 @@ def _get_user_ids_filter():
     uid = g.current_user["user_id"]
     if role == ROLE_SUPER_ADMIN:
         return None
-    elif role == ROLE_ENTERPRISE:
-        return get_enterprise_employee_ids(_db, uid)
-    else:
-        return [uid]
+    # 员工：只看自己的记录
+    return [uid]
+
+
+def _get_enterprise_id_filter():
+    """返回当前用户的 enterprise_id，超管返回 None（不过滤）"""
+    from flask import g
+    role = g.current_user["role"]
+    if role == ROLE_SUPER_ADMIN:
+        return None
+    return g.current_user.get("parent_id")
 
 
 # ============================================================
@@ -171,6 +178,7 @@ def list_records():
             date_start=date_start,
             date_end=date_end,
             user_ids=_get_user_ids_filter(),
+            enterprise_id=_get_enterprise_id_filter(),
             search_company=search_company,
             search_policy_no=search_policy_no,
             search_plate_no=search_plate_no,
@@ -391,6 +399,9 @@ def get_stats():
         user_ids = _get_user_ids_filter()
         if user_ids is not None:
             filters["user_ids"] = user_ids
+        eid = _get_enterprise_id_filter()
+        if eid is not None:
+            filters["enterprise_id"] = eid
         stats = get_insurance_stats(_db, filters=filters if filters else None)
         return jsonify({"code": 0, "data": stats})
     except Exception as e:
@@ -527,9 +538,10 @@ def _save_manual_record(file_name, policy, ocr_engine, file_data_b64=None, uploa
         except Exception:
             pass
 
-    # 关联当前登录用户
+    # 关联当前登录用户和企业
     from flask import g
     current_user_id = g.current_user["user_id"] if hasattr(g, "current_user") else None
+    current_enterprise_id = g.current_user.get("parent_id") if hasattr(g, "current_user") else None
 
     record = {
         "filename": file_name,
@@ -542,6 +554,7 @@ def _save_manual_record(file_name, policy, ocr_engine, file_data_b64=None, uploa
         "status": "done",
         "source": "manual",
         "user_id": current_user_id,
+        "enterprise_id": current_enterprise_id,
     }
     if file_md5:
         record["file_md5"] = file_md5
@@ -868,6 +881,7 @@ def reocr_record(record_id):
                     "status": "processing",
                     "source": record.get("source", "auto"),
                     "user_id": record.get("user_id"),
+                    "enterprise_id": record.get("enterprise_id"),
                     "file_md5": record.get("file_md5"),
                     "cos_url": cos_url,
                 }

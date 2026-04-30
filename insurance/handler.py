@@ -318,12 +318,16 @@ class InsuranceHandler:
             except Exception as e:
                 logger.warning("获取群名失败: %s", e)
 
-        # 2. 获取匹配的监控配置，提取绑定的 user_id
+        # 2. 获取匹配的监控配置，提取绑定的 user_id 和 enterprise_id
         matched_monitors = self._get_matched_monitors(roomid, sender)
         config_user_id = None
+        config_enterprise_id = None
         for m in matched_monitors:
             if m.get("user_id"):
                 config_user_id = m["user_id"]
+            if m.get("enterprise_id"):
+                config_enterprise_id = m["enterprise_id"]
+            if config_user_id:
                 break
 
         # 3. 创建初始记录（状态: processing）
@@ -338,6 +342,7 @@ class InsuranceHandler:
             "status": "processing",
             "source": "auto",
             "user_id": config_user_id,
+            "enterprise_id": config_enterprise_id,
         }
         try:
             record_id = save_insurance_record(self.db, initial_record)
@@ -413,6 +418,7 @@ class InsuranceHandler:
                         "status": "processing",
                         "source": "auto",
                         "user_id": config_user_id,
+                        "enterprise_id": config_enterprise_id,
                         "file_md5": hashlib.md5(pdf_bytes).hexdigest() if pdf_bytes else None,
                         "cos_url": cos_url,
                     }

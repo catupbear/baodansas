@@ -126,6 +126,7 @@
                 <span class="font-semibold text-gray-800">保单识别系统</span>
                 <a href="/" class="text-sm text-gray-500 hover:text-orange-600">保单识别</a>
                 <a href="/monitor-config" class="text-sm text-gray-500 hover:text-orange-600">监控配置</a>
+                <a href="/admin/enterprises" class="text-sm text-gray-500 hover:text-orange-600">企业管理</a>
                 <a href="/admin/users" class="text-sm text-orange-600 font-medium">账号管理</a>
             </div>
             <div class="flex items-center space-x-4">
@@ -241,7 +242,6 @@
                             <label class="block text-sm text-gray-500 mb-1">角色</label>
                             <select v-model="form.role" class="form-select">
                                 <option value="super_admin">超级管理员</option>
-                                <option value="enterprise">企业账号</option>
                                 <option value="employee">员工账号</option>
                             </select>
                         </div>
@@ -410,13 +410,13 @@ createApp({
             }
         }
 
-        /* 获取企业列表（用于员工所属企业下拉） */
+        /* 获取企业列表（用于所属企业下拉，从 enterprises 表取） */
         async function fetchEnterprises() {
             try {
-                const resp = await authFetch('/api/auth/users?role=enterprise');
+                const resp = await authFetch('/api/auth/enterprises');
                 const data = await resp.json();
                 if (data.code === 0) {
-                    enterprises.value = data.data || [];
+                    enterprises.value = (data.data || []).filter(e => e.enabled);
                 }
             } catch {}
         }

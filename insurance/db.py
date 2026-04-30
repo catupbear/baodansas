@@ -294,6 +294,7 @@ def init_insurance_tables(db):
             ("display_fields", "TEXT COMMENT '映射后的展示字段JSON（列表轻量展示用）'"),
             ("file_md5", "VARCHAR(32) DEFAULT NULL COMMENT 'PDF文件MD5（用于去重）'"),
             ("user_id", "INT DEFAULT NULL COMMENT '所属用户ID'"),
+            ("enterprise_id", "INT DEFAULT NULL COMMENT '所属企业ID（关联 enterprises 表）'"),
             ("manual_fields", "LONGTEXT COMMENT '手动修改过的字段名列表JSON'"),
         ]
         for col_name, col_def in new_columns:
@@ -308,6 +309,7 @@ def init_insurance_tables(db):
             "CREATE INDEX idx_insurance_is_abnormal ON insurance_records(is_abnormal)",
             "CREATE UNIQUE INDEX idx_insurance_file_md5 ON insurance_records(file_md5)",
             "CREATE INDEX idx_insurance_user_id ON insurance_records(user_id)",
+            "CREATE INDEX idx_insurance_enterprise_id ON insurance_records(enterprise_id)",
         ]:
             try:
                 cursor.execute(idx_sql)
@@ -788,6 +790,7 @@ def query_insurance_records(
     date_start: str = "",
     date_end: str = "",
     user_ids: list = None,
+    enterprise_id: int = None,
     # 关联表模糊搜索
     search_company: str = "",
     search_policy_no: str = "",
@@ -886,6 +889,10 @@ def query_insurance_records(
             params.extend(user_ids)
         else:
             conditions.append("0")  # 空列表不返回数据
+    # 按企业过滤
+    if enterprise_id is not None:
+        conditions.append(f"{col_prefix}enterprise_id = %s")
+        params.append(enterprise_id)
 
     # 关联表模糊搜索条件
     if need_join:
@@ -1220,6 +1227,10 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
                 params.extend(uid_list)
             else:
                 where_parts.append("0")
+        # 按企业过滤
+        if filters.get("enterprise_id") is not None:
+            where_parts.append(f"{col_prefix}enterprise_id = %s")
+            params.append(filters["enterprise_id"])
         # 关联表模糊搜索和日期筛选
         if need_join:
             if filters.get("search_company"):

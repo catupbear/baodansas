@@ -18,6 +18,10 @@ from .db import (
     create_user,
     update_user,
     reset_password,
+    list_enterprises,
+    get_enterprise_by_id,
+    create_enterprise,
+    update_enterprise,
 )
 from .jwt_utils import generate_token
 from .decorators import login_required, admin_required
@@ -109,6 +113,17 @@ def api_list_users():
             parent_id = None
 
     users = list_users(_db, role=role, parent_id=parent_id)
+    # 填充所属企业名称
+    ent_cache = {}
+    for u in users:
+        pid = u.get("parent_id")
+        if pid:
+            if pid not in ent_cache:
+                ent = get_enterprise_by_id(_db, pid)
+                ent_cache[pid] = ent["name"] if ent else ""
+            u["parent_name"] = ent_cache[pid]
+        else:
+            u["parent_name"] = ""
     return jsonify({"code": 0, "data": users})
 
 
@@ -140,11 +155,11 @@ def api_create_user():
     if existing:
         return jsonify({"code": 400, "msg": "该手机号已注册"}), 400
 
-    # 校验 parent_id 指向的企业账号确实存在
+    # 校验 parent_id 指向的企业确实存在
     if parent_id:
-        parent = get_user_by_id(_db, int(parent_id))
-        if not parent or parent["role"] != ROLE_ENTERPRISE:
-            return jsonify({"code": 400, "msg": "所属企业账号不存在"}), 400
+        ent = get_enterprise_by_id(_db, int(parent_id))
+        if not ent:
+            return jsonify({"code": 400, "msg": "所属企业不存在"}), 400
 
     try:
         user_id = create_user(_db, phone, password, role, parent_id, name)
@@ -180,6 +195,54 @@ def api_reset_password(user_id):
         return jsonify({"code": 0})
     except Exception as e:
         logger.exception("重置密码 %d 失败", user_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+# ============================================================
+# 企业管理（超管专属）
+# ============================================================
+
+@auth_bp.route("/api/auth/enterprises", methods=["GET"])
+@admin_required
+def api_list_enterprises():
+    """查询企业列表"""
+    enterprises = list_enterprises(_db)
+    return jsonify({"code": 0, "data": enterprises})
+
+
+@auth_bp.route("/api/auth/enterprises", methods=["POST"])
+@admin_required
+def api_create_enterprise():
+    """
+    创建企业。
+    请求体: {"name", "contact_person"(可选), "contact_phone"(可选)}
+    """
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "").strip()
+    contact_person = data.get("contact_person", "").strip()
+    contact_phone = data.get("contact_phone", "").strip()
+
+    if not name:
+        return jsonify({"code": 400, "msg": "企业名称不能为空"}), 400
+
+    try:
+        eid = create_enterprise(_db, name, contact_person, contact_phone)
+        return jsonify({"code": 0, "data": {"id": eid}})
+    except Exception as e:
+        logger.exception("创建企业失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@auth_bp.route("/api/auth/enterprises/<int:eid>", methods=["PUT"])
+@admin_required
+def api_update_enterprise(eid):
+    """更新企业信息（name, contact_person, contact_phone, enabled）"""
+    data = request.get_json(silent=True) or {}
+    try:
+        update_enterprise(_db, eid, data)
+        return jsonify({"code": 0})
+    except Exception as e:
+        logger.exception("更新企业 %d 失败", eid)
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
