@@ -147,8 +147,8 @@ def api_create_user():
     if role not in (ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, ROLE_EMPLOYEE):
         return jsonify({"code": 400, "msg": f"无效角色: {role}"}), 400
 
-    if role == ROLE_EMPLOYEE and not parent_id:
-        return jsonify({"code": 400, "msg": "员工账号必须指定所属企业"}), 400
+    if role in (ROLE_ENTERPRISE, ROLE_EMPLOYEE) and not parent_id:
+        return jsonify({"code": 400, "msg": "企业管理员和员工必须指定所属企业"}), 400
 
     # 检查手机号唯一
     existing = get_user_by_phone(_db, phone)

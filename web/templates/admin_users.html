@@ -242,12 +242,13 @@
                             <label class="block text-sm text-gray-500 mb-1">角色</label>
                             <select v-model="form.role" class="form-select">
                                 <option value="super_admin">超级管理员</option>
+                                <option value="enterprise">企业管理员</option>
                                 <option value="employee">员工账号</option>
                             </select>
                         </div>
 
-                        <!-- 所属企业（仅 employee） -->
-                        <div v-if="form.role === 'employee'">
+                        <!-- 所属企业（企业管理员和员工） -->
+                        <div v-if="form.role === 'employee' || form.role === 'enterprise'">
                             <label class="block text-sm text-gray-500 mb-1">所属企业</label>
                             <select v-model="form.parent_id" class="form-select">
                                 <option :value="null">请选择企业</option>
@@ -376,7 +377,7 @@ createApp({
 
         /* 角色相关 */
         function roleLabel(role) {
-            const map = { super_admin: '超级管理员', enterprise: '企业账号', employee: '员工账号' };
+            const map = { super_admin: '超级管理员', enterprise: '企业管理员', employee: '员工账号' };
             return map[role] || role;
         }
         function roleBadgeClass(role) {
@@ -469,7 +470,7 @@ createApp({
                     body = {
                         name: form.name,
                         role: form.role,
-                        parent_id: form.role === 'employee' ? form.parent_id : null,
+                        parent_id: (form.role === 'employee' || form.role === 'enterprise') ? form.parent_id : null,
                     };
                 } else {
                     url = '/api/auth/users';
@@ -479,7 +480,7 @@ createApp({
                         password: form.password,
                         name: form.name,
                         role: form.role,
-                        parent_id: form.role === 'employee' ? form.parent_id : null,
+                        parent_id: (form.role === 'employee' || form.role === 'enterprise') ? form.parent_id : null,
                     };
                 }
                 const resp = await authFetch(url, { method, body: JSON.stringify(body) });

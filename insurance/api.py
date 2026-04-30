@@ -45,7 +45,7 @@ from .field_mapping import (
 from .policy_parser import get_extraction_rules, parse_policy_text, parse_policy_text_multi
 from .ocr_service import extract_text_from_pdf
 from auth.decorators import login_required
-from auth.db import ROLE_SUPER_ADMIN
+from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE
 
 logger = logging.getLogger(__name__)
 
@@ -104,18 +104,21 @@ def _require_login():
 
 
 def _get_user_ids_filter():
-    """根据当前用户角色返回 user_ids 过滤列表，超管返回 None（不过滤）"""
+    """根据当前用户角色返回 user_ids 过滤列表，超管和企业管理员返回 None（不按用户过滤）"""
     from flask import g
     role = g.current_user["role"]
     uid = g.current_user["user_id"]
     if role == ROLE_SUPER_ADMIN:
+        return None
+    # 企业管理员：不按 user_id 过滤，由 enterprise_id 过滤
+    if role == ROLE_ENTERPRISE:
         return None
     # 员工：只看自己的记录
     return [uid]
 
 
 def _get_enterprise_id_filter():
-    """返回当前用户的 enterprise_id，超管返回 None（不过滤）"""
+    """返回当前用户的 enterprise_id，超管返回 None（不过滤），企业管理员和员工按企业过滤"""
     from flask import g
     role = g.current_user["role"]
     if role == ROLE_SUPER_ADMIN:
