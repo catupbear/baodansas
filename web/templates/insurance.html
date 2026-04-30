@@ -1826,9 +1826,17 @@
                 </div>
                 <div class="flex-1 flex min-h-0">
                     <!-- 左侧：文件预览 -->
-                    <div class="flex-1 overflow-auto bg-gray-100 min-w-0">
-                        <iframe v-if="previewIsImage === false" :src="previewSrc" class="w-full h-full border-0"></iframe>
-                        <img v-else :src="previewSrc" class="max-w-full max-h-full mx-auto p-4" style="object-fit: contain;">
+                    <div class="flex-1 overflow-auto bg-gray-100 min-w-0 relative">
+                        <!-- 加载中提示 -->
+                        <div v-if="previewLoading" class="absolute inset-0 flex flex-col items-center justify-center z-10 bg-gray-100">
+                            <svg class="w-10 h-10 animate-spin text-orange-400 mb-3" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                            <span class="text-sm text-gray-400">保单加载中...</span>
+                        </div>
+                        <iframe v-if="previewIsImage === false" :src="previewSrc" class="w-full h-full border-0" @load="previewLoading = false"></iframe>
+                        <img v-else :src="previewSrc" class="max-w-full max-h-full mx-auto p-4" style="object-fit: contain;" @load="previewLoading = false">
                     </div>
                     <!-- 右侧：列表信息 -->
                     <div v-if="previewShowFields" class="border-l flex flex-col" style="width: 420px; min-width: 320px;">
@@ -2192,6 +2200,7 @@ createApp({
         const syncSuccess = ref(false);
         const previewVisible = ref(false);
         const previewSrc = ref('');
+        const previewLoading = ref(false);
         const previewType = ref('pdf');
         const previewFileName = ref('');
         // 识别记录预览时存储当前记录（用于右侧字段面板）
@@ -2890,6 +2899,7 @@ createApp({
 
         async function previewFile(file) {
             previewAutoRecord.value = null;
+            previewLoading.value = false;
             previewFileName.value = file.name;
             loadPreviewRawText(file.name);
             previewShowRaw.value = false; previewShowFields.value = false; previewShowRules.value = false;
@@ -2941,6 +2951,7 @@ createApp({
             const ext = (record.filename || '').split('.').pop().toLowerCase();
             previewType.value = ext || 'pdf';
             const pageHash = getStartPage(record.page_range) > 1 ? `#page=${getStartPage(record.page_range)}` : '';
+            previewLoading.value = true;
             previewSrc.value = `/api/insurance/records/${record.id}/preview?token=${getToken()}${pageHash}`;
             // PDF 文件支持查看原文（懒加载）
             previewHasRawText.value = (ext === 'pdf');
@@ -4588,7 +4599,7 @@ createApp({
             newAliasFrom, newAliasTo, toggleCompanyConfig, addAlias, saveCompanyConfig,
             companyStats,
             syncMessage, syncSuccess,
-            previewVisible, previewSrc, previewIsImage, previewOcrEngine,
+            previewVisible, previewSrc, previewLoading, previewIsImage, previewOcrEngine,
             previewType, previewFileName, previewHasRawText, previewShowRaw, previewShowFields, previewShowRules,
             previewRawText, formattedRawText, previewFieldsList, rawTextCopied, copyRawText,
             extractionRules, loadExtractionRules,
