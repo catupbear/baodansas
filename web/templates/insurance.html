@@ -1010,6 +1010,17 @@
                 </button>
                 <div class="ml-auto flex items-center gap-3">
                     <div class="flex items-center gap-1.5">
+                        <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-500 font-medium select-none" @click.prevent="recordFilter.dedup = !recordFilter.dedup; loadRecords()">
+                            <span class="relative inline-block" style="width:32px;height:18px;">
+                                <span style="position:absolute;inset:0;border-radius:9px;transition:background .2s;"
+                                      :style="{ background: recordFilter.dedup ? '#f97316' : '#d1d5db' }"></span>
+                                <span style="position:absolute;top:2px;width:14px;height:14px;border-radius:50%;background:white;transition:left .2s;box-shadow:0 1px 2px rgba(0,0,0,.2);"
+                                      :style="{ left: recordFilter.dedup ? '16px' : '2px' }"></span>
+                            </span>
+                            保单号去重
+                        </label>
+                    </div>
+                    <div class="flex items-center gap-1.5">
                         <span class="text-xs text-gray-500 font-medium">保司:</span>
                         <select v-model="recordCompanyFilter" @change="loadRecords()"
                                 class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
@@ -1024,13 +1035,6 @@
                             <option value="">全部 ({{ recordStats.total }})</option>
                             <option v-for="dt in recordDocTypes" :key="dt.name" :value="dt.name">{{ dt.name }} ({{ dt.cnt }})</option>
                         </select>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                        <label class="flex items-center gap-1 cursor-pointer text-xs text-gray-500 font-medium select-none">
-                            <input type="checkbox" v-model="recordFilter.dedup" @change="loadRecords()"
-                                   class="cursor-pointer" style="accent-color:#f97316;">
-                            保单号去重
-                        </label>
                     </div>
                     <div class="flex items-center gap-1.5">
                         <span class="text-xs text-gray-500 font-medium">识别方式:</span>
