@@ -312,7 +312,7 @@
     </header>
 
     <!-- ========== 手动上传 Tab ========== -->
-    <main v-if="pageTab === 'upload'" class="mx-auto px-4 sm:px-6 lg:px-10 py-6 space-y-5">
+    <main v-if="pageTab === 'upload'" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5">
         <!-- 支持保司列表 -->
         <div class="card p-4">
             <!-- 加载中 -->
@@ -809,7 +809,7 @@
     </main>
 
     <!-- ========== 自动识别记录 Tab ========== -->
-    <main v-if="pageTab === 'records'" class="mx-auto px-4 sm:px-6 lg:px-10 py-6 space-y-5">
+    <main v-if="pageTab === 'records'" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5">
         <!-- 筛选栏 -->
         <div class="card p-4">
             <div class="flex flex-wrap items-center gap-3">
@@ -1024,6 +1024,13 @@
                             <option value="">全部 ({{ recordStats.total }})</option>
                             <option v-for="dt in recordDocTypes" :key="dt.name" :value="dt.name">{{ dt.name }} ({{ dt.cnt }})</option>
                         </select>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <label class="flex items-center gap-1 cursor-pointer text-xs text-gray-500 font-medium select-none">
+                            <input type="checkbox" v-model="recordFilter.dedup" @change="loadRecords()"
+                                   class="cursor-pointer" style="accent-color:#f97316;">
+                            保单号去重
+                        </label>
                     </div>
                     <div class="flex items-center gap-1.5">
                         <span class="text-xs text-gray-500 font-medium">识别方式:</span>
@@ -3799,6 +3806,7 @@ createApp({
         const monitorRooms = ref([]);  // 监控群列表
         const monitorUsers = ref([]);  // 监控用户列表
         const recordFilter = reactive({
+            dedup: true,      // 按保单号去重，默认开启
             source_type: '',  // '': 全部, 'room': 群聊, 'user': 私聊
             roomid: '',
             userid: '',
@@ -3919,7 +3927,10 @@ createApp({
 
         // 清空所有筛选条件
         function clearAllFilters() {
-            Object.keys(recordFilter).forEach(k => { recordFilter[k] = ''; });
+            Object.keys(recordFilter).forEach(k => {
+                if (k === 'dedup') { recordFilter[k] = true; }
+                else { recordFilter[k] = ''; }
+            });
             showAdvancedSearch.value = false;
             loadRecords();
         }
@@ -4042,6 +4053,7 @@ createApp({
                 if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
                 if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
                 if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+                if (recordFilter.dedup) params.set('dedup', '1');
                 _appendAdvancedParams(params);
                 const resp = await authFetch(`/api/insurance/records?${params.toString()}`);
                 const json = await resp.json();

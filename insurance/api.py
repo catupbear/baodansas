@@ -151,6 +151,7 @@ def list_records():
     start_date_end = request.args.get("start_date_end", "")
     end_date_start = request.args.get("end_date_start", "")
     end_date_end = request.args.get("end_date_end", "")
+    dedup = request.args.get("dedup", "") == "1"
 
     try:
         result = query_insurance_records(
@@ -182,6 +183,7 @@ def list_records():
             start_date_end=start_date_end,
             end_date_start=end_date_start,
             end_date_end=end_date_end,
+            dedup=dedup,
         )
         # 列表返回 display_fields（轻量映射字段）替代 parsed_fields
         for record in result.get("records", []):

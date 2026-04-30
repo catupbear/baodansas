@@ -802,9 +802,11 @@ def query_insurance_records(
     start_date_end: str = "",
     end_date_start: str = "",
     end_date_end: str = "",
+    dedup: bool = False,
 ) -> dict:
     """
     分页查询保单识别记录，支持按群、状态、关键词、来源、识别方式、文档类型筛选。
+    dedup: 按保单号去重，只保留每个保单号最新的一条记录。
     source_type: 'room' 仅群聊, 'user' 仅私聊（roomid 为空的记录）
     sender: 按发送人 ID 筛选
     ocr_engine: 按识别方式筛选（pdfplumber / baidu）
@@ -816,7 +818,7 @@ def query_insurance_records(
     conditions = []
     params = []
     # 是否需要 JOIN 关联表
-    need_join = any([
+    need_join = dedup or any([
         search_company, search_policy_no, search_plate_no,
         search_applicant, search_insured, search_salesperson,
         sign_date_start, sign_date_end,
@@ -930,21 +932,49 @@ def query_insurance_records(
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        # 查询总数
-        cursor.execute(
-            f"SELECT COUNT(*) as cnt FROM {from_clause} {where_clause}",
-            params
-        )
-        total = cursor.fetchone()["cnt"]
+        # 去重模式：按保单号分组，取每组最新记录
+        if dedup:
+            # 排除空保单号的记录参与去重
+            dedup_cond = "pf.policy_no IS NOT NULL AND pf.policy_no != ''"
+            full_where = f"{where_clause} AND {dedup_cond}" if where_clause else f"WHERE {dedup_cond}"
+            count_sql = (
+                f"SELECT COUNT(*) as cnt FROM ("
+                f"  SELECT MAX({col_prefix}id) FROM {from_clause} {full_where} GROUP BY pf.policy_no"
+                f") t"
+            )
+            cursor.execute(count_sql, params)
+            total_dedup = cursor.fetchone()["cnt"]
+            # 加上空保单号的记录数
+            empty_where = f"{where_clause} AND (pf.policy_no IS NULL OR pf.policy_no = '')" if where_clause else "WHERE (pf.policy_no IS NULL OR pf.policy_no = '')"
+            cursor.execute(f"SELECT COUNT(*) as cnt FROM {from_clause} {empty_where}", params)
+            total_empty = cursor.fetchone()["cnt"]
+            total = total_dedup + total_empty
+        else:
+            cursor.execute(
+                f"SELECT COUNT(*) as cnt FROM {from_clause} {where_clause}",
+                params
+            )
+            total = cursor.fetchone()["cnt"]
         pages = max(1, (total + page_size - 1) // page_size)
 
-        # 延迟关联：先查 id（轻量排序），再用 id 取完整数据（避免 LONGTEXT 拖慢排序）
+        # 延迟关联：先查 id（轻量排序），再用 id 取完整数据
         offset = (page - 1) * page_size
-        cursor.execute(
-            f"SELECT {col_prefix}id FROM {from_clause} {where_clause} "
-            f"ORDER BY {col_prefix}created_at DESC LIMIT %s OFFSET %s",
-            params + [page_size, offset]
-        )
+        if dedup:
+            # 去重：每个保单号取最新的 id；空保单号全部保留
+            id_sql = (
+                f"SELECT MAX({col_prefix}id) as id FROM {from_clause} {full_where} "
+                f"GROUP BY pf.policy_no "
+                f"UNION ALL "
+                f"SELECT {col_prefix}id FROM {from_clause} {empty_where} "
+                f"ORDER BY id DESC LIMIT %s OFFSET %s"
+            )
+            cursor.execute(id_sql, params + params + [page_size, offset])
+        else:
+            cursor.execute(
+                f"SELECT {col_prefix}id FROM {from_clause} {where_clause} "
+                f"ORDER BY {col_prefix}created_at DESC LIMIT %s OFFSET %s",
+                params + [page_size, offset]
+            )
         id_rows = cursor.fetchall()
         if id_rows:
             ids = [r["id"] for r in id_rows]
