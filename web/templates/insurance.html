@@ -4040,22 +4040,21 @@ createApp({
                 const listJson = await listResp.json();
                 const allRecords = (listJson.data || listJson).records || [];
 
-                const exportCols = ['文件名', ...outputColumns.value];
                 const data = allRecords
                     .filter(r => r.status === 'done' || r.status === 'success')
                     .map(r => {
                         const df = r.display_fields || {};
-                        const row = { '文件名': r.filename || '' };
+                        const row = {};
                         for (const col of outputColumns.value) {
                             row[col] = df[col] || '';
                         }
-                        return { fields: row };
+                        return { fields: row, filename: r.filename || '' };
                     });
                 if (!data.length) { showMessage('没有可导出的数据', false); return; }
 
                 const resp = await authFetch('/api/insurance/export/excel', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ invoices: data, field_names: exportCols, export_type: 'success' }),
+                    body: JSON.stringify({ invoices: data, field_names: outputColumns.value, export_type: 'success' }),
                 });
                 if (!resp.ok) { showMessage('导出失败', false); return; }
                 const blob = await resp.blob();
