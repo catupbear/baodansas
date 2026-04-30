@@ -1804,11 +1804,11 @@
                                 class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;background:#fef3c7;border:1px solid #fbbf24;color:#92400e;">
                             标记正常
                         </button>
-                        <span v-if="previewAutoRecord && previewAutoRecord.abnormal_override_reason"
-                              class="inline-flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
-                            已标记正常
-                            <button @click="undoMarkNormal(previewAutoRecord)" class="text-gray-400 hover:text-red-500 cursor-pointer" title="撤销标记">&times;</button>
-                        </span>
+                        <button v-if="previewAutoRecord && previewAutoRecord.abnormal_override_reason"
+                                @click="undoMarkNormal(previewAutoRecord)"
+                                class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;background:#f0fdf4;border:1px solid #86efac;color:#16a34a;">
+                            取消标记为正常
+                        </button>
                         <button @click="previewAutoRecord ? reocrRecord(previewAutoRecord) : reocrPreviewFile()"
                                 :disabled="previewAutoRecord ? previewAutoRecord._reocring : previewReocring"
                                 class="btn btn-outline cursor-pointer" style="padding:5px 12px;font-size:12px;color:#f59e0b;border-color:#f59e0b;">
