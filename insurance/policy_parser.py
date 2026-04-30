@@ -1044,12 +1044,11 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
     for i, line in enumerate(lines):
         stripped = line.strip()
         if stripped == '被保险人' or re.match(r'^被保险人\s*(?:证件|信息|承保)', stripped):
-            # 先查附近行的"名称 XXX"格式
+            # 先查附近行的"名称 XXX"或"客户名称：XXX"格式（华农等）
             for j in range(max(0, i - 3), min(len(lines), i + 3)):
                 if j == i:
                     continue
-                # 兼容"名称 XXX"和"名称：XXX"两种格式（华农等）
-                m = re.match(r'名称[：:\s]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+(?:[（(][^）)]+[）)])?)', lines[j].strip())
+                m = re.match(r'(?:客户)?名称[：:\s]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+(?:[（(][^）)]+[）)])?)', lines[j].strip())
                 if m and _is_valid_person(m.group(1)):
                     fields["被保险人"] = m.group(1)
                     return
@@ -1195,8 +1194,8 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
             break
 
     # 永诚/中华联合等格式："投保人信息\n姓名：李飞" 或 "投保人信息\n姓名/名称：深圳XXX公司"
-    # 华农格式："投保人信息\n名称：邹柳青"
-    m = re.search(r"投保人信息[\s\n]*(?:姓名(?:[/／]名称)?|名称)[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|$)", text)
+    # 华农格式："投保人信息\n名称：邹柳青" 或 "投保人信息\n客户名称：深圳市XXX公司"
+    m = re.search(r"投保人信息[\s\n]*(?:客户)?(?:姓名(?:[/／]名称)?|名称)[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|$)", text)
     if m:
         val = _clean_person_name(m.group(1))
         if _is_valid_person(val):
@@ -1527,9 +1526,11 @@ def _extract_premium(text: str, fields: dict, company_short: str):
         r"总?保险?费[：:\s]*([\d,]+\.\d{2})",
     ]
 
-    # 华农格式："总保费（人民币：元）:240"（无小数点，优先于不含税保费匹配）
+    # 华农格式：保费可能无小数点，优先匹配避免误取不含税保费
+    # "总保费（人民币：元）:240" 或 "保险费合计（元）：1200"
     if company_short == "华农":
-        patterns.insert(0, r"总保费[^:\n]*[：:]\s*([\d,]+\.?\d*)(?:\s|$)")
+        patterns.insert(0, r"保险?费合计[^￥¥\d\n]*[：:]\s*([\d,]+\.?\d*)(?:\s|$)")
+        patterns.insert(1, r"总保费[^:\n]*[：:]\s*([\d,]+\.?\d*)(?:\s|$)")
 
     # 华泰/京东安联/安盛天平特殊格式："（¥： 1,850.00 元）"
     if company_short in ("华泰", "京东安联", "安盛天平", "永诚", "前海联合"):
@@ -1631,13 +1632,15 @@ def _extract_premium(text: str, fields: dict, company_short: str):
                         fields["保费合计"] = val
                 break
 
-    # 不含税保费
-    m = re.search(r"不含税保[险]?费[总计：:\s]*([\d,]+\.\d{2})", text)
+    # 不含税保费：兼容"不含税保费：1132.08"和"不含税保费（元）：1132.08"等
+    m = re.search(r"不含税保[险]?费[^：:\d]*[：:\s]*([\d,]+\.\d{2})", text)
     if m:
         fields["不含税保费"] = m.group(1)
 
-    # 增值税额：兼容"税额：10.88"和"增值税10.88元"（华农等无"额"字）
-    m = re.search(r"(?:增值)?税额[总计：:\s]*([\d,]+\.\d{2})", text)
+    # 增值税额：兼容"税额：67.92"、"增值税10.88元"、"增值税（元）：67.92"等
+    m = re.search(r"(?:增值)?税额[^：:\d]*[：:\s]*([\d,]+\.\d{2})", text)
+    if not m:
+        m = re.search(r"增值税[^：:\d]*[：:\s]*([\d,]+\.\d{2})", text)
     if not m:
         m = re.search(r"增值税([\d,]+\.\d{2})\s*元", text)
     if m:
