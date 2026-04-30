@@ -4463,7 +4463,8 @@ createApp({
                     record.is_abnormal = 0;
                     record.abnormal_override_reason = reason;
                     markNormalVisible.value = false;
-                    // 刷新列表统计
+                    // 刷新列表和统计
+                    loadRecords(false);
                     loadRecordStats();
                 } else {
                     showMessage(data.msg || '标记失败', false);
@@ -4484,6 +4485,7 @@ createApp({
                     showMessage('已撤销标记', true);
                     record.is_abnormal = 1;
                     record.abnormal_override_reason = null;
+                    loadRecords(false);
                     loadRecordStats();
                 } else {
                     showMessage(data.msg || '撤销失败', false);
