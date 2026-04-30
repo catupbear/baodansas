@@ -1019,10 +1019,10 @@ def reocr_record(record_id):
             _handler._cross_fill_same_pdf(policies)
 
         total_policies = len(policies)
-
-        # 收集同一 PDF 的所有记录（当前 + 兄弟），统一分配 policy
         file_md5 = record.get("file_md5", "")
-        all_records = [record]
+
+        # 收集同一 PDF 的兄弟记录（按 policy_index 去重，每个 index 只保留最新）
+        sibling_records = []
         if file_md5:
             conn = _db.pool.connection()
             try:
@@ -1031,72 +1031,51 @@ def reocr_record(record_id):
                     "SELECT * FROM insurance_records WHERE file_md5 = %s AND id != %s",
                     (file_md5, record_id)
                 )
-                siblings = cursor.fetchall()
-                for sib in siblings:
+                for sib in cursor.fetchall():
                     for f in ("parsed_fields", "mapped_fields"):
                         if isinstance(sib.get(f), str):
                             try: sib[f] = json.loads(sib[f])
                             except: sib[f] = {}
-                    all_records.append(dict(sib))
+                    sibling_records.append(dict(sib))
             finally:
                 conn.close()
+            # 按 policy_index 去重，每个 index 只保留最新
+            by_index = {}
+            for sib in sibling_records:
+                idx = sib.get("policy_index", 0) or 0
+                if idx not in by_index or sib["id"] > by_index[idx]["id"]:
+                    by_index[idx] = sib
+            sibling_records = list(by_index.values())
 
-        # 按 policy_index 去重，每个 index 只保留最新（id 最大）的记录
-        best_by_index = {}
-        for rec in all_records:
-            idx = rec.get("policy_index", 0) or 0
-            if idx not in best_by_index or rec["id"] > best_by_index[idx]["id"]:
-                best_by_index[idx] = rec
-        unique_records = sorted(best_by_index.values(), key=lambda r: r.get("policy_index", 0))
+        # 为当前记录匹配最佳 policy（通过保单号匹配）
+        original_policy_no = ""
+        try:
+            orig_fields = record.get("parsed_fields", {})
+            if isinstance(orig_fields, str):
+                orig_fields = json.loads(orig_fields) if orig_fields else {}
+            original_policy_no = orig_fields.get("保单号", "")
+        except (TypeError, json.JSONDecodeError):
+            pass
 
-        # 为每条记录匹配最佳 policy（通过保单号匹配）
-        used_policies = set()
-        updated_count = 0
-        for rec in unique_records:
-            # 获取原保单号
-            orig_pf = rec.get("parsed_fields", {})
-            if isinstance(orig_pf, str):
-                try: orig_pf = json.loads(orig_pf) if orig_pf else {}
-                except: orig_pf = {}
-            orig_no = orig_pf.get("保单号", "")
+        best_idx = 0
+        if original_policy_no and len(policies) > 1:
+            for i, p in enumerate(policies):
+                if p.get("fields", {}).get("保单号", "") == original_policy_no:
+                    best_idx = i
+                    break
+        used_policies = {best_idx}
 
-            # 匹配 policy
-            matched = None
-            if orig_no:
-                for i, p in enumerate(policies):
-                    if i not in used_policies and p.get("fields", {}).get("保单号", "") == orig_no:
-                        matched = (i, p)
-                        break
-            # 未匹配到则取第一个未使用的
-            if matched is None:
-                for i, p in enumerate(policies):
-                    if i not in used_policies:
-                        matched = (i, p)
-                        break
-            if matched is None:
-                continue
-
-            policy_idx, policy = matched
-            used_policies.add(policy_idx)
-
+        # 更新当前记录
+        def _apply_policy_to_record(rec_id, policy, policy_idx):
             pf = policy.get("fields", {})
-            doc_cat = policy.get("doc_category", "")
-            conf = policy.get("confidence", 0.0)
-
-            # 兄弟记录互补
-            if file_md5:
-                _cross_fill_from_siblings(_db, rec["id"], file_md5, pf)
-            # 同车牌互补
-            _handler._cross_fill_by_plate(pf, rec["id"])
-
+            _handler._cross_fill_by_plate(pf, rec_id)
             cs = pf.get("保险公司简称", "")
             mf = apply_mapping(pf, cs)
-
             updates = {
                 "status": "done",
                 "ocr_engine": ocr_engine,
-                "doc_category": doc_cat,
-                "confidence": conf,
+                "doc_category": policy.get("doc_category", ""),
+                "confidence": policy.get("confidence", 0.0),
                 "parsed_fields": pf,
                 "mapped_fields": mf,
                 "raw_text": policy.get("raw_text", ""),
@@ -1106,7 +1085,34 @@ def reocr_record(record_id):
                 "policy_index": policy_idx + 1,
                 "page_range": policy.get("page_range", ""),
             }
-            update_insurance_record(_db, rec["id"], updates)
+            update_insurance_record(_db, rec_id, updates)
+
+        _apply_policy_to_record(record_id, policies[best_idx], best_idx)
+        updated_count = 1
+
+        # 为每条兄弟记录匹配 policy 并更新
+        for sib in sibling_records:
+            sib_pf = sib.get("parsed_fields", {})
+            sib_no = sib_pf.get("保单号", "") if isinstance(sib_pf, dict) else ""
+
+            matched_idx = None
+            # 通过保单号匹配
+            if sib_no:
+                for i, p in enumerate(policies):
+                    if i not in used_policies and p.get("fields", {}).get("保单号", "") == sib_no:
+                        matched_idx = i
+                        break
+            # 未匹配则取第一个未使用的
+            if matched_idx is None:
+                for i in range(len(policies)):
+                    if i not in used_policies:
+                        matched_idx = i
+                        break
+            if matched_idx is None:
+                continue
+
+            used_policies.add(matched_idx)
+            _apply_policy_to_record(sib["id"], policies[matched_idx], matched_idx)
             updated_count += 1
 
         # 返回更新后的主记录
