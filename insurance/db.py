@@ -1347,7 +1347,7 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
                 FROM insurance_records
                 WHERE id IN ({dedup_ids_sql})
             """, params + params)
-            summary = cursor.fetchone()
+            summary = cursor.fetchone() or {"total": 0, "done_cnt": 0, "failed_cnt": 0, "pending_cnt": 0, "processing_cnt": 0}
             # 异常/非保单数量需要"先过滤再去重"，与列表查询逻辑一致
             done_cond = f" AND ({col_prefix}status = 'done' OR {col_prefix}status = 'success')"
             # 提取异常：status=done AND is_abnormal=1，然后去重
