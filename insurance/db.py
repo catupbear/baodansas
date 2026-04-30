@@ -1386,7 +1386,7 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
                     SUM(({col_prefix}status = 'done' OR {col_prefix}status = 'success') AND {col_prefix}doc_category != '' AND {col_prefix}doc_category != '保单') as nonpolicy_cnt
                 FROM {from_sql}{where_sql}
             """, params)
-        summary = cursor.fetchone()
+        summary = cursor.fetchone() or {"total": 0, "done_cnt": 0, "failed_cnt": 0, "pending_cnt": 0, "processing_cnt": 0, "abnormal_cnt": 0, "nonpolicy_cnt": 0}
         total = summary["total"] or 0
 
         status_stats = []
