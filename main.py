@@ -247,9 +247,15 @@ def create_app(config: dict) -> Flask:
             try:
                 logger.info("启动补拉：开始拉取中断期间的历史消息...")
                 fetcher.fetch_new_messages()
-                logger.info("启动补拉完成，开始补扫漏掉的保单 PDF...")
+                logger.info("启动补拉完成（含报价消息监听），开始补扫漏掉的保单 PDF...")
                 fetcher.rescan_missed_insurance(lookback_days=5)
                 logger.info("启动补扫完成")
+                # 预热报价绑定列表缓存
+                try:
+                    bindings = quote_handler.binding_service.get_bindings()
+                    logger.info("报价模块就绪：绑定列表 %d 条", len(bindings))
+                except Exception as e:
+                    logger.warning("报价绑定列表预热失败: %s", e)
             except Exception as e:
                 logger.error("启动补拉/补扫失败: %s", e)
 
