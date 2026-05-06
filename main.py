@@ -22,6 +22,7 @@ from insurance.db import init_insurance_tables
 from insurance.monitor_config_db import init_monitor_config_table, migrate_from_watch_list
 from insurance.handler import InsuranceHandler
 from insurance.api import insurance_bp, init_insurance_api
+from quote.handler import QuoteHandler
 from auth.db import init_users_table, init_enterprises_table
 from auth.jwt_utils import init_jwt
 from auth.decorators import init_auth_decorators
@@ -111,6 +112,12 @@ def create_app(config: dict) -> Flask:
     )
     init_insurance_api(db, handler=insurance_handler, contacts=contacts)
     app.register_blueprint(insurance_bp)
+
+    # 初始化保险报价模块
+    quote_handler = QuoteHandler(
+        cos_storage=cos_storage,
+        app_config=config,
+    )
 
     # 登录页（无需认证）
     @app.route("/login")
@@ -221,12 +228,18 @@ def create_app(config: dict) -> Flask:
         # 将 insurance_handler 绑定到 fetcher（用于自动触发）
         fetcher.insurance_handler = insurance_handler
 
+        # 将 quote_handler 绑定到 fetcher（用于自动触发报价）
+        fetcher.quote_handler = quote_handler
+        quote_handler.finance_sdk = finance_sdk
+        quote_handler.sdk_config = sdk_config
+
         # 保存引用，方便清理
         app.extensions["wxbot"] = {
             "db": db,
             "finance_sdk": finance_sdk,
             "fetcher": fetcher,
             "insurance_handler": insurance_handler,
+            "quote_handler": quote_handler,
         }
 
         # 启动时在后台补拉中断期间的消息 + 补扫漏掉的保单 PDF
