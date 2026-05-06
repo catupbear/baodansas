@@ -67,6 +67,8 @@ class BindingService:
         """
         bindings = self.get_bindings()
         for b in bindings:
-            if b.get("group_id") == group_id and b.get("wechat_id") == sender:
+            b_group_id = (b.get("group_id") or "").strip()
+            b_wechat_id = (b.get("wechat_id") or "").strip()
+            if b_group_id == group_id and b_wechat_id == sender:
                 return b
         return None
