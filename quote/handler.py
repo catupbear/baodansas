@@ -60,7 +60,10 @@ class QuoteHandler:
 
         binding = self.binding_service.find_binding(roomid, sender)
         if not binding:
+            logger.info("报价：未匹配绑定 roomid=%s, sender=%s", roomid, sender)
             return
+        logger.info("报价：匹配绑定成功 roomid=%s, sender=%s, binding_id=%s",
+                    roomid, sender, binding.get("id"))
 
         msg_data["binding"] = binding
         try:

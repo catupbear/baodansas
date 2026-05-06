@@ -47,6 +47,9 @@ class BindingService:
         self._cache = self._fetch_bindings()
         self._cache_time = now
         logger.info("刷新绑定列表缓存，共 %d 条", len(self._cache))
+        for b in self._cache:
+            logger.info("  绑定: id=%s, group_id=%s, group_name=%s, wechat_id=%s",
+                        b.get("id"), b.get("group_id"), b.get("group_name"), b.get("wechat_id"))
         return self._cache
 
     def find_binding(self, group_id: str, sender: str) -> Optional[Dict]:
