@@ -112,12 +112,16 @@ class QuoteHandler:
         image_bytes = None
         try:
             if self.finance_sdk and self.sdk_config:
-                image_bytes = self.finance_sdk.get_media_data_bytes(
+                ret, data = self.finance_sdk.get_media_data_bytes(
                     sdkfileid,
                     proxy=self.sdk_config.get("proxy", ""),
                     passwd=self.sdk_config.get("proxy_passwd", ""),
                     timeout=self.sdk_config.get("timeout", 10),
                 )
+                if ret != 0:
+                    logger.error("报价：下载图片失败 seq=%d, 错误码=%d", seq, ret)
+                    return
+                image_bytes = data
         except Exception as e:
             logger.error("报价：下载图片失败 seq=%d: %s", seq, e)
             return
