@@ -43,13 +43,17 @@ class BindingService:
         """获取绑定列表（带缓存）"""
         now = time.time()
         if self._cache and (now - self._cache_time) < self._cache_ttl:
+            logger.info("报价绑定列表：使用缓存（剩余 %ds），共 %d 条",
+                        int(self._cache_ttl - (now - self._cache_time)), len(self._cache))
             return self._cache
         self._cache = self._fetch_bindings()
         self._cache_time = now
-        logger.info("刷新绑定列表缓存，共 %d 条", len(self._cache))
+        logger.info("报价绑定列表：从接口刷新，共 %d 条", len(self._cache))
         for b in self._cache:
-            logger.info("  绑定: id=%s, group_id=%s, group_name=%s, wechat_id=%s",
-                        b.get("id"), b.get("group_id"), b.get("group_name"), b.get("wechat_id"))
+            logger.info("  绑定: id=%s, group_id=%s, group_name=%s, wechat_id=%s, "
+                        "platform_user_id=%s, auto_quote=%s",
+                        b.get("id"), b.get("group_id"), b.get("group_name"),
+                        b.get("wechat_id"), b.get("platform_user_id"), b.get("auto_quote"))
         return self._cache
 
     def find_binding(self, group_id: str, sender: str) -> Optional[Dict]:
