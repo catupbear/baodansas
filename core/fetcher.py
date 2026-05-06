@@ -186,6 +186,9 @@ class MessageFetcher:
 
             # 检查是否需要触发保单识别
             self._check_insurance_trigger(msg_seq, msg_data, parsed)
+
+            # 检查是否需要触发保险报价
+            self._check_quote_trigger(msg_seq, msg_data, parsed)
         except json.JSONDecodeError as e:
             logger.error("消息JSON解析失败, seq=%d: %s", msg_seq, e)
 
@@ -233,4 +236,31 @@ class MessageFetcher:
             "filename": filename,
             "sdkfileid": content.get("sdkfileid", ""),
             "filesize": content.get("filesize", 0),
+        })
+
+    def _check_quote_trigger(self, seq: int, msg_data: dict, parsed: dict):
+        """检查是否需要触发保险报价（图片/文本消息）"""
+        handler = getattr(self, "quote_handler", None)
+        if not handler:
+            return
+
+        msgtype = parsed.get("msgtype", "")
+        roomid = parsed.get("roomid", "")
+        sender = parsed.get("from", "")
+        content = parsed.get("content", {})
+
+        # 仅处理图片和文本消息
+        if msgtype not in ("image", "text"):
+            return
+
+        # 仅处理群聊消息
+        if not roomid:
+            return
+
+        handler.check_and_enqueue({
+            "msgtype": msgtype,
+            "roomid": roomid,
+            "sender": sender,
+            "content": content,
+            "seq": seq,
         })
