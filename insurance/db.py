@@ -206,6 +206,34 @@ def init_insurance_tables(db):
             except Exception:
                 pass
 
+        # 用户字段配置表（支持全局/企业/个人三级作用域）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_field_config (
+                id              INT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+                scope           ENUM('global','enterprise','user') NOT NULL COMMENT '配置作用域：global=全局默认, enterprise=企业级, user=员工个人',
+                scope_id        INT DEFAULT NULL COMMENT '作用域ID：global时为NULL, enterprise时为企业ID, user时为用户ID',
+                template_name   VARCHAR(64) NOT NULL DEFAULT '默认模板' COMMENT '模板名称',
+                config_type     VARCHAR(32) NOT NULL COMMENT '配置类型：company_alias/policy_type_alias/date_format/fee_formula',
+                config_key      VARCHAR(128) NOT NULL COMMENT '配置项标识',
+                config_value    TEXT NOT NULL COMMENT '配置值(JSON)',
+                visible_to_employees TINYINT NOT NULL DEFAULT 0 COMMENT '是否对员工可见（仅enterprise scope有效）',
+                updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后更新时间',
+                UNIQUE KEY uk_scope_tpl (scope, scope_id, template_name, config_type, config_key)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户字段配置表'
+        """)
+
+        # 用户当前启用的配置模板表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_active_template (
+                id              INT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
+                user_id         INT NOT NULL COMMENT '用户ID',
+                active_source   ENUM('own','enterprise') NOT NULL DEFAULT 'own' COMMENT '启用来源',
+                template_name   VARCHAR(64) NOT NULL DEFAULT '默认模板' COMMENT '启用的模板名称',
+                updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后更新时间',
+                UNIQUE KEY uk_user (user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户当前启用的配置模板'
+        """)
+
         # 回填已有数据的 ISO 日期列（后台线程，Python端逐行转换，跳过异常格式）
         conn.commit()  # 先提交前面的 DDL
 
