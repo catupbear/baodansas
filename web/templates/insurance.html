@@ -3999,7 +3999,7 @@ createApp({
             // 用当前筛选条件请求全部数据（不限分页），导出完整结果
             try {
                 showMessage('正在导出，请稍候...', true);
-                // 构建与 loadRecords 一致的筛选参数
+                // 构建与 loadRecords 完全一致的筛选参数
                 const params = new URLSearchParams({ page: 1, page_size: 10000 });
                 if (recordFilter.source_type === 'user') {
                     params.set('source_type', 'user');
@@ -4025,6 +4025,8 @@ createApp({
                     params.set('doc_category', '!保单');
                 } else if (tab === 'failed') {
                     params.set('status', 'failed');
+                } else if (tab === 'pending') {
+                    params.set('status', 'pending');
                 } else if (recordFilter.status) {
                     params.set('status', recordFilter.status);
                 }
@@ -4034,6 +4036,8 @@ createApp({
                 if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
                 if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
                 if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+                // 失败/待处理 tab 下不去重，避免记录被过滤掉
+                if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');
                 _appendAdvancedParams(params);
 
                 const listResp = await authFetch(`/api/insurance/records?${params.toString()}`);

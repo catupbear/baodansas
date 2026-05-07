@@ -897,8 +897,12 @@ def query_insurance_records(
             conditions.append(f"{col_prefix}roomid LIKE %s")
             params.append(f"%{roomid}%")
     if status:
-        conditions.append(f"{col_prefix}status = %s")
-        params.append(status)
+        # done 和 success 视为同一状态，与 stats 统计逻辑保持一致
+        if status == "done":
+            conditions.append(f"({col_prefix}status = 'done' OR {col_prefix}status = 'success')")
+        else:
+            conditions.append(f"{col_prefix}status = %s")
+            params.append(status)
     if keyword:
         # 在文件名、群名、发送人名中模糊匹配
         conditions.append(
