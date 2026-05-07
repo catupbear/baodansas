@@ -13,7 +13,7 @@ import logging
 
 import pymysql
 import pymysql.cursors
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, jsonify, render_template, request, send_file
 
 from .db import (
     backfill_records_by_sources,
@@ -27,6 +27,12 @@ from .db import (
     set_insurance_config,
     update_insurance_record,
     upsert_insurance_record_by_policy,
+)
+from .field_config_db import (
+    list_templates, rename_template, update_template_visibility, delete_template as delete_template_db,
+    get_template_config, save_full_template,
+    get_active_template, set_active_template,
+    get_effective_config,
 )
 from .monitor_config_db import (
     list_monitor_configs,
@@ -125,6 +131,19 @@ def _get_enterprise_id_filter():
     if role == ROLE_SUPER_ADMIN:
         return None
     return g.current_user.get("parent_id")
+
+
+def _get_user_scope():
+    """根据当前用户角色返回 (scope, scope_id)"""
+    from flask import g
+    user = g.current_user
+    role = user["role"]
+    if role == "super_admin":
+        return "global", None
+    elif role == "enterprise":
+        return "enterprise", user.get("parent_id") or user["user_id"]
+    else:
+        return "user", user["user_id"]
 
 
 # ============================================================
@@ -2586,4 +2605,167 @@ def toggle_monitor_config_api(config_id):
         return jsonify({"code": 0, "data": {"enabled": bool(new_enabled)}, "msg": "已更新"})
     except Exception as e:
         logger.exception("切换监控配置 %d 状态失败", config_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+# ============================================================
+# 字段配置（系统设置）相关路由
+# ============================================================
+
+@insurance_bp.route("/insurance/settings")
+def field_config_page():
+    """系统设置页面"""
+    return render_template("field_config.html")
+
+
+@insurance_bp.route("/api/insurance/field-config/templates", methods=["GET"])
+def get_field_config_templates():
+    """获取模板列表（我的 + 企业可见）"""
+    try:
+        from flask import g
+        user = g.current_user
+        data = list_templates(_db, user["user_id"], user["role"], user.get("parent_id"))
+        active = get_active_template(_db, user["user_id"])
+        return jsonify({"code": 0, "data": {**data, "active": active}})
+    except Exception as e:
+        logger.exception("获取模板列表失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/field-config/templates/manage", methods=["PUT"])
+def manage_field_config_templates():
+    """批量管理模板"""
+    try:
+        body = request.get_json(force=True) or {}
+        actions = body.get("actions", [])
+        scope, scope_id = _get_user_scope()
+
+        for action in actions:
+            act_type = action.get("type")
+            if act_type == "rename":
+                rename_template(_db, scope, scope_id, action["old_name"], action["new_name"])
+            elif act_type == "visibility":
+                update_template_visibility(_db, scope, scope_id, action["name"], action["visible"])
+            elif act_type == "delete":
+                delete_template_db(_db, scope, scope_id, action["name"])
+
+        return jsonify({"code": 0, "msg": "模板已更新"})
+    except Exception as e:
+        logger.exception("管理模板失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/field-config", methods=["GET"])
+def get_field_config():
+    """获取指定模板的全部配置"""
+    try:
+        from flask import g
+        template_name = request.args.get("template", "默认模板")
+        source = request.args.get("source", "own")
+        user = g.current_user
+
+        if source == "enterprise" and user.get("parent_id"):
+            config = get_template_config(_db, "enterprise", user["parent_id"], template_name)
+        else:
+            scope, scope_id = _get_user_scope()
+            config = get_template_config(_db, scope, scope_id, template_name)
+
+        return jsonify({"code": 0, "data": config})
+    except Exception as e:
+        logger.exception("获取字段配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/field-config/save-and-apply", methods=["POST"])
+def save_and_apply_field_config():
+    """保存模板配置并设为启用"""
+    try:
+        from flask import g
+        body = request.get_json(force=True) or {}
+        template_name = body.get("template_name", "默认模板")
+        config = body.get("config", {})
+        visible = body.get("visible", False)
+
+        scope, scope_id = _get_user_scope()
+        user = g.current_user
+
+        save_full_template(_db, scope, scope_id, template_name, config, visible)
+        set_active_template(_db, user["user_id"], "own", template_name)
+
+        return jsonify({"code": 0, "msg": "已保存并应用"})
+    except Exception as e:
+        logger.exception("保存配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/field-config/apply", methods=["POST"])
+def apply_field_config_template():
+    """切换启用模板（不修改内容）"""
+    try:
+        from flask import g
+        body = request.get_json(force=True) or {}
+        template_name = body.get("template_name", "默认模板")
+        source = body.get("source", "own")
+
+        set_active_template(_db, g.current_user["user_id"], source, template_name)
+        return jsonify({"code": 0, "msg": "已切换模板"})
+    except Exception as e:
+        logger.exception("切换模板失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/field-config/formula/validate", methods=["POST"])
+def validate_formula():
+    """验证公式合法性并返回示例计算结果"""
+    try:
+        body = request.get_json(force=True) or {}
+        formula = body.get("formula", "")
+        if not formula:
+            return jsonify({"code": 400, "msg": "公式不能为空"}), 400
+
+        sample = {"保费": 5000, "车船税": 300, "佣金率": 0.15, "佣金": 750,
+                  "采购费率": 0.05, "公司利润": 200, "跟单利润": 100}
+
+        import re
+        expr = formula.replace("×", "*").replace("÷", "/")
+        for field_name, val in sample.items():
+            expr = expr.replace(field_name, str(val))
+
+        if not re.match(r'^[\d\s\+\-\*/\.\(\)]+$', expr.strip()):
+            return jsonify({"code": 400, "msg": "公式包含非法字符"}), 400
+
+        result = eval(expr)
+        return jsonify({"code": 0, "data": {"result": round(result, 2), "expression": expr}})
+    except ZeroDivisionError:
+        return jsonify({"code": 400, "msg": "公式存在除零错误"}), 400
+    except Exception as e:
+        return jsonify({"code": 400, "msg": f"公式错误：{str(e)}"}), 400
+
+
+@insurance_bp.route("/api/insurance/field-config/defaults", methods=["GET"])
+def get_field_config_defaults():
+    """获取系统默认的公司/险种映射"""
+    try:
+        from insurance.policy_parser import COMPANY_SHORT_MAP
+
+        company_defaults = []
+        seen_shorts = set()
+        for keyword, short in COMPANY_SHORT_MAP.items():
+            if short not in seen_shorts:
+                company_defaults.append({"key": keyword, "value": short})
+                seen_shorts.add(short)
+
+        policy_type_defaults = [
+            {"key": "机动车交通事故责任强制保险", "value": "交强险"},
+            {"key": "机动车商业保险", "value": "商业险"},
+            {"key": "驾乘人员意外伤害保险", "value": "驾乘险"},
+            {"key": "新能源汽车商业保险", "value": "新能源商业险"},
+        ]
+
+        return jsonify({"code": 0, "data": {
+            "company_alias": company_defaults,
+            "policy_type_alias": policy_type_defaults,
+        }})
+    except Exception as e:
+        logger.exception("获取默认值失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
