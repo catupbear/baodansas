@@ -1,0 +1,530 @@
+"""
+用户字段配置数据库操作层
+
+负责 user_field_config（字段配置模板）和 user_active_template（启用模板）两张表的增删改查。
+支持三级作用域：global（全局默认）、enterprise（企业级）、user（员工个人）。
+同时提供公式引擎和配置应用函数，供导出时调用。
+"""
+
+import json
+import logging
+import re
+from datetime import datetime
+
+import pymysql
+import pymysql.cursors
+
+logger = logging.getLogger(__name__)
+
+# 支持的 config_type 类型
+CONFIG_TYPES = ["company_alias", "policy_type_alias", "date_format", "fee_formula"]
+
+# 默认模板名
+DEFAULT_TEMPLATE_NAME = "默认模板"
+
+
+# ------------------------------------------------------------------ #
+# 内部工具函数
+# ------------------------------------------------------------------ #
+
+def _scope_id_condition(scope_id):
+    """
+    生成 scope_id 的 SQL 条件片段和参数。
+    scope_id 为 None 时使用 IS NULL，否则使用 = %s。
+    返回 (condition_str, params_list)
+    """
+    if scope_id is None:
+        return "scope_id IS NULL", []
+    return "scope_id = %s", [scope_id]
+
+
+def _format_date(raw: str, fmt: str) -> str:
+    """
+    日期格式转换（内部函数）。
+    支持解析：YYYY-MM-DD、YYYY/MM/DD、YYYY年MM月DD日
+    按 fmt 输出，fmt 支持标准 strftime 格式（如 %Y年%m月%d日、%Y/%m/%d、%Y-%m-%d）
+    解析失败则原样返回。
+    """
+    if not raw or not fmt:
+        return raw
+    # 尝试多种格式解析
+    patterns = [
+        r'(\d{4})-(\d{1,2})-(\d{1,2})',
+        r'(\d{4})/(\d{1,2})/(\d{1,2})',
+        r'(\d{4})年(\d{1,2})月(\d{1,2})日?',
+    ]
+    for pat in patterns:
+        m = re.match(pat, str(raw).strip())
+        if m:
+            try:
+                year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                dt = datetime(year, month, day)
+                return dt.strftime(fmt)
+            except (ValueError, OverflowError):
+                pass
+    return raw
+
+
+# ------------------------------------------------------------------ #
+# 模板管理
+# ------------------------------------------------------------------ #
+
+def list_templates(db, user_id: int, role: str, parent_id=None) -> dict:
+    """
+    列出用户可见的模板列表。
+
+    返回格式：
+    {
+        "my": [{"name": "xxx", "visible": bool}],
+        "enterprise": [{"name": "xxx"}]   # 仅 employee 角色有此键
+    }
+    如果 my 没有任何模板，返回默认的 [{"name": "默认模板", "visible": False}]
+
+    role: "admin" 时 scope=enterprise, scope_id=parent_id（企业管理员）
+          "employee" 时 scope=user, scope_id=user_id（普通员工）
+          其他情况同 employee
+    """
+    # 确定 my 的查询范围
+    if role == "admin":
+        my_scope = "enterprise"
+        my_scope_id = parent_id
+    else:
+        my_scope = "user"
+        my_scope_id = user_id
+
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        # 查询 my 模板（DISTINCT template_name + visible_to_employees）
+        sid_cond, sid_params = _scope_id_condition(my_scope_id)
+        cursor.execute(
+            f"SELECT DISTINCT template_name, visible_to_employees "
+            f"FROM user_field_config "
+            f"WHERE scope = %s AND {sid_cond} "
+            f"ORDER BY template_name",
+            [my_scope] + sid_params
+        )
+        my_rows = cursor.fetchall()
+
+        # 每个模板名只保留一行（取 visible_to_employees 最大值，即有一条可见则视为可见）
+        my_map = {}
+        for row in my_rows:
+            name = row["template_name"]
+            visible = bool(row["visible_to_employees"])
+            if name not in my_map:
+                my_map[name] = visible
+            else:
+                my_map[name] = my_map[name] or visible
+
+        my_list = [{"name": k, "visible": v} for k, v in my_map.items()]
+
+        # 如果没有任何模板，返回默认模板
+        if not my_list:
+            my_list = [{"name": DEFAULT_TEMPLATE_NAME, "visible": False}]
+
+        result = {"my": my_list}
+
+        # employee 角色额外查询企业可见模板
+        if role == "employee" and parent_id is not None:
+            ent_sid_cond, ent_sid_params = _scope_id_condition(parent_id)
+            cursor.execute(
+                f"SELECT DISTINCT template_name "
+                f"FROM user_field_config "
+                f"WHERE scope = 'enterprise' AND {ent_sid_cond} AND visible_to_employees = 1 "
+                f"ORDER BY template_name",
+                ent_sid_params
+            )
+            ent_rows = cursor.fetchall()
+            result["enterprise"] = [{"name": row["template_name"]} for row in ent_rows]
+
+        return result
+    finally:
+        conn.close()
+
+
+def rename_template(db, scope: str, scope_id, old_name: str, new_name: str):
+    """
+    重命名模板（更新 user_field_config 中的 template_name）。
+    同时更新 user_active_template 中引用该模板名的记录。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        sid_cond, sid_params = _scope_id_condition(scope_id)
+
+        # 更新配置表中的模板名
+        cursor.execute(
+            f"UPDATE user_field_config SET template_name = %s "
+            f"WHERE scope = %s AND {sid_cond} AND template_name = %s",
+            [new_name, scope] + sid_params + [old_name]
+        )
+
+        # 同步更新启用模板表（source 匹配 scope，模板名匹配旧名）
+        # active_source: own=user scope, enterprise=enterprise scope
+        active_source = "enterprise" if scope == "enterprise" else "own"
+        cursor.execute(
+            "UPDATE user_active_template SET template_name = %s "
+            "WHERE active_source = %s AND template_name = %s",
+            [new_name, active_source, old_name]
+        )
+
+        conn.commit()
+        logger.debug("模板重命名: %s → %s (scope=%s, scope_id=%s)", old_name, new_name, scope, scope_id)
+    finally:
+        conn.close()
+
+
+def update_template_visibility(db, scope: str, scope_id, template_name: str, visible: bool):
+    """
+    更新模板的对员工可见性（仅 enterprise scope 有实际意义）。
+    将该模板下所有配置行的 visible_to_employees 统一设置。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        sid_cond, sid_params = _scope_id_condition(scope_id)
+
+        cursor.execute(
+            f"UPDATE user_field_config SET visible_to_employees = %s "
+            f"WHERE scope = %s AND {sid_cond} AND template_name = %s",
+            [1 if visible else 0, scope] + sid_params + [template_name]
+        )
+        conn.commit()
+        logger.debug("模板可见性更新: template=%s visible=%s", template_name, visible)
+    finally:
+        conn.close()
+
+
+def delete_template(db, scope: str, scope_id, template_name: str):
+    """
+    删除模板（删除 user_field_config 中该模板的所有配置行）。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        sid_cond, sid_params = _scope_id_condition(scope_id)
+
+        cursor.execute(
+            f"DELETE FROM user_field_config "
+            f"WHERE scope = %s AND {sid_cond} AND template_name = %s",
+            [scope] + sid_params + [template_name]
+        )
+        conn.commit()
+        logger.debug("模板已删除: template=%s (scope=%s, scope_id=%s)", template_name, scope, scope_id)
+    finally:
+        conn.close()
+
+
+# ------------------------------------------------------------------ #
+# 配置读写
+# ------------------------------------------------------------------ #
+
+def get_template_config(db, scope: str, scope_id, template_name: str) -> dict:
+    """
+    获取指定模板的所有配置，按 config_type 分组返回。
+
+    返回格式：
+    {
+        "company_alias": [{"key": "xxx", "value": "yyy"}],
+        "policy_type_alias": [...],
+        "date_format": [...],
+        "fee_formula": [...]
+    }
+    config_value 自动尝试 json.loads，失败则返回原字符串。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        sid_cond, sid_params = _scope_id_condition(scope_id)
+
+        cursor.execute(
+            f"SELECT config_type, config_key, config_value "
+            f"FROM user_field_config "
+            f"WHERE scope = %s AND {sid_cond} AND template_name = %s "
+            f"ORDER BY config_type, id",
+            [scope] + sid_params + [template_name]
+        )
+        rows = cursor.fetchall()
+
+        # 按 config_type 分组，初始化所有类型为空列表
+        result = {ct: [] for ct in CONFIG_TYPES}
+        for row in rows:
+            ct = row["config_type"]
+            raw_val = row["config_value"]
+            # 自动尝试 JSON 反序列化
+            try:
+                value = json.loads(raw_val)
+            except (TypeError, json.JSONDecodeError, ValueError):
+                value = raw_val
+            if ct not in result:
+                result[ct] = []
+            result[ct].append({"key": row["config_key"], "value": value})
+
+        return result
+    finally:
+        conn.close()
+
+
+def save_template_config(db, scope: str, scope_id, template_name: str,
+                         config_type: str, items: list, visible: bool = False):
+    """
+    保存指定 config_type 的配置（先删后插，整体替换）。
+
+    items: [{"key": "xxx", "value": "yyy"}, ...]
+    value 如果不是字符串则自动 json.dumps。
+    visible: 是否对员工可见（visible_to_employees）
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        sid_cond, sid_params = _scope_id_condition(scope_id)
+
+        # 先删除该 config_type 下的所有旧配置
+        cursor.execute(
+            f"DELETE FROM user_field_config "
+            f"WHERE scope = %s AND {sid_cond} AND template_name = %s AND config_type = %s",
+            [scope] + sid_params + [template_name, config_type]
+        )
+
+        # 批量插入新配置
+        visible_val = 1 if visible else 0
+        for item in items:
+            key = item.get("key", "")
+            value = item.get("value", "")
+            if not isinstance(value, str):
+                value = json.dumps(value, ensure_ascii=False)
+            if not key:
+                continue
+
+            # scope_id 为 None 时需要特殊处理 INSERT
+            if scope_id is None:
+                cursor.execute(
+                    "INSERT INTO user_field_config "
+                    "(scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
+                    "VALUES (%s, NULL, %s, %s, %s, %s, %s) "
+                    "ON DUPLICATE KEY UPDATE config_value = VALUES(config_value), "
+                    "visible_to_employees = VALUES(visible_to_employees)",
+                    [scope, template_name, config_type, key, value, visible_val]
+                )
+            else:
+                cursor.execute(
+                    "INSERT INTO user_field_config "
+                    "(scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s) "
+                    "ON DUPLICATE KEY UPDATE config_value = VALUES(config_value), "
+                    "visible_to_employees = VALUES(visible_to_employees)",
+                    [scope, scope_id, template_name, config_type, key, value, visible_val]
+                )
+
+        conn.commit()
+        logger.debug("模板配置已保存: scope=%s template=%s config_type=%s items=%d",
+                     scope, template_name, config_type, len(items))
+    finally:
+        conn.close()
+
+
+def save_full_template(db, scope: str, scope_id, template_name: str,
+                       config: dict, visible: bool = False):
+    """
+    保存完整模板配置（所有 4 种 config_type）。
+
+    config 格式：
+    {
+        "company_alias": [{"key": "xxx", "value": "yyy"}],
+        "policy_type_alias": [...],
+        "date_format": [...],
+        "fee_formula": [...]
+    }
+    """
+    for config_type in CONFIG_TYPES:
+        items = config.get(config_type, [])
+        save_template_config(db, scope, scope_id, template_name, config_type, items, visible)
+
+
+# ------------------------------------------------------------------ #
+# 启用模板
+# ------------------------------------------------------------------ #
+
+def get_active_template(db, user_id: int) -> dict:
+    """
+    获取用户当前启用的模板信息。
+    无记录时返回默认值 {"source": "own", "template_name": "默认模板"}
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT active_source, template_name FROM user_active_template WHERE user_id = %s",
+            (user_id,)
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return {"source": "own", "template_name": DEFAULT_TEMPLATE_NAME}
+        return {"source": row["active_source"], "template_name": row["template_name"]}
+    finally:
+        conn.close()
+
+
+def set_active_template(db, user_id: int, source: str, template_name: str):
+    """
+    设置用户启用的模板（REPLACE INTO，存在则替换，不存在则插入）。
+
+    source: "own"（使用自己的模板）或 "enterprise"（使用企业模板）
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "REPLACE INTO user_active_template (user_id, active_source, template_name) "
+            "VALUES (%s, %s, %s)",
+            (user_id, source, template_name)
+        )
+        conn.commit()
+        logger.debug("用户启用模板已更新: user_id=%s source=%s template=%s",
+                     user_id, source, template_name)
+    finally:
+        conn.close()
+
+
+# ------------------------------------------------------------------ #
+# 导出时用：获取有效配置
+# ------------------------------------------------------------------ #
+
+def get_effective_config(db, user_id: int, role: str, parent_id=None) -> dict:
+    """
+    获取用户当前启用模板的配置。
+
+    先调用 get_active_template 获取启用信息，再根据 source 决定查询哪个作用域：
+    - source="own": 查询用户自己的模板（scope=user, scope_id=user_id）
+    - source="enterprise": 查询企业模板（scope=enterprise, scope_id=parent_id）
+
+    返回与 get_template_config 相同格式的 dict。
+    """
+    active = get_active_template(db, user_id)
+    source = active.get("source", "own")
+    template_name = active.get("template_name", DEFAULT_TEMPLATE_NAME)
+
+    if source == "enterprise":
+        scope = "enterprise"
+        scope_id = parent_id
+    else:
+        scope = "user"
+        scope_id = user_id
+
+    return get_template_config(db, scope, scope_id, template_name)
+
+
+# ------------------------------------------------------------------ #
+# 公式引擎
+# ------------------------------------------------------------------ #
+
+def evaluate_formula(formula: str, fields: dict) -> str:
+    """
+    计算公式结果。
+
+    - 替换 × → *, ÷ → /
+    - 按字段名（从长到短）替换为实际值（float 转换，失败用 0）
+    - 正则校验安全（只允许数字 + 运算符 + 括号 + 空格 + 小数点）
+    - eval 计算，失败返回空字符串
+
+    示例：
+        formula = "保费合计 × 0.8 + 手续费"
+        fields = {"保费合计": "1000", "手续费": "50"}
+        → "850.0"
+    """
+    if not formula:
+        return ""
+
+    expr = formula
+    # 替换中文运算符
+    expr = expr.replace("×", "*").replace("÷", "/")
+
+    # 按字段名长度降序替换（避免短字段名替换掉长字段名的一部分）
+    sorted_keys = sorted(fields.keys(), key=lambda k: len(k), reverse=True)
+    for key in sorted_keys:
+        if key in expr:
+            raw_val = fields.get(key, "")
+            try:
+                # 尝试提取数字（去除非数字字符如"元"、"，"等）
+                clean_val = re.sub(r"[^\d.]", "", str(raw_val))
+                num_val = float(clean_val) if clean_val else 0.0
+            except (ValueError, TypeError):
+                num_val = 0.0
+            expr = expr.replace(key, str(num_val))
+
+    # 安全校验：只允许数字、运算符、括号、空格、小数点
+    if not re.match(r'^[\d\s\+\-\*\/\.\(\)]+$', expr):
+        logger.warning("公式安全校验失败，拒绝执行: %s", expr)
+        return ""
+
+    try:
+        result = eval(expr)  # noqa: S307 # 已通过正则白名单校验
+        # 格式化输出：整数则不显示小数点
+        if isinstance(result, float) and result == int(result):
+            return str(int(result))
+        return str(result)
+    except Exception as e:
+        logger.debug("公式计算失败: %s，expr=%s", e, expr)
+        return ""
+
+
+def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
+    """
+    将用户字段配置应用到一条保单记录，返回 fields 的副本。
+
+    config 格式（同 get_template_config 返回值）：
+    {
+        "company_alias": [{"key": "原名", "value": "简称"}],
+        "policy_type_alias": [{"key": "原名", "value": "简称"}],
+        "date_format": [{"key": "字段名", "value": "%Y年%m月%d日"}],
+        "fee_formula": [{"key": "目标字段名", "value": "公式"}]
+    }
+
+    处理顺序：
+    1. 公司简称替换（company_alias）
+    2. 险种简称替换（policy_type_alias）
+    3. 日期格式化（date_format）
+    4. 公式计算（fee_formula）
+    """
+    result = dict(fields)
+
+    # 1. 公司简称替换
+    company_aliases = {item["key"]: item["value"] for item in config.get("company_alias", [])}
+    company_val = result.get("保险公司") or result.get("承保公司") or result.get("保险公司简称") or ""
+    if company_val and company_val in company_aliases:
+        # 写入简称（同时更新保险公司简称字段）
+        alias = company_aliases[company_val]
+        result["保险公司简称"] = alias
+        # 如果已有承保公司字段则一并更新
+        if "承保公司" in result:
+            result["承保公司"] = alias
+
+    # 2. 险种简称替换
+    type_aliases = {item["key"]: item["value"] for item in config.get("policy_type_alias", [])}
+    policy_type_val = result.get("险种类型") or result.get("险种") or ""
+    if policy_type_val and policy_type_val in type_aliases:
+        alias = type_aliases[policy_type_val]
+        result["险种类型"] = alias
+        if "险种" in result:
+            result["险种"] = alias
+
+    # 3. 日期格式化
+    for item in config.get("date_format", []):
+        field_name = item.get("key", "")
+        fmt = item.get("value", "")
+        if field_name and fmt and field_name in result:
+            raw_date = result[field_name]
+            if raw_date:
+                result[field_name] = _format_date(str(raw_date), fmt)
+
+    # 4. 公式计算
+    for item in config.get("fee_formula", []):
+        target_field = item.get("key", "")
+        formula = item.get("value", "")
+        if target_field and formula:
+            calculated = evaluate_formula(formula, result)
+            if calculated:
+                result[target_field] = calculated
+
+    return result
