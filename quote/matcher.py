@@ -52,6 +52,7 @@ class QuoteMatcher:
 
     def __init__(self, timeout_seconds: int = 60, check_interval: int = 10):
         self._pending: Dict[tuple, List[dict]] = {}
+        self._pending_backs: Dict[tuple, List[dict]] = {}  # 暂存无归属的身份证反面
         self._lock = threading.Lock()
         self._timeout = timeout_seconds
         self._check_interval = check_interval
@@ -77,6 +78,7 @@ class QuoteMatcher:
                 "vin": ocr_data.get("vin", ""),
                 "engine_number": ocr_data.get("engine_number", ""),
                 "first_register_date": ocr_data.get("first_register_date", ""),
+                "issue_date": ocr_data.get("issue_date", ""),
                 "model": ocr_data.get("model", ""),
             }
             entry["license_image_cos_url"] = cos_url
@@ -107,6 +109,8 @@ class QuoteMatcher:
             entry["has_idcard_front"] = True
             if name:
                 entry["names"].add(name)
+            # 归入暂存的身份证反面
+            self._attach_pending_back(key, entry)
             self._try_match_texts(entry)
             logger.info("配对器：添加身份证正面 key=%s, 姓名=%s", key, name)
             self._check_complete(key, entry)
@@ -128,8 +132,15 @@ class QuoteMatcher:
                 if entries:
                     entry = entries[-1]
                 else:
-                    entry = _new_entry(binding, group_id, sender)
-                    self._pending.setdefault(key, []).append(entry)
+                    # 没有任何现有条目，暂存反面数据等后续证件到达时归入
+                    back_data = {
+                        "id_card_start_date": ocr_data.get("id_card_start_date", ""),
+                        "id_card_end_date": ocr_data.get("id_card_end_date", ""),
+                        "opposite_img": cos_url,
+                    }
+                    self._pending_backs.setdefault(key, []).append(back_data)
+                    logger.info("配对器：暂存身份证反面（无现有条目） key=%s", key)
+                    return
 
             entry["has_idcard_back"] = True
             entry["_idcard_back_data"] = {
@@ -164,6 +175,17 @@ class QuoteMatcher:
                     entries[-1]["raw_texts"].append(text)
 
             logger.info("配对器：添加文本 key=%s, text=%s", key, text[:50])
+
+    def _attach_pending_back(self, key: tuple, entry: dict):
+        """将暂存的身份证反面数据归入当前条目（调用时需持有 self._lock）"""
+        backs = self._pending_backs.get(key)
+        if backs and not entry["has_idcard_back"]:
+            back_data = backs.pop(0)
+            if not backs:
+                del self._pending_backs[key]
+            entry["has_idcard_back"] = True
+            entry["_idcard_back_data"] = back_data
+            logger.info("配对器：归入暂存的身份证反面 key=%s", key)
 
     def _find_entry_by_name(self, key: tuple, name: str) -> Optional[dict]:
         """在已有套中查找姓名匹配的条目"""
@@ -260,7 +282,9 @@ class QuoteMatcher:
                 "vin": entry["vehicle_info"].get("vin", ""),
                 "engine_number": entry["vehicle_info"].get("engine_number", ""),
                 "first_register_date": entry["vehicle_info"].get("first_register_date", ""),
+                "issue_date": entry["vehicle_info"].get("issue_date", ""),
                 "model": entry["vehicle_info"].get("model", ""),
+                "license_image_cos_url": entry.get("license_image_cos_url", ""),
             },
             "owner_info": {
                 "name": entry["owner_info"].get("name", ""),

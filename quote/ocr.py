@@ -97,6 +97,7 @@ class QuoteOCR:
                     "vin": vin,
                     "engine_number": words.get("发动机号码", {}).get("words", ""),
                     "first_register_date": words.get("注册日期", {}).get("words", ""),
+                    "issue_date": words.get("发证日期", {}).get("words", ""),
                     "model": words.get("品牌型号", {}).get("words", ""),
                     "owner_name": owner,  # 用于姓名配对，不提交到 pre-quote
                 },
