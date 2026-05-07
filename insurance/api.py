@@ -2125,8 +2125,15 @@ def export_excel():
             else:
                 headers = ["文件名"] + list(field_names)
             ws.append(headers)
+            # 获取用户字段配置，导出时应用简称/日期格式/公式
+            from insurance.field_config_db import apply_user_config_to_fields
+            user = g.current_user
+            user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
             for inv in invoices:
                 fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
+                # 应用用户配置（简称映射、日期格式、公式计算）
+                if user_config and any(user_config.get(k) for k in user_config):
+                    fields = apply_user_config_to_fields(user_config, fields)
                 if has_filename:
                     row = []
                 else:
