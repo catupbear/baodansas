@@ -1,0 +1,1161 @@
+{% raw %}<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统设置</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #c2410c;
+            --primary-light: #ea580c;
+            --primary-bg: #fff7ed;
+            --surface: #ffffff;
+            --surface-secondary: #fffbf7;
+            --border: #e7e0d8;
+            --border-light: #f5f0eb;
+            --text-primary: #1c1410;
+            --text-secondary: #57534e;
+            --text-muted: #a8a29e;
+            --success: #059669;
+            --warning: #d97706;
+            --danger: #dc2626;
+        }
+        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 0; box-sizing: border-box; }
+        [v-cloak] { display: none; }
+        body { background: #faf8f5; color: var(--text-primary); }
+
+        /* 顶部导航 */
+        .nav-header {
+            background: linear-gradient(135deg, #7c2d12 0%, #c2410c 50%, #ea580c 100%);
+            color: #fff;
+        }
+
+        /* 按钮 */
+        .btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 16px; border-radius: 8px;
+            font-size: 14px; font-weight: 500;
+            transition: all 0.2s ease; cursor: pointer;
+            border: none; outline: none;
+        }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: #9a3412; }
+        .btn-outline {
+            background: transparent; color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+        .btn-outline:hover { background: var(--surface-secondary); border-color: #cbd5e1; }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 6px; }
+
+        /* 卡片 */
+        .card {
+            background: var(--surface);
+            border-radius: 12px;
+            border: 1px solid var(--border-light);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+        }
+
+        /* Tab */
+        .tab-btn {
+            padding: 10px 20px; font-size: 14px; font-weight: 500;
+            border-bottom: 2px solid transparent;
+            color: var(--text-muted);
+            transition: all 0.2s ease; cursor: pointer;
+            background: none; border-top: none; border-left: none; border-right: none;
+        }
+        .tab-btn:hover { color: var(--text-secondary); }
+        .tab-btn.active { color: var(--primary-light); border-bottom-color: var(--primary-light); }
+
+        /* Radio 切换 */
+        .radio-group { display: flex; gap: 0; }
+        .radio-group label {
+            padding: 6px 16px; font-size: 13px; font-weight: 500;
+            cursor: pointer; transition: all 0.2s;
+            border: 1px solid var(--border); color: var(--text-secondary);
+            background: var(--surface);
+        }
+        .radio-group label:first-child { border-radius: 6px 0 0 6px; }
+        .radio-group label:last-child { border-radius: 0 6px 6px 0; }
+        .radio-group label:not(:first-child) { margin-left: -1px; }
+        .radio-group input { display: none; }
+        .radio-group input:checked + span {
+            color: var(--primary);
+        }
+        .radio-group label:has(input:checked) {
+            background: var(--primary-bg); border-color: var(--primary-light);
+            color: var(--primary); z-index: 1; position: relative;
+        }
+
+        /* 双文本框 */
+        .dual-textarea {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+        }
+        .dual-textarea textarea {
+            width: 100%; min-height: 320px; padding: 12px;
+            border: 1px solid var(--border); border-radius: 8px;
+            font-size: 13px; line-height: 1.8; resize: vertical;
+            font-family: 'Inter', sans-serif;
+            transition: border-color 0.2s;
+        }
+        .dual-textarea textarea:focus {
+            outline: none; border-color: var(--primary-light);
+            box-shadow: 0 0 0 3px rgba(234,88,12,0.1);
+        }
+        .dual-textarea textarea.inherited {
+            background: #fafaf9; color: var(--text-secondary);
+        }
+
+        /* 下拉 */
+        select {
+            padding: 6px 28px 6px 10px; border: 1px solid var(--border);
+            border-radius: 6px; font-size: 13px; background: var(--surface);
+            cursor: pointer; appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2357534e' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 8px center;
+        }
+        select:focus { outline: none; border-color: var(--primary-light); }
+
+        /* 规则表格 */
+        .rule-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .rule-table th {
+            text-align: left; padding: 10px 12px;
+            background: var(--surface-secondary); color: var(--text-secondary);
+            font-weight: 600; border-bottom: 1px solid var(--border);
+        }
+        .rule-table td {
+            padding: 10px 12px; border-bottom: 1px solid var(--border-light);
+        }
+        .rule-table tbody tr:hover { background: var(--primary-bg); }
+        .rule-table .formula-cell {
+            font-family: 'SF Mono', 'Fira Code', monospace; color: var(--primary);
+        }
+
+        /* 弹窗 */
+        .modal-mask {
+            position: fixed; inset: 0; z-index: 100;
+            background: rgba(15,23,42,0.6); backdrop-filter: blur(4px);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .modal-body {
+            background: var(--surface); border-radius: 16px;
+            width: 560px; max-height: 85vh; overflow-y: auto;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+        }
+
+        /* 公式编辑器 */
+        .formula-input {
+            width: 100%; padding: 10px 12px; font-size: 14px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            border: 1px solid var(--border); border-radius: 8px;
+            background: #fefefe;
+        }
+        .formula-input:focus {
+            outline: none; border-color: var(--primary-light);
+            box-shadow: 0 0 0 3px rgba(234,88,12,0.1);
+        }
+        .field-chip {
+            display: inline-flex; padding: 4px 10px; margin: 3px;
+            border-radius: 6px; font-size: 12px; font-weight: 500;
+            cursor: pointer; transition: all 0.15s;
+            background: var(--primary-bg); color: var(--primary);
+            border: 1px solid rgba(234,88,12,0.15);
+        }
+        .field-chip:hover { background: #ffedd5; border-color: rgba(234,88,12,0.3); }
+        .op-chip {
+            display: inline-flex; width: 32px; height: 32px;
+            align-items: center; justify-content: center; margin: 3px;
+            border-radius: 6px; font-size: 14px; font-weight: 600;
+            cursor: pointer; transition: all 0.15s;
+            background: #f3f4f6; color: var(--text-secondary);
+            border: 1px solid #e5e7eb;
+        }
+        .op-chip:hover { background: #e5e7eb; color: var(--text-primary); }
+
+        /* 预览区 */
+        .preview-box {
+            background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;
+            padding: 12px 16px; font-size: 13px; color: #166534;
+        }
+        .preview-box.error {
+            background: #fef2f2; border-color: #fecaca; color: #991b1b;
+        }
+
+        /* 行数统计 */
+        .line-count { font-size: 12px; margin-top: 6px; }
+        .line-count.match { color: var(--success); }
+        .line-count.mismatch { color: var(--danger); }
+
+        /* scope 下拉 */
+        .scope-select {
+            padding: 6px 32px 6px 12px; border-radius: 8px;
+            font-size: 13px; font-weight: 500;
+            background: rgba(255,255,255,0.15); color: #fff;
+            border: 1px solid rgba(255,255,255,0.25);
+        }
+        .scope-select option { color: #333; background: #fff; }
+
+        /* 日期格式行 */
+        .date-row {
+            display: grid; grid-template-columns: 140px 1fr 180px; gap: 12px;
+            align-items: center; padding: 12px 0;
+            border-bottom: 1px solid var(--border-light);
+        }
+        .date-row:last-child { border-bottom: none; }
+        .date-preview {
+            font-size: 13px; color: var(--text-muted);
+            font-family: 'SF Mono', 'Fira Code', monospace;
+        }
+
+        /* 同步按钮 */
+        .btn-sync {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 14px; border-radius: 8px;
+            font-size: 13px; font-weight: 500; cursor: pointer;
+            background: rgba(255,255,255,0.15); color: #fff;
+            border: 1px solid rgba(255,255,255,0.25);
+            transition: all 0.2s;
+        }
+        .btn-sync:hover { background: rgba(255,255,255,0.25); }
+
+        /* 员工模板切换 */
+        .template-switch {
+            display: inline-flex; border-radius: 8px; overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.25);
+        }
+        .template-switch button {
+            padding: 6px 14px; font-size: 13px; font-weight: 500;
+            cursor: pointer; border: none; transition: all 0.2s;
+            background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7);
+        }
+        .template-switch button:not(:last-child) { border-right: 1px solid rgba(255,255,255,0.2); }
+        .template-switch button.active {
+            background: rgba(255,255,255,0.25); color: #fff;
+        }
+        .template-switch button:hover:not(.active) {
+            background: rgba(255,255,255,0.18); color: #fff;
+        }
+
+        /* 确认弹窗 */
+        .confirm-modal {
+            background: var(--surface); border-radius: 12px;
+            width: 420px; box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+        }
+        .confirm-modal .warn-icon {
+            display: inline-flex; width: 48px; height: 48px;
+            align-items: center; justify-content: center;
+            border-radius: 50%; background: #fff7ed; font-size: 24px;
+            margin-bottom: 12px;
+        }
+
+        /* 快捷统一格式 */
+        .quick-action {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 4px 12px; border-radius: 6px;
+            font-size: 12px; color: var(--primary);
+            background: var(--primary-bg); border: 1px solid rgba(234,88,12,0.15);
+            cursor: pointer; transition: all 0.15s;
+        }
+        .quick-action:hover { background: #ffedd5; }
+
+        /* Toast 提示 */
+        .toast {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 500;
+            z-index: 9999; transition: opacity 0.3s; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .toast-success { background: #059669; color: #fff; }
+        .toast-error { background: #dc2626; color: #fff; }
+        .toast-warning { background: #d97706; color: #fff; }
+
+        /* 加载遮罩 */
+        .loading-overlay {
+            position: absolute; inset: 0; background: rgba(255,255,255,0.7);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 10; border-radius: 12px;
+        }
+        .loading-spinner {
+            width: 32px; height: 32px; border: 3px solid var(--border);
+            border-top-color: var(--primary); border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+<div id="app" v-cloak>
+    <!-- Toast 提示 -->
+    <div v-if="toast.show" class="toast" :class="'toast-' + toast.type">{{ toast.message }}</div>
+
+    <!-- 顶部导航 -->
+    <div class="nav-header">
+        <div style="max-width:1200px; margin:0 auto; padding:16px 24px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div style="display:flex; align-items:center; gap:16px;">
+                    <a href="/insurance" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:13px;">← 返回保单台账</a>
+                    <h1 style="font-size:18px; font-weight:700;">⚙ 系统设置</h1>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <!-- 模板选择下拉 -->
+                    <div style="position:relative;">
+                        <button class="btn-sync" @click="showTemplateDropdown = !showTemplateDropdown" style="min-width:160px; justify-content:space-between;">
+                            <span style="display:flex; align-items:center; gap:6px;">
+                                <span v-if="activeSource === 'enterprise'" style="font-size:10px; background:rgba(255,255,255,0.2); padding:1px 6px; border-radius:3px;">企业</span>
+                                {{ activeTemplateName }}
+                            </span>
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
+                        </button>
+                        <!-- 下拉面板 -->
+                        <div v-if="showTemplateDropdown" style="position:absolute; right:0; top:calc(100% + 6px); width:260px; background:var(--surface); border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,0.15); border:1px solid var(--border-light); z-index:50; overflow:hidden;">
+                            <!-- 我的模板 -->
+                            <div style="padding:8px 12px 4px; font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">我的模板</div>
+                            <div v-for="t in myTemplates" :key="t.name"
+                                 @click="selectTemplate('own', t.name)"
+                                 style="padding:8px 12px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; transition:background 0.15s;"
+                                 :style="{background: activeSource==='own' && activeTemplateName===t.name ? 'var(--primary-bg)' : '', color: activeSource==='own' && activeTemplateName===t.name ? 'var(--primary)' : 'var(--text-primary)'}"
+                                 onmouseover="if(!this.dataset.active)this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+                                <span v-if="activeSource==='own' && activeTemplateName===t.name" style="color:var(--primary); flex-shrink:0;">✓</span>
+                                <span style="flex:1;">{{ t.name }}</span>
+                                <span v-if="t.visible" style="font-size:10px; padding:1px 6px; background:#ecfdf5; color:#059669; border-radius:3px; flex-shrink:0;">员工可见</span>
+                            </div>
+                            <!-- 企业模板（员工可见） -->
+                            <template v-if="currentRole === 'employee' && enterpriseTemplates.length">
+                                <div style="border-top:1px solid var(--border-light); padding:8px 12px 4px; font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">企业模板</div>
+                                <div v-for="t in enterpriseTemplates" :key="'e-'+t.name"
+                                     @click="selectTemplate('enterprise', t.name)"
+                                     style="padding:8px 12px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; transition:background 0.15s;"
+                                     :style="{background: activeSource==='enterprise' && activeTemplateName===t.name ? 'var(--primary-bg)' : '', color: activeSource==='enterprise' && activeTemplateName===t.name ? 'var(--primary)' : 'var(--text-primary)'}"
+                                     onmouseover="if(!this.dataset.active)this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+                                    <span v-if="activeSource==='enterprise' && activeTemplateName===t.name" style="color:var(--primary); flex-shrink:0;">✓</span>
+                                    <span style="flex:1;">{{ t.name }}</span>
+                                    <span style="font-size:10px; padding:1px 6px; background:#f3f4f6; color:var(--text-muted); border-radius:3px; flex-shrink:0;">只读</span>
+                                </div>
+                            </template>
+                            <!-- 底部操作 -->
+                            <div style="border-top:1px solid var(--border-light); padding:6px;">
+                                <div @click="createTemplate" style="padding:8px 12px; font-size:13px; color:var(--primary); cursor:pointer; border-radius:6px; transition:background 0.15s;" onmouseover="this.style.background='var(--primary-bg)'" onmouseout="this.style.background=''">+ 新建模板</div>
+                                <div @click="showTemplateDropdown=false; showTemplateManager=true" style="padding:8px 12px; font-size:13px; color:var(--text-secondary); cursor:pointer; border-radius:6px; transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">⚙ 管理模板</div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 管理模板按钮 -->
+                    <button class="btn-sync" @click="showTemplateManager = true">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                        管理模板
+                    </button>
+                    <!-- 保存按钮 -->
+                    <button class="btn-sync" @click="saveConfig" :disabled="saving" style="background:rgba(255,255,255,0.22);">
+                        <svg v-if="!saving" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
+                        <span v-if="saving" class="loading-spinner" style="width:14px;height:14px;border-width:2px;"></span>
+                        {{ saving ? '保存中...' : '保存并应用' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主内容区 -->
+    <div style="max-width:1200px; margin:0 auto; padding:24px;">
+        <div class="card" style="position:relative;">
+            <!-- 加载遮罩 -->
+            <div v-if="loading" class="loading-overlay">
+                <div class="loading-spinner"></div>
+            </div>
+
+            <!-- Tab 导航 -->
+            <div style="display:flex; border-bottom:1px solid var(--border-light); padding:0 24px;">
+                <button class="tab-btn" :class="{active: activeTab==='alias'}" @click="activeTab='alias'">简称映射</button>
+                <button class="tab-btn" :class="{active: activeTab==='date'}" @click="activeTab='date'">日期格式</button>
+                <button class="tab-btn" :class="{active: activeTab==='formula'}" @click="activeTab='formula'">自动计算公式</button>
+            </div>
+
+            <!-- Tab 1: 简称映射 -->
+            <div v-show="activeTab==='alias'" style="padding:24px;">
+                <!-- Radio 切换 -->
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+                    <div class="radio-group">
+                        <label><input type="radio" v-model="aliasType" value="company"><span>承保公司</span></label>
+                        <label><input type="radio" v-model="aliasType" value="policy_type"><span>险种</span></label>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted);">一行一个，左右行数必须一一对应</div>
+                </div>
+
+                <!-- 双文本框 -->
+                <div class="dual-textarea">
+                    <div>
+                        <div style="font-size:13px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">
+                            {{ aliasType === 'company' ? '公司全称' : '险种全称' }}
+                        </div>
+                        <textarea
+                            v-model="aliasFullNames"
+                            :placeholder="aliasType === 'company' ? '中国人民财产保险股份有限公司\n中国平安财产保险股份有限公司\n...' : '机动车交通事故责任强制保险\n机动车商业保险\n...'"
+                            :readonly="activeSource === 'enterprise'"
+                        ></textarea>
+                        <div class="line-count" :class="aliasLinesMatch ? 'match' : 'mismatch'">
+                            共 {{ fullNameLineCount }} 条
+                        </div>
+                    </div>
+                    <div>
+                        <div style="font-size:13px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">
+                            {{ aliasType === 'company' ? '简称' : '简称' }}
+                        </div>
+                        <textarea
+                            v-model="aliasShortNames"
+                            :placeholder="aliasType === 'company' ? '人保PICC\n平安\n...' : '交强险\n商业险\n...'"
+                            :readonly="activeSource === 'enterprise'"
+                        ></textarea>
+                        <div class="line-count" :class="aliasLinesMatch ? 'match' : 'mismatch'">
+                            共 {{ shortNameLineCount }} 条
+                            <span v-if="aliasLinesMatch"> ✓ 行数一致</span>
+                            <span v-else> ⚠ 行数不一致，无法保存</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 2: 日期格式 -->
+            <div v-show="activeTab==='date'" style="padding:24px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+                    <div style="font-size:13px; color:var(--text-muted);">为每个时间字段选择显示格式</div>
+                    <div class="quick-action" @click="showQuickFormat=!showQuickFormat">
+                        ⚡ 一键统一格式
+                        <select v-if="showQuickFormat" @change="applyQuickFormat($event.target.value); showQuickFormat=false" style="margin-left:4px; font-size:12px;">
+                            <option value="">选择格式...</option>
+                            <option v-for="f in dateFormats" :value="f.value">{{ f.label }}</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="background:var(--surface-secondary); border-radius:8px; padding:4px 20px;">
+                    <div class="date-row" v-for="field in dateFields" :key="field.name">
+                        <div style="font-size:14px; font-weight:500;">{{ field.name }}</div>
+                        <select v-model="field.format" style="width:100%; max-width:240px;" :disabled="activeSource === 'enterprise'">
+                            <option v-for="f in dateFormats" :value="f.value">{{ f.label }}</option>
+                        </select>
+                        <div class="date-preview">{{ formatDate(sampleDate, field.format) }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 3: 自动计算公式 -->
+            <div v-show="activeTab==='formula'" style="padding:24px;">
+                <!-- 计算字段选择 -->
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <span style="font-size:13px; font-weight:500; color:var(--text-secondary);">计算字段：</span>
+                        <select v-model="currentFormulaField" style="font-size:14px; font-weight:500;">
+                            <option v-for="f in formulaFields" :value="f">{{ f }}</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary btn-sm" @click="openFormulaModal(null)" :disabled="activeSource === 'enterprise'">+ 添加规则</button>
+                </div>
+
+                <!-- 规则列表 -->
+                <table class="rule-table">
+                    <thead>
+                        <tr>
+                            <th style="width:160px;">承保公司</th>
+                            <th style="width:100px;">险种</th>
+                            <th>计算公式</th>
+                            <th style="width:100px; text-align:center;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(rule, idx) in currentRules" :key="idx">
+                            <td style="font-weight:500;">{{ rule.company }}</td>
+                            <td>{{ rule.policyType }}</td>
+                            <td class="formula-cell">{{ rule.display }}</td>
+                            <td style="text-align:center; white-space:nowrap;">
+                                <button class="btn btn-outline btn-sm" style="margin-right:4px;" @click="openFormulaModal(idx)" :disabled="activeSource === 'enterprise'">编辑</button>
+                                <button class="btn btn-sm" style="color:var(--danger); background:transparent; border:1px solid #fecaca;" @click="deleteRule(idx)" :disabled="activeSource === 'enterprise'">删除</button>
+                            </td>
+                        </tr>
+                        <tr v-if="currentRules.length === 0">
+                            <td colspan="4" style="text-align:center; color:var(--text-muted); padding:40px 0;">
+                                暂无规则，点击右上角"添加规则"开始配置
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 底部提示 -->
+            <div v-if="activeSource==='enterprise'" style="padding:12px 24px; border-top:1px solid var(--border-light); background:#fffbeb; font-size:13px; color:#92400e; display:flex; align-items:center; gap:8px;">
+                <span>⚠</span> 当前使用企业模板（只读），如需修改请切换到「我的模板」或另存为新模板
+            </div>
+        </div>
+    </div>
+
+    <!-- 模板管理弹窗 -->
+    <div class="modal-mask" v-if="showTemplateManager" @click.self="showTemplateManager=false">
+        <div class="modal-body" style="width:500px;">
+            <div style="padding:20px 24px; border-bottom:1px solid var(--border-light); display:flex; align-items:center; justify-content:space-between;">
+                <h3 style="font-size:16px; font-weight:600;">管理模板</h3>
+                <span @click="showTemplateManager=false" style="cursor:pointer; color:var(--text-muted); font-size:18px;">✕</span>
+            </div>
+            <div style="padding:16px 24px; max-height:400px; overflow-y:auto;">
+                <div v-for="(t, idx) in managerTemplates" :key="idx"
+                     style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border-light);">
+                    <!-- 模板名（可编辑） -->
+                    <input v-model="t.editName" style="flex:1; padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px;"
+                           @focus="$event.target.select()">
+                    <!-- 员工可见 -->
+                    <label v-if="currentRole !== 'employee'" style="display:flex; align-items:center; gap:4px; font-size:12px; color:var(--text-secondary); cursor:pointer; white-space:nowrap;">
+                        <input type="checkbox" v-model="t.visible" style="accent-color:var(--primary); width:14px; height:14px;">
+                        员工可见
+                    </label>
+                    <!-- 删除 -->
+                    <button v-if="managerTemplates.length > 1" @click="markDeleteTemplate(idx)"
+                            class="btn btn-sm"
+                            :style="t.deleted ? 'color:#fff; background:var(--danger); border:1px solid var(--danger);' : 'color:var(--danger); background:transparent; border:1px solid #fecaca;'"
+                            style="white-space:nowrap;">
+                        {{ t.deleted ? '已标记删除' : '删除' }}
+                    </button>
+                </div>
+                <div v-if="managerTemplates.length === 0" style="text-align:center; color:var(--text-muted); padding:24px 0;">暂无模板</div>
+            </div>
+            <div style="padding:16px 24px; border-top:1px solid var(--border-light); display:flex; justify-content:flex-end; gap:12px;">
+                <button class="btn btn-outline" @click="showTemplateManager=false">取消</button>
+                <button class="btn btn-primary" @click="saveTemplateManager" :disabled="savingManager">
+                    {{ savingManager ? '保存中...' : '保存' }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 公式编辑弹窗 -->
+    <div class="modal-mask" v-if="showFormulaModal" @click.self="showFormulaModal=false">
+        <div class="modal-body">
+            <div style="padding:20px 24px; border-bottom:1px solid var(--border-light);">
+                <h3 style="font-size:16px; font-weight:600;">{{ editingRuleIdx !== null ? '编辑' : '添加' }}计算规则</h3>
+            </div>
+            <div style="padding:24px;">
+                <!-- 承保公司 + 险种 -->
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
+                    <div>
+                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">承保公司</label>
+                        <select v-model="formulaForm.company" style="width:100%; padding:8px 12px;">
+                            <option value="">请选择</option>
+                            <option v-for="c in companyShortList" :value="c">{{ c }}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">险种</label>
+                        <select v-model="formulaForm.policyType" style="width:100%; padding:8px 12px;">
+                            <option value="">请选择</option>
+                            <option v-for="p in policyTypeShortList" :value="p">{{ p }}</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 公式输入 -->
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">计算公式</label>
+                    <input class="formula-input" v-model="formulaForm.display" placeholder="点击下方字段和运算符构建公式，或直接输入" ref="formulaInput">
+                </div>
+
+                <!-- 可用字段 -->
+                <div style="margin-bottom:12px;">
+                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">可用字段（点击插入）：</div>
+                    <div style="display:flex; flex-wrap:wrap;">
+                        <span class="field-chip" v-for="f in availableFields" :key="f" @click="insertField(f)">{{ f }}</span>
+                    </div>
+                </div>
+
+                <!-- 运算符 -->
+                <div style="margin-bottom:20px;">
+                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">运算符（点击插入）：</div>
+                    <div style="display:flex; flex-wrap:wrap;">
+                        <span class="op-chip" v-for="op in operators" :key="op" @click="insertOp(op)">{{ op }}</span>
+                    </div>
+                </div>
+
+                <!-- 预览 -->
+                <div class="preview-box" :class="{error: formulaError}">
+                    <div style="font-size:12px; margin-bottom:4px; opacity:0.7;">预览计算：</div>
+                    <div v-if="!formulaError">
+                        <span style="opacity:0.8;">{{ previewExpression }}</span><br>
+                        <strong>结果：{{ previewResult }}</strong>
+                    </div>
+                    <div v-else>{{ formulaError }}</div>
+                </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:12px; padding:16px 24px; border-top:1px solid var(--border-light);">
+                <button class="btn btn-outline" @click="showFormulaModal=false">取消</button>
+                <button class="btn btn-primary" @click="saveFormula" :disabled="!formulaForm.company || !formulaForm.policyType || !formulaForm.display || formulaError">确定</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+// ========== 鉴权工具 ==========
+function getToken() { return localStorage.getItem('token'); }
+function getUser() { try { return JSON.parse(localStorage.getItem('user')); } catch { return null; } }
+function checkAuth() { if (!getToken()) { window.location.href = '/login'; return false; } return true; }
+function doLogout() { localStorage.removeItem('token'); localStorage.removeItem('user'); window.location.href = '/login'; }
+async function authFetch(url, options = {}) {
+    if (!options.headers) options.headers = {};
+    options.headers['Authorization'] = 'Bearer ' + getToken();
+    if (!options.headers['Content-Type'] && !(options.body instanceof FormData)) {
+        options.headers['Content-Type'] = 'application/json';
+    }
+    const resp = await fetch(url, options);
+    if (resp.status === 401) { doLogout(); throw new Error('未登录'); }
+    return resp;
+}
+// 进入页面检查登录
+if (!checkAuth()) throw new Error('redirect');
+
+const { createApp, ref, computed, watch, nextTick, onMounted } = Vue;
+
+createApp({
+    setup() {
+        // === Toast 提示 ===
+        const toast = ref({ show: false, message: '', type: 'success' });
+        let toastTimer = null;
+        const showToast = (message, type = 'success', duration = 3000) => {
+            if (toastTimer) clearTimeout(toastTimer);
+            toast.value = { show: true, message, type };
+            toastTimer = setTimeout(() => { toast.value.show = false; }, duration);
+        };
+
+        // === 加载状态 ===
+        const loading = ref(false);
+        const saving = ref(false);
+        const savingManager = ref(false);
+
+        // === 角色 ===
+        const currentUser = ref(getUser());
+        const currentRole = computed(() => currentUser.value?.role || 'employee');
+        const showTemplateManager = ref(false);
+
+        // === 模板系统 ===
+        const showTemplateDropdown = ref(false);
+        const activeTemplateName = ref('默认模板');
+        const activeSource = ref('own');
+        const myTemplates = ref([]);
+        const enterpriseTemplates = ref([]);
+
+        // 模板管理弹窗用的临时数据（含编辑名、删除标记）
+        const managerTemplates = ref([]);
+
+        // 点击页面其他区域关闭下拉
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('[style*="position:relative"]')) {
+                showTemplateDropdown.value = false;
+            }
+        });
+
+        // === Tab ===
+        const activeTab = ref('alias');
+
+        // === Tab 1: 简称映射 - 分开存储 ===
+        const aliasType = ref('company');
+        const companyFullNamesData = ref('');
+        const companyShortNamesData = ref('');
+        const policyFullNamesData = ref('');
+        const policyShortNamesData = ref('');
+
+        // 根据 radio 切换显示对应数据
+        const aliasFullNames = computed({
+            get: () => aliasType.value === 'company' ? companyFullNamesData.value : policyFullNamesData.value,
+            set: (v) => { if (aliasType.value === 'company') companyFullNamesData.value = v; else policyFullNamesData.value = v; }
+        });
+        const aliasShortNames = computed({
+            get: () => aliasType.value === 'company' ? companyShortNamesData.value : policyShortNamesData.value,
+            set: (v) => { if (aliasType.value === 'company') companyShortNamesData.value = v; else policyShortNamesData.value = v; }
+        });
+
+        const getLineCount = (text) => text.trim() ? text.trim().split('\n').length : 0;
+        const fullNameLineCount = computed(() => getLineCount(aliasFullNames.value));
+        const shortNameLineCount = computed(() => getLineCount(aliasShortNames.value));
+        const aliasLinesMatch = computed(() => fullNameLineCount.value === shortNameLineCount.value);
+
+        // === Tab 2: 日期格式 ===
+        const dateFormats = [
+            { label: 'YYYY-MM-DD（2026-05-07）', value: 'YYYY-MM-DD' },
+            { label: 'YYYY/MM/DD（2026/05/07）', value: 'YYYY/MM/DD' },
+            { label: 'YYYY年MM月DD日（2026年05月07日）', value: 'YYYY年MM月DD日' },
+            { label: 'MM-DD-YYYY（05-07-2026）', value: 'MM-DD-YYYY' },
+            { label: 'DD/MM/YYYY（07/05/2026）', value: 'DD/MM/YYYY' },
+            { label: 'YYYYMMDD（20260507）', value: 'YYYYMMDD' },
+        ];
+        const dateFields = ref([
+            { name: '签单日期', format: 'YYYY-MM-DD' },
+            { name: '起保日期', format: 'YYYY年MM月DD日' },
+            { name: '终保日期', format: 'YYYY年MM月DD日' },
+        ]);
+        const sampleDate = new Date(2026, 4, 7);
+        const showQuickFormat = ref(false);
+
+        const formatDate = (date, fmt) => {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            const map = {
+                'YYYY-MM-DD': `${y}-${m}-${d}`,
+                'YYYY/MM/DD': `${y}/${m}/${d}`,
+                'YYYY年MM月DD日': `${y}年${m}月${d}日`,
+                'MM-DD-YYYY': `${m}-${d}-${y}`,
+                'DD/MM/YYYY': `${d}/${m}/${y}`,
+                'YYYYMMDD': `${y}${m}${d}`,
+            };
+            return map[fmt] || `${y}-${m}-${d}`;
+        };
+
+        const applyQuickFormat = (fmt) => {
+            if (fmt) dateFields.value.forEach(f => f.format = fmt);
+        };
+
+        // === Tab 3: 自动计算公式 ===
+        const formulaFields = ['佣金率', '佣金', '采购费率', '公司利润', '跟单利润'];
+        const currentFormulaField = ref('佣金率');
+
+        const allRules = ref({
+            '佣金率': [],
+            '佣金': [],
+            '采购费率': [],
+            '公司利润': [],
+            '跟单利润': [],
+        });
+
+        const currentRules = computed(() => allRules.value[currentFormulaField.value] || []);
+
+        // 公式弹窗
+        const showFormulaModal = ref(false);
+        const editingRuleIdx = ref(null);
+        const formulaInput = ref(null);
+        const formulaForm = ref({ company: '', policyType: '', display: '' });
+
+        // 公司/险种下拉从简称映射数据动态获取
+        const companyShortList = computed(() => companyShortNamesData.value.trim().split('\n').filter(Boolean));
+        const policyTypeShortList = computed(() => policyShortNamesData.value.trim().split('\n').filter(Boolean));
+
+        const availableFields = ['保费', '车船税', '佣金率', '佣金', '采购费率', '公司利润', '跟单利润'];
+        const operators = ['+', '-', '×', '÷', '(', ')'];
+
+        const sampleValues = { '保费': 5000, '车船税': 300, '佣金率': 0.15, '佣金': 750, '采购费率': 0.05, '公司利润': 200, '跟单利润': 100 };
+
+        const formulaError = computed(() => {
+            if (!formulaForm.value.display) return '';
+            try {
+                const expr = formulaForm.value.display
+                    .replace(/×/g, '*').replace(/÷/g, '/')
+                    .replace(/保费/g, '5000').replace(/车船税/g, '300')
+                    .replace(/佣金率/g, '0.15').replace(/佣金/g, '750')
+                    .replace(/采购费率/g, '0.05').replace(/公司利润/g, '200')
+                    .replace(/跟单利润/g, '100');
+                const result = Function('"use strict"; return (' + expr + ')')();
+                if (isNaN(result) || !isFinite(result)) return '公式计算结果无效';
+                return '';
+            } catch (e) {
+                return '公式语法错误：' + e.message;
+            }
+        });
+
+        const previewExpression = computed(() => {
+            if (!formulaForm.value.display) return '';
+            let expr = formulaForm.value.display;
+            for (const [k, v] of Object.entries(sampleValues)) {
+                expr = expr.replace(new RegExp(k, 'g'), String(v));
+            }
+            return expr;
+        });
+
+        const previewResult = computed(() => {
+            if (!formulaForm.value.display || formulaError.value) return '';
+            try {
+                const expr = formulaForm.value.display
+                    .replace(/×/g, '*').replace(/÷/g, '/')
+                    .replace(/保费/g, '5000').replace(/车船税/g, '300')
+                    .replace(/佣金率/g, '0.15').replace(/佣金/g, '750')
+                    .replace(/采购费率/g, '0.05').replace(/公司利润/g, '200')
+                    .replace(/跟单利润/g, '100');
+                return Function('"use strict"; return (' + expr + ')')().toFixed(2);
+            } catch { return ''; }
+        });
+
+        const insertField = (f) => {
+            formulaForm.value.display = (formulaForm.value.display || '') + ' ' + f + ' ';
+        };
+        const insertOp = (op) => {
+            formulaForm.value.display = (formulaForm.value.display || '') + ' ' + op + ' ';
+        };
+
+        const openFormulaModal = (idx) => {
+            editingRuleIdx.value = idx;
+            if (idx !== null) {
+                const rule = currentRules.value[idx];
+                formulaForm.value = { company: rule.company, policyType: rule.policyType, display: rule.display };
+            } else {
+                formulaForm.value = { company: '', policyType: '', display: '' };
+            }
+            showFormulaModal.value = true;
+        };
+
+        const saveFormula = () => {
+            const rule = {
+                company: formulaForm.value.company,
+                policyType: formulaForm.value.policyType,
+                display: formulaForm.value.display,
+                tokens: formulaForm.value.display.split(/\s+/).filter(Boolean),
+            };
+            const rules = allRules.value[currentFormulaField.value];
+            if (editingRuleIdx.value !== null) {
+                rules[editingRuleIdx.value] = rule;
+            } else {
+                rules.push(rule);
+            }
+            showFormulaModal.value = false;
+        };
+
+        const deleteRule = (idx) => {
+            allRules.value[currentFormulaField.value].splice(idx, 1);
+        };
+
+        // ========== API 调用 ==========
+
+        // 加载模板列表
+        const loadTemplates = async () => {
+            try {
+                const resp = await authFetch('/api/insurance/field-config/templates');
+                const json = await resp.json();
+                if (json.code !== 0) { showToast(json.message || '加载模板失败', 'error'); return; }
+                const data = json.data;
+                myTemplates.value = (data.my || []).map(t => ({ name: t.name, visible: !!t.visible }));
+                enterpriseTemplates.value = data.enterprise || [];
+                if (data.active) {
+                    activeSource.value = data.active.source || 'own';
+                    activeTemplateName.value = data.active.template_name || (myTemplates.value[0]?.name || '默认模板');
+                }
+            } catch (e) {
+                if (e.message !== '未登录') showToast('加载模板列表失败: ' + e.message, 'error');
+            }
+        };
+
+        // 加载配置
+        const loadConfig = async (templateName, source) => {
+            loading.value = true;
+            try {
+                const params = new URLSearchParams({ template: templateName || activeTemplateName.value, source: source || activeSource.value });
+                const resp = await authFetch('/api/insurance/field-config?' + params.toString());
+                const json = await resp.json();
+                if (json.code !== 0) { showToast(json.message || '加载配置失败', 'error'); return; }
+                applyConfig(json.data);
+            } catch (e) {
+                if (e.message !== '未登录') showToast('加载配置失败: ' + e.message, 'error');
+            } finally {
+                loading.value = false;
+            }
+        };
+
+        // 将 API 数据应用到表单
+        const applyConfig = (data) => {
+            // 公司简称
+            const companies = data.company_alias || [];
+            companyFullNamesData.value = companies.map(c => c.key).join('\n');
+            companyShortNamesData.value = companies.map(c => c.value).join('\n');
+
+            // 险种简称
+            const policies = data.policy_type_alias || [];
+            policyFullNamesData.value = policies.map(p => p.key).join('\n');
+            policyShortNamesData.value = policies.map(p => p.value).join('\n');
+
+            // 日期格式
+            const dateMap = {};
+            (data.date_format || []).forEach(d => dateMap[d.key] = d.value);
+            dateFields.value.forEach(f => { if (dateMap[f.name]) f.format = dateMap[f.name]; });
+
+            // 公式 - 解析 key 格式 "字段名:公司:险种"
+            const newRules = { '佣金率': [], '佣金': [], '采购费率': [], '公司利润': [], '跟单利润': [] };
+            (data.fee_formula || []).forEach(item => {
+                const parts = item.key.split(':');
+                if (parts.length === 3) {
+                    const [fieldName, company, policyType] = parts;
+                    const val = item.value;
+                    if (newRules[fieldName]) {
+                        newRules[fieldName].push({
+                            company, policyType,
+                            display: typeof val === 'object' ? val.display : String(val),
+                            tokens: typeof val === 'object' ? val.tokens : [],
+                        });
+                    }
+                }
+            });
+            allRules.value = newRules;
+        };
+
+        // 构建配置对象
+        const buildConfig = () => {
+            const config = {};
+
+            // 简称映射
+            const fullLines = companyFullNamesData.value.trim().split('\n').filter(Boolean);
+            const shortLines = companyShortNamesData.value.trim().split('\n').filter(Boolean);
+            config.company_alias = fullLines.map((full, i) => ({ key: full.trim(), value: (shortLines[i] || '').trim() }));
+
+            // 险种简称
+            const ptFullLines = policyFullNamesData.value.trim().split('\n').filter(Boolean);
+            const ptShortLines = policyShortNamesData.value.trim().split('\n').filter(Boolean);
+            config.policy_type_alias = ptFullLines.map((full, i) => ({ key: full.trim(), value: (ptShortLines[i] || '').trim() }));
+
+            // 日期格式
+            config.date_format = dateFields.value.map(f => ({ key: f.name, value: f.format }));
+
+            // 公式
+            const formulaItems = [];
+            for (const [fieldName, rules] of Object.entries(allRules.value)) {
+                for (const rule of rules) {
+                    formulaItems.push({
+                        key: `${fieldName}:${rule.company}:${rule.policyType}`,
+                        value: { tokens: rule.tokens, display: rule.display }
+                    });
+                }
+            }
+            config.fee_formula = formulaItems;
+
+            return config;
+        };
+
+        // 保存并应用配置
+        const saveConfig = async () => {
+            // 校验行数一致
+            const companyFullCount = getLineCount(companyFullNamesData.value);
+            const companyShortCount = getLineCount(companyShortNamesData.value);
+            const policyFullCount = getLineCount(policyFullNamesData.value);
+            const policyShortCount = getLineCount(policyShortNamesData.value);
+            if (companyFullCount !== companyShortCount) {
+                showToast('公司简称映射行数不一致，请检查', 'error');
+                activeTab.value = 'alias';
+                aliasType.value = 'company';
+                return;
+            }
+            if (policyFullCount !== policyShortCount) {
+                showToast('险种简称映射行数不一致，请检查', 'error');
+                activeTab.value = 'alias';
+                aliasType.value = 'policy_type';
+                return;
+            }
+
+            if (activeSource.value === 'enterprise') {
+                showToast('企业模板为只读，无法保存', 'warning');
+                return;
+            }
+
+            saving.value = true;
+            try {
+                const config = buildConfig();
+                const currentTpl = myTemplates.value.find(t => t.name === activeTemplateName.value);
+                const body = {
+                    template_name: activeTemplateName.value,
+                    config: config,
+                    visible: currentTpl ? !!currentTpl.visible : false,
+                };
+                const resp = await authFetch('/api/insurance/field-config/save-and-apply', {
+                    method: 'POST',
+                    body: JSON.stringify(body),
+                });
+                const json = await resp.json();
+                if (json.code !== 0) {
+                    showToast(json.message || '保存失败', 'error');
+                    return;
+                }
+                showToast('模板「' + activeTemplateName.value + '」已保存并应用', 'success');
+            } catch (e) {
+                if (e.message !== '未登录') showToast('保存失败: ' + e.message, 'error');
+            } finally {
+                saving.value = false;
+            }
+        };
+
+        // 切换模板
+        const selectTemplate = async (source, name) => {
+            showTemplateDropdown.value = false;
+            if (source === activeSource.value && name === activeTemplateName.value) return;
+
+            try {
+                const resp = await authFetch('/api/insurance/field-config/apply', {
+                    method: 'POST',
+                    body: JSON.stringify({ template_name: name, source: source }),
+                });
+                const json = await resp.json();
+                if (json.code !== 0) {
+                    showToast(json.message || '切换模板失败', 'error');
+                    return;
+                }
+                activeSource.value = source;
+                activeTemplateName.value = name;
+                await loadConfig(name, source);
+                if (source === 'enterprise') {
+                    showToast('已切换到企业模板「' + name + '」（只读）', 'warning');
+                } else {
+                    showToast('已切换到模板「' + name + '」', 'success');
+                }
+            } catch (e) {
+                if (e.message !== '未登录') showToast('切换模板失败: ' + e.message, 'error');
+            }
+        };
+
+        // 新建模板
+        const createTemplate = async () => {
+            const name = prompt('请输入新模板名称：');
+            if (!name || !name.trim()) return;
+            const trimmed = name.trim();
+
+            // 检查重名
+            if (myTemplates.value.some(t => t.name === trimmed)) {
+                showToast('模板名称已存在', 'error');
+                return;
+            }
+
+            // 先加载默认值预填充，再保存新模板
+            showTemplateDropdown.value = false;
+            loading.value = true;
+            try {
+                // 获取默认值
+                const defaultResp = await authFetch('/api/insurance/field-config/defaults');
+                const defaultJson = await defaultResp.json();
+                if (defaultJson.code === 0 && defaultJson.data) {
+                    applyConfig(defaultJson.data);
+                }
+
+                // 保存新模板
+                const config = buildConfig();
+                const resp = await authFetch('/api/insurance/field-config/save-and-apply', {
+                    method: 'POST',
+                    body: JSON.stringify({ template_name: trimmed, config: config, visible: false }),
+                });
+                const json = await resp.json();
+                if (json.code !== 0) {
+                    showToast(json.message || '创建模板失败', 'error');
+                    return;
+                }
+
+                myTemplates.value.push({ name: trimmed, visible: false });
+                activeSource.value = 'own';
+                activeTemplateName.value = trimmed;
+                showToast('模板「' + trimmed + '」已创建', 'success');
+            } catch (e) {
+                if (e.message !== '未登录') showToast('创建模板失败: ' + e.message, 'error');
+            } finally {
+                loading.value = false;
+            }
+        };
+
+        // 打开模板管理弹窗时初始化临时数据
+        watch(showTemplateManager, (val) => {
+            if (val) {
+                managerTemplates.value = myTemplates.value.map(t => ({
+                    originalName: t.name,
+                    editName: t.name,
+                    visible: !!t.visible,
+                    deleted: false,
+                }));
+            }
+        });
+
+        // 标记删除
+        const markDeleteTemplate = (idx) => {
+            const t = managerTemplates.value[idx];
+            if (t.originalName === activeTemplateName.value && activeSource.value === 'own') {
+                showToast('不能删除当前使用的模板', 'warning');
+                return;
+            }
+            t.deleted = !t.deleted;
+        };
+
+        // 保存模板管理弹窗
+        const saveTemplateManager = async () => {
+            const actions = [];
+
+            for (const t of managerTemplates.value) {
+                if (t.deleted) {
+                    actions.push({ type: 'delete', name: t.originalName });
+                } else {
+                    // 重命名
+                    if (t.editName.trim() && t.editName.trim() !== t.originalName) {
+                        actions.push({ type: 'rename', old_name: t.originalName, new_name: t.editName.trim() });
+                    }
+                    // 可见性变更
+                    const orig = myTemplates.value.find(m => m.name === t.originalName);
+                    if (orig && !!orig.visible !== !!t.visible) {
+                        const nameToUse = (t.editName.trim() && t.editName.trim() !== t.originalName) ? t.editName.trim() : t.originalName;
+                        actions.push({ type: 'visibility', name: nameToUse, visible: !!t.visible });
+                    }
+                }
+            }
+
+            if (actions.length === 0) {
+                showTemplateManager.value = false;
+                return;
+            }
+
+            savingManager.value = true;
+            try {
+                const resp = await authFetch('/api/insurance/field-config/templates/manage', {
+                    method: 'PUT',
+                    body: JSON.stringify({ actions }),
+                });
+                const json = await resp.json();
+                if (json.code !== 0) {
+                    showToast(json.message || '管理模板失败', 'error');
+                    return;
+                }
+
+                // 更新本地模板列表
+                // 检查当前激活模板是否被重命名
+                for (const t of managerTemplates.value) {
+                    if (!t.deleted && t.editName.trim() !== t.originalName && t.originalName === activeTemplateName.value) {
+                        activeTemplateName.value = t.editName.trim();
+                    }
+                }
+
+                // 重新加载模板列表
+                await loadTemplates();
+                showTemplateManager.value = false;
+                showToast('模板管理已保存', 'success');
+            } catch (e) {
+                if (e.message !== '未登录') showToast('保存失败: ' + e.message, 'error');
+            } finally {
+                savingManager.value = false;
+            }
+        };
+
+        // ========== 页面初始化 ==========
+        onMounted(async () => {
+            await loadTemplates();
+            await loadConfig();
+        });
+
+        return {
+            toast,
+            loading, saving, savingManager,
+            currentRole,
+            showTemplateDropdown, activeTemplateName, activeSource,
+            myTemplates, enterpriseTemplates,
+            showTemplateManager, managerTemplates,
+            markDeleteTemplate, saveTemplateManager,
+            selectTemplate, createTemplate,
+            activeTab,
+            aliasType, aliasFullNames, aliasShortNames,
+            fullNameLineCount, shortNameLineCount, aliasLinesMatch,
+            dateFormats, dateFields, sampleDate, showQuickFormat,
+            formatDate, applyQuickFormat,
+            formulaFields, currentFormulaField, currentRules, allRules,
+            showFormulaModal, editingRuleIdx, formulaInput, formulaForm,
+            companyShortList, policyTypeShortList, availableFields, operators,
+            formulaError, previewExpression, previewResult,
+            insertField, insertOp, openFormulaModal, saveFormula, deleteRule,
+            saveConfig,
+        };
+    }
+}).mount('#app');
+</script>
+</body>
+</html>{% endraw %}
