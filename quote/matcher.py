@@ -22,6 +22,43 @@ BASE_URL = "https://riskapi.wuhuxiche.com"
 _CLEAN_PATTERN = re.compile(r'[\s\-_—–·.。,，、;；:：!！?？()\[\]【】《》""\'\'`~\u3000]+')
 
 
+# 车牌号正则：省份汉字 + 城市字母 + 5位车牌码（含新能源）
+_PLATE_PATTERN = re.compile(
+    r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁夏]'
+    r'[A-Z][0-9A-Z·•]{4,5}'
+)
+# VIN码正则：17位，不含 I/O/Q
+_VIN_PATTERN = re.compile(r'\b[A-HJ-NPR-Z0-9]{17}\b')
+# 保单号正则：字母开头、8-20位字母数字组合（排除纯数字，避免误匹配电话/日期）
+_POLICY_PATTERN = re.compile(r'[A-Z][A-Z0-9]{7,19}')
+
+
+def _extract_plate(text: str) -> str:
+    m = _PLATE_PATTERN.search(text)
+    if m:
+        return re.sub(r'[·•]', '', m.group(0))
+    return ""
+
+
+def _extract_vin(text: str) -> str:
+    m = _VIN_PATTERN.search(text.upper())
+    return m.group(0) if m else ""
+
+
+def _extract_policy_number(text: str, exclude_vin: str = "") -> str:
+    """从文本中提取保单号（字母开头的8-20位字母数字串，排除VIN）"""
+    upper = text.upper()
+    for m in _POLICY_PATTERN.finditer(upper):
+        candidate = m.group(0)
+        # VIN恰好17位且符合VIN字符集，跳过
+        if candidate == exclude_vin.upper():
+            continue
+        if len(candidate) == 17 and _VIN_PATTERN.fullmatch(candidate):
+            continue
+        return candidate
+    return ""
+
+
 def _clean_text(text: str) -> str:
     """清洗文本，去除特殊字符，用于匹配"""
     return _CLEAN_PATTERN.sub("", text)
@@ -331,3 +368,51 @@ class QuoteMatcher:
                 logger.error("预报价提交失败: %s", result.get("msg", "未知错误"))
         except Exception as e:
             logger.error("预报价提交异常: %s", e)
+
+    def check_and_submit_renewal(self, group_id: str, sender: str, text: str, binding: dict):
+        """处理含"续保"关键词的文本消息，提取车牌/VIN/保单号后提交续保报价接口"""
+        plate = _extract_plate(text)
+        vin = _extract_vin(text)
+        policy_number = _extract_policy_number(text, exclude_vin=vin)
+
+        if not plate and not vin and not policy_number:
+            logger.warning("续保：文本中未识别到车牌、VIN或保单号，跳过提交 "
+                           "group_id=%s sender=%s text=%s", group_id, sender, text[:80])
+            return
+
+        item = {
+            "plate_number": plate,
+            "vin": vin,
+            "policy_number": policy_number,
+            "wechat_id": sender,
+            "wechat_name": binding.get("wechat_name", ""),
+            "group_id": group_id,
+            "group_name": binding.get("group_name", ""),
+            "extra_info": text,
+        }
+        logger.info("续保：识别到续保请求 plate=%s vin=%s policy_number=%s group_id=%s sender=%s",
+                    plate, vin, policy_number, group_id, sender)
+        threading.Thread(target=self._do_submit_renewal, args=(item,), daemon=True).start()
+
+    def _do_submit_renewal(self, item: dict):
+        """提交续保报价请求"""
+        try:
+            resp = requests.post(
+                f"{BASE_URL}/insurance/renewal-quote",
+                json={"items": [item]},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            result = resp.json()
+            if result.get("ok") == 0:
+                data = result.get("data", {})
+                results = data.get("results", [])
+                for r in results:
+                    logger.info("续保报价提交成功: state=%s, order_id=%s, auto_quote=%s",
+                                r.get("state"),
+                                r.get("order_info", {}).get("order_id"),
+                                r.get("auto_quote_triggered"))
+            else:
+                logger.error("续保报价提交失败: %s", result.get("msg", "未知错误"))
+        except Exception as e:
+            logger.error("续保报价提交异常: %s", e)

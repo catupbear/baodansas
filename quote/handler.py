@@ -171,7 +171,7 @@ class QuoteHandler:
             gc.collect()
 
     def _process_text(self, msg: dict):
-        """处理文本消息：暂存等待配对"""
+        """处理文本消息：暂存等待配对，或识别续保关键词直接提交续保报价"""
         roomid = msg["roomid"]
         sender = msg["sender"]
         binding = msg["binding"]
@@ -183,4 +183,10 @@ class QuoteHandler:
 
         logger.info("报价：收到文本消息 room=%s, sender=%s, text=%s",
                     roomid, sender, text[:50])
+
+        if "续保" in text:
+            logger.info("报价：检测到续保关键词，转续保报价流程 room=%s sender=%s", roomid, sender)
+            self.matcher.check_and_submit_renewal(roomid, sender, text, binding)
+            return
+
         self.matcher.add_text(roomid, sender, text, binding)
