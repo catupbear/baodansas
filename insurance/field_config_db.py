@@ -80,12 +80,15 @@ def list_templates(db, user_id: int, role: str, parent_id=None) -> dict:
     }
     如果 my 没有任何模板，返回默认的 [{"name": "默认模板", "visible": False}]
 
-    role: "admin" 时 scope=enterprise, scope_id=parent_id（企业管理员）
+    role: "super_admin" 时 scope=global, scope_id=None
+          "enterprise" 时 scope=enterprise, scope_id=parent_id（企业管理员）
           "employee" 时 scope=user, scope_id=user_id（普通员工）
-          其他情况同 employee
     """
     # 确定 my 的查询范围
-    if role == "admin":
+    if role == "super_admin":
+        my_scope = "global"
+        my_scope_id = None
+    elif role == "enterprise":
         my_scope = "enterprise"
         my_scope_id = parent_id
     else:
@@ -160,14 +163,22 @@ def rename_template(db, scope: str, scope_id, old_name: str, new_name: str):
             [new_name, scope] + sid_params + [old_name]
         )
 
-        # 同步更新启用模板表（source 匹配 scope，模板名匹配旧名）
-        # active_source: own=user scope, enterprise=enterprise scope
-        active_source = "enterprise" if scope == "enterprise" else "own"
-        cursor.execute(
-            "UPDATE user_active_template SET template_name = %s "
-            "WHERE active_source = %s AND template_name = %s",
-            [new_name, active_source, old_name]
-        )
+        # 同步更新启用模板表
+        if scope == "user":
+            # 个人模板：只更新自己的
+            cursor.execute(
+                "UPDATE user_active_template SET template_name = %s "
+                "WHERE user_id = %s AND active_source = 'own' AND template_name = %s",
+                (new_name, scope_id, old_name)
+            )
+        elif scope == "enterprise":
+            # 企业模板：更新使用了该企业模板的所有员工
+            cursor.execute(
+                "UPDATE user_active_template SET template_name = %s "
+                "WHERE active_source = 'enterprise' AND template_name = %s "
+                "AND user_id IN (SELECT id FROM users WHERE parent_id = %s)",
+                (new_name, old_name, scope_id)
+            )
 
         conn.commit()
         logger.debug("模板重命名: %s → %s (scope=%s, scope_id=%s)", old_name, new_name, scope, scope_id)
@@ -210,6 +221,22 @@ def delete_template(db, scope: str, scope_id, template_name: str):
             f"WHERE scope = %s AND {sid_cond} AND template_name = %s",
             [scope] + sid_params + [template_name]
         )
+
+        # 清理启用模板表中对该模板的引用，回退到默认模板
+        if scope == "user":
+            cursor.execute(
+                "UPDATE user_active_template SET template_name = %s "
+                "WHERE user_id = %s AND active_source = 'own' AND template_name = %s",
+                (DEFAULT_TEMPLATE_NAME, scope_id, template_name)
+            )
+        elif scope == "enterprise":
+            cursor.execute(
+                "UPDATE user_active_template SET template_name = %s, active_source = 'own' "
+                "WHERE active_source = 'enterprise' AND template_name = %s "
+                "AND user_id IN (SELECT id FROM users WHERE parent_id = %s)",
+                (DEFAULT_TEMPLATE_NAME, template_name, scope_id)
+            )
+
         conn.commit()
         logger.debug("模板已删除: template=%s (scope=%s, scope_id=%s)", template_name, scope, scope_id)
     finally:
@@ -409,8 +436,16 @@ def get_effective_config(db, user_id: int, role: str, parent_id=None) -> dict:
         scope = "enterprise"
         scope_id = parent_id
     else:
-        scope = "user"
-        scope_id = user_id
+        # 根据角色确定 scope
+        if role == "super_admin":
+            scope = "global"
+            scope_id = None
+        elif role == "enterprise":
+            scope = "enterprise"
+            scope_id = parent_id
+        else:
+            scope = "user"
+            scope_id = user_id
 
     return get_template_config(db, scope, scope_id, template_name)
 
