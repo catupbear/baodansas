@@ -1681,6 +1681,53 @@
         </div>
     </transition>
 
+    <!-- ========== 导出列选择弹窗 ========== -->
+    <transition name="fade">
+        <div v-if="exportModalVisible" class="fixed inset-0 z-50 modal-mask flex items-center justify-center"
+             @click.self="exportModalVisible = false">
+            <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4">
+                <div class="px-5 py-4 border-b flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center">
+                            <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-base font-semibold text-gray-800">选择导出列</h3>
+                    </div>
+                    <button @click="exportModalVisible = false" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">&times;</button>
+                </div>
+                <div class="px-5 py-4 space-y-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="text-sm text-gray-600">选择要导出的表头字段：</p>
+                        <label class="flex items-center gap-1 text-xs text-green-600 cursor-pointer">
+                            <input type="checkbox" :checked="isAllExportFieldsSelected" @change="toggleAllExportFields">
+                            全选
+                        </label>
+                    </div>
+                    <div class="max-h-56 overflow-y-auto border rounded p-2 grid grid-cols-3 gap-1">
+                        <label v-for="f in exportAvailableFields" :key="f"
+                               class="flex items-center gap-1.5 text-sm text-gray-700 px-1.5 py-1 rounded hover:bg-gray-50 cursor-pointer">
+                            <input type="checkbox" :value="f" v-model="exportSelectedFields" class="text-green-600 rounded">
+                            <span class="truncate" :title="f">{{ f }}</span>
+                        </label>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-1">已选 {{ exportSelectedFields.length }} / {{ exportAvailableFields.length }} 个字段</p>
+                </div>
+                <div class="px-5 py-3 border-t bg-gray-50 rounded-b-xl flex justify-end gap-2">
+                    <button @click="exportModalVisible = false" class="btn btn-outline" style="font-size:13px;">取消</button>
+                    <button @click="confirmExport" :disabled="!exportSelectedFields.length"
+                            class="btn btn-success" style="font-size:13px;">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        导出（{{ exportSelectedFields.length }}列）
+                    </button>
+                </div>
+            </div>
+        </div>
+    </transition>
+
     <!-- ========== 重复保单确认弹窗 ========== -->
     <transition name="fade">
         <div v-if="duplicateVisible" class="fixed inset-0 z-50 modal-mask flex items-center justify-center"
@@ -3409,33 +3456,68 @@ createApp({
             });
         }
 
-        // 导出Excel
-        async function exportExcel(type) {
-            let data, fieldNamesToUse, fileName;
+        // 手动上传结果导出的额外列
+        const uploadExtraColumns = ['文件名', '文档类型'];
+
+        // 导出Excel（弹窗选择列）
+        function exportExcel(type) {
+            let fieldNamesToUse;
+            if (type === 'success' || type === 'abnormal') {
+                fieldNamesToUse = [...uploadExtraColumns, ...outputColumns.value];
+            } else if (type === 'nonpolicy') {
+                fieldNamesToUse = ['文件名', '文档类型'];
+            } else {
+                fieldNamesToUse = ['文件名', '失败原因'];
+            }
+            exportPendingType.value = type;
+            exportAvailableFields.value = [...fieldNamesToUse];
+            exportSelectedFields.value = [...fieldNamesToUse]; // 默认全选
+            exportModalVisible.value = true;
+        }
+
+        // 给手动上传结果补充额外列（文件名、文档类型）
+        function enrichUploadData(rawData, sourceResults) {
+            return rawData.map((item, idx) => {
+                const r = sourceResults[idx];
+                const fields = { ...item.fields };
+                fields['文件名'] = item.file_name || r?.file_name || '';
+                fields['文档类型'] = getDocCategory(r) || '';
+                return { ...item, fields };
+            });
+        }
+
+        // 实际执行导出（手动上传结果）
+        async function doExportExcel(type, selectedCols) {
+            let data, fileName;
             if (type === 'success') {
-                data = buildMappedInvoices();
-                fieldNamesToUse = outputColumns.value;
+                data = enrichUploadData(buildMappedInvoices(), successResults.value);
                 fileName = '保单识别结果.xlsx';
             } else if (type === 'abnormal') {
-                data = buildAbnormalInvoices();
-                fieldNamesToUse = outputColumns.value;
+                data = enrichUploadData(buildAbnormalInvoices(), abnormalResults.value);
                 fileName = '提取异常清单.xlsx';
             } else if (type === 'nonpolicy') {
                 data = nonPolicyResults.value.map(r => ({
                     file_name: r.file_name,
-                    doc_category: r.invoices?.[0]?.doc_category || r.error || '非保单',
+                    fields: {
+                        '文件名': r.file_name,
+                        '文档类型': r.invoices?.[0]?.doc_category || r.error || '非保单',
+                    },
                 }));
-                fieldNamesToUse = ['文件名', '文档类型'];
                 fileName = '非保单清单.xlsx';
             } else {
-                data = failedResults.value;
-                fieldNamesToUse = ['文件名', '失败原因'];
+                data = failedResults.value.map(r => ({
+                    file_name: r.file_name || r.filename || '',
+                    fields: {
+                        '文件名': r.file_name || r.filename || '',
+                        '失败原因': r.error || r.error_message || '',
+                    },
+                }));
                 fileName = '识别失败清单.xlsx';
             }
             try {
                 const resp = await authFetch('/api/insurance/export/excel', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ invoices: data, field_names: fieldNamesToUse, export_type: type }),
+                    body: JSON.stringify({ invoices: data, field_names: selectedCols, export_type: 'success' }),
                 });
                 if (!resp.ok) { const err = await resp.json(); showMessage(err.detail || '导出失败', false); return; }
                 const blob = await resp.blob();
@@ -3505,6 +3587,37 @@ createApp({
             await loadTargets();
             selectedFields.value = [...outputColumns.value];
             targetModalVisible.value = true;
+        }
+
+        // ========== 导出列选择弹窗 ==========
+        const exportModalVisible = ref(false);
+        const exportSelectedFields = ref([]);
+        const exportAvailableFields = ref([]);
+        const exportPendingType = ref('');       // 'success'|'abnormal'|'nonpolicy'|'failed'|'records'
+        const exportPendingData = ref(null);     // 暂存导出数据
+        const exportPendingFileName = ref('');
+
+        const isAllExportFieldsSelected = computed(() =>
+            exportAvailableFields.value.length > 0 && exportSelectedFields.value.length === exportAvailableFields.value.length
+        );
+
+        function toggleAllExportFields(e) {
+            exportSelectedFields.value = e.target.checked ? [...exportAvailableFields.value] : [];
+        }
+
+        // 实际执行导出
+        async function confirmExport() {
+            exportModalVisible.value = false;
+            const type = exportPendingType.value;
+            const selectedCols = exportSelectedFields.value;
+
+            if (type === 'records') {
+                // 识别记录导出
+                await doExportRecordsExcel(selectedCols);
+            } else {
+                // 手动上传结果导出
+                await doExportExcel(type, selectedCols);
+            }
         }
 
         async function confirmSync() {
@@ -3994,12 +4107,22 @@ createApp({
             if (_downloadPollTimer) { clearInterval(_downloadPollTimer); _downloadPollTimer = null; }
         }
 
-        // 导出识别记录
-        async function exportRecordsExcel() {
-            // 用当前筛选条件请求全部数据（不限分页），导出完整结果
+        // 识别记录导出的额外列（与列表展示一致）
+        const recordExtraColumns = ['文件名', '文档类型', '状态', '时间', '群名', '发送人'];
+
+        // 导出识别记录（弹窗选择列）
+        function exportRecordsExcel() {
+            exportPendingType.value = 'records';
+            const allCols = [...recordExtraColumns, ...outputColumns.value];
+            exportAvailableFields.value = allCols;
+            exportSelectedFields.value = [...allCols]; // 默认全选
+            exportModalVisible.value = true;
+        }
+
+        // 实际执行导出（识别记录）
+        async function doExportRecordsExcel(selectedCols) {
             try {
                 showMessage('正在导出，请稍候...', true);
-                // 构建与 loadRecords 完全一致的筛选参数
                 const params = new URLSearchParams({ page: 1, page_size: 10000 });
                 if (recordFilter.source_type === 'user') {
                     params.set('source_type', 'user');
@@ -4036,7 +4159,6 @@ createApp({
                 if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
                 if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
                 if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
-                // 失败/待处理 tab 下不去重，避免记录被过滤掉
                 if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');
                 _appendAdvancedParams(params);
 
@@ -4049,8 +4171,17 @@ createApp({
                     .map(r => {
                         const df = r.display_fields || {};
                         const row = {};
-                        for (const col of outputColumns.value) {
-                            row[col] = df[col] || '';
+                        // 额外列映射
+                        const extraMap = {
+                            '文件名': r.filename || '',
+                            '文档类型': r.doc_category || '',
+                            '状态': statusLabel(r.status),
+                            '时间': formatTime(r.created_at),
+                            '群名': r.room_name || r.roomid || '',
+                            '发送人': r.sender_name || r.sender || '',
+                        };
+                        for (const col of selectedCols) {
+                            row[col] = extraMap[col] !== undefined ? extraMap[col] : (df[col] || '');
                         }
                         return { fields: row, filename: r.filename || '' };
                     });
@@ -4058,7 +4189,7 @@ createApp({
 
                 const resp = await authFetch('/api/insurance/export/excel', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ invoices: data, field_names: outputColumns.value, export_type: 'success' }),
+                    body: JSON.stringify({ invoices: data, field_names: selectedCols, export_type: 'success' }),
                 });
                 if (!resp.ok) { showMessage('导出失败', false); return; }
                 const blob = await resp.blob();
@@ -4624,6 +4755,9 @@ createApp({
             openMappingModal, loadCompanyMapping, saveCurrentMapping,
             addCompanyMapping, deleteCompanyMapping, resetMapping,
             addColumn, removeColumn, startRenameCol, finishRenameCol, onNewColFieldChange,
+            // 导出列选择
+            exportModalVisible, exportSelectedFields, exportAvailableFields,
+            isAllExportFieldsSelected, toggleAllExportFields, confirmExport,
             // 钉钉
             targets, selectedTargetId, targetModalVisible,
             newTargetUrl, newTargetName, targetError, addingTarget,

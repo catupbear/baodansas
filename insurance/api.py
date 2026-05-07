@@ -2099,14 +2099,25 @@ def export_excel():
                     inv.get("doc_category", "非保单"),
                 ])
         else:
-            # 成功类型：文件名 + 各字段列
-            headers = ["文件名"] + list(field_names)
+            # 成功类型：如果 field_names 中已包含"文件名"则不重复添加
+            has_filename = "文件名" in field_names
+            if has_filename:
+                headers = list(field_names)
+            else:
+                headers = ["文件名"] + list(field_names)
             ws.append(headers)
             for inv in invoices:
                 fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
-                row = [inv.get("file_name", inv.get("filename", fields.get("文件名", "")))]
+                if has_filename:
+                    row = []
+                else:
+                    row = [inv.get("file_name", inv.get("filename", fields.get("文件名", "")))]
                 for col in field_names:
-                    row.append(fields.get(col, ""))
+                    if col == "文件名" and has_filename:
+                        # 优先取 fields 中的值，兜底取 invoice 的 filename
+                        row.append(fields.get("文件名", "") or inv.get("file_name", inv.get("filename", "")))
+                    else:
+                        row.append(fields.get(col, ""))
                 ws.append(row)
 
         # 自动列宽（最大 40 字符）
