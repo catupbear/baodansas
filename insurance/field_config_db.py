@@ -573,10 +573,29 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
             if raw_date:
                 result[field_name] = _format_date(str(raw_date), fmt)
 
-    # 4. 公式计算
+    # 4. 公式计算（key格式："目标字段:公司简称:险种简称"）
+    record_company = result.get("保险公司简称") or result.get("承保公司") or result.get("保险公司") or ""
+    record_policy_type = result.get("险种类型") or result.get("险种") or ""
     for item in config.get("fee_formula", []):
-        target_field = item.get("key", "")
-        formula = item.get("value", "")
+        raw_key = item.get("key", "")
+        raw_value = item.get("value", "")
+        if not raw_key:
+            continue
+        # 解析 key："目标字段:公司:险种" 或旧格式 "目标字段"
+        parts = raw_key.split(":", 2)
+        target_field = parts[0]
+        rule_company = parts[1] if len(parts) > 1 else ""
+        rule_policy_type = parts[2] if len(parts) > 2 else ""
+        # 匹配公司和险种（包含匹配）
+        if rule_company and rule_company not in record_company and record_company not in rule_company:
+            continue
+        if rule_policy_type and rule_policy_type not in record_policy_type and record_policy_type not in rule_policy_type:
+            continue
+        # 取公式字符串（value 可能是 dict{display,tokens} 或直接字符串）
+        if isinstance(raw_value, dict):
+            formula = raw_value.get("display", "")
+        else:
+            formula = str(raw_value)
         if target_field and formula:
             calculated = evaluate_formula(formula, result)
             if calculated:

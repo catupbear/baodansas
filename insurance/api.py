@@ -221,6 +221,12 @@ def list_records():
             dedup=dedup,
         )
         # 列表返回 display_fields（轻量映射字段）替代 parsed_fields
+        # 获取用户字段配置，应用简称/日期格式/公式计算
+        from insurance.field_config_db import apply_user_config_to_fields
+        user = g.current_user
+        user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
+        has_config = user_config and any(user_config.get(k) for k in user_config)
+
         for record in result.get("records", []):
             # 反序列化 display_fields
             if isinstance(record.get("display_fields"), str):
@@ -228,6 +234,9 @@ def list_records():
                     record["display_fields"] = json.loads(record["display_fields"])
                 except (TypeError, json.JSONDecodeError):
                     record["display_fields"] = {}
+            # 应用用户配置（简称映射、日期格式、公式计算）
+            if has_config and record.get("display_fields"):
+                record["display_fields"] = apply_user_config_to_fields(user_config, record["display_fields"])
             # 时间戳转字符串
             for ts_field in ("created_at",):
                 if record.get(ts_field) and not isinstance(record[ts_field], str):
