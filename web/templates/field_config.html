@@ -394,9 +394,11 @@
                             </button>
                         </div>
                         <textarea
+                            ref="fullNameTextarea"
                             v-model="aliasFullNames"
                             :placeholder="aliasType === 'company' ? '中国人民财产保险股份有限公司\n中国平安财产保险股份有限公司\n...' : '机动车交通事故责任强制保险\n机动车商业保险\n...'"
                             :readonly="activeSource === 'enterprise'"
+                            @scroll="syncScroll('full')"
                         ></textarea>
                         <div class="line-count" :class="aliasLinesMatch ? 'match' : 'mismatch'">
                             共 {{ fullNameLineCount }} 条
@@ -407,9 +409,11 @@
                             {{ aliasType === 'company' ? '简称' : '简称' }}
                         </div>
                         <textarea
+                            ref="shortNameTextarea"
                             v-model="aliasShortNames"
                             :placeholder="aliasType === 'company' ? '人保PICC\n平安\n...' : '交强险\n商业险\n...'"
                             :readonly="activeSource === 'enterprise'"
+                            @scroll="syncScroll('short')"
                         ></textarea>
                         <div class="line-count" :class="aliasLinesMatch ? 'match' : 'mismatch'">
                             共 {{ shortNameLineCount }} 条
@@ -659,6 +663,20 @@ createApp({
         const activeTab = ref('alias');
 
         // === Tab 1: 简称映射 - 分开存储 ===
+        const fullNameTextarea = ref(null);
+        const shortNameTextarea = ref(null);
+        let scrollSyncing = false;
+        const syncScroll = (source) => {
+            if (scrollSyncing) return;
+            scrollSyncing = true;
+            const from = source === 'full' ? fullNameTextarea.value : shortNameTextarea.value;
+            const to = source === 'full' ? shortNameTextarea.value : fullNameTextarea.value;
+            if (from && to) {
+                to.scrollTop = from.scrollTop;
+            }
+            scrollSyncing = false;
+        };
+
         const aliasType = ref('company');
         const companyFullNamesData = ref('');
         const companyShortNamesData = ref('');
@@ -1186,6 +1204,7 @@ createApp({
             selectTemplate, createTemplate,
             activeTab,
             aliasType, aliasFullNames, aliasShortNames,
+            fullNameTextarea, shortNameTextarea, syncScroll,
             fullNameLineCount, shortNameLineCount, aliasLinesMatch,
             dateFormats, dateFields, sampleDate, showQuickFormat,
             formatDate, applyQuickFormat,
