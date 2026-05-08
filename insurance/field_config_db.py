@@ -524,16 +524,26 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
     """
     result = dict(fields)
 
-    # 1. 公司简称替换
+    # 1. 公司简称替换（支持包含匹配：配置key是公司全称的子串即可命中）
     company_aliases = {item["key"]: item["value"] for item in config.get("company_alias", [])}
     company_val = result.get("保险公司") or result.get("承保公司") or result.get("保险公司简称") or ""
-    if company_val and company_val in company_aliases:
-        # 写入简称（同时更新保险公司简称字段）
-        alias = company_aliases[company_val]
-        result["保险公司简称"] = alias
-        # 如果已有承保公司字段则一并更新
-        if "承保公司" in result:
-            result["承保公司"] = alias
+    if company_val:
+        alias = None
+        # 优先精确匹配
+        if company_val in company_aliases:
+            alias = company_aliases[company_val]
+        else:
+            # 包含匹配：按key长度从长到短，避免短key误命中
+            for key in sorted(company_aliases.keys(), key=len, reverse=True):
+                if key and key in company_val:
+                    alias = company_aliases[key]
+                    break
+        if alias:
+            # 写入简称（同时更新保险公司简称字段）
+            result["保险公司简称"] = alias
+            # 如果已有承保公司字段则一并更新
+            if "承保公司" in result:
+                result["承保公司"] = alias
 
     # 2. 险种简称替换（支持包含匹配：配置key是险种全称的子串即可命中）
     type_aliases = {item["key"]: item["value"] for item in config.get("policy_type_alias", [])}
