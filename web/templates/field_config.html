@@ -759,7 +759,8 @@ createApp({
         const companyShortList = computed(() => [...new Set(companyShortNamesData.value.trim().split('\n').filter(Boolean))]);
         const policyTypeShortList = computed(() => [...new Set(policyShortNamesData.value.trim().split('\n').filter(Boolean))]);
 
-        const availableFields = ['保费', '车船税', '佣金率', '佣金', '采购费率', '公司利润', '跟单利润'];
+        const allFields = ['保费', '车船税', '佣金率', '佣金', '采购费率', '公司利润', '跟单利润'];
+        const availableFields = computed(() => allFields.filter(f => f !== currentFormulaField.value));
         const operators = ['+', '-', '×', '÷', '(', ')'];
 
         const sampleValues = { '保费': 5000, '车船税': 300, '佣金率': 0.15, '佣金': 750, '采购费率': 0.05, '公司利润': 200, '跟单利润': 100 };
