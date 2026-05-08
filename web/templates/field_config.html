@@ -381,19 +381,17 @@
                         <label><input type="radio" v-model="aliasType" value="company"><span>承保公司</span></label>
                         <label><input type="radio" v-model="aliasType" value="policy_type"><span>险种</span></label>
                     </div>
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <button class="btn btn-outline btn-sm" @click="importFromDb" :disabled="importingDefaults" style="font-size:12px;">
-                            {{ importingDefaults ? '导入中...' : '导入已有保单数据' }}
-                        </button>
-                        <span style="font-size:12px; color:var(--text-muted);">一行一个，左右行数必须一一对应</span>
-                    </div>
+                    <div style="font-size:12px; color:var(--text-muted);">一行一个，左右行数必须一一对应</div>
                 </div>
 
                 <!-- 双文本框 -->
                 <div class="dual-textarea">
                     <div>
-                        <div style="font-size:13px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">
-                            {{ aliasType === 'company' ? '公司全称' : '险种全称' }}
+                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                            <span style="font-size:13px; font-weight:600; color:var(--text-secondary);">{{ aliasType === 'company' ? '公司全称' : '险种全称' }}</span>
+                            <button class="btn btn-outline btn-sm" @click="importFromDb" :disabled="importingDefaults || activeSource === 'enterprise'" style="font-size:11px; padding:3px 8px;">
+                                {{ importingDefaults ? '导入中...' : '导入已有保单数据' }}
+                            </button>
                         </div>
                         <textarea
                             v-model="aliasFullNames"
