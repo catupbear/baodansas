@@ -565,9 +565,9 @@
                     <input class="formula-input" v-model="formulaForm.display" placeholder="点击下方字段和运算符构建公式，或直接输入" ref="formulaInput">
                 </div>
 
-                <!-- 可用字段 -->
+                <!-- 可用数据 -->
                 <div style="margin-bottom:12px;">
-                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">可用字段（点击插入）：</div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">可用数据（点击插入）：</div>
                     <div style="display:flex; flex-wrap:wrap;">
                         <span class="field-chip" v-for="f in availableFields" :key="f" @click="insertField(f)">{{ f }}</span>
                     </div>
@@ -776,7 +776,7 @@ createApp({
                 if (isNaN(result) || !isFinite(result)) return '公式计算结果无效';
                 return '';
             } catch (e) {
-                return '公式语法错误：' + e.message;
+                return '公式不完整，请继续输入';
             }
         });
 
@@ -829,9 +829,11 @@ createApp({
             };
             const rules = allRules.value[currentFormulaField.value];
             if (editingRuleIdx.value !== null) {
-                rules[editingRuleIdx.value] = rule;
+                rules.splice(editingRuleIdx.value, 1, rule);
+                showToast('规则已更新');
             } else {
                 rules.push(rule);
+                showToast('规则已添加');
             }
             showFormulaModal.value = false;
         };
