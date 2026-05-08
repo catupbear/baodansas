@@ -1229,11 +1229,11 @@
                                             class="btn btn-outline" style="padding:3px 8px;font-size:11px;">
                                         预览
                                     </button>
-                                    <!-- 查看详情 -->
+                                    <!-- 查看详情（暂时隐藏）
                                     <button @click="openRecordDetail(record)"
                                             class="btn btn-outline" style="padding:3px 8px;font-size:11px;">
                                         详情
-                                    </button>
+                                    </button> -->
                                     <!-- 重新识别（有COS文件的记录） -->
                                     <button v-if="record.cos_url && (record.status === 'done' || record.status === 'success' || record.status === 'failed')"
                                             @click="reocrRecord(record)"
