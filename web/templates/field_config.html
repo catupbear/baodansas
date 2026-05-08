@@ -428,12 +428,12 @@
             <div v-show="activeTab==='date'" style="padding:24px;">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
                     <div style="font-size:13px; color:var(--text-muted);">为每个时间字段选择显示格式</div>
-                    <div class="quick-action" @click="showQuickFormat=!showQuickFormat">
-                        ⚡ 一键统一格式
-                        <select v-if="showQuickFormat" @change="applyQuickFormat($event.target.value); showQuickFormat=false" style="margin-left:4px; font-size:12px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <select v-model="quickFormatValue" style="font-size:12px; padding:4px 8px; border-radius:6px; border:1px solid var(--border);">
                             <option value="">选择格式...</option>
                             <option v-for="f in dateFormats" :value="f.value">{{ f.label }}</option>
                         </select>
+                        <div class="quick-action" @click="applyQuickFormat(quickFormatValue)">⚡ 一键统一</div>
                     </div>
                 </div>
 
@@ -713,7 +713,7 @@ createApp({
             { name: '终保日期', format: 'YYYY年MM月DD日' },
         ]);
         const sampleDate = new Date(2026, 4, 7);
-        const showQuickFormat = ref(false);
+        const quickFormatValue = ref('');
 
         const formatDate = (date, fmt) => {
             const y = date.getFullYear();
@@ -1206,7 +1206,7 @@ createApp({
             aliasType, aliasFullNames, aliasShortNames,
             fullNameTextarea, shortNameTextarea, syncScroll,
             fullNameLineCount, shortNameLineCount, aliasLinesMatch,
-            dateFormats, dateFields, sampleDate, showQuickFormat,
+            dateFormats, dateFields, sampleDate, quickFormatValue,
             formatDate, applyQuickFormat,
             formulaFields, currentFormulaField, currentRules, allRules,
             showFormulaModal, editingRuleIdx, formulaInput, formulaForm,
