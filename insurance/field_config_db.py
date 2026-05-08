@@ -38,20 +38,32 @@ def _scope_id_condition(scope_id):
     return "scope_id = %s", [scope_id]
 
 
+def _convert_fmt_to_strftime(fmt: str) -> str:
+    """将前端日期格式（如 YYYY-MM-DD）转为 Python strftime 格式（如 %Y-%m-%d）"""
+    return (fmt
+            .replace("YYYY", "%Y")
+            .replace("MM", "%m")
+            .replace("DD", "%d"))
+
+
 def _format_date(raw: str, fmt: str) -> str:
     """
     日期格式转换（内部函数）。
-    支持解析：YYYY-MM-DD、YYYY/MM/DD、YYYY年MM月DD日
-    按 fmt 输出，fmt 支持标准 strftime 格式（如 %Y年%m月%d日、%Y/%m/%d、%Y-%m-%d）
+    支持解析：YYYY-MM-DD、YYYY/MM/DD、YYYY年MM月DD日、YYYYMMDD
+    fmt 支持前端格式（YYYY-MM-DD）或 strftime 格式（%Y-%m-%d），自动识别。
     解析失败则原样返回。
     """
     if not raw or not fmt:
         return raw
+    # 自动转换前端格式为 strftime 格式
+    if "YYYY" in fmt or "MM" in fmt or "DD" in fmt:
+        fmt = _convert_fmt_to_strftime(fmt)
     # 尝试多种格式解析
     patterns = [
         r'(\d{4})-(\d{1,2})-(\d{1,2})',
         r'(\d{4})/(\d{1,2})/(\d{1,2})',
         r'(\d{4})年(\d{1,2})月(\d{1,2})日?',
+        r'(\d{4})(\d{2})(\d{2})',
     ]
     for pat in patterns:
         m = re.match(pat, str(raw).strip())
