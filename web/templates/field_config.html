@@ -933,13 +933,20 @@ createApp({
             try {
                 const resp = await authFetch('/api/insurance/field-config/defaults?source=db');
                 const res = await resp.json();
+                console.log('导入响应:', res, 'aliasType:', aliasType.value);
                 if (res && res.code === 0) {
                     const data = res.data;
-                    if (aliasType.value === 'company') {
+                    const isCompany = aliasType.value === 'company';
+                    console.log('isCompany:', isCompany, 'company_alias count:', (data.company_alias||[]).length);
+                    if (isCompany) {
                         const items = data.company_alias || [];
                         if (!items.length) { showToast('暂无已有保单的承保公司数据', 'warning'); return; }
-                        companyFullNamesData.value = items.map(c => c.key).join('\n');
-                        companyShortNamesData.value = items.map(c => c.value).join('\n');
+                        const fullText = items.map(c => c.key).join('\n');
+                        const shortText = items.map(c => c.value).join('\n');
+                        console.log('赋值前 companyFullNamesData:', companyFullNamesData.value.length, '赋值:', fullText.length);
+                        companyFullNamesData.value = fullText;
+                        companyShortNamesData.value = shortText;
+                        console.log('赋值后 companyFullNamesData:', companyFullNamesData.value.length);
                     } else {
                         const items = data.policy_type_alias || [];
                         if (!items.length) { showToast('暂无已有保单的险种数据', 'warning'); return; }
@@ -947,6 +954,9 @@ createApp({
                         policyShortNamesData.value = items.map(p => p.value).join('\n');
                     }
                     showToast('已导入已有保单数据');
+                } else {
+                    console.log('响应异常:', res);
+                    showToast('导入失败: ' + (res.msg || '未知错误'), 'error');
                 }
             } catch (e) {
                 showToast('导入失败: ' + e.message, 'error');
