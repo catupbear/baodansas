@@ -535,14 +535,24 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
         if "承保公司" in result:
             result["承保公司"] = alias
 
-    # 2. 险种简称替换
+    # 2. 险种简称替换（支持包含匹配：配置key是险种全称的子串即可命中）
     type_aliases = {item["key"]: item["value"] for item in config.get("policy_type_alias", [])}
     policy_type_val = result.get("险种类型") or result.get("险种") or ""
-    if policy_type_val and policy_type_val in type_aliases:
-        alias = type_aliases[policy_type_val]
-        result["险种类型"] = alias
-        if "险种" in result:
-            result["险种"] = alias
+    if policy_type_val:
+        alias = None
+        # 优先精确匹配
+        if policy_type_val in type_aliases:
+            alias = type_aliases[policy_type_val]
+        else:
+            # 包含匹配：按key长度从长到短匹配，避免短key误命中
+            for key in sorted(type_aliases.keys(), key=len, reverse=True):
+                if key and key in policy_type_val:
+                    alias = type_aliases[key]
+                    break
+        if alias:
+            result["险种类型"] = alias
+            if "险种" in result:
+                result["险种"] = alias
 
     # 3. 日期格式化
     for item in config.get("date_format", []):
