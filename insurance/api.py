@@ -13,7 +13,7 @@ import logging
 
 import pymysql
 import pymysql.cursors
-from flask import Blueprint, jsonify, render_template, request, send_file
+from flask import Blueprint, g, jsonify, render_template, request, send_file
 
 from .db import (
     backfill_records_by_sources,
@@ -32,7 +32,7 @@ from .field_config_db import (
     list_templates as list_field_config_templates, rename_template, update_template_visibility, delete_template as delete_template_db,
     get_template_config, save_full_template,
     get_active_template, set_active_template,
-    get_effective_config,
+    get_effective_config, apply_user_config_to_fields,
 )
 from .monitor_config_db import (
     list_monitor_configs,
@@ -222,9 +222,7 @@ def list_records():
         )
         # 列表返回 display_fields（轻量映射字段）替代 parsed_fields
         # 获取用户字段配置，应用简称/日期格式/公式计算
-        from flask import g as flask_g
-        from insurance.field_config_db import apply_user_config_to_fields
-        user = flask_g.current_user
+        user = g.current_user
         user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
         has_config = user_config and any(user_config.get(k) for k in user_config)
 
@@ -2136,7 +2134,6 @@ def export_excel():
             headers = list(field_names)
             ws.append(headers)
             # 获取用户字段配置，导出时应用简称/日期格式/公式
-            from insurance.field_config_db import apply_user_config_to_fields
             user = g.current_user
             user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
             for inv in invoices:
