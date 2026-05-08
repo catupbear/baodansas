@@ -909,6 +909,10 @@ def query_insurance_records(
     # 主表别名前缀
     col_prefix = "r." if need_join else ""
 
+    # 去重模式下排除 duplicate 状态的记录
+    if dedup:
+        conditions.append(f"{col_prefix}status != 'duplicate'")
+
     # 来源类型筛选
     if source_type == "room":
         conditions.append(f"{col_prefix}roomid IS NOT NULL AND {col_prefix}roomid != ''")
@@ -1278,6 +1282,9 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
         # 构建 WHERE 条件
         where_parts = []
         params = []
+        # 去重模式下排除 duplicate 状态的记录，避免 total 与各子状态之和不一致
+        if dedup:
+            where_parts.append(f"{col_prefix}status != 'duplicate'")
         if filters.get("roomid"):
             where_parts.append(f"{col_prefix}roomid = %s")
             params.append(filters["roomid"])
