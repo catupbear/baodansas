@@ -2118,12 +2118,8 @@ def export_excel():
                     inv.get("doc_category", "非保单"),
                 ])
         else:
-            # 成功类型：如果 field_names 中已包含"文件名"则不重复添加
-            has_filename = "文件名" in field_names
-            if has_filename:
-                headers = list(field_names)
-            else:
-                headers = ["文件名"] + list(field_names)
+            # 成功类型：完全按用户勾选的列导出
+            headers = list(field_names)
             ws.append(headers)
             # 获取用户字段配置，导出时应用简称/日期格式/公式
             from insurance.field_config_db import apply_user_config_to_fields
@@ -2134,12 +2130,9 @@ def export_excel():
                 # 应用用户配置（简称映射、日期格式、公式计算）
                 if user_config and any(user_config.get(k) for k in user_config):
                     fields = apply_user_config_to_fields(user_config, fields)
-                if has_filename:
-                    row = []
-                else:
-                    row = [inv.get("file_name", inv.get("filename", fields.get("文件名", "")))]
+                row = []
                 for col in field_names:
-                    if col == "文件名" and has_filename:
+                    if col == "文件名":
                         # 优先取 fields 中的值，兜底取 invoice 的 filename
                         row.append(fields.get("文件名", "") or inv.get("file_name", inv.get("filename", "")))
                     else:
