@@ -503,7 +503,7 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
         m = re.search(p, text)
         if m:
             val = _clean_person_name(m.group(1))
-            if val and len(val) >= 2 and not re.search(r'公司|集团|保险|有限|机构|人寿|平安|太平|阳光|人保', val):
+            if val and len(val) >= 2 and not re.search(r'公司|集团|保险|有限|机构|人寿|平安|太平|阳光|人保|车险|非车|财险|寿险|健康险|意外险|团险|渠道', val):
                 fields["业务员"] = val
                 break
     # 中华联合：销售渠道名称兜底为业务员（值可能是代理公司名）
@@ -553,7 +553,7 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
             if fallback_field in fields:
                 val = _clean_person_name(fields[fallback_field])
                 if val and len(val) >= 2 and re.match(r'^[\u4e00-\u9fff]+$', val) \
-                        and not re.search(r'公司|集团|保险|有限|机构|自动', val):
+                        and not re.search(r'公司|集团|保险|有限|机构|自动|车险|非车|财险|寿险|健康险|意外险|团险|渠道', val):
                     fields["业务员"] = val
                     break
 
