@@ -203,7 +203,7 @@
         .toggle-switch input:checked + .toggle-track::after { transform: translateX(20px); }
 
         /* 识别记录表格 */
-        .records-table { font-size: 13px; border-collapse: collapse; width: 100%; }
+        .records-table { font-size: 13px; border-collapse: separate; border-spacing: 0; width: 100%; }
         .records-table th, .records-table td {
             white-space: nowrap; border-bottom: 1px solid var(--border-light);
             padding: 8px 12px;
@@ -213,6 +213,22 @@
             background: var(--surface-secondary);
             font-weight: 600; color: var(--text-secondary);
         }
+        /* 勾选列固定 */
+        .records-table th.sticky-col-check,
+        .records-table td.sticky-col-check {
+            position: sticky; left: 0; z-index: 1;
+        }
+        .records-table th.sticky-col-check { z-index: 3; }
+        /* 文件名列固定 */
+        .records-table th.sticky-col-name,
+        .records-table td.sticky-col-name {
+            position: sticky; left: 40px; z-index: 1;
+            border-right: 2px solid var(--border-light);
+        }
+        .records-table th.sticky-col-name { z-index: 3; }
+        /* sticky 列背景继承行背景 */
+        .records-table td.sticky-col-check,
+        .records-table td.sticky-col-name { background: inherit; }
         .records-table tbody tr { background: var(--surface); transition: background 0.15s ease; }
         .records-table tbody tr:hover { background: var(--primary-bg) !important; }
 
@@ -1096,10 +1112,10 @@
                 <table class="records-table text-left">
                     <thead>
                         <tr>
-                            <th style="min-width:40px;">
+                            <th class="sticky-col-check" style="min-width:40px;">
                                 <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" class="cursor-pointer">
                             </th>
-                            <th style="min-width:150px;">文件名</th>
+                            <th class="sticky-col-name" style="min-width:150px;">文件名</th>
                             <th style="min-width:70px;">文档类型</th>
                             <th v-for="col in outputColumns" :key="col" class="text-gray-600 font-medium" style="min-width:80px;">{{ col }}</th>
                             <th v-if="isSuperAdmin" style="min-width:70px;">识别方式</th>
@@ -1116,11 +1132,11 @@
                         <!-- 数据行 -->
                         <tr v-for="record in filteredRecords" :key="record.id">
                             <!-- 选择框 -->
-                            <td>
+                            <td class="sticky-col-check">
                                 <input type="checkbox" :value="record.id" v-model="selectedRecordIds" class="cursor-pointer">
                             </td>
                             <!-- 文件名（可点击预览） -->
-                            <td>
+                            <td class="sticky-col-name">
                                 <span v-if="record.cos_url"
                                       class="text-orange-600 hover:underline text-sm truncate block cursor-pointer" style="max-width:180px;"
                                       :title="record.filename"
