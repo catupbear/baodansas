@@ -586,8 +586,10 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
                 result[field_name] = _format_date(str(raw_date), fmt)
 
     # 4. 公式计算（key格式："目标字段:公司简称:险种简称"）
+    # 先用原始数值计算所有公式，最后再转百分比显示，避免"率"字段被提前转成"10%"影响后续公式
     record_company = result.get("保险公司简称") or result.get("承保公司") or result.get("保险公司") or ""
     record_policy_type = result.get("险种类型") or result.get("险种") or ""
+    rate_fields = []  # 记录需要转百分比的字段
     for item in config.get("fee_formula", []):
         raw_key = item.get("key", "")
         raw_value = item.get("value", "")
@@ -611,18 +613,19 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
         if target_field and formula:
             calculated = evaluate_formula(formula, result)
             if calculated:
-                # "率"字段显示为百分比（如 0.1 → 10%）
+                result[target_field] = calculated
                 if "率" in target_field:
-                    try:
-                        val = float(calculated)
-                        if abs(val) < 1:
-                            pct = val * 100
-                            result[target_field] = f"{pct:g}%"
-                        else:
-                            result[target_field] = f"{val:g}%"
-                    except (ValueError, TypeError):
-                        result[target_field] = calculated
-                else:
-                    result[target_field] = calculated
+                    rate_fields.append(target_field)
+
+    # 所有公式算完后，再将"率"字段转为百分比显示
+    for field in rate_fields:
+        try:
+            val = float(result[field])
+            if abs(val) < 1:
+                result[field] = f"{val * 100:g}%"
+            else:
+                result[field] = f"{val:g}%"
+        except (ValueError, TypeError):
+            pass
 
     return result
