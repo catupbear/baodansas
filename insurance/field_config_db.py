@@ -611,6 +611,18 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
         if target_field and formula:
             calculated = evaluate_formula(formula, result)
             if calculated:
-                result[target_field] = calculated
+                # "率"字段显示为百分比（如 0.1 → 10%）
+                if "率" in target_field:
+                    try:
+                        val = float(calculated)
+                        if abs(val) < 1:
+                            pct = val * 100
+                            result[target_field] = f"{pct:g}%"
+                        else:
+                            result[target_field] = f"{val:g}%"
+                    except (ValueError, TypeError):
+                        result[target_field] = calculated
+                else:
+                    result[target_field] = calculated
 
     return result
