@@ -755,8 +755,8 @@ createApp({
         const formulaForm = ref({ company: '', policyType: '', display: '' });
 
         // 公司/险种下拉从简称映射数据动态获取
-        const companyShortList = computed(() => companyShortNamesData.value.trim().split('\n').filter(Boolean));
-        const policyTypeShortList = computed(() => policyShortNamesData.value.trim().split('\n').filter(Boolean));
+        const companyShortList = computed(() => [...new Set(companyShortNamesData.value.trim().split('\n').filter(Boolean))]);
+        const policyTypeShortList = computed(() => [...new Set(policyShortNamesData.value.trim().split('\n').filter(Boolean))]);
 
         const availableFields = ['保费', '车船税', '佣金率', '佣金', '采购费率', '公司利润', '跟单利润'];
         const operators = ['+', '-', '×', '÷', '(', ')'];
