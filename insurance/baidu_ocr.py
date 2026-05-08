@@ -171,12 +171,17 @@ class BaiduOCR:
                 result = self.recognize_pdf(pdf_base64, page_num=page)
                 if result.get("success"):
                     page_text = result.get("text", "")
-                    # 检测是否为条款页（含大量法律条文特征词），是则停止
-                    if page > 1 and _is_clause_page(page_text):
+                    logger.info("百度OCR第%d/%d页识别成功，文字数=%d", page, pages_to_scan, len(page_text))
+                    # 至少扫描前2页（签单日期等字段常在第2页），第3页起检测条款页
+                    if page > 2 and _is_clause_page(page_text):
+                        logger.info("百度OCR第%d页检测为条款页，停止扫描", page)
                         break
                     # 插入页码标记，供多保单拆分时追踪页码
                     all_texts.append(f"[PAGE:{page}]\n{page_text}")
-            except Exception:
+                else:
+                    logger.warning("百度OCR第%d页识别失败: %s", page, result.get("error", ""))
+            except Exception as e:
+                logger.warning("百度OCR第%d页异常: %s", page, e)
                 break
 
         if not all_texts:

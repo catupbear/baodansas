@@ -1935,6 +1935,8 @@ def _extract_sign_date(text: str, fields: dict, company_short: str):
         r"出单日期[^：:\d]*[：:\s]*([\d]{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)",
         # 华泰格式
         r"签单时间[：:\s]*([\d]{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)",
+        # 京东安联格式："收费日期 Date of Premium Receipt: 2026-05-08"
+        r"收费日期[^：:\d]*[：:\s]*([\d]{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)",
     ]:
         m = re.search(p, sign_text)
         if m:
@@ -1972,6 +1974,14 @@ def _extract_sign_date(text: str, fields: dict, company_short: str):
     # 兜底：浙商格式 — 投保人签名/签章后紧跟日期，如"投保人签名/签章：\n2026年03月31日"
     if "签单日期" not in fields and company_short == "浙商":
         m = re.search(r"投保人签名[/／]?签章[：:\s]*\n?\s*(\d{4}年\d{1,2}月\d{1,2}日)", text)
+        if m:
+            fields["签单日期"] = m.group(1)
+
+    # 兜底：华泰驾乘险等 — "制单:XXX"或"复核:XXX"上方紧邻的日期行
+    # 格式："2026年05月08日\n绿单专用章\n复核:自动核保\n制单:贾子河"
+    # 注意：用原始 text 匹配（sign_text 预处理会把换行符两侧的汉字合并）
+    if "签单日期" not in fields:
+        m = re.search(r"(\d{4}年\d{1,2}月\d{1,2}日)\s*\n[^\n]*(?:制单|复核|专用章)", text)
         if m:
             fields["签单日期"] = m.group(1)
 
@@ -2019,7 +2029,8 @@ def _normalize_date_fields(fields: dict):
 def _identify_doc_category(text: str, fields: dict) -> str:
     """
     识别文档类型，返回类别标识：
-    - "保单"：正式保单文件（含投保单、批单）
+    - "保单"：正式保单文件
+    - "批单"：保险批改单（加保/退保/变更）
     - "电子标志"：交强险电子标志/贴纸，仅含保单号车牌期间，无保单详细信息
     - "条款"：保险条款文件
     - "缴款通知"：缴费通知书
@@ -2091,6 +2102,10 @@ def _identify_doc_category(text: str, fields: dict) -> str:
         # 条款文件特征：有"总则"+"第一条"
         if '总则' in text_head and '第一条' in text_head:
             return "条款"
+
+    # 批单：包含"批单"/"批改"关键词（在保单判断之前，避免被误判为保单）
+    if re.search(r'(?:电子批单|保险批单|批\s*单\s*号|批改日期|批改确认码)', text_head):
+        return "批单"
 
     # 有保单关键字段才认定为保单，否则标记为未知
     if _has_policy_markers:

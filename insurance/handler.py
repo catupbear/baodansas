@@ -833,18 +833,52 @@ class InsuranceHandler:
         # --- 质量检查：文本质量不佳时降级 ---
         needs_fallback = not text
         if text:
-            try:
-                preliminary = parse_policy_text(text)
-                if preliminary.get("confidence", 0) == 0 or preliminary.get("doc_category", "") == "其他":
-                    logger.info(
-                        "pdfplumber 识别质量不足（confidence=%.2f, category=%s），降级百度 OCR",
-                        preliminary.get("confidence", 0),
-                        preliminary.get("doc_category", ""),
-                    )
-                    needs_fallback = True
-            except Exception as e:
-                logger.warning("初步质量检查失败: %s，降级百度 OCR", e)
+            # 乱码检测：检查文本中的异常字符
+            garbled_count = 0
+            has_nonchar = False  # U+FFFE/U+FFFF 非字符（正常文本绝不会出现）
+            for ch in text:
+                cp = ord(ch)
+                if cp in (0xFFFE, 0xFFFF):  # Unicode非字符，字体编码异常的确定性标志
+                    has_nonchar = True
+                    garbled_count += 1
+                elif cp == 0xFFFD:  # 替换字符
+                    garbled_count += 1
+                elif 0xE000 <= cp <= 0xF8FF:  # 私有使用区
+                    garbled_count += 1
+                elif 0xFDD0 <= cp <= 0xFDEF:  # Unicode非字符区
+                    has_nonchar = True
+                    garbled_count += 1
+                elif cp < 0x20 and ch not in '\n\r\t':  # 控制字符
+                    garbled_count += 1
+            # U+FFFE/U+FFFF 出现即降级（PDF字体编码损坏的确定性标志）
+            # 其他乱码字符按占比>5%降级
+            garbled_ratio = garbled_count / len(text) if text else 0
+            if has_nonchar:
+                logger.info(
+                    "pdfplumber 提取文本含Unicode非字符（U+FFFE/U+FFFF），字体编码异常，降级 OCR（count=%d）",
+                    garbled_count,
+                )
                 needs_fallback = True
+            elif garbled_ratio > 0.05:
+                logger.info(
+                    "pdfplumber 提取文本含大量乱码（占比=%.1f%%, count=%d），降级 OCR",
+                    garbled_ratio * 100, garbled_count,
+                )
+                needs_fallback = True
+            else:
+                try:
+                    preliminary = parse_policy_text(text)
+                    conf = preliminary.get("confidence", 0)
+                    cat = preliminary.get("doc_category", "")
+                    if conf < 0.4 or cat == "其他":
+                        logger.info(
+                            "pdfplumber 识别质量不足（confidence=%.2f, category=%s），降级 OCR",
+                            conf, cat,
+                        )
+                        needs_fallback = True
+                except Exception as e:
+                    logger.warning("初步质量检查失败: %s，降级百度 OCR", e)
+                    needs_fallback = True
 
         # --- 第二步（可选降级）：火山引擎 OCR → 百度 OCR ---
         if needs_fallback:
