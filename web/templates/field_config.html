@@ -91,7 +91,7 @@
             color: var(--primary); z-index: 1; position: relative;
         }
 
-        /* 简称映射列表 */
+        /* 别名设置列表 */
         .alias-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         .alias-table th {
             text-align: left; padding: 8px 12px;
@@ -382,12 +382,12 @@
 
             <!-- Tab 导航 -->
             <div style="display:flex; border-bottom:1px solid var(--border-light); padding:0 24px;">
-                <button class="tab-btn" :class="{active: activeTab==='alias'}" @click="activeTab='alias'">简称映射</button>
+                <button class="tab-btn" :class="{active: activeTab==='alias'}" @click="activeTab='alias'">别名设置</button>
                 <button class="tab-btn" :class="{active: activeTab==='date'}" @click="activeTab='date'">日期格式</button>
                 <button class="tab-btn" :class="{active: activeTab==='formula'}" @click="activeTab='formula'">自动计算公式</button>
             </div>
 
-            <!-- Tab 1: 简称映射 -->
+            <!-- Tab 1: 别名设置 -->
             <div v-show="activeTab==='alias'" style="padding:24px;">
                 <!-- Radio 切换 -->
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
@@ -400,12 +400,12 @@
 
                 <!-- 批量操作栏 -->
                 <div class="alias-batch-bar">
-                    <div class="batch-actions">
-                        <button class="btn btn-outline btn-sm" @click="aliasBatchEnable" :disabled="activeSource === 'enterprise'">批量使用默认简称</button>
-                        <button class="btn btn-outline btn-sm" @click="aliasBatchDisable" :disabled="activeSource === 'enterprise'">批量取消简称</button>
-                    </div>
                     <div class="batch-info">
                         已选 {{ aliasEnabledCount }}/{{ currentAliasList.length }} 条
+                    </div>
+                    <div class="batch-actions">
+                        <button class="btn btn-outline btn-sm" @click="aliasBatchEnable" :disabled="activeSource === 'enterprise'">批量使用默认别名</button>
+                        <button class="btn btn-outline btn-sm" @click="aliasBatchDisable" :disabled="activeSource === 'enterprise'">批量取消别名</button>
                     </div>
                 </div>
 
@@ -416,7 +416,7 @@
                             <tr>
                                 <th style="width:40px;"><input type="checkbox" :checked="aliasAllChecked" @change="aliasToggleAll($event.target.checked)" :disabled="activeSource === 'enterprise'"></th>
                                 <th>{{ aliasType === 'company' ? '公司全称' : '险种全称' }}</th>
-                                <th style="width:180px;">简称</th>
+                                <th style="width:180px;">别名</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -673,7 +673,7 @@ createApp({
         // === Tab ===
         const activeTab = ref('alias');
 
-        // === Tab 1: 简称映射 - 列表模式 ===
+        // === Tab 1: 别名设置 - 列表模式 ===
         const aliasType = ref('company');
         const companyAliasList = ref([]);   // [{key, value, defaultValue, enabled}]
         const policyAliasList = ref([]);
@@ -695,7 +695,7 @@ createApp({
             });
         };
 
-        // 批量使用默认简称
+        // 批量使用默认别名
         const aliasBatchEnable = () => {
             currentAliasList.value.forEach(i => {
                 if (i.defaultValue) {
@@ -705,7 +705,7 @@ createApp({
             });
         };
 
-        // 批量取消简称
+        // 批量取消别名
         const aliasBatchDisable = () => {
             currentAliasList.value.forEach(i => {
                 i.enabled = false;
