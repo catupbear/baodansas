@@ -518,9 +518,8 @@
                     <!-- 删除 -->
                     <button v-if="managerTemplates.length > 1" @click="markDeleteTemplate(idx)"
                             class="btn btn-sm"
-                            :style="t.deleted ? 'color:#fff; background:var(--danger); border:1px solid var(--danger);' : 'color:var(--danger); background:transparent; border:1px solid #fecaca;'"
-                            style="white-space:nowrap;">
-                        {{ t.deleted ? '已标记删除' : '删除' }}
+                            style="color:var(--danger); background:transparent; border:1px solid #fecaca; white-space:nowrap;">
+                        删除
                     </button>
                 </div>
                 <div v-if="managerTemplates.length === 0" style="text-align:center; color:var(--text-muted); padding:24px 0;">暂无模板</div>
@@ -1123,43 +1122,48 @@ createApp({
         // 打开模板管理弹窗时初始化临时数据
         watch(showTemplateManager, (val) => {
             if (val) {
+                deletedTemplateNames.value = [];
                 managerTemplates.value = myTemplates.value.map(t => ({
                     originalName: t.name,
                     editName: t.name,
                     visible: !!t.visible,
-                    deleted: false,
                 }));
             }
         });
 
-        // 标记删除
+        // 记录被删除的模板名（保存时提交）
+        const deletedTemplateNames = ref([]);
+        // 删除模板（确认后从列表移除）
         const markDeleteTemplate = (idx) => {
             const t = managerTemplates.value[idx];
             if (t.originalName === activeTemplateName.value && activeSource.value === 'own') {
                 showToast('不能删除当前使用的模板', 'warning');
                 return;
             }
-            t.deleted = !t.deleted;
+            if (!confirm(`确定要删除模板「${t.editName}」吗？删除后不可恢复。`)) return;
+            deletedTemplateNames.value.push(t.originalName);
+            managerTemplates.value.splice(idx, 1);
         };
 
         // 保存模板管理弹窗
         const saveTemplateManager = async () => {
             const actions = [];
 
+            // 已删除的模板
+            for (const name of deletedTemplateNames.value) {
+                actions.push({ type: 'delete', name });
+            }
+
             for (const t of managerTemplates.value) {
-                if (t.deleted) {
-                    actions.push({ type: 'delete', name: t.originalName });
-                } else {
-                    // 重命名
-                    if (t.editName.trim() && t.editName.trim() !== t.originalName) {
-                        actions.push({ type: 'rename', old_name: t.originalName, new_name: t.editName.trim() });
-                    }
-                    // 可见性变更
-                    const orig = myTemplates.value.find(m => m.name === t.originalName);
-                    if (orig && !!orig.visible !== !!t.visible) {
-                        const nameToUse = (t.editName.trim() && t.editName.trim() !== t.originalName) ? t.editName.trim() : t.originalName;
-                        actions.push({ type: 'visibility', name: nameToUse, visible: !!t.visible });
-                    }
+                // 重命名
+                if (t.editName.trim() && t.editName.trim() !== t.originalName) {
+                    actions.push({ type: 'rename', old_name: t.originalName, new_name: t.editName.trim() });
+                }
+                // 可见性变更
+                const orig = myTemplates.value.find(m => m.name === t.originalName);
+                if (orig && !!orig.visible !== !!t.visible) {
+                    const nameToUse = (t.editName.trim() && t.editName.trim() !== t.originalName) ? t.editName.trim() : t.originalName;
+                    actions.push({ type: 'visibility', name: nameToUse, visible: !!t.visible });
                 }
             }
 
