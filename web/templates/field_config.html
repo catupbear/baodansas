@@ -593,7 +593,7 @@
             </div>
             <div style="display:flex; justify-content:flex-end; gap:12px; padding:16px 24px; border-top:1px solid var(--border-light);">
                 <button class="btn btn-outline" @click="showFormulaModal=false">取消</button>
-                <button class="btn btn-primary" @click="saveFormula" :disabled="!formulaForm.company || !formulaForm.policyType || !formulaForm.display || formulaError">确定</button>
+                <button class="btn btn-primary" @click="saveFormula">确定</button>
             </div>
         </div>
     </div>
@@ -822,10 +822,14 @@ createApp({
         };
 
         const saveFormula = () => {
-            console.log('[saveFormula] called', JSON.stringify(formulaForm.value));
-            console.log('[saveFormula] currentFormulaField:', currentFormulaField.value);
-            console.log('[saveFormula] editingRuleIdx:', editingRuleIdx.value);
-            console.log('[saveFormula] formulaError:', formulaError.value);
+            if (!formulaForm.value.company || !formulaForm.value.policyType || !formulaForm.value.display) {
+                showToast('请填写完整：承保公司、险种、计算公式', 'error');
+                return;
+            }
+            if (formulaError.value) {
+                showToast(formulaError.value, 'error');
+                return;
+            }
             const rule = {
                 company: formulaForm.value.company,
                 policyType: formulaForm.value.policyType,
@@ -833,7 +837,6 @@ createApp({
                 tokens: formulaForm.value.display.split(/\s+/).filter(Boolean),
             };
             const rules = allRules.value[currentFormulaField.value];
-            console.log('[saveFormula] rules before:', JSON.stringify(rules));
             if (editingRuleIdx.value !== null) {
                 rules.splice(editingRuleIdx.value, 1, rule);
                 showToast('规则已更新');
@@ -841,7 +844,6 @@ createApp({
                 rules.push(rule);
                 showToast('规则已添加');
             }
-            console.log('[saveFormula] rules after:', JSON.stringify(rules));
             showFormulaModal.value = false;
         };
 
