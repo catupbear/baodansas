@@ -2784,10 +2784,13 @@ def get_field_config_defaults():
                 policy_rows = cursor.fetchall()
                 # 自动生成简称
                 from insurance.policy_parser import _get_policy_type_code
+                # 简称显示映射（覆盖 policy_parser 的默认值）
+                _SHORT_NAME_DISPLAY = {"驾乘/意外险": "驾意险"}
                 policy_type_defaults = []
                 for r in policy_rows:
                     full_name = r["policy_type"]
                     _, short_name = _get_policy_type_code(full_name)
+                    short_name = _SHORT_NAME_DISPLAY.get(short_name, short_name)
                     policy_type_defaults.append({"key": full_name, "value": short_name})
             finally:
                 conn.close()
