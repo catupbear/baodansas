@@ -497,7 +497,7 @@
                     {{ isRecognizing ? '识别中...' : '开始识别' }}
                 </button>
                 <!-- 上传保单开关 -->
-                <div class="flex items-center gap-2 cursor-pointer select-none" @click="uploadCos = !uploadCos">
+                <div v-if="isSuperAdmin" class="flex items-center gap-2 cursor-pointer select-none" @click="uploadCos = !uploadCos">
                     <div class="relative flex-shrink-0" style="width:36px;height:20px;">
                         <div class="absolute inset-0 rounded-full transition-colors" :style="{ background: uploadCos ? '#f97316' : '#d1d5db' }"></div>
                         <div class="absolute rounded-full bg-white shadow transition-all" style="width:16px;height:16px;top:2px;" :style="{ left: uploadCos ? '18px' : '2px' }"></div>
@@ -2155,7 +2155,7 @@ createApp({
         const results = ref([]);
         const isDragging = ref(false);
         const isRecognizing = ref(false);
-        const uploadCos = ref(false);  // 上传保单到云存储开关，默认关闭
+        const uploadCos = ref(true);   // 上传保单到云存储开关，默认开启
         const recognizedCount = ref(0);
         const currentFileName = ref('');
         const activeTab = ref('all');
