@@ -931,7 +931,8 @@ createApp({
         const importFromDb = async () => {
             importingDefaults.value = true;
             try {
-                const res = await authFetch('/api/insurance/field-config/defaults?source=db');
+                const resp = await authFetch('/api/insurance/field-config/defaults?source=db');
+                const res = await resp.json();
                 if (res && res.code === 0) {
                     const data = res.data;
                     if (aliasType.value === 'company') {
