@@ -91,24 +91,39 @@
             color: var(--primary); z-index: 1; position: relative;
         }
 
-        /* 双文本框 */
-        .dual-textarea {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+        /* 简称映射列表 */
+        .alias-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .alias-table th {
+            text-align: left; padding: 8px 12px;
+            background: var(--surface-secondary); color: var(--text-secondary);
+            font-weight: 600; border-bottom: 1px solid var(--border);
+            position: sticky; top: 0; z-index: 1;
         }
-        .dual-textarea textarea {
-            width: 100%; min-height: 320px; padding: 12px;
-            border: 1px solid var(--border); border-radius: 8px;
-            font-size: 13px; line-height: 1.8; resize: vertical;
-            font-family: 'Inter', sans-serif;
+        .alias-table td { padding: 6px 12px; border-bottom: 1px solid var(--border-light); }
+        .alias-table tbody tr:hover { background: var(--primary-bg); }
+        .alias-table tbody tr.disabled { opacity: 0.5; }
+        .alias-table input[type="text"] {
+            width: 100%; padding: 5px 8px; border: 1px solid var(--border);
+            border-radius: 6px; font-size: 13px; background: var(--surface);
             transition: border-color 0.2s;
         }
-        .dual-textarea textarea:focus {
+        .alias-table input[type="text"]:focus {
             outline: none; border-color: var(--primary-light);
-            box-shadow: 0 0 0 3px rgba(234,88,12,0.1);
+            box-shadow: 0 0 0 2px rgba(234,88,12,0.1);
         }
-        .dual-textarea textarea.inherited {
-            background: #fafaf9; color: var(--text-secondary);
+        .alias-table input[type="text"]:disabled {
+            background: #f5f5f4; color: var(--text-muted); cursor: not-allowed;
         }
+        .alias-table-wrap {
+            max-height: 400px; overflow-y: auto; border: 1px solid var(--border-light);
+            border-radius: 8px;
+        }
+        .alias-batch-bar {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .alias-batch-bar .batch-actions { display: flex; gap: 8px; }
+        .alias-batch-bar .batch-info { font-size: 12px; color: var(--text-muted); }
 
         /* 下拉 */
         select {
@@ -376,51 +391,48 @@
             <!-- Tab 1: 简称映射 -->
             <div v-show="activeTab==='alias'" style="padding:24px;">
                 <!-- Radio 切换 -->
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
                     <div class="radio-group">
                         <label><input type="radio" v-model="aliasType" value="company"><span>承保公司</span></label>
                         <label><input type="radio" v-model="aliasType" value="policy_type"><span>险种</span></label>
                     </div>
-                    <div style="font-size:12px; color:var(--text-muted);">一行一个，左右行数必须一一对应</div>
+                    <span v-if="aliasListLoading" style="font-size:12px; color:var(--text-muted);">加载中...</span>
                 </div>
 
-                <!-- 双文本框 -->
-                <div class="dual-textarea">
-                    <div>
-                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-                            <span style="font-size:13px; font-weight:600; color:var(--text-secondary);">{{ aliasType === 'company' ? '公司全称' : '险种全称' }}</span>
-                            <button class="btn btn-outline btn-sm" @click="importFromDb" :disabled="importingDefaults || activeSource === 'enterprise'" style="font-size:11px; padding:3px 8px;">
-                                {{ importingDefaults ? '导入中...' : '导入已有保单数据' }}
-                            </button>
-                        </div>
-                        <textarea
-                            ref="fullNameTextarea"
-                            v-model="aliasFullNames"
-                            :placeholder="aliasType === 'company' ? '中国人民财产保险股份有限公司\n中国平安财产保险股份有限公司\n...' : '机动车交通事故责任强制保险\n机动车商业保险\n...'"
-                            :readonly="activeSource === 'enterprise'"
-                            @scroll="syncScroll('full')"
-                        ></textarea>
-                        <div class="line-count" :class="aliasLinesMatch ? 'match' : 'mismatch'">
-                            共 {{ fullNameLineCount }} 条
-                        </div>
+                <!-- 批量操作栏 -->
+                <div class="alias-batch-bar">
+                    <div class="batch-actions">
+                        <button class="btn btn-outline btn-sm" @click="aliasBatchEnable" :disabled="activeSource === 'enterprise'">批量使用默认简称</button>
+                        <button class="btn btn-outline btn-sm" @click="aliasBatchDisable" :disabled="activeSource === 'enterprise'">批量取消简称</button>
                     </div>
-                    <div>
-                        <div style="font-size:13px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">
-                            {{ aliasType === 'company' ? '简称' : '简称' }}
-                        </div>
-                        <textarea
-                            ref="shortNameTextarea"
-                            v-model="aliasShortNames"
-                            :placeholder="aliasType === 'company' ? '人保PICC\n平安\n...' : '交强险\n商业险\n...'"
-                            :readonly="activeSource === 'enterprise'"
-                            @scroll="syncScroll('short')"
-                        ></textarea>
-                        <div class="line-count" :class="aliasLinesMatch ? 'match' : 'mismatch'">
-                            共 {{ shortNameLineCount }} 条
-                            <span v-if="aliasLinesMatch"> ✓ 行数一致</span>
-                            <span v-else> ⚠ 行数不一致，无法保存</span>
-                        </div>
+                    <div class="batch-info">
+                        已选 {{ aliasEnabledCount }}/{{ currentAliasList.length }} 条
                     </div>
+                </div>
+
+                <!-- 列表 -->
+                <div class="alias-table-wrap">
+                    <table class="alias-table">
+                        <thead>
+                            <tr>
+                                <th style="width:40px;"><input type="checkbox" :checked="aliasAllChecked" @change="aliasToggleAll($event.target.checked)" :disabled="activeSource === 'enterprise'"></th>
+                                <th>{{ aliasType === 'company' ? '公司全称' : '险种全称' }}</th>
+                                <th style="width:180px;">简称</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(item, idx) in currentAliasList" :key="item.key" :class="{ disabled: !item.enabled }">
+                                <td><input type="checkbox" v-model="item.enabled" :disabled="activeSource === 'enterprise'"></td>
+                                <td style="color:var(--text-secondary);">{{ item.key }}</td>
+                                <td><input type="text" v-model="item.value" :disabled="!item.enabled || activeSource === 'enterprise'" :placeholder="item.defaultValue || ''" /></td>
+                            </tr>
+                            <tr v-if="!currentAliasList.length">
+                                <td colspan="3" style="text-align:center; padding:40px; color:var(--text-muted);">
+                                    暂无数据，数据将在打开页面时自动从已有保单加载
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -662,41 +674,47 @@ createApp({
         // === Tab ===
         const activeTab = ref('alias');
 
-        // === Tab 1: 简称映射 - 分开存储 ===
-        const fullNameTextarea = ref(null);
-        const shortNameTextarea = ref(null);
-        let scrollSyncing = false;
-        const syncScroll = (source) => {
-            if (scrollSyncing) return;
-            scrollSyncing = true;
-            const from = source === 'full' ? fullNameTextarea.value : shortNameTextarea.value;
-            const to = source === 'full' ? shortNameTextarea.value : fullNameTextarea.value;
-            if (from && to) {
-                to.scrollTop = from.scrollTop;
-            }
-            scrollSyncing = false;
+        // === Tab 1: 简称映射 - 列表模式 ===
+        const aliasType = ref('company');
+        const companyAliasList = ref([]);   // [{key, value, defaultValue, enabled}]
+        const policyAliasList = ref([]);
+        const aliasListLoading = ref(false);
+        let aliasAutoLoaded = false;        // 是否已自动加载过
+
+        // 当前显示的列表
+        const currentAliasList = computed(() => aliasType.value === 'company' ? companyAliasList.value : policyAliasList.value);
+
+        // 统计
+        const aliasEnabledCount = computed(() => currentAliasList.value.filter(i => i.enabled).length);
+        const aliasAllChecked = computed(() => currentAliasList.value.length > 0 && currentAliasList.value.every(i => i.enabled));
+
+        // 全选/全不选
+        const aliasToggleAll = (checked) => {
+            currentAliasList.value.forEach(i => {
+                i.enabled = checked;
+                if (checked && !i.value) i.value = i.defaultValue || '';
+            });
         };
 
-        const aliasType = ref('company');
-        const companyFullNamesData = ref('');
-        const companyShortNamesData = ref('');
-        const policyFullNamesData = ref('');
-        const policyShortNamesData = ref('');
+        // 批量使用默认简称
+        const aliasBatchEnable = () => {
+            currentAliasList.value.forEach(i => {
+                if (i.defaultValue) {
+                    i.value = i.defaultValue;
+                    i.enabled = true;
+                }
+            });
+        };
 
-        // 根据 radio 切换显示对应数据
-        const aliasFullNames = computed({
-            get: () => aliasType.value === 'company' ? companyFullNamesData.value : policyFullNamesData.value,
-            set: (v) => { if (aliasType.value === 'company') companyFullNamesData.value = v; else policyFullNamesData.value = v; }
-        });
-        const aliasShortNames = computed({
-            get: () => aliasType.value === 'company' ? companyShortNamesData.value : policyShortNamesData.value,
-            set: (v) => { if (aliasType.value === 'company') companyShortNamesData.value = v; else policyShortNamesData.value = v; }
-        });
+        // 批量取消简称
+        const aliasBatchDisable = () => {
+            currentAliasList.value.forEach(i => {
+                i.enabled = false;
+                i.value = '';
+            });
+        };
 
-        const getLineCount = (text) => text.trim() ? text.trim().split('\n').length : 0;
-        const fullNameLineCount = computed(() => getLineCount(aliasFullNames.value));
-        const shortNameLineCount = computed(() => getLineCount(aliasShortNames.value));
-        const aliasLinesMatch = computed(() => fullNameLineCount.value === shortNameLineCount.value);
+        // （companyShortList / policyTypeShortList 在公式 Tab 使用，从列表数据派生）
 
         // === Tab 2: 日期格式 ===
         const dateFormats = [
@@ -754,9 +772,9 @@ createApp({
         const formulaInput = ref(null);
         const formulaForm = ref({ company: '', policyType: '', display: '' });
 
-        // 公司/险种下拉从简称映射数据动态获取
-        const companyShortList = computed(() => [...new Set(companyShortNamesData.value.trim().split('\n').filter(Boolean))]);
-        const policyTypeShortList = computed(() => [...new Set(policyShortNamesData.value.trim().split('\n').filter(Boolean))]);
+        // 公司/险种下拉从简称映射列表动态获取
+        const companyShortList = computed(() => [...new Set(companyAliasList.value.filter(i => i.enabled && i.value).map(i => i.value))]);
+        const policyTypeShortList = computed(() => [...new Set(policyAliasList.value.filter(i => i.enabled && i.value).map(i => i.value))]);
 
         const allFields = ['保费', '车船税', '佣金率', '佣金', '采购费率', '公司利润', '跟单利润'];
         const availableFields = computed(() => allFields.filter(f => f !== currentFormulaField.value));
@@ -889,15 +907,23 @@ createApp({
 
         // 将 API 数据应用到表单
         const applyConfig = (data) => {
-            // 公司简称
+            // 公司简称 - 转为列表对象
             const companies = data.company_alias || [];
-            companyFullNamesData.value = companies.map(c => c.key).join('\n');
-            companyShortNamesData.value = companies.map(c => c.value).join('\n');
+            companyAliasList.value = companies.map(c => ({
+                key: c.key,
+                value: c.value || '',
+                defaultValue: c.value || '',
+                enabled: !!(c.value),
+            }));
 
             // 险种简称
             const policies = data.policy_type_alias || [];
-            policyFullNamesData.value = policies.map(p => p.key).join('\n');
-            policyShortNamesData.value = policies.map(p => p.value).join('\n');
+            policyAliasList.value = policies.map(p => ({
+                key: p.key,
+                value: p.value || '',
+                defaultValue: p.value || '',
+                enabled: !!(p.value),
+            }));
 
             // 日期格式
             const dateMap = {};
@@ -927,15 +953,15 @@ createApp({
         const buildConfig = () => {
             const config = {};
 
-            // 简称映射
-            const fullLines = companyFullNamesData.value.trim().split('\n').filter(Boolean);
-            const shortLines = companyShortNamesData.value.trim().split('\n').filter(Boolean);
-            config.company_alias = fullLines.map((full, i) => ({ key: full.trim(), value: (shortLines[i] || '').trim() }));
+            // 简称映射 - 从列表构建，只保存启用且有简称的
+            config.company_alias = companyAliasList.value
+                .filter(i => i.key)
+                .map(i => ({ key: i.key.trim(), value: i.enabled ? (i.value || '').trim() : '' }));
 
             // 险种简称
-            const ptFullLines = policyFullNamesData.value.trim().split('\n').filter(Boolean);
-            const ptShortLines = policyShortNamesData.value.trim().split('\n').filter(Boolean);
-            config.policy_type_alias = ptFullLines.map((full, i) => ({ key: full.trim(), value: (ptShortLines[i] || '').trim() }));
+            config.policy_type_alias = policyAliasList.value
+                .filter(i => i.key)
+                .map(i => ({ key: i.key.trim(), value: i.enabled ? (i.value || '').trim() : '' }));
 
             // 日期格式
             config.date_format = dateFields.value.map(f => ({ key: f.name, value: f.format }));
@@ -955,32 +981,72 @@ createApp({
             return config;
         };
 
-        // 从已有保单数据导入默认值
+        // 从已有保单数据导入默认值（合并到现有列表，不覆盖已有配置）
         const importingDefaults = ref(false);
+        const autoLoadAliasFromDb = async () => {
+            // 进入页面自动加载，与已保存配置合并
+            if (aliasAutoLoaded) return;
+            aliasAutoLoaded = true;
+            aliasListLoading.value = true;
+            try {
+                const resp = await authFetch('/api/insurance/field-config/defaults?source=db');
+                const res = await resp.json();
+                if (res && res.code === 0) {
+                    const data = res.data;
+                    // 合并公司数据：已保存的保留，新数据补充
+                    mergeAliasList(companyAliasList, data.company_alias || []);
+                    // 合并险种数据
+                    mergeAliasList(policyAliasList, data.policy_type_alias || []);
+                }
+            } catch (e) {
+                // 静默失败，不影响已有配置
+                console.warn('自动加载保单数据失败:', e.message);
+            } finally {
+                aliasListLoading.value = false;
+            }
+        };
+
+        // 合并逻辑：DB 数据提供 key+defaultValue，已保存配置优先
+        const mergeAliasList = (listRef, dbItems) => {
+            const existingMap = new Map(listRef.value.map(i => [i.key, i]));
+            for (const item of dbItems) {
+                if (!item.key) continue;
+                if (existingMap.has(item.key)) {
+                    // 已有配置，只更新 defaultValue
+                    existingMap.get(item.key).defaultValue = item.value || '';
+                } else {
+                    // 新数据，添加到列表（默认未启用，简称为空）
+                    listRef.value.push({
+                        key: item.key,
+                        value: '',
+                        defaultValue: item.value || '',
+                        enabled: false,
+                    });
+                }
+            }
+        };
+
         const importFromDb = async () => {
             importingDefaults.value = true;
             try {
                 const resp = await authFetch('/api/insurance/field-config/defaults?source=db');
                 const res = await resp.json();
-                console.log('导入响应:', res, 'aliasType:', aliasType.value);
                 if (res && res.code === 0) {
                     const data = res.data;
                     const isCompany = aliasType.value === 'company';
-                    console.log('isCompany:', isCompany, 'company_alias count:', (data.company_alias||[]).length);
                     if (isCompany) {
                         const items = data.company_alias || [];
                         if (!items.length) { showToast('暂无已有保单的承保公司数据', 'warning'); return; }
-                        const fullText = items.map(c => c.key).join('\n');
-                        const shortText = items.map(c => c.value).join('\n');
-                        console.log('赋值前 companyFullNamesData:', companyFullNamesData.value.length, '赋值:', fullText.length);
-                        companyFullNamesData.value = fullText;
-                        companyShortNamesData.value = shortText;
-                        console.log('赋值后 companyFullNamesData:', companyFullNamesData.value.length);
+                        // 直接替换为 DB 数据
+                        companyAliasList.value = items.map(c => ({
+                            key: c.key, value: c.value || '', defaultValue: c.value || '', enabled: !!(c.value),
+                        }));
                     } else {
                         const items = data.policy_type_alias || [];
                         if (!items.length) { showToast('暂无已有保单的险种数据', 'warning'); return; }
-                        policyFullNamesData.value = items.map(p => p.key).join('\n');
-                        policyShortNamesData.value = items.map(p => p.value).join('\n');
+                        policyAliasList.value = items.map(p => ({
+                            key: p.key, value: p.value || '', defaultValue: p.value || '', enabled: !!(p.value),
+                        }));
                     }
                     showToast('已导入已有保单数据');
                 } else {
@@ -996,23 +1062,7 @@ createApp({
 
         // 保存并应用配置
         const saveConfig = async () => {
-            // 校验行数一致
-            const companyFullCount = getLineCount(companyFullNamesData.value);
-            const companyShortCount = getLineCount(companyShortNamesData.value);
-            const policyFullCount = getLineCount(policyFullNamesData.value);
-            const policyShortCount = getLineCount(policyShortNamesData.value);
-            if (companyFullCount !== companyShortCount) {
-                showToast('公司简称映射行数不一致，请检查', 'error');
-                activeTab.value = 'alias';
-                aliasType.value = 'company';
-                return;
-            }
-            if (policyFullCount !== policyShortCount) {
-                showToast('险种简称映射行数不一致，请检查', 'error');
-                activeTab.value = 'alias';
-                aliasType.value = 'policy_type';
-                return;
-            }
+            // 列表模式无需校验行数一致性
 
             if (activeSource.value === 'enterprise') {
                 showToast('企业模板为只读，无法保存', 'warning');
@@ -1207,6 +1257,8 @@ createApp({
         onMounted(async () => {
             await loadTemplates();
             await loadConfig();
+            // 自动加载数据库中已有保单数据，合并到简称列表
+            await autoLoadAliasFromDb();
         });
 
         return {
@@ -1219,9 +1271,8 @@ createApp({
             markDeleteTemplate, saveTemplateManager,
             selectTemplate, createTemplate,
             activeTab,
-            aliasType, aliasFullNames, aliasShortNames,
-            fullNameTextarea, shortNameTextarea, syncScroll,
-            fullNameLineCount, shortNameLineCount, aliasLinesMatch,
+            aliasType, currentAliasList, aliasEnabledCount, aliasAllChecked, aliasListLoading,
+            aliasToggleAll, aliasBatchEnable, aliasBatchDisable,
             dateFormats, dateFields, sampleDate, quickFormatValue,
             formatDate, applyQuickFormat,
             formulaFields, currentFormulaField, currentRules, allRules,
@@ -1229,7 +1280,6 @@ createApp({
             companyShortList, policyTypeShortList, availableFields, operators,
             formulaError, previewExpression, previewResult,
             insertField, insertOp, openFormulaModal, saveFormula, deleteRule,
-            importingDefaults, importFromDb,
             saveConfig,
         };
     }
