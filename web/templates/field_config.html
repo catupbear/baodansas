@@ -301,7 +301,7 @@
                 </div>
                 <div style="display:flex; align-items:center; gap:10px;">
                     <!-- 模板选择下拉 -->
-                    <div style="position:relative;">
+                    <div ref="templateDropdownRef" style="position:relative;">
                         <button class="btn-sync" @click="showTemplateDropdown = !showTemplateDropdown" style="min-width:160px; justify-content:space-between;">
                             <span style="display:flex; align-items:center; gap:6px;">
                                 <span v-if="activeSource === 'enterprise'" style="font-size:10px; background:rgba(255,255,255,0.2); padding:1px 6px; border-radius:3px;">企业</span>
@@ -653,8 +653,9 @@ createApp({
         const managerTemplates = ref([]);
 
         // 点击页面其他区域关闭下拉
+        const templateDropdownRef = ref(null);
         document.addEventListener('click', (e) => {
-            if (!e.target.closest('[style*="position:relative"]')) {
+            if (templateDropdownRef.value && !templateDropdownRef.value.contains(e.target)) {
                 showTemplateDropdown.value = false;
             }
         });
@@ -1205,7 +1206,7 @@ createApp({
             toast,
             loading, saving, savingManager,
             currentRole,
-            showTemplateDropdown, activeTemplateName, activeSource,
+            templateDropdownRef, showTemplateDropdown, activeTemplateName, activeSource,
             myTemplates, enterpriseTemplates,
             showTemplateManager, managerTemplates,
             markDeleteTemplate, saveTemplateManager,
