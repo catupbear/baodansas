@@ -88,6 +88,10 @@ def _require_login():
     from auth.jwt_utils import verify_token
     from auth.db import get_user_by_id
 
+    # 页面路由不需要鉴权（由前端 JS 处理登录跳转）
+    if request.path == "/insurance/settings":
+        return
+
     auth_header = request.headers.get("Authorization", "")
     token = auth_header[7:] if auth_header.startswith("Bearer ") else request.args.get("token")
     if not token:
