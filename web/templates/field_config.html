@@ -362,12 +362,11 @@
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
                         管理模板
                     </button>
-                    <!-- 保存按钮 -->
-                    <button class="btn-sync" @click="saveConfig" :disabled="saving" style="background:rgba(255,255,255,0.22);">
-                        <svg v-if="!saving" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
-                        <span v-if="saving" class="loading-spinner" style="width:14px;height:14px;border-width:2px;"></span>
-                        {{ saving ? '保存中...' : '保存并应用' }}
-                    </button>
+                    <!-- 自动保存状态 -->
+                    <span v-if="saving" class="flex items-center gap-1" style="font-size:12px; color:rgba(255,255,255,0.7);">
+                        <span class="loading-spinner" style="width:12px;height:12px;border-width:2px;"></span>
+                        保存中...
+                    </span>
                 </div>
             </div>
         </div>
@@ -1062,12 +1061,8 @@ createApp({
 
         // 保存并应用配置
         const saveConfig = async () => {
-            // 列表模式无需校验行数一致性
-
-            if (activeSource.value === 'enterprise') {
-                showToast('企业模板为只读，无法保存', 'warning');
-                return;
-            }
+            if (activeSource.value === 'enterprise') return;
+            if (saving.value) return;
 
             saving.value = true;
             try {
@@ -1084,16 +1079,28 @@ createApp({
                 });
                 const json = await resp.json();
                 if (json.code !== 0) {
-                    showToast(json.message || '保存失败', 'error');
-                    return;
+                    showToast(json.message || '自动保存失败', 'error');
                 }
-                showToast('模板「' + activeTemplateName.value + '」已保存并应用', 'success');
             } catch (e) {
-                if (e.message !== '未登录') showToast('保存失败: ' + e.message, 'error');
+                if (e.message !== '未登录') showToast('自动保存失败: ' + e.message, 'error');
             } finally {
                 saving.value = false;
             }
         };
+
+        // 自动保存：防抖 800ms，数据变化后自动触发
+        let autoSaveTimer = null;
+        let configLoaded = false;  // 防止初始加载时触发
+        const triggerAutoSave = () => {
+            if (!configLoaded || activeSource.value === 'enterprise') return;
+            if (autoSaveTimer) clearTimeout(autoSaveTimer);
+            autoSaveTimer = setTimeout(() => saveConfig(), 800);
+        };
+
+        // 监听所有配置数据变化
+        watch([companyAliasList, policyAliasList], triggerAutoSave, { deep: true });
+        watch([() => dateFields.value.map(f => f.format).join(',')], triggerAutoSave);
+        watch(allRules, triggerAutoSave, { deep: true });
 
         // 切换模板
         const selectTemplate = async (source, name) => {
@@ -1259,6 +1266,8 @@ createApp({
             await loadConfig();
             // 自动加载数据库中已有保单数据，合并到简称列表
             await autoLoadAliasFromDb();
+            // 初始加载完成后才启用自动保存
+            nextTick(() => { configLoaded = true; });
         });
 
         return {
@@ -1280,7 +1289,6 @@ createApp({
             companyShortList, policyTypeShortList, availableFields, operators,
             formulaError, previewExpression, previewResult,
             insertField, insertOp, openFormulaModal, saveFormula, deleteRule,
-            saveConfig,
         };
     }
 }).mount('#app');
