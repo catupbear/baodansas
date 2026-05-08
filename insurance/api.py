@@ -29,7 +29,7 @@ from .db import (
     upsert_insurance_record_by_policy,
 )
 from .field_config_db import (
-    list_templates, rename_template, update_template_visibility, delete_template as delete_template_db,
+    list_templates as list_field_config_templates, rename_template, update_template_visibility, delete_template as delete_template_db,
     get_template_config, save_full_template,
     get_active_template, set_active_template,
     get_effective_config,
@@ -2628,7 +2628,7 @@ def get_field_config_templates():
     try:
         from flask import g
         user = g.current_user
-        data = list_templates(_db, user["user_id"], user["role"], user.get("parent_id"))
+        data = list_field_config_templates(_db, user["user_id"], user["role"], user.get("parent_id"))
         active = get_active_template(_db, user["user_id"])
         return jsonify({"code": 0, "data": {**data, "active": active}})
     except Exception as e:
