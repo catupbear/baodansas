@@ -2150,17 +2150,24 @@ def export_excel():
                         row.append(fields.get(col, ""))
                 ws.append(row)
 
-        # 自动列宽（最大 40 字符）
+        # 设置所有行高为 22
+        for row_idx in range(1, ws.max_row + 1):
+            ws.row_dimensions[row_idx].height = 22
+
+        # 自动列宽（根据内容，中文字符按 2 倍宽度计算，最大 50）
         for col_idx, _ in enumerate(ws[1], start=1):
             col_letter = get_column_letter(col_idx)
             max_len = 0
             for cell in ws[col_letter]:
                 try:
-                    cell_len = len(str(cell.value)) if cell.value else 0
-                    max_len = max(max_len, cell_len)
+                    if cell.value:
+                        val = str(cell.value)
+                        # 中文等宽字符按 2 倍计算
+                        cell_len = sum(2 if ord(c) > 127 else 1 for c in val)
+                        max_len = max(max_len, cell_len)
                 except Exception:
                     pass
-            adjusted_width = min(max_len + 2, 40)
+            adjusted_width = min(max_len + 2, 50)
             ws.column_dimensions[col_letter].width = adjusted_width
 
         # 保存到内存流
