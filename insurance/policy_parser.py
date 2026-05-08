@@ -1558,6 +1558,10 @@ def _extract_premium(text: str, fields: dict, company_short: str):
         patterns.insert(0, r"保险?费合计[^￥¥\d\n]*[：:]\s*([\d,]+\.?\d*)(?:\s|$)")
         patterns.insert(1, r"总保费[^:\n]*[：:]\s*([\d,]+\.?\d*)(?:\s|$)")
 
+    # 安诚格式（跨行）："保险费合计(人民币大写):壹仟...分\n(¥:1617.85元)"
+    if company_short == "安诚":
+        patterns.insert(0, r"保险费合计[\s\S]{0,80}?[（(][￥¥][：:\s]*([\d,]+\.?\d{0,2})\s*(?:元)?[)）]")
+
     # 华泰/京东安联/安盛天平特殊格式："（¥： 1,850.00 元）"
     if company_short in ("华泰", "京东安联", "安盛天平", "永诚", "前海联合"):
         patterns.insert(0, r"保险费合计.*?[（(][￥¥][：:\s]*([\d,]+\.?\d{0,2})\s*(?:元)?[)）]")
@@ -1632,6 +1636,7 @@ def _extract_premium(text: str, fields: dict, company_short: str):
                 fields["保费合计"] = val
 
     # 紫金等格式1：同行"小 写 ： C NY 30 .00"（OCR空格拆散）
+    # 安诚等格式：金额在下一行 "(¥:1617.85元)"
     if "保费合计" not in fields:
         lines = text.split('\n')
         for i, line in enumerate(lines):
@@ -1642,6 +1647,15 @@ def _extract_premium(text: str, fields: dict, company_short: str):
                     val = m.group(1)
                     if float(val) > 0:
                         fields["保费合计"] = val
+                        break
+                # 同行没找到，检查下一行（安诚格式："(¥:1617.85元)"在下一行）
+                if i + 1 < len(lines):
+                    next_cleaned = re.sub(r'\s+', '', lines[i + 1])
+                    m = re.search(r'[（(][￥¥][：:]\s*([\d,]+\.?\d{0,2})\s*(?:元)?[)）]', next_cleaned)
+                    if m:
+                        val = m.group(1).replace(",", "")
+                        if float(val) > 0:
+                            fields["保费合计"] = val
                 break
 
     # 紫金等格式2：金额在"保险费合计"标签的上一行，与其他数字粘连
