@@ -2770,8 +2770,19 @@ def get_field_config_defaults():
                     "ORDER BY company_short"
                 )
                 company_rows = cursor.fetchall()
+                # 导入时的显示简称映射（内部简称 → 更短的显示名）
+                _COMPANY_DISPLAY = {
+                    "人保PICC": "人保",
+                    "中华联合": "中华",
+                    "前海联合": "前海",
+                    "安盛天平": "安盛",
+                    "泰康在线": "泰康",
+                    "京东安联": "京东安联",
+                    "国寿财产": "国寿",
+                    "大家财险": "大家",
+                }
                 company_defaults = [
-                    {"key": r["company"], "value": r["company_short"] or ""}
+                    {"key": r["company"], "value": _COMPANY_DISPLAY.get(r["company_short"], r["company_short"]) or ""}
                     for r in company_rows if r["company"]
                 ]
 
