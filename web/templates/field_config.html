@@ -821,6 +821,10 @@ createApp({
         };
 
         const saveFormula = () => {
+            console.log('[saveFormula] called', JSON.stringify(formulaForm.value));
+            console.log('[saveFormula] currentFormulaField:', currentFormulaField.value);
+            console.log('[saveFormula] editingRuleIdx:', editingRuleIdx.value);
+            console.log('[saveFormula] formulaError:', formulaError.value);
             const rule = {
                 company: formulaForm.value.company,
                 policyType: formulaForm.value.policyType,
@@ -828,6 +832,7 @@ createApp({
                 tokens: formulaForm.value.display.split(/\s+/).filter(Boolean),
             };
             const rules = allRules.value[currentFormulaField.value];
+            console.log('[saveFormula] rules before:', JSON.stringify(rules));
             if (editingRuleIdx.value !== null) {
                 rules.splice(editingRuleIdx.value, 1, rule);
                 showToast('规则已更新');
@@ -835,6 +840,7 @@ createApp({
                 rules.push(rule);
                 showToast('规则已添加');
             }
+            console.log('[saveFormula] rules after:', JSON.stringify(rules));
             showFormulaModal.value = false;
         };
 
