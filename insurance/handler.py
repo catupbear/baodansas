@@ -33,6 +33,37 @@ logger = logging.getLogger(__name__)
 MAX_MEMORY_SIZE = 20 * 1024 * 1024
 
 
+def _ocr_early_stop_check(combined_text: str) -> bool:
+    """检查已扫描文本是否已包含所有导出所需字段，用于提前终止 OCR 扫描。
+    导出字段：保险公司、保单号、险种类型、车牌号、投保人、被保险人、
+             签单日期、保险起期、保险止期、保费合计、车船税、业务员。
+    仅当文本中只包含单份保单时才提前停止，多保单PDF需扫描完整。
+    """
+    try:
+        result = parse_policy_text(combined_text)
+        fields = result.get("fields", {})
+        # 多保单（交强+商业）需要完整扫描，不提前停止
+        import re
+        has_compulsory = bool(re.search(r'交通事故责任强制保险', combined_text))
+        has_commercial = bool(re.search(r'(?:商业保险|综合险).*?(?:保险单|保\s*单)', combined_text))
+        if has_compulsory and has_commercial:
+            return False
+        # 所有导出所需字段全部提取到才提前停止
+        required_fields = [
+            "保险公司", "保单号", "险种类型", "车牌号",
+            "投保人", "被保险人", "签单日期",
+            "保险起期", "保险止期", "保费合计",
+            "业务员",
+        ]
+        # 车船税仅交强险需要，非交强险不作为必要字段
+        policy_type = fields.get("险种类型", "")
+        if "交强" in policy_type:
+            required_fields.append("车船税")
+        return all(f in fields for f in required_fields)
+    except Exception:
+        return False
+
+
 class InsuranceHandler:
     """保单识别处理器（异步队列 + 守护线程）"""
 
@@ -887,7 +918,7 @@ class InsuranceHandler:
             # 优先尝试火山引擎 OCR
             if self._volc_ocr:
                 try:
-                    volc_result = self._volc_ocr.recognize_pdf_multi_pages(pdf_bytes, max_pages=6)
+                    volc_result = self._volc_ocr.recognize_pdf_multi_pages(pdf_bytes, max_pages=6, early_stop_check=_ocr_early_stop_check)
                     if volc_result.get("success"):
                         text = volc_result.get("text", "")
                         ocr_engine = "volc"
@@ -901,7 +932,7 @@ class InsuranceHandler:
             # 火山引擎失败或未配置，降级百度 OCR
             if not fallback_done and self._baidu_ocr:
                 try:
-                    baidu_result = self._baidu_ocr.recognize_pdf_multi_pages(pdf_bytes, max_pages=6)
+                    baidu_result = self._baidu_ocr.recognize_pdf_multi_pages(pdf_bytes, max_pages=6, early_stop_check=_ocr_early_stop_check)
                     if baidu_result.get("success"):
                         text = baidu_result.get("text", "")
                         ocr_engine = "baidu"

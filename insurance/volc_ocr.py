@@ -203,10 +203,17 @@ class VolcOCR:
         pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
         return self.recognize_pdf(pdf_base64, page_num)
 
-    def recognize_pdf_multi_pages(self, pdf_bytes: bytes, max_pages: int = 6) -> Dict[str, Any]:
+    def recognize_pdf_multi_pages(self, pdf_bytes: bytes, max_pages: int = 6,
+                                   early_stop_check=None) -> Dict[str, Any]:
         """
         多页PDF识别，逐页调用并拼接结果。
         遇到条款页自动停止。
+
+        Args:
+            pdf_bytes: PDF 原始字节
+            max_pages: 最多识别页数
+            early_stop_check: 可选回调 fn(combined_text) -> bool，
+                              返回 True 表示核心字段已提取完毕可以提前停止
         """
         try:
             import pdfplumber
@@ -241,6 +248,12 @@ class VolcOCR:
                         break
                     # 插入页码标记，供多保单拆分时追踪页码
                     all_texts.append(f"[PAGE:{page}]\n{page_text}")
+                    # 至少扫描前2页后，检查核心字段是否已提取完毕
+                    if page >= 2 and early_stop_check and len(all_texts) >= 2:
+                        combined_so_far = "\n".join(all_texts)
+                        if early_stop_check(combined_so_far):
+                            logger.info("火山引擎OCR第%d页后核心字段已齐全，提前停止扫描", page)
+                            break
                 else:
                     logger.warning("火山引擎OCR第%d页识别失败: %s", page, result.get("error", ""))
             except Exception as e:
