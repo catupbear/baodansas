@@ -47,23 +47,28 @@ class QuoteOCR:
         self._token_expire_time = time.time() + result.get("expires_in", 2592000) - 3600
         return self._access_token
 
-    def recognize_vehicle_license(self, image_bytes: bytes) -> Dict[str, Any]:
+    def recognize_vehicle_license(self, image_bytes: bytes = None, *, image_url: str = None) -> Dict[str, Any]:
         """
         识别行驶证
+        Args:
+            image_bytes: 图片二进制数据（与 image_url 二选一）
+            image_url: 图片URL（与 image_bytes 二选一，优先使用）
         Returns:
             成功: {"success": True, "type": "vehicle_license", "data": {字段...}}
             失败: {"success": False, "type": "vehicle_license", "error": "原因"}
         """
         token = self._get_access_token()
-        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+
+        if image_url:
+            data = {"url": image_url, "detect_direction": "true"}
+        else:
+            image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+            data = {"image": image_base64, "detect_direction": "true"}
 
         try:
             resp = requests.post(
                 f"{self.VEHICLE_LICENSE_URL}?access_token={token}",
-                data={
-                    "image": image_base64,
-                    "detect_direction": "true",
-                },
+                data=data,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
                 timeout=30,
             )
@@ -105,36 +110,44 @@ class QuoteOCR:
         except requests.RequestException as e:
             return {"success": False, "type": "vehicle_license", "error": str(e)}
 
-    def recognize_idcard(self, image_bytes: bytes) -> Dict[str, Any]:
+    def recognize_idcard(self, image_bytes: bytes = None, *, image_url: str = None) -> Dict[str, Any]:
         """
         识别身份证（先尝试正面，失败再尝试反面）
+        Args:
+            image_bytes: 图片二进制数据（与 image_url 二选一）
+            image_url: 图片URL（与 image_bytes 二选一，优先使用）
         Returns:
             成功: {"success": True, "type": "idcard", "side": "front/back", "data": {字段...}}
             失败: {"success": False, "type": "idcard", "error": "原因"}
         """
         token = self._get_access_token()
-        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
 
-        front_result = self._call_idcard(token, image_base64, "front")
+        if image_url:
+            image_data = {"url": image_url}
+        else:
+            image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+            image_data = {"image": image_base64}
+
+        front_result = self._call_idcard(token, image_data, "front")
         if front_result.get("success"):
             return front_result
 
-        back_result = self._call_idcard(token, image_base64, "back")
+        back_result = self._call_idcard(token, image_data, "back")
         if back_result.get("success"):
             return back_result
 
         return {"success": False, "type": "idcard", "error": "正反面均未识别到有效身份证信息"}
 
-    def _call_idcard(self, token: str, image_base64: str, side: str) -> Dict[str, Any]:
-        """调用身份证识别API"""
+    def _call_idcard(self, token: str, image_data: dict, side: str) -> Dict[str, Any]:
+        """调用身份证识别API
+        Args:
+            image_data: {"url": "..."} 或 {"image": "base64..."}
+        """
         try:
+            data = {**image_data, "id_card_side": side, "detect_direction": "true"}
             resp = requests.post(
                 f"{self.IDCARD_URL}?access_token={token}",
-                data={
-                    "image": image_base64,
-                    "id_card_side": side,
-                    "detect_direction": "true",
-                },
+                data=data,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
                 timeout=30,
             )

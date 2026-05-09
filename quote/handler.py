@@ -138,9 +138,14 @@ class QuoteHandler:
                 cos_key = f"quote/{roomid}/{sender}/{timestamp}.jpg"
                 cos_url = self.cos_storage.upload_bytes(image_bytes, cos_key)
 
-            # 3. 同时尝试行驶证和身份证识别
-            vehicle_result = self._ocr.recognize_vehicle_license(image_bytes)
-            idcard_result = self._ocr.recognize_idcard(image_bytes)
+            # 3. 同时尝试行驶证和身份证识别（优先用COS压缩URL，节省带宽并避免图片过大报错）
+            if cos_url:
+                compressed_url = cos_url + "?imageMogr2/thumbnail/!500x500r/quality/80"
+                vehicle_result = self._ocr.recognize_vehicle_license(image_url=compressed_url)
+                idcard_result = self._ocr.recognize_idcard(image_url=compressed_url)
+            else:
+                vehicle_result = self._ocr.recognize_vehicle_license(image_bytes)
+                idcard_result = self._ocr.recognize_idcard(image_bytes)
 
             vehicle_ok = vehicle_result.get("success", False)
             idcard_ok = idcard_result.get("success", False)
