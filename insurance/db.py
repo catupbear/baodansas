@@ -397,6 +397,21 @@ def init_insurance_tables(db):
         except Exception:
             logger.exception("回填 is_abnormal 失败")
 
+        # 修正已标记正常但 is_abnormal 仍为 1 的历史数据
+        try:
+            cursor.execute("""
+                UPDATE insurance_records
+                SET is_abnormal = 0, hint = ''
+                WHERE is_abnormal = 1
+                  AND abnormal_override_reason IS NOT NULL
+                  AND abnormal_override_reason != ''
+            """)
+            fixed = cursor.rowcount
+            if fixed:
+                logger.info("修正已标记正常但 is_abnormal=1 的记录 %d 条", fixed)
+        except Exception:
+            logger.exception("修正 abnormal_override 失败")
+
         # 回填 display_fields（仅对有 parsed_fields 但无 display_fields 的记录）
         try:
             cursor.execute("""
