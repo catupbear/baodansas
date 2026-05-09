@@ -40,10 +40,12 @@ class ContactsManager:
             cursor = conn.cursor()
             # 只清除可能受益于外部应用 Secret 的标记：
             # wm/wo 前缀（外部联系人）和 wr 前缀（外部群）
+            # 排除 extra='90501' 的记录（永久性不可解析：不是外部群）
             cursor.execute("""
                 DELETE FROM contacts_cache
                 WHERE name = '__unresolvable__'
                   AND (id LIKE 'wm%%' OR id LIKE 'wo%%' OR id LIKE 'wr%%' OR id LIKE 'wb%%')
+                  AND (extra IS NULL OR extra != '90501')
             """)
             deleted = cursor.rowcount
             conn.commit()
@@ -161,9 +163,12 @@ class ContactsManager:
         if name:
             self._set_cache(room_id, "room", name)
         else:
-            # 缓存失败标记，避免反复重试
-            self._set_cache(room_id, "room", "__unresolvable__")
-            logger.info("群 %s 已标记为不可解析，后续不再请求 API", room_id)
+            # 检查是否已被 _fetch_external_room_info 缓存（如 90501）
+            already_cached = self._get_cache(room_id)
+            if not already_cached:
+                # 缓存失败标记，避免反复重试
+                self._set_cache(room_id, "room", "__unresolvable__")
+                logger.info("群 %s 已标记为不可解析，后续不再请求 API", room_id)
 
         return name or room_id
 
@@ -283,7 +288,9 @@ class ContactsManager:
                 return ""
 
         # 降级：用外部应用 token 调客户群接口
-        return self._fetch_external_room_info(roomid)
+        result = self._fetch_external_room_info(roomid)
+        # __skipped__ 表示 90501（不是外部群），已在内部缓存，返回空让调用方跳过
+        return "" if result == "__skipped__" else result
 
     def _fetch_external_room_info(self, roomid: str) -> str:
         """
@@ -301,7 +308,8 @@ class ContactsManager:
             req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-            if data.get("errcode") == 0:
+            errcode = data.get("errcode")
+            if errcode == 0:
                 chat = data.get("group_chat", {})
                 name = chat.get("name", "")
 
@@ -327,6 +335,12 @@ class ContactsManager:
                         name += "..."
                 logger.debug("获取群信息(外部群): %s -> %s", roomid, name)
                 return name
+            elif errcode == 90501:
+                # 90501 = 不是外部群，属于永久性状态，降级为 DEBUG 并标记不可解析
+                logger.debug("群 %s 不是外部群(90501)，已跳过", roomid)
+                # 直接在此处缓存，并在 extra 字段标记原因，避免重启后重试
+                self._set_cache_with_extra(roomid, "room", "__unresolvable__", "90501")
+                return "__skipped__"
             else:
                 logger.warning("获取外部群信息失败 %s: errcode=%s, errmsg=%s",
                                roomid, data.get("errcode"), data.get("errmsg"))
@@ -379,6 +393,19 @@ class ContactsManager:
             cursor.execute(
                 "REPLACE INTO contacts_cache (id, type, name, updated_at) VALUES (%s, %s, %s, %s)",
                 (contact_id, contact_type, name, int(time.time()))
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _set_cache_with_extra(self, contact_id: str, contact_type: str, name: str, extra: str):
+        """写入数据库永久缓存，附带 extra 信息（如错误码，用于区分不可解析原因）"""
+        conn = self.db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor.execute(
+                "REPLACE INTO contacts_cache (id, type, name, extra, updated_at) VALUES (%s, %s, %s, %s, %s)",
+                (contact_id, contact_type, name, extra, int(time.time()))
             )
             conn.commit()
         finally:
