@@ -928,8 +928,8 @@
                            @change="loadRecords()">
                 </template>
                 <!-- 清除日期 -->
-                <button v-if="recordFilter.date_shortcut"
-                        @click="recordFilter.date_shortcut = ''; recordFilter.date_start = ''; recordFilter.date_end = ''; loadRecords()"
+                <button v-if="recordFilter.date_shortcut && recordFilter.date_shortcut !== 'all'"
+                        @click="recordFilter.date_shortcut = 'all'; recordFilter.date_start = ''; recordFilter.date_end = ''; loadRecords()"
                         class="text-xs text-gray-400 hover:text-orange-500 cursor-pointer ml-1"
                         title="清除日期筛选">&times; 清除</button>
                 <!-- 展开高级搜索按钮 -->
@@ -4239,7 +4239,7 @@ createApp({
             status: '',
             keyword: '',
             ocr_engine: '',  // '': 全部, 'pdfplumber', 'baidu'
-            date_shortcut: '',  // 日期快捷：today/yesterday/thisWeek/lastWeek/thisMonth/lastMonth/custom
+            date_shortcut: 'today',  // 日期快捷：all/today/yesterday/thisWeek/lastWeek/thisMonth/lastMonth/custom
             date_start: '',     // 自定义开始日期 YYYY-MM-DD
             date_end: '',       // 自定义结束日期 YYYY-MM-DD
             // 关联表模糊搜索
@@ -4261,6 +4261,7 @@ createApp({
         const showAdvancedSearch = ref(false);
         // 日期快捷选项
         const dateShortcuts = [
+            { key: 'all', label: '全部' },
             { key: 'today', label: '今天' },
             { key: 'yesterday', label: '昨天' },
             { key: 'thisWeek', label: '本周' },
@@ -4278,6 +4279,13 @@ createApp({
         }
         function setDateShortcut(key) {
             recordFilter.date_shortcut = key;
+            if (key === 'all') {
+                // 全部：不限日期
+                recordFilter.date_start = '';
+                recordFilter.date_end = '';
+                loadRecords();
+                return;
+            }
             const now = new Date();
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             if (key === 'today') {
