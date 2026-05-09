@@ -347,6 +347,7 @@ def _identify_policy_type(text: str) -> Optional[str]:
         r"(卓越全意保\S*保险)",            # 安盛天平卓越全意保
         r"(个人账户资金安全险)",            # 国任非车险
         r"(信用卡盗用保险)",               # 国任非车险
+        r"(家财守护(?:[（(]\S+?[)）])?)",  # 家财守护（单交经济版）等家财险产品
     ]:
         m = re.search(p, text)
         if m:
@@ -382,6 +383,15 @@ def _identify_policy_type(text: str) -> Optional[str]:
     if m:
         return m.group(1)
 
+    # 兜底：无标题但包含交强险特征字段（赔偿限额），如华农交强险保单
+    compulsory_indicators = [
+        r"死亡伤残赔偿限额",
+        r"医疗费用赔偿限额",
+        r"财产损失赔偿限额",
+    ]
+    if sum(1 for p in compulsory_indicators if re.search(p, text)) >= 2:
+        return "机动车交通事故责任强制保险"
+
     return None
 
 
@@ -398,6 +408,8 @@ def _get_policy_type_code(policy_type: str) -> tuple:
     if "账户" in policy_type or "资金安全" in policy_type or "信用卡" in policy_type or "盗用" in policy_type:
         return "non_vehicle", "非车险"
     if "承运人" in policy_type or "货运" in policy_type or "货物" in policy_type or "责任险" in policy_type:
+        return "non_vehicle", "非车险"
+    if "家财" in policy_type:
         return "non_vehicle", "非车险"
     return "unknown", policy_type
 
@@ -1063,11 +1075,11 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
     for i, line in enumerate(lines):
         stripped = line.strip()
         if stripped == '被保险人' or re.match(r'^被保险人\s*(?:证件|信息|承保)', stripped):
-            # 先查附近行的"名称 XXX"或"客户名称：XXX"格式（华农等）
+            # 先查附近行的"名称/姓名 XXX"或"客户名称：XXX"格式（华农/亚太等）
             for j in range(max(0, i - 3), min(len(lines), i + 3)):
                 if j == i:
                     continue
-                m = re.match(r'(?:客户)?名称[：:\s]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+(?:[（(][^）)]+[）)])?)', lines[j].strip())
+                m = re.match(r'(?:客户)?(?:姓名|名称)[：:\s]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+(?:[（(][^）)]+[）)])?)', lines[j].strip())
                 if m and _is_valid_person(m.group(1)):
                     fields["被保险人"] = m.group(1)
                     return
@@ -1080,6 +1092,20 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
                 if prev_cleaned and _is_valid_person(prev_cleaned):
                     fields["被保险人"] = prev_cleaned
                     return
+            # 众安等格式：区域标题后下一行 "被保险人 XXX 证件类型 其他"
+            for j in range(i + 1, min(len(lines), i + 3)):
+                m_next = re.match(r'被保险人\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|$)', lines[j].strip())
+                if m_next:
+                    val = _clean_person_name(m_next.group(1))
+                    if _is_valid_person(val):
+                        fields["被保险人"] = val
+                        return
+                    # 驾乘险被保险人为"车辆随车人员"等，保留原始值
+                    if re.search(r'车辆随车人员|车上人员|随车人员', m_next.group(1) + lines[j]):
+                        # 提取车牌+描述作为被保险人（如"粤AB00R2车辆随车人员"）
+                        fields["被保险人"] = m_next.group(1)
+                        return
+                    break
             break
 
     # 合并文本匹配无分隔符格式（允许终止词前有换行/空白）
@@ -1192,11 +1218,12 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
                     return
             break
 
-    # 华泰/国任等表格格式："姓名\n付琴\n联系电话\n...\n投保人\n证件类型"
+    # 华泰/国任/亚太等表格格式："姓名\n付琴\n联系电话\n...\n投保人\n证件类型"
+    # 或亚太格式："姓名 王忠武 联系电话...\n投保人 证件类型 身份证..."
     # "投保人"是区域标题，投保人姓名在前面"姓名"字段的下一行或同一行
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if stripped == '投保人' and i >= 2:
+        if (stripped == '投保人' or re.match(r'^投保人\s+证件', stripped)) and i >= 1:
             # 向前找"姓名"行（不含/名称，区别于浙商格式）
             for j in range(max(0, i - 6), i):
                 if lines[j].strip() == '姓名' and j + 1 < i:
@@ -1217,6 +1244,14 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
                 if m and _is_valid_person(m.group(1)):
                     fields["投保人"] = m.group(1)
                     return
+            # 众安等格式：区域标题后下一行 "投保人 黄宝兰 证件类型 身份证"
+            for j in range(i + 1, min(len(lines), i + 3)):
+                m_next = re.match(r'投保人\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|$)', lines[j].strip())
+                if m_next:
+                    val = _clean_person_name(m_next.group(1))
+                    if _is_valid_person(val):
+                        fields["投保人"] = val
+                        return
             break
 
     # 永诚/中华联合等格式："投保人信息\n姓名：李飞" 或 "投保人信息\n姓名/名称：深圳XXX公司"
@@ -1421,6 +1456,12 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
             if re.search(r"(?:号[1]?牌[1]?号[1]?码|车牌号码?)[：:\s]*\*[-\s]*\*", text):
                 fields["车牌号"] = "新车"
 
+    # 新车用车架号后几位作为车牌（如"车牌号:LSB08602"，非省份简称开头）
+    if "车牌号" not in fields:
+        m = re.search(r"(?:号牌号码|车牌号码?)[：:\s]*([A-Z0-9]{6,17})", text)
+        if m:
+            fields["车牌号"] = m.group(1)
+
     # 平安非车险保单：车牌号码后只有省份简称（如"车牌号码:鄂"），OCR将剩余部分拆到附近行
     if "车牌号" not in fields and company_short == "平安":
         lines = text.split('\n')
@@ -1535,6 +1576,64 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
 # 保费提取（按保司分策略）
 # ============================================================
 
+# 大写中文金额 → 数字（如"壹佰捌拾玖元整" → "189.00"）
+_CN_DIGIT = {"零": 0, "壹": 1, "贰": 2, "叁": 3, "肆": 4,
+             "伍": 5, "陆": 6, "柒": 7, "捌": 8, "玖": 9}
+_CN_UNIT = {"拾": 10, "佰": 100, "仟": 1000, "万": 10000, "亿": 100000000}
+
+
+def _parse_chinese_amount(text: str) -> Optional[str]:
+    """将大写中文金额转为数字字符串，如 '壹佰捌拾玖元整' → '189.00'"""
+    m = re.search(r'人民币([\u4e00-\u9fff]+元(?:整|[\u4e00-\u9fff]*[分角整])?)', text)
+    if not m:
+        return None
+    s = m.group(1)
+    # 拆分元/角/分
+    yuan_part, jiao_val, fen_val = "", 0, 0
+    if "元" in s:
+        yuan_part, rest = s.split("元", 1)
+    else:
+        return None
+    # 解析元部分
+    total = 0
+    cur = 0
+    wan_total = 0  # 万以上部分
+    for ch in yuan_part:
+        if ch in _CN_DIGIT:
+            cur = _CN_DIGIT[ch]
+        elif ch in _CN_UNIT:
+            unit = _CN_UNIT[ch]
+            if unit == 10000:
+                total = (total + cur) * unit
+                wan_total = total
+                total = 0
+                cur = 0
+            elif unit == 100000000:
+                total = (total + cur) * unit
+                wan_total = total
+                total = 0
+                cur = 0
+            else:
+                total += cur * unit
+                cur = 0
+    total += cur + wan_total
+    # 解析角/分
+    rest = rest.replace("整", "")
+    for ch_i, ch in enumerate(rest):
+        if ch in _CN_DIGIT:
+            d = _CN_DIGIT[ch]
+            # 下一个字符决定是角还是分
+            next_ch = rest[ch_i + 1] if ch_i + 1 < len(rest) else ""
+            if next_ch == "角":
+                jiao_val = d
+            elif next_ch == "分":
+                fen_val = d
+    amount = total + jiao_val * 0.1 + fen_val * 0.01
+    if amount <= 0:
+        return None
+    return f"{amount:.2f}"
+
+
 def _extract_premium(text: str, fields: dict, company_short: str):
     """提取保费合计"""
 
@@ -1550,7 +1649,24 @@ def _extract_premium(text: str, fields: dict, company_short: str):
         r"总保险费.*?[￥¥]([\d,]+\.\d{2})",
         r"实收保费[：:\s]*([\d,]+\.\d{2})",
         r"总?保险?费[：:\s]*([\d,]+\.\d{2})",
+        # 众安等格式：无小数点 "（小写）RMB 499元"
+        r"总保险费.*?RMB\s*([\d,]+)元",
     ]
+
+    # 太平洋格式："保险费及车船税合计金额 ￥：19544.56 元"（优先取含税合计）
+    if company_short == "太平洋":
+        patterns.insert(0, r"保险费及车船税合计金额\s*[￥¥][：:\s]*([\d,]+\.\d{2})")
+
+    # 人保等合并投保单："保险费+车船税合计（人民币大写）：... （￥ 5017.32 元）"
+    m = re.search(r"保险费[+＋]车船税合计.*?[（(\s][￥¥]\s*([\d,]+\.\d{2})\s*(?:元)?[)）]", text)
+    if m:
+        fields["保费合计"] = m.group(1).replace(",", "")
+        return
+
+    # 亚太等格式："保险费 大写：人民币陆拾捌元整 小写：CNY 68.00"
+    # 需排除"总保险金额"行的干扰，优先精确匹配"保险费"行
+    if company_short == "亚太":
+        patterns.insert(0, r"保险费\s+大写[：:].*?小写[：:\s]*CNY\s*([\d,]+\.\d{2})")
 
     # 华农格式：保费可能无小数点，优先匹配避免误取不含税保费
     # "总保费（人民币：元）:240" 或 "保险费合计（元）：1200"
@@ -1672,6 +1788,15 @@ def _extract_premium(text: str, fields: dict, company_short: str):
                         fields["保费合计"] = val
                 break
 
+    # 兜底：只有大写金额没有小写数字（安诚等格式）
+    # "保费合计\n(大写)人民币壹佰捌拾玖元整"
+    if "保费合计" not in fields:
+        m = re.search(r"保险?费合计[\s\S]{0,60}?人民币([\u4e00-\u9fff]+元(?:整|[\u4e00-\u9fff]*[分角整])?)", text)
+        if m:
+            val = _parse_chinese_amount("人民币" + m.group(1))
+            if val:
+                fields["保费合计"] = val
+
     # 不含税保费：兼容"不含税保费：1132.08"和"不含税保费（元）：1132.08"等
     m = re.search(r"不含税保[险]?费[^：:\d]*[：:\s]*([\d,]+\.\d{2})", text)
     if m:
@@ -1707,6 +1832,8 @@ def _extract_tax(text: str, fields: dict):
                 return
         except (ValueError, AttributeError):
             pass
+    # 先排除"保险费+车船税合计"/"保险费及车船税合计"行，避免误提取
+    tax_text_clean = re.sub(r'保险费[+＋及]车船税合计.*', '', tax_text)
     for p in [
         # 车船税...合计...（￥：XXX 元）
         r"车\s*船\s*税[\s\S]*?合计.*?[（(]\s*[￥¥][：:\s]*([\d,.]+)\s*(?:元)?[)）]",
@@ -1718,7 +1845,7 @@ def _extract_tax(text: str, fields: dict):
         # 兜底：当年应缴
         r"当年应缴\s*[（(\s]*[￥¥][：:\s]*([\d,.]+)\s*元",
     ]:
-        m = re.search(p, tax_text)
+        m = re.search(p, tax_text_clean)
         if m:
             val = m.group(1).strip().replace(",", "")
             try:
@@ -1747,6 +1874,8 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
             return
 
     period_text = text_merged
+    # 清理下划线（人保投保单OCR格式："_2_0_2_6_____年_05____月_0_7___日"）
+    period_text = period_text.replace('_', ' ')
     # 清理数字之间的空格："20 2 6" → "2026"（需多次执行）
     for _ in range(5):
         period_text = re.sub(r'(\d)\s+(\d)', r'\1\2', period_text)
@@ -1756,11 +1885,13 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
     # 清理时/分之间的空格
     period_text = re.sub(r'(\d)\s+(时|分|秒)', r'\1\2', period_text)
     period_text = re.sub(r'(时|分)\s+(\d)', r'\1\2', period_text)
+    # 清理冒号周围的空格（人保投保单OCR："0 : 00" → "0:00"）
+    period_text = re.sub(r'(\d)\s*:\s*(\d)', r'\1:\2', period_text)
 
     # 通用模式（使用re.DOTALL让.匹配换行，支持"保险期间"与日期跨行的情况）
     for p in [
-        # "保险期间...起始日期...至...结束日期"
-        r"保险期间.{0,30}?(\d{4}年\d{1,2}月\d{1,2}日?)[\s\d时分秒:]+?(?:起|时起)?[，,\s]*[至到]\s*(\d{4}年\d{1,2}月\d{1,2}日?)",
+        # "保险期间...起始日期...至...结束日期"（兼容"由...至..."格式，日和至之间可能无空格）
+        r"保险期间.{0,30}?(\d{4}年\d{1,2}月\d{1,2}日?)[\s\d时分秒:]*?(?:起|时起)?[，,\s]*[至到]\s*(\d{4}年\d{1,2}月\d{1,2}日?)",
         r"保险期间[：:\s]*(\d{4}年?\d{1,2}月?\d{1,2}日?)\s*(?:\d{2}:\d{2}(?::\d{2})?)?\s*[至到]\s*(\d{4}年?\d{1,2}月?\d{1,2}日?)",
     ]:
         m = re.search(p, period_text, re.DOTALL)
@@ -1853,6 +1984,16 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
                     fields["保险止期"] = m.group(2)
                     fields["保险期间"] = f"{m.group(1)} 至 {m.group(2)}"
                     return
+
+    # 兜底：无"保险期间"标签，直接匹配"YYYY年MM月DD日...时起至...YYYY年MM月DD日...时止"
+    # 人保投保单OCR格式清理后：" 2026年05月07日 0:00时起至 2027年05月06日 24:00时止"
+    if "保险期间" not in fields:
+        m = re.search(r"(\d{4}年\d{1,2}月\d{1,2}日)\s*\d{1,2}:\d{2}\s*时?\s*起\s*至\s*(\d{4}年\d{1,2}月\d{1,2}日)", period_text)
+        if m:
+            fields["保险起期"] = m.group(1)
+            fields["保险止期"] = m.group(2)
+            fields["保险期间"] = f"{m.group(1)} 至 {m.group(2)}"
+            return
 
     # "保险期限： 2026-05-17 00:00:00 至 2027-05-16 23:59:59" 格式（太平驾意险等）
     # 也支持 "保险期间： 自 2026-04-22 00:00:00 起，至 2027-04-21 23:59:59 止。"
@@ -1991,6 +2132,14 @@ def _extract_sign_date(text: str, fields: dict, company_short: str):
         if m:
             fields["签单日期"] = m.group(1)
 
+    # 兜底：平安等格式 — 无签单日期，用"收费确认时间"或"投保确认时间"替代
+    # "收费确认时间： 2026年5月6日14:45时" / "投保确认时间： 2026年5月6日14:45时"
+    if "签单日期" not in fields:
+        m = re.search(r"(?:收费确认时间|投保确认时间)[：:\s]*(\d{4}年\d{1,2}月\d{1,2}日)", sign_text)
+        if m:
+            fields["签单日期"] = m.group(1)
+            return
+
     # 兜底：华泰驾乘险等 — "制单:XXX"或"复核:XXX"上方紧邻的日期行
     # 格式："2026年05月08日\n绿单专用章\n复核:自动核保\n制单:贾子河"
     # 注意：用原始 text 匹配（sign_text 预处理会把换行符两侧的汉字合并）
@@ -2128,6 +2277,36 @@ def _identify_doc_category(text: str, fields: dict) -> str:
 
 
 # ============================================================
+# 文本预处理：PDF双层文字去重
+# ============================================================
+
+def _is_doubled_token(s: str) -> bool:
+    """检查字符串是否为每字符重复格式（如'黄黄宝宝兰兰'、'449999'）"""
+    if len(s) < 4 or len(s) % 2 != 0:
+        return False
+    if not all(s[i] == s[i + 1] for i in range(0, len(s), 2)):
+        return False
+    # 去重后至少有2个不同字符，排除"0000"、"...."等误判
+    deduped = s[::2]
+    return len(set(deduped)) >= 2
+
+
+def _dedup_doubled_text(text: str) -> str:
+    """检测并修复PDF双层文字（表单值每个字符重复一次）
+    众安等PDF会出现双层渲染，导致pdfplumber提取的文本中
+    表单值字符逐个重复，如'黄黄宝宝兰兰'应为'黄宝兰'
+    按行检测：一行中超过一半的>=4字符token是doubled则去重该行
+    """
+    lines = text.split('\n')
+    result = []
+    for line in lines:
+        if any(_is_doubled_token(t) for t in re.findall(r'\S{4,}', line)):
+            line = re.sub(r'\S+', lambda m: m.group(0)[::2] if _is_doubled_token(m.group(0)) else m.group(0), line)
+        result.append(line)
+    return '\n'.join(result)
+
+
+# ============================================================
 # 主入口：parse_policy_text
 # ============================================================
 
@@ -2143,6 +2322,9 @@ def parse_policy_text(text: str) -> Dict[str, Any]:
     Returns:
         包含字段和险种明细的结果字典
     """
+    # 预处理：修复PDF双层文字（众安等）
+    text = _dedup_doubled_text(text)
+
     fields = {}
     insurance_items = []
 
@@ -2326,6 +2508,9 @@ def parse_policy_text_multi(text: str) -> List[Dict[str, Any]]:
     Returns:
         保单结果列表（至少包含一条）
     """
+    # 预处理：修复PDF双层文字（众安等）
+    text = _dedup_doubled_text(text)
+
     boundaries = _find_policy_boundaries(text)
 
     if len(boundaries) <= 1:
