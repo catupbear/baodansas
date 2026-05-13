@@ -53,6 +53,7 @@ COMPANY_BASES = [
     "安诚财产保险股份有限公司",
     "国任财产保险股份有限公司",
     "泰康在线财产保险股份有限公司",
+    "安华农业保险股份有限公司",
 ]
 
 # 保司简称映射
@@ -88,6 +89,7 @@ COMPANY_SHORT_MAP = {
     "安诚财产": "安诚",
     "国任财产": "国任",
     "泰康在线": "泰康在线",
+    "安华农业": "安华农业",
 }
 
 # 通过特征关键词辅助识别保司（当公司名未直接出现时的兜底）
@@ -355,6 +357,7 @@ def _identify_policy_type(text: str) -> Optional[str]:
         r"(个人账户资金安全险)",            # 国任非车险
         r"(信用卡盗用保险)",               # 国任非车险
         r"(家财守护(?:[（(]\S+?[)）])?)",  # 家财守护（单交经济版）等家财险产品
+        r"(司乘人员\S*意外伤害保险)",       # 安华农业等司乘团体险
     ]:
         m = re.search(p, text)
         if m:
@@ -522,7 +525,7 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
         m = re.search(p, text)
         if m:
             val = _clean_person_name(m.group(1))
-            if val and len(val) >= 2 and not re.search(r'公司|集团|保险|有限|机构|人寿|平安|太平|阳光|人保|车险|非车|财险|寿险|健康险|意外险|团险|渠道', val):
+            if val and len(val) >= 2 and not re.search(r'公司|集团|保险|有限|机构|人寿|平安|太平|阳光|人保|车险|非车|财险|寿险|健康险|意外险|团险|渠道|^代理$', val):
                 fields["业务员"] = val
                 break
     # 中华联合：销售渠道名称兜底为业务员（值可能是代理公司名）
