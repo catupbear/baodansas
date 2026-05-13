@@ -105,7 +105,7 @@ class InsuranceHandler:
 
         # 火山引擎 OCR 熔断：连续失败 N 次后自动跳过，一段时间后恢复尝试
         self._volc_fail_count = 0
-        self._volc_fail_threshold = 3  # 连续失败 3 次触发熔断
+        self._volc_fail_threshold = 1  # 失败 1 次即熔断，快速切换百度
         self._volc_circuit_open_until = 0  # 熔断恢复时间戳（time.time()）
 
         # 启动消费者守护线程

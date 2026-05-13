@@ -140,16 +140,9 @@ class VolcOCR:
         qs = urlencode(query)
         url = f"{self.ENDPOINT}?{qs}"
 
-        # 429 限流仅重试1次（快速失败，由上层熔断机制切换百度OCR）
-        for attempt in range(2):
-            resp = requests.post(url, data=body, headers=headers, timeout=30)
-            if resp.status_code == 429 and attempt < 1:
-                logger.warning("火山引擎OCR限流(429)，2s后重试")
-                time.sleep(2)
-                headers = self._sign_request(body, query)
-                continue
-            resp.raise_for_status()
-            return resp.json()
+        resp = requests.post(url, data=body, headers=headers, timeout=30)
+        resp.raise_for_status()
+        return resp.json()
 
     def _parse_result(self, result: dict) -> Dict[str, Any]:
         """解析火山引擎OCR响应"""
@@ -266,9 +259,7 @@ class VolcOCR:
                     logger.warning("火山引擎OCR第%d页识别失败: %s", page, result.get("error", ""))
             except Exception as e:
                 logger.warning("火山引擎OCR第%d页异常: %s", page, e)
-                # 已有部分结果时跳过失败页继续，否则中断
-                if all_texts:
-                    continue
+                # 任何页异常直接中断，由上层熔断机制切换百度OCR
                 break
 
         if not all_texts:
