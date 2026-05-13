@@ -103,6 +103,11 @@ class InsuranceHandler:
         self._init_baidu_ocr()
         self._init_volc_ocr()
 
+        # 火山引擎 OCR 熔断：连续失败 N 次后自动跳过，一段时间后恢复尝试
+        self._volc_fail_count = 0
+        self._volc_fail_threshold = 3  # 连续失败 3 次触发熔断
+        self._volc_circuit_open_until = 0  # 熔断恢复时间戳（time.time()）
+
         # 启动消费者守护线程
         self._worker = threading.Thread(target=self._consume, daemon=True)
         self._worker.start()
@@ -915,19 +920,33 @@ class InsuranceHandler:
         if needs_fallback:
             fallback_done = False
 
-            # 优先尝试火山引擎 OCR
-            if self._volc_ocr:
+            # 优先尝试火山引擎 OCR（熔断期内跳过）
+            volc_circuit_open = (time.time() < self._volc_circuit_open_until)
+            if self._volc_ocr and not volc_circuit_open:
                 try:
                     volc_result = self._volc_ocr.recognize_pdf_multi_pages(pdf_bytes, max_pages=6, early_stop_check=_ocr_early_stop_check)
                     if volc_result.get("success"):
                         text = volc_result.get("text", "")
                         ocr_engine = "volc"
                         fallback_done = True
+                        self._volc_fail_count = 0  # 成功则重置计数
                         logger.info("火山引擎 OCR 识别成功，文字数=%d", len(text))
                     else:
-                        logger.warning("火山引擎 OCR 识别失败: %s", volc_result.get("error", ""))
+                        self._volc_fail_count += 1
+                        logger.warning("火山引擎 OCR 识别失败(%d/%d): %s",
+                                       self._volc_fail_count, self._volc_fail_threshold,
+                                       volc_result.get("error", ""))
                 except Exception as e:
-                    logger.error("火山引擎 OCR 调用异常: %s", e, exc_info=True)
+                    self._volc_fail_count += 1
+                    logger.error("火山引擎 OCR 调用异常(%d/%d): %s",
+                                 self._volc_fail_count, self._volc_fail_threshold, e)
+                # 连续失败达到阈值，熔断 10 分钟
+                if self._volc_fail_count >= self._volc_fail_threshold:
+                    self._volc_circuit_open_until = time.time() + 600
+                    logger.warning("火山引擎 OCR 连续失败 %d 次，熔断 10 分钟，切换百度 OCR",
+                                   self._volc_fail_count)
+            elif volc_circuit_open:
+                logger.info("火山引擎 OCR 熔断中，跳过直接使用百度 OCR")
 
             # 火山引擎失败或未配置，降级百度 OCR
             if not fallback_done and self._baidu_ocr:
@@ -1096,15 +1115,22 @@ class InsuranceHandler:
                 img_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
                 text = ""
 
-                # 优先火山引擎
-                if self._volc_ocr:
+                # 优先火山引擎（熔断期内跳过）
+                if self._volc_ocr and time.time() >= self._volc_circuit_open_until:
                     try:
                         volc_result = self._volc_ocr.recognize_image(img_b64)
                         if volc_result.get("success"):
                             text = volc_result.get("text", "")
                             ocr_engine = "volc"
+                            self._volc_fail_count = 0
+                        else:
+                            self._volc_fail_count += 1
                     except Exception as e:
+                        self._volc_fail_count += 1
                         logger.warning("火山引擎图片识别失败: %s", e)
+                    if self._volc_fail_count >= self._volc_fail_threshold:
+                        self._volc_circuit_open_until = time.time() + 600
+                        logger.warning("火山引擎 OCR 连续失败 %d 次，熔断 10 分钟", self._volc_fail_count)
 
                 # 降级百度 OCR
                 if not text and self._baidu_ocr:

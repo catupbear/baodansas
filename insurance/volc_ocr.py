@@ -140,14 +140,12 @@ class VolcOCR:
         qs = urlencode(query)
         url = f"{self.ENDPOINT}?{qs}"
 
-        # 429 限流重试，最多3次，间隔递增
-        for attempt in range(3):
+        # 429 限流仅重试1次（快速失败，由上层熔断机制切换百度OCR）
+        for attempt in range(2):
             resp = requests.post(url, data=body, headers=headers, timeout=30)
-            if resp.status_code == 429 and attempt < 2:
-                wait = (attempt + 1) * 2  # 2s, 4s
-                logger.warning("火山引擎OCR限流(429)，%ds后重试(%d/3)", wait, attempt + 1)
-                time.sleep(wait)
-                # 重新签名（时间戳会变）
+            if resp.status_code == 429 and attempt < 1:
+                logger.warning("火山引擎OCR限流(429)，2s后重试")
+                time.sleep(2)
                 headers = self._sign_request(body, query)
                 continue
             resp.raise_for_status()
