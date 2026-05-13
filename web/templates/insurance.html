@@ -4144,52 +4144,61 @@ createApp({
             exportModalVisible.value = true;
         }
 
-        // 实际执行导出（识别记录）
+        // 实际执行导出（识别记录）：有勾选按勾选，否则按当前筛选条件全部导出
         async function doExportRecordsExcel(selectedCols) {
             try {
                 showMessage('正在导出，请稍候...', true);
-                const params = new URLSearchParams({ page: 1, page_size: 10000 });
-                if (recordFilter.source_type === 'user') {
-                    params.set('source_type', 'user');
-                    if (recordFilter.userid) params.set('sender', recordFilter.userid);
-                } else if (recordFilter.source_type === 'room') {
-                    params.set('source_type', 'room');
-                    if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
-                } else if (recordFilter.source_type === 'manual') {
-                    params.set('source', 'manual');
-                } else {
-                    if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
-                }
-                const tab = recordActiveTab.value;
-                if (tab === 'done') {
-                    params.set('status', 'done');
-                    params.set('is_abnormal', '0');
-                    params.set('doc_category', recordDocTypeFilter.value || '保单');
-                } else if (tab === 'abnormal') {
-                    params.set('status', 'done');
-                    params.set('is_abnormal', '1');
-                } else if (tab === 'nonpolicy') {
-                    params.set('status', 'done');
-                    params.set('doc_category', '!保单');
-                } else if (tab === 'failed') {
-                    params.set('status', 'failed');
-                } else if (tab === 'pending') {
-                    params.set('status', 'pending');
-                } else if (recordFilter.status) {
-                    params.set('status', recordFilter.status);
-                }
-                if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
-                if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
-                if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
-                if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
-                if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
-                if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
-                if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');
-                _appendAdvancedParams(params);
 
-                const listResp = await authFetch(`/api/insurance/records?${params.toString()}`);
-                const listJson = await listResp.json();
-                const allRecords = (listJson.data || listJson).records || [];
+                let allRecords;
+                if (selectedRecordIds.value.length) {
+                    // 有勾选：从当前已加载的记录中筛选
+                    const idSet = new Set(selectedRecordIds.value);
+                    allRecords = records.value.filter(r => idSet.has(r.id));
+                } else {
+                    // 没有勾选：按当前筛选条件查询全部
+                    const params = new URLSearchParams({ page: 1, page_size: 10000 });
+                    if (recordFilter.source_type === 'user') {
+                        params.set('source_type', 'user');
+                        if (recordFilter.userid) params.set('sender', recordFilter.userid);
+                    } else if (recordFilter.source_type === 'room') {
+                        params.set('source_type', 'room');
+                        if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
+                    } else if (recordFilter.source_type === 'manual') {
+                        params.set('source', 'manual');
+                    } else {
+                        if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
+                    }
+                    const tab = recordActiveTab.value;
+                    if (tab === 'done') {
+                        params.set('status', 'done');
+                        params.set('is_abnormal', '0');
+                        params.set('doc_category', recordDocTypeFilter.value || '保单');
+                    } else if (tab === 'abnormal') {
+                        params.set('status', 'done');
+                        params.set('is_abnormal', '1');
+                    } else if (tab === 'nonpolicy') {
+                        params.set('status', 'done');
+                        params.set('doc_category', '!保单');
+                    } else if (tab === 'failed') {
+                        params.set('status', 'failed');
+                    } else if (tab === 'pending') {
+                        params.set('status', 'pending');
+                    } else if (recordFilter.status) {
+                        params.set('status', recordFilter.status);
+                    }
+                    if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
+                    if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
+                    if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
+                    if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
+                    if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
+                    if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+                    if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');
+                    _appendAdvancedParams(params);
+
+                    const listResp = await authFetch(`/api/insurance/records?${params.toString()}`);
+                    const listJson = await listResp.json();
+                    allRecords = (listJson.data || listJson).records || [];
+                }
 
                 const data = allRecords
                     .filter(r => r.status === 'done' || r.status === 'success')
