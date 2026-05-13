@@ -1627,7 +1627,8 @@ _CN_UNIT = {"拾": 10, "佰": 100, "仟": 1000, "万": 10000, "亿": 100000000}
 
 def _parse_chinese_amount(text: str) -> Optional[str]:
     """将大写中文金额转为数字字符串，如 '壹佰捌拾玖元整' → '189.00'"""
-    m = re.search(r'人民币([\u4e00-\u9fff]+元(?:整|[\u4e00-\u9fff]*[分角整])?)', text)
+    # 支持带"人民币"前缀和不带前缀两种格式
+    m = re.search(r'(?:人民币)?([\u4e00-\u9fff]+元(?:整|[\u4e00-\u9fff]*[分角整])?)', text)
     if not m:
         return None
     s = m.group(1)
@@ -1840,10 +1841,24 @@ def _extract_premium(text: str, fields: dict, company_short: str):
     # 兜底：只有大写金额没有小写数字（安诚等格式）
     # "保费合计\n(大写)人民币壹佰捌拾玖元整"
     if "保费合计" not in fields:
-        m = re.search(r"保险?费合计[\s\S]{0,60}?人民币([\u4e00-\u9fff]+元(?:整|[\u4e00-\u9fff]*[分角整])?)", text)
+        m = re.search(r"保险?费合计[\s\S]{0,60}?(?:人民币)?([\u4e00-\u9fff]+元(?:整|[\u4e00-\u9fff]*[分角整])?)", text)
         if m:
-            val = _parse_chinese_amount("人民币" + m.group(1))
+            val = _parse_chinese_amount(m.group(1))
             if val:
+                fields["保费合计"] = val
+
+    # 人保等兜底：险种明细表末尾的大写金额（如"800.00 陆仟叁佰玖拾玖元伍角肆分"）
+    # 在"特别约定"或"车险"之前查找最后一个大写金额
+    if "保费合计" not in fields and company_short == "人民财产":
+        # 匹配独立的大写金额（至少包含X仟/X佰/X拾+元）
+        cn_amounts = list(re.finditer(
+            r'([壹贰叁肆伍陆柒捌玖零拾佰仟万亿]+元(?:整|[壹贰叁肆伍陆柒捌玖零角分]+)?)',
+            text
+        ))
+        if cn_amounts:
+            # 取最后一个大写金额（通常是保费合计）
+            val = _parse_chinese_amount(cn_amounts[-1].group(1))
+            if val and float(val) > 50:  # 排除过小的金额
                 fields["保费合计"] = val
 
     # 不含税保费：兼容"不含税保费：1132.08"和"不含税保费（元）：1132.08"等
