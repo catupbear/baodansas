@@ -1263,6 +1263,18 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
             fields["投保人"] = val
             return
 
+    # 人保非车险等格式："投保人信息\n中设(深圳)设备检验检测"（无"姓名:"前缀，下一行直接是投保人名称）
+    for i, line in enumerate(lines):
+        if line.strip() == '投保人信息' and i + 1 < len(lines):
+            next_val = lines[i + 1].strip()
+            # 排除下一行是"姓名"/"名称"等标签行的情况（由上面的正则处理）
+            if next_val and not re.match(r'^(?:客户)?(?:姓名|名称|证件|联系)', next_val):
+                next_val = _clean_person_name(next_val)
+                if _is_valid_person(next_val):
+                    fields["投保人"] = next_val
+                    return
+            break
+
     # 按行匹配"投保人为："（处理名字中有OCR空格的情况，如"沈 心诚"）
     for line in lines:
         m = re.search(r'投保人为[：:]\s*(.+)', line.strip())
@@ -1662,6 +1674,10 @@ def _extract_premium(text: str, fields: dict, company_short: str):
     if m:
         fields["保费合计"] = m.group(1).replace(",", "")
         return
+
+    # 人保非车险格式（跨行）："保险费合计:\n人民币(大写)贰佰捌拾捌元整¥288.00元"
+    if company_short == "人民财产":
+        patterns.insert(0, r"保险费合计[\s\S]{0,60}?[￥¥]([\d,]+\.?\d{0,2})\s*元")
 
     # 亚太等格式："保险费 大写：人民币陆拾捌元整 小写：CNY 68.00"
     # 需排除"总保险金额"行的干扰，优先精确匹配"保险费"行
