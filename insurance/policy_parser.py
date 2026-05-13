@@ -57,7 +57,7 @@ COMPANY_BASES = [
 
 # 保司简称映射
 COMPANY_SHORT_MAP = {
-    "人民财产": "人保PICC",
+    "人民财产": "人民财产",
     "平安财产": "平安",
     "太平洋财产": "太平洋",
     "大家财产": "大家财险",
@@ -770,12 +770,10 @@ def _extract_insured(text: str, text_merged: str, fields: dict, company_short: s
         if "被保险人" in fields:
             return
 
-    # ===== 人保驾乘险："被保险人为以下车辆的驾驶人员及乘客" =====
+    # ===== 人保驾乘险："被保险人为以下车辆的驾驶人员及乘客"，无具体被保人 =====
     if company_short == "人民财产":
         if re.search(r"被保险人为以下车辆的驾驶人员及乘客", text):
-            if "投保人" in fields:
-                fields["被保险人"] = fields["投保人"]
-                return
+            return
 
     # ===== 紫金被保险人清单格式 =====
     # "被保险人清单" → 表头含"被保险人姓名" → 数据行"序号 姓名 ..."，可能多人
