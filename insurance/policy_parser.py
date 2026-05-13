@@ -1062,7 +1062,13 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
     # OCR带空格格式："被 保 险 人 深圳市中立咨询有限公司"（原始text匹配，优先于冒号格式）
     m = re.search(r"被\s+保\s+险\s+人\s+([\u4e00-\u9fff][\u4e00-\u9fff\w（()）)]{1,29})", text)
     if m:
-        val = _clean_person_name(m.group(1))
+        val = m.group(1)
+        # 名称可能被换行截断（如"中设\n（深圳）设备..."），拼接下一行的括号部分
+        remaining = text[m.end():]
+        next_part = re.match(r'\s*[（(][^）)\n]*[）)][\u4e00-\u9fff\w（()）)]*', remaining)
+        if next_part:
+            val += next_part.group().strip()
+        val = _clean_person_name(val)
         if _is_valid_person(val):
             fields["被保险人"] = val
             return
