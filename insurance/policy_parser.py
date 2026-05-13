@@ -652,8 +652,9 @@ def _extract_policy_no(text: str, fields: dict, company_short: str, policy_type:
                 break
 
     # 永诚等保司：保单号中有空格 "1 12B5032620260001099" → "112B5032620260001099"
+    # 安华等保司：OCR空格 "P DDA202644000005035286" → "PDDA202644000005035286"
     if "保单号" not in fields:
-        m = re.search(r"保险单号[码]?[：:\s]\s*(\d{1,3})\s+(\S+)", text)
+        m = re.search(r"保险单号[码]?[：:\s]\s*([A-Za-z0-9]{1,4})\s+([A-Za-z0-9]+\d{6,})", text)
         if m:
             val = m.group(1) + m.group(2)
             if len(val) > 6:
