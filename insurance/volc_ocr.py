@@ -13,6 +13,7 @@ import hmac
 import io
 import json
 import logging
+import time
 import requests
 from typing import Dict, Any
 from urllib.parse import quote, urlencode
@@ -139,9 +140,18 @@ class VolcOCR:
         qs = urlencode(query)
         url = f"{self.ENDPOINT}?{qs}"
 
-        resp = requests.post(url, data=body, headers=headers, timeout=30)
-        resp.raise_for_status()
-        return resp.json()
+        # 429 限流重试，最多3次，间隔递增
+        for attempt in range(3):
+            resp = requests.post(url, data=body, headers=headers, timeout=30)
+            if resp.status_code == 429 and attempt < 2:
+                wait = (attempt + 1) * 2  # 2s, 4s
+                logger.warning("火山引擎OCR限流(429)，%ds后重试(%d/3)", wait, attempt + 1)
+                time.sleep(wait)
+                # 重新签名（时间戳会变）
+                headers = self._sign_request(body, query)
+                continue
+            resp.raise_for_status()
+            return resp.json()
 
     def _parse_result(self, result: dict) -> Dict[str, Any]:
         """解析火山引擎OCR响应"""
@@ -258,6 +268,9 @@ class VolcOCR:
                     logger.warning("火山引擎OCR第%d页识别失败: %s", page, result.get("error", ""))
             except Exception as e:
                 logger.warning("火山引擎OCR第%d页异常: %s", page, e)
+                # 已有部分结果时跳过失败页继续，否则中断
+                if all_texts:
+                    continue
                 break
 
         if not all_texts:
