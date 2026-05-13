@@ -158,7 +158,9 @@ def _is_valid_person(val: str) -> bool:
     # ====== 公司名判断（优先，允许较长） ======
     # 去掉括号后缀再判断（如"飘逸共雅饮品店（个体工商户）"→ 以"店"结尾）
     val_no_paren = re.sub(r'[（(][^）)]*[）)]$', '', val)
-    if re.search(r'公司|集团|合伙|工厂|商行|商贸|车行(?!驶)|车队|事务所|经营部|经营店|经销商|专营店|服务部|加工厂|养殖场|合作社|研究院|研究所|设计院|分院|医院|学院|中心|个体工商户', val) or val_no_paren.endswith('店'):
+    # 含"(地名)"的企业名（如"中设(深圳)设备检验检测"）也视为公司名
+    has_location_paren = bool(re.search(r'[\u4e00-\u9fff][（(][\u4e00-\u9fff]{2,4}[）)][\u4e00-\u9fff]', val))
+    if re.search(r'公司|集团|合伙|工厂|商行|商贸|车行(?!驶)|车队|事务所|经营部|经营店|经销商|专营店|服务部|加工厂|养殖场|合作社|研究院|研究所|设计院|分院|医院|学院|中心|个体工商户', val) or val_no_paren.endswith('店') or has_location_paren:
         # 公司名允许长一些，但不能超过 30 字
         # 排除含动词/条款用语/保险术语的句子片段（如"向本公司提出的申请"）
         if re.search(r'提出|提供|负责|承担|向.*公司|本公司.*的|申请|告知|声明|附加.*险|附加.*费|损失费|保险费', val):
@@ -207,7 +209,12 @@ def _clean_person_name(val: str) -> str:
     # 清理中文字符间的OCR空格（如"沈 心诚" → "沈心诚"、"大 家财产" → "大家财产"）
     val = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', val)
     val = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', val)  # 二次清理
-    val = re.sub(r'[：:（(].*', '', val)
+    # 保留名称中间的括号内容（如"中设(深圳)设备检验检测"），只清理末尾或无关的括号
+    if re.search(r'[（(][^）)]*[）)][\u4e00-\u9fff]', val):
+        # 括号后面还有中文，属于名称的一部分（如"中设(深圳)设备"），只清理冒号
+        val = re.sub(r'[：:].*', '', val)
+    else:
+        val = re.sub(r'[：:（(].*', '', val)
     val = re.sub(r'车主.*', '', val)
     val = re.sub(r'名称.*', '', val)
     val = re.sub(r'证件.*', '', val)
@@ -763,6 +770,13 @@ def _extract_insured(text: str, text_merged: str, fields: dict, company_short: s
         if "被保险人" in fields:
             return
 
+    # ===== 人保驾乘险："被保险人为以下车辆的驾驶人员及乘客" =====
+    if company_short == "人民财产":
+        if re.search(r"被保险人为以下车辆的驾驶人员及乘客", text):
+            if "投保人" in fields:
+                fields["被保险人"] = fields["投保人"]
+                return
+
     # ===== 紫金被保险人清单格式 =====
     # "被保险人清单" → 表头含"被保险人姓名" → 数据行"序号 姓名 ..."，可能多人
     if company_short == "紫金":
@@ -1263,12 +1277,21 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
             fields["投保人"] = val
             return
 
-    # 人保非车险等格式："投保人信息\n中设(深圳)设备检验检测"（无"姓名:"前缀，下一行直接是投保人名称）
+    # 人保非车险等格式："投保人信息\n中设(深圳)设备检验检测\n姓名/名称:\n...\n技术有限公司"
+    # OCR 可能将公司名拆成多行，需在"投保人信息"和"被保险人信息"之间拼接
     for i, line in enumerate(lines):
         if line.strip() == '投保人信息' and i + 1 < len(lines):
             next_val = lines[i + 1].strip()
             # 排除下一行是"姓名"/"名称"等标签行的情况（由上面的正则处理）
             if next_val and not re.match(r'^(?:客户)?(?:姓名|名称|证件|联系)', next_val):
+                # 在后续行中查找公司名后缀（如"技术有限公司"），拼接完整公司名
+                for j in range(i + 2, min(len(lines), i + 12)):
+                    if re.match(r'^被保险人', lines[j].strip()):
+                        break
+                    suffix = lines[j].strip()
+                    if suffix and re.search(r'(?:有限公司|有限责任公司|集团公司|股份公司)$', suffix) and len(suffix) <= 15:
+                        next_val = next_val + suffix
+                        break
                 next_val = _clean_person_name(next_val)
                 if _is_valid_person(next_val):
                     fields["投保人"] = next_val
@@ -1677,7 +1700,9 @@ def _extract_premium(text: str, fields: dict, company_short: str):
 
     # 人保非车险格式（跨行）："保险费合计:\n人民币(大写)贰佰捌拾捌元整¥288.00元"
     if company_short == "人民财产":
-        patterns.insert(0, r"保险费合计[\s\S]{0,60}?[￥¥]([\d,]+\.?\d{0,2})\s*元")
+        patterns.insert(0, r"保险费合计[\s\S]{0,80}?[￥¥]([\d,]+\.\d{2})\s*元")
+        # 兜底：不依赖¥符号，直接匹配"保险费合计"后跨行的第一个金额
+        patterns.insert(1, r"保险费合计[\s\S]{0,80}?([\d,]+\.\d{2})\s*元")
 
     # 亚太等格式："保险费 大写：人民币陆拾捌元整 小写：CNY 68.00"
     # 需排除"总保险金额"行的干扰，优先精确匹配"保险费"行
