@@ -347,9 +347,11 @@ class QuoteMatcher:
     def _do_submit(self, item: dict):
         """实际提交请求"""
         try:
+            payload = {"items": [item]}
+            logger.info("预报价提交请求参数: %s", payload)
             resp = requests.post(
                 f"{BASE_URL}/insurance/pre-quote",
-                json={"items": [item]},
+                json=payload,
                 timeout=30,
             )
             resp.raise_for_status()

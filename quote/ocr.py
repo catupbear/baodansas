@@ -74,6 +74,7 @@ class QuoteOCR:
             )
             resp.raise_for_status()
             result = resp.json()
+            logger.info("行驶证OCR原始返回: %s", result)
 
             if "error_code" in result:
                 return {
@@ -94,6 +95,13 @@ class QuoteOCR:
             if not plate and not vin:
                 return {"success": False, "type": "vehicle_license", "error": "缺少车牌号和车架号，非有效行驶证"}
 
+            def _fmt_date(s: str) -> str:
+                """将 YYYYMMDD 格式化为 YYYY-MM-DD"""
+                s = s.strip().replace("/", "").replace("-", "").replace(".", "")
+                if len(s) == 8 and s.isdigit():
+                    return f"{s[:4]}-{s[4:6]}-{s[6:]}"
+                return s
+
             return {
                 "success": True,
                 "type": "vehicle_license",
@@ -101,8 +109,8 @@ class QuoteOCR:
                     "plate_number": plate,
                     "vin": vin,
                     "engine_number": words.get("发动机号码", {}).get("words", ""),
-                    "first_register_date": words.get("注册日期", {}).get("words", ""),
-                    "issue_date": words.get("发证日期", {}).get("words", ""),
+                    "first_register_date": _fmt_date(words.get("注册日期", {}).get("words", "")),
+                    "issue_date": _fmt_date(words.get("发证日期", {}).get("words", "")),
                     "model": words.get("品牌型号", {}).get("words", ""),
                     "owner_name": owner,  # 用于姓名配对，不提交到 pre-quote
                 },
@@ -153,6 +161,7 @@ class QuoteOCR:
             )
             resp.raise_for_status()
             result = resp.json()
+            logger.info("身份证OCR原始返回(side=%s): %s", side, result)
 
             if "error_code" in result:
                 return {
