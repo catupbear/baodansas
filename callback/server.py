@@ -88,3 +88,59 @@ def receive_callback():
 
     # 必须返回 "success" 或空字符串，否则企业微信会重试
     return "success"
+
+
+def create_callback_blueprint(path, crypto, on_message_callback, name_suffix):
+    """为指定路径创建独立的回调 Blueprint（支持多组回调配置）"""
+    bp = Blueprint(f"callback{name_suffix}", __name__)
+
+    @bp.route(path, methods=["GET"])
+    def verify_url():
+        msg_signature = request.args.get("msg_signature", "")
+        timestamp = request.args.get("timestamp", "")
+        nonce = request.args.get("nonce", "")
+        echostr = request.args.get("echostr", "")
+
+        logger.info("[%s] 收到URL验证请求: timestamp=%s, nonce=%s", path, timestamp, nonce)
+
+        ret, reply_echostr = crypto.verify_url(msg_signature, timestamp, nonce, echostr)
+        if ret != 0:
+            logger.error("[%s] URL验证失败, 错误码: %d", path, ret)
+            return "验证失败", 403
+
+        logger.info("[%s] URL验证成功", path)
+        return reply_echostr
+
+    @bp.route(path, methods=["POST"])
+    def receive_callback():
+        msg_signature = request.args.get("msg_signature", "")
+        timestamp = request.args.get("timestamp", "")
+        nonce = request.args.get("nonce", "")
+        post_data = request.data.decode("utf-8")
+
+        logger.info("[%s] 收到回调通知: timestamp=%s", path, timestamp)
+
+        ret, xml_content = crypto.decrypt_msg(post_data, msg_signature, timestamp, nonce)
+        if ret != 0:
+            logger.error("[%s] 回调消息解密失败, 错误码: %d", path, ret)
+            return "解密失败", 403
+
+        try:
+            tree = ET.fromstring(xml_content)
+            msg_type = tree.find("MsgType").text
+            event = tree.find("Event")
+            event_type = event.text if event is not None else ""
+
+            logger.info("[%s] 回调事件: MsgType=%s, Event=%s", path, msg_type, event_type)
+
+            if msg_type == "event" and event_type == "msgaudit_notify":
+                logger.info("[%s] 收到会话存档通知，开始拉取新消息", path)
+                if on_message_callback:
+                    on_message_callback()
+        except Exception as e:
+            logger.error("[%s] 解析回调XML失败: %s", path, e)
+            return "解析失败", 500
+
+        return "success"
+
+    return bp

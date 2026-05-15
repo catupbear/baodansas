@@ -62,6 +62,7 @@ class Database:
                 CREATE TABLE IF NOT EXISTS messages (
                     id INT PRIMARY KEY AUTO_INCREMENT,
                     seq INT UNIQUE,
+                    corpid VARCHAR(64) DEFAULT '',
                     msgid VARCHAR(128),
                     action VARCHAR(64),
                     sender VARCHAR(128),
@@ -108,51 +109,69 @@ class Database:
                 "CREATE INDEX idx_messages_msgtype ON messages(msgtype)",
                 "CREATE INDEX idx_messages_sender ON messages(sender)",
                 "CREATE INDEX idx_messages_roomid ON messages(roomid)",
+                "CREATE INDEX idx_messages_corpid ON messages(corpid)",
             ]:
                 try:
                     cursor.execute(idx_sql)
                 except Exception:
                     pass  # 索引已存在，忽略
 
+            # 迁移：为 messages 表添加 corpid 字段（已有表兼容）
+            try:
+                cursor.execute(
+                    "ALTER TABLE messages ADD COLUMN corpid VARCHAR(64) DEFAULT '' AFTER seq"
+                )
+                logger.info("messages 表已添加 corpid 字段")
+            except Exception:
+                pass  # 字段已存在，忽略
+
             conn.commit()
         finally:
             conn.close()
 
-    def get_seq(self) -> int:
-        """获取当前 seq 游标"""
+    def get_seq(self, cursor_id: int = 1) -> int:
+        """获取指定企业的 seq 游标（默认 id=1 兼容老逻辑）"""
         conn = self.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
-            cursor.execute("SELECT seq FROM cursor_state WHERE id = 1")
+            cursor.execute("SELECT seq FROM cursor_state WHERE id = %s", (cursor_id,))
             row = cursor.fetchone()
-            return row["seq"] if row else 0
+            if row:
+                return row["seq"]
+            # 新企业首次拉取，插入初始游标
+            cursor.execute(
+                "INSERT INTO cursor_state (id, seq) VALUES (%s, 0)", (cursor_id,)
+            )
+            conn.commit()
+            return 0
         finally:
             conn.close()
 
-    def update_seq(self, seq: int):
-        """更新 seq 游标"""
+    def update_seq(self, seq: int, cursor_id: int = 1):
+        """更新指定企业的 seq 游标（默认 id=1 兼容老逻辑）"""
         conn = self.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
             cursor.execute(
-                "UPDATE cursor_state SET seq = %s, updated_at = %s WHERE id = 1",
-                (seq, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                "UPDATE cursor_state SET seq = %s, updated_at = %s WHERE id = %s",
+                (seq, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), cursor_id)
             )
             conn.commit()
         finally:
             conn.close()
 
-    def save_message(self, seq: int, raw_data: dict, parsed: dict):
+    def save_message(self, seq: int, raw_data: dict, parsed: dict, corpid: str = ""):
         """保存一条消息，seq 重复时忽略（INSERT IGNORE）"""
         conn = self.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
             cursor.execute("""
                 INSERT IGNORE INTO messages
-                (seq, msgid, action, sender, tolist, roomid, msgtime, msgtype, summary, raw_data, parsed_content)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (seq, corpid, msgid, action, sender, tolist, roomid, msgtime, msgtype, summary, raw_data, parsed_content)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 seq,
+                corpid,
                 parsed.get("msgid", ""),
                 parsed.get("action", ""),
                 parsed.get("from", ""),

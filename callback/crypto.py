@@ -81,6 +81,12 @@ class WXBizMsgCrypt:
     def _check_signature(self, msg_signature: str, timestamp: str, nonce: str, encrypt: str) -> bool:
         """校验签名"""
         signature = self._generate_signature(timestamp, nonce, encrypt)
+        if signature != msg_signature:
+            import logging
+            logging.getLogger(__name__).warning(
+                "签名不匹配: 收到=%s, 计算=%s, token=%s, encrypt长度=%d",
+                msg_signature, signature, self.token, len(encrypt),
+            )
         return signature == msg_signature
 
     def _generate_signature(self, timestamp: str, nonce: str, encrypt: str) -> str:

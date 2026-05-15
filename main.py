@@ -10,7 +10,7 @@ import yaml
 from flask import Flask, redirect, render_template, request
 
 from callback.crypto import WXBizMsgCrypt
-from callback.server import callback_bp, init_callback
+from callback.server import callback_bp, init_callback, create_callback_blueprint
 from web.api import api_bp, init_api
 from core.contacts import ContactsManager
 from core.decryptor import MessageDecryptor
@@ -51,14 +51,15 @@ def create_app(config: dict) -> Flask:
     # 初始化数据库（MySQL 连接池）
     db = Database(config["mysql"])
 
-    # 初始化通讯录模块
+    # 初始化通讯录模块（主企业：车物家，不加缓存前缀以兼容历史数据）
     contacts = ContactsManager(
         corpid=config["wecom"]["corpid"],
         secret=config["wecom"]["secret"],
         db=db,
         external_secret=config["wecom"].get("external_secret", ""),
+        enterprise_name="车物家",
     )
-    logger.info("通讯录模块初始化完成")
+    logger.info("[车物家] 通讯录模块初始化完成")
 
     # 启动通讯录自动解析（每5分钟检查一次未解析的联系人/群名）
     contacts.start_auto_resolve(interval=300)
@@ -189,7 +190,8 @@ def create_app(config: dict) -> Flask:
         # 初始化解析器
         parser = MessageParser()
 
-        # 初始化消息拉取器
+        # 主企业（车物家）消息拉取器
+        main_corpid = config["wecom"]["corpid"]
         fetcher = MessageFetcher(
             finance_sdk=finance_sdk,
             decryptor=decryptor,
@@ -199,6 +201,9 @@ def create_app(config: dict) -> Flask:
             proxy=sdk_config.get("proxy", ""),
             passwd=sdk_config.get("proxy_passwd", ""),
             timeout=sdk_config.get("timeout", 10),
+            cursor_id=1,
+            enterprise_name="车物家",
+            corpid=main_corpid,
         )
 
         # 回调触发函数：在新线程中拉取消息，避免阻塞回调响应
@@ -211,12 +216,95 @@ def create_app(config: dict) -> Flask:
         crypto = WXBizMsgCrypt(
             token=callback_config["token"],
             encoding_aes_key=callback_config["encoding_aes_key"],
-            corp_id=config["wecom"]["corpid"],
+            corp_id=main_corpid,
         )
 
         # 初始化回调服务
         init_callback(crypto, on_message_callback=on_message_notify)
         app.register_blueprint(callback_bp)
+
+        # 注册额外企业回调（独立 SDK + fetcher + contacts）
+        extra_fetchers = []
+        for i, cb_conf in enumerate(config.get("extra_callbacks", [])):
+            cb_corpid = cb_conf.get("corpid", main_corpid)
+            cb_secret = cb_conf.get("secret", "")
+            cb_name = cb_conf.get("name", f"企业{i + 2}")
+            cb_cursor_id = i + 2  # 游标 id: 2, 3, 4...
+
+            # 回调加解密
+            extra_crypto = WXBizMsgCrypt(
+                token=cb_conf["token"],
+                encoding_aes_key=cb_conf["encoding_aes_key"],
+                corp_id=cb_corpid,
+            )
+
+            # 如果有独立的 secret，初始化独立 SDK + fetcher
+            if cb_secret and cb_corpid != main_corpid:
+                extra_sdk = FinanceSDK(sdk_config["lib_path"])
+                ret2 = extra_sdk.init(cb_corpid, cb_secret)
+                if ret2 != 0:
+                    logger.error("[%s] SDK初始化失败, 错误码: %d, 跳过", cb_name, ret2)
+                    continue
+
+                extra_decryptor = MessageDecryptor(extra_sdk, sdk_config["private_key_path"])
+                extra_fetcher = MessageFetcher(
+                    finance_sdk=extra_sdk,
+                    decryptor=extra_decryptor,
+                    parser=parser,  # 解析器无状态，共用
+                    db=db,
+                    limit=config["fetch"]["limit"],
+                    proxy=sdk_config.get("proxy", ""),
+                    passwd=sdk_config.get("proxy_passwd", ""),
+                    timeout=sdk_config.get("timeout", 10),
+                    cursor_id=cb_cursor_id,
+                    enterprise_name=cb_name,
+                    corpid=cb_corpid,
+                )
+                # 绑定保单识别和报价（共享同一个 handler）
+                extra_fetcher.insurance_handler = insurance_handler
+                extra_fetcher.quote_handler = quote_handler
+
+                # 初始化独立通讯录（用 corpid 前缀隔离缓存）
+                extra_contacts = ContactsManager(
+                    corpid=cb_corpid,
+                    secret=cb_secret,
+                    db=db,
+                    external_secret=cb_conf.get("external_secret", ""),
+                    enterprise_name=cb_name,
+                )
+                extra_contacts.set_cache_prefix(cb_corpid)
+                extra_contacts.start_auto_resolve(interval=300)
+
+                def make_notify(f):
+                    def notify():
+                        thread = threading.Thread(target=f.fetch_new_messages, daemon=True)
+                        thread.start()
+                    return notify
+
+                extra_fetchers.append({
+                    "name": cb_name,
+                    "sdk": extra_sdk,
+                    "fetcher": extra_fetcher,
+                    "contacts": extra_contacts,
+                })
+
+                bp = create_callback_blueprint(
+                    path=cb_conf["path"],
+                    crypto=extra_crypto,
+                    on_message_callback=make_notify(extra_fetcher),
+                    name_suffix=f"_{i + 2}",
+                )
+            else:
+                # 同企业不同回调，共享 fetcher
+                bp = create_callback_blueprint(
+                    path=cb_conf["path"],
+                    crypto=extra_crypto,
+                    on_message_callback=on_message_notify,
+                    name_suffix=f"_{i + 2}",
+                )
+
+            app.register_blueprint(bp)
+            logger.info("[%s] 回调已注册: %s (corpid=%s)", cb_name, cb_conf["path"], cb_corpid)
 
         # 把 fetcher 和 SDK 传给 API
         init_api(db, fetcher, finance_sdk, sdk_config, contacts, cos_storage)
@@ -240,16 +328,25 @@ def create_app(config: dict) -> Flask:
             "fetcher": fetcher,
             "insurance_handler": insurance_handler,
             "quote_handler": quote_handler,
+            "extra_fetchers": extra_fetchers,
         }
 
         # 启动时在后台补拉中断期间的消息 + 补扫漏掉的保单 PDF
         def _startup_catch_up():
             try:
-                logger.info("启动补拉：开始拉取中断期间的历史消息...")
+                # 主企业补拉
+                logger.info("[车物家] 启动补拉：开始拉取中断期间的历史消息...")
                 fetcher.fetch_new_messages()
-                logger.info("启动补拉完成（含报价消息监听），开始补扫漏掉的保单 PDF...")
+                logger.info("[车物家] 启动补拉完成，开始补扫漏掉的保单 PDF...")
                 fetcher.rescan_missed_insurance(lookback_days=5)
-                logger.info("启动补扫完成")
+                logger.info("[车物家] 启动补扫完成")
+
+                # 额外企业补拉
+                for ef in extra_fetchers:
+                    logger.info("[%s] 启动补拉：开始拉取中断期间的历史消息...", ef["name"])
+                    ef["fetcher"].fetch_new_messages()
+                    logger.info("[%s] 启动补拉完成", ef["name"])
+
                 # 预热报价绑定列表缓存
                 try:
                     bindings = quote_handler.binding_service.get_bindings()

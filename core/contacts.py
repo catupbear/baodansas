@@ -19,19 +19,28 @@ logger = logging.getLogger(__name__)
 class ContactsManager:
     """通讯录管理器"""
 
-    def __init__(self, corpid: str, secret: str, db, external_secret: str = ""):
+    def __init__(self, corpid: str, secret: str, db, external_secret: str = "",
+                 enterprise_name: str = ""):
         self.corpid = corpid
         self.secret = secret
         self.external_secret = external_secret  # 外部联系人应用的 Secret
         self.db = db
+        self.enterprise_name = enterprise_name
+        # 缓存 key 前缀：多企业时用 corpid 隔离，主企业（第一个初始化的）不加前缀以兼容历史数据
+        self._cache_prefix = ""
         self._access_token = ""
         self._token_expires = 0
         self._external_access_token = ""
         self._external_token_expires = 0
+        self._log_prefix = f"[{enterprise_name}] " if enterprise_name else ""
         self._init_cache_table()
         # 有外部应用 Secret 时，清除之前标记为不可解析的外部联系人/群，重新尝试
         if external_secret:
             self._clear_unresolvable()
+
+    def set_cache_prefix(self, prefix: str):
+        """设置缓存 key 前缀（多企业隔离用，主企业不设置以兼容历史数据）"""
+        self._cache_prefix = prefix
 
     def _clear_unresolvable(self):
         """清除外部联系人和外部群的 __unresolvable__ 标记，用新 Secret 重试"""
@@ -41,10 +50,12 @@ class ContactsManager:
             # 只清除可能受益于外部应用 Secret 的标记：
             # wm/wo 前缀（外部联系人）和 wr 前缀（外部群）
             # 排除 extra='90501' 的记录（永久性不可解析：不是外部群）
-            cursor.execute("""
+            prefix = f"{self._cache_prefix}:" if self._cache_prefix else ""
+            cursor.execute(f"""
                 DELETE FROM contacts_cache
                 WHERE name = '__unresolvable__'
-                  AND (id LIKE 'wm%%' OR id LIKE 'wo%%' OR id LIKE 'wr%%' OR id LIKE 'wb%%')
+                  AND (id LIKE '{prefix}wm%%' OR id LIKE '{prefix}wo%%'
+                       OR id LIKE '{prefix}wr%%' OR id LIKE '{prefix}wb%%')
                   AND (extra IS NULL OR extra != '90501')
             """)
             deleted = cursor.rowcount
@@ -349,6 +360,12 @@ class ContactsManager:
             logger.error("获取外部群信息异常 %s: %s", roomid, e)
             return ""
 
+    def _cache_key(self, contact_id: str) -> str:
+        """生成带前缀的缓存 key（多企业隔离）"""
+        if self._cache_prefix:
+            return f"{self._cache_prefix}:{contact_id}"
+        return contact_id
+
     def _get_cache(self, contact_id: str) -> str:
         """从数据库永久缓存读取昵称"""
         conn = self.db.pool.connection()
@@ -356,7 +373,7 @@ class ContactsManager:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
             cursor.execute(
                 "SELECT name FROM contacts_cache WHERE id = %s",
-                (contact_id,)
+                (self._cache_key(contact_id),)
             )
             row = cursor.fetchone()
             return row["name"] if row else ""
@@ -367,20 +384,24 @@ class ContactsManager:
         """批量从数据库读取昵称，一次 IN 查询。不可解析的返回原 ID。"""
         if not ids:
             return {}
+        cache_keys = [self._cache_key(uid) for uid in ids]
+        # 建立 cache_key -> 原始 id 的映射
+        key_to_id = dict(zip(cache_keys, ids))
         conn = self.db.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
-            placeholders = ",".join(["%s"] * len(ids))
+            placeholders = ",".join(["%s"] * len(cache_keys))
             cursor.execute(
                 f"SELECT id, name FROM contacts_cache WHERE id IN ({placeholders})",
-                ids
+                cache_keys
             )
             result = {}
             for row in cursor.fetchall():
+                original_id = key_to_id.get(row["id"], row["id"])
                 if row["name"] == "__unresolvable__":
-                    result[row["id"]] = row["id"]  # 返回原 ID
+                    result[original_id] = original_id  # 返回原 ID
                 else:
-                    result[row["id"]] = row["name"]
+                    result[original_id] = row["name"]
             return result
         finally:
             conn.close()
@@ -392,7 +413,7 @@ class ContactsManager:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
             cursor.execute(
                 "REPLACE INTO contacts_cache (id, type, name, updated_at) VALUES (%s, %s, %s, %s)",
-                (contact_id, contact_type, name, int(time.time()))
+                (self._cache_key(contact_id), contact_type, name, int(time.time()))
             )
             conn.commit()
         finally:
@@ -405,7 +426,7 @@ class ContactsManager:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
             cursor.execute(
                 "REPLACE INTO contacts_cache (id, type, name, extra, updated_at) VALUES (%s, %s, %s, %s, %s)",
-                (contact_id, contact_type, name, extra, int(time.time()))
+                (self._cache_key(contact_id), contact_type, name, extra, int(time.time()))
             )
             conn.commit()
         finally:
@@ -414,30 +435,48 @@ class ContactsManager:
     def find_unresolved(self) -> dict:
         """
         从 messages 表中查找所有未缓存的 sender 和 roomid。
+        多企业时只查本企业的消息。
         返回: {"users": [id, ...], "rooms": [id, ...]}
         """
         conn = self.db.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
 
+            # 企业过滤条件
+            corpid_filter = ""
+            corpid_params = []
+            if self._cache_prefix:
+                corpid_filter = "AND m.corpid = %s"
+                corpid_params = [self.corpid]
+
+            # 缓存 key 前缀（JOIN 时需匹配带前缀的 key）
+            if self._cache_prefix:
+                join_expr = f"CONCAT('{self._cache_prefix}:', m.sender)"
+                join_expr_room = f"CONCAT('{self._cache_prefix}:', m.roomid)"
+            else:
+                join_expr = "m.sender"
+                join_expr_room = "m.roomid"
+
             # 查找未缓存的 sender
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT DISTINCT m.sender
                 FROM messages m
-                LEFT JOIN contacts_cache c ON m.sender = c.id
+                LEFT JOIN contacts_cache c ON {join_expr} = c.id
                 WHERE m.sender != '' AND m.sender IS NOT NULL AND c.id IS NULL
+                {corpid_filter}
                 LIMIT 50
-            """)
+            """, corpid_params)
             users = [row["sender"] for row in cursor.fetchall()]
 
             # 查找未缓存的 roomid
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT DISTINCT m.roomid
                 FROM messages m
-                LEFT JOIN contacts_cache c ON m.roomid = c.id
+                LEFT JOIN contacts_cache c ON {join_expr_room} = c.id
                 WHERE m.roomid != '' AND m.roomid IS NOT NULL AND c.id IS NULL
+                {corpid_filter}
                 LIMIT 50
-            """)
+            """, corpid_params)
             rooms = [row["roomid"] for row in cursor.fetchall()]
 
             return {"users": users, "rooms": rooms}
@@ -574,25 +613,26 @@ class ContactsManager:
         import threading
 
         def _worker():
-            logger.info("通讯录自动解析线程启动，间隔 %d 秒", interval)
+            logger.info("%s通讯录自动解析线程启动，间隔 %d 秒", self._log_prefix, interval)
             while True:
                 try:
                     unresolved = self.find_unresolved()
                     total = len(unresolved["users"]) + len(unresolved["rooms"])
                     if total > 0:
-                        logger.info("发现 %d 个未解析联系人，%d 个未解析群名，开始自动解析",
-                                    len(unresolved["users"]), len(unresolved["rooms"]))
+                        logger.info("%s发现 %d 个未解析联系人，%d 个未解析群名，开始自动解析",
+                                    self._log_prefix, len(unresolved["users"]), len(unresolved["rooms"]))
                         result = self.resolve_unresolved()
-                        logger.info("自动解析完成: 用户 %d 成功/%d 失败, 群 %d 成功/%d 失败",
-                                    result["resolved_users"], result["failed_users"],
+                        logger.info("%s自动解析完成: 用户 %d 成功/%d 失败, 群 %d 成功/%d 失败",
+                                    self._log_prefix, result["resolved_users"], result["failed_users"],
                                     result["resolved_rooms"], result["failed_rooms"])
                 except Exception as e:
-                    logger.error("自动解析异常: %s", e)
+                    logger.error("%s自动解析异常: %s", self._log_prefix, e)
                 time.sleep(interval)
 
-        thread = threading.Thread(target=_worker, daemon=True, name="contacts-auto-resolve")
+        thread_name = f"contacts-auto-resolve-{self.enterprise_name or 'main'}"
+        thread = threading.Thread(target=_worker, daemon=True, name=thread_name)
         thread.start()
-        logger.info("通讯录自动解析线程已启动")
+        logger.info("%s通讯录自动解析线程已启动", self._log_prefix)
 
     def batch_resolve(self, user_ids: list, room_ids: list) -> dict:
         """

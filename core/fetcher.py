@@ -20,7 +20,8 @@ class MessageFetcher:
 
     def __init__(self, finance_sdk: FinanceSDK, decryptor: MessageDecryptor,
                  parser: MessageParser, db: Database,
-                 limit: int = 1000, proxy: str = "", passwd: str = "", timeout: int = 10):
+                 limit: int = 1000, proxy: str = "", passwd: str = "", timeout: int = 10,
+                 cursor_id: int = 1, enterprise_name: str = "", corpid: str = ""):
         self.finance_sdk = finance_sdk
         self.decryptor = decryptor
         self.parser = parser
@@ -29,7 +30,11 @@ class MessageFetcher:
         self.proxy = proxy
         self.passwd = passwd
         self.timeout = timeout
+        self.cursor_id = cursor_id
+        self.enterprise_name = enterprise_name
+        self.corpid = corpid
         self._lock = threading.Lock()
+        self._log_prefix = f"[{enterprise_name}] " if enterprise_name else ""
 
     def fetch_new_messages(self):
         """
@@ -41,22 +46,22 @@ class MessageFetcher:
 
     def _do_fetch(self):
         """执行拉取逻辑"""
-        seq = self.db.get_seq()
+        seq = self.db.get_seq(self.cursor_id)
         total_count = 0
 
         while True:
-            logger.info("拉取消息, seq=%d, limit=%d", seq, self.limit)
+            logger.info("%s拉取消息, seq=%d, limit=%d", self._log_prefix, seq, self.limit)
 
             ret, data = self.finance_sdk.get_chat_data(
                 seq, self.limit, self.proxy, self.passwd, self.timeout
             )
             if ret != 0:
-                logger.error("拉取消息失败, 错误码: %d", ret)
+                logger.error("%s拉取消息失败, 错误码: %d", self._log_prefix, ret)
                 break
 
             chat_list = data.get("chatdata", [])
             if not chat_list:
-                logger.info("没有新消息")
+                logger.info("%s没有新消息", self._log_prefix)
                 break
 
             for item in chat_list:
@@ -67,13 +72,13 @@ class MessageFetcher:
             total_count += len(chat_list)
 
             # 更新游标
-            self.db.update_seq(seq)
+            self.db.update_seq(seq, self.cursor_id)
 
             # 如果拉取数量小于 limit，说明没有更多数据
             if len(chat_list) < self.limit:
                 break
 
-        logger.info("本次共拉取 %d 条消息", total_count)
+        logger.info("%s本次共拉取 %d 条消息", self._log_prefix, total_count)
 
     def rescan_missed_insurance(self, lookback_days: int = 5):
         """
@@ -172,17 +177,17 @@ class MessageFetcher:
         # 解密消息
         ret, decrypted_json = self.decryptor.decrypt_message(encrypt_random_key, encrypt_chat_msg)
         if ret != 0:
-            logger.error("解密消息失败, seq=%d", msg_seq)
+            logger.error("%s解密消息失败, seq=%d", self._log_prefix, msg_seq)
             return
 
         # 解析消息
         try:
             msg_data = json.loads(decrypted_json)
             parsed = self.parser.parse(msg_data)
-            logger.info("消息[seq=%d]: %s", msg_seq, parsed.get("summary", ""))
+            logger.info("%s消息[seq=%d]: %s", self._log_prefix, msg_seq, parsed.get("summary", ""))
 
             # 存储消息
-            self.db.save_message(msg_seq, msg_data, parsed)
+            self.db.save_message(msg_seq, msg_data, parsed, corpid=self.corpid)
 
             # 检查是否需要触发保单识别
             self._check_insurance_trigger(msg_seq, msg_data, parsed)
@@ -190,7 +195,7 @@ class MessageFetcher:
             # 检查是否需要触发保险报价
             self._check_quote_trigger(msg_seq, msg_data, parsed)
         except json.JSONDecodeError as e:
-            logger.error("消息JSON解析失败, seq=%d: %s", msg_seq, e)
+            logger.error("%s消息JSON解析失败, seq=%d: %s", self._log_prefix, msg_seq, e)
 
     def _check_insurance_trigger(self, seq: int, msg_data: dict, parsed: dict):
         """检查是否需要触发保单识别（支持群聊 + 私聊）"""
