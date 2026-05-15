@@ -20,11 +20,13 @@ logger = logging.getLogger(__name__)
 class Database:
     """MySQL 数据库操作，基于 PooledDB 连接池"""
 
-    def __init__(self, db_config: dict):
+    def __init__(self, db_config: dict, main_corpid: str = ""):
         """
         初始化数据库连接池。
         db_config 包含: host, port, user, password, database
+        main_corpid: 主企业 corpid，用于回填历史消息
         """
+        self._main_corpid = main_corpid
         self.pool = PooledDB(
             creator=pymysql,
             maxconnections=0,   # 无限制
@@ -124,6 +126,15 @@ class Database:
                 logger.info("messages 表已添加 corpid 字段")
             except Exception:
                 pass  # 字段已存在，忽略
+
+            # 迁移：回填历史消息的 corpid（空值 → 主企业 corpid）
+            if self._main_corpid:
+                cursor.execute(
+                    "UPDATE messages SET corpid = %s WHERE corpid = '' OR corpid IS NULL",
+                    (self._main_corpid,)
+                )
+                if cursor.rowcount > 0:
+                    logger.info("已回填 %d 条历史消息的 corpid 为 %s", cursor.rowcount, self._main_corpid)
 
             conn.commit()
         finally:

@@ -48,8 +48,8 @@ def create_app(config: dict) -> Flask:
     app = Flask(__name__, template_folder="web/templates")
     app.secret_key = config.get("secret_key", "wxbot-monitor-secret-key")
 
-    # 初始化数据库（MySQL 连接池）
-    db = Database(config["mysql"])
+    # 初始化数据库（MySQL 连接池，传入主企业 corpid 用于回填历史消息）
+    db = Database(config["mysql"], main_corpid=config["wecom"]["corpid"])
 
     # 初始化通讯录模块（主企业：车物家，不加缓存前缀以兼容历史数据）
     contacts = ContactsManager(
