@@ -258,18 +258,37 @@ def get_media(msg_seq):
         cos_filename = f"{file_hash}{ext}"
         save_path = os.path.join(MEDIA_DIR, cos_filename)
 
-        # 下载媒体文件到本地（根据 corpid 选择对应的 SDK）
+        # 下载媒体文件到本地（根据 corpid 选择对应的 SDK，失败时尝试其他 SDK）
         if not os.path.exists(save_path):
             os.makedirs(MEDIA_DIR, exist_ok=True)
             msg_corpid = row.get("corpid", "")
-            sdk = _sdk_map.get(msg_corpid, _finance_sdk) if msg_corpid else _finance_sdk
-            ret, _ = sdk.get_media_data(
-                sdk_file_id=sdkfileid,
-                proxy=_sdk_config.get("proxy", ""),
-                passwd=_sdk_config.get("proxy_passwd", ""),
-                timeout=_sdk_config.get("timeout", 10),
-                save_path=save_path,
-            )
+            # 构建尝试顺序：优先匹配 corpid 的 SDK，然后主 SDK，最后其他 SDK
+            sdks_to_try = []
+            if msg_corpid and msg_corpid in _sdk_map:
+                sdks_to_try.append(("matched", _sdk_map[msg_corpid]))
+            sdks_to_try.append(("main", _finance_sdk))
+            for cid, s in _sdk_map.items():
+                if s not in [t[1] for t in sdks_to_try]:
+                    sdks_to_try.append((cid, s))
+
+            ret = -1
+            for sdk_label, sdk in sdks_to_try:
+                ret, _ = sdk.get_media_data(
+                    sdk_file_id=sdkfileid,
+                    proxy=_sdk_config.get("proxy", ""),
+                    passwd=_sdk_config.get("proxy_passwd", ""),
+                    timeout=_sdk_config.get("timeout", 10),
+                    save_path=save_path,
+                )
+                if ret == 0:
+                    # 下载成功，回填 corpid（修复历史消息缺失 corpid 的问题）
+                    if not msg_corpid and sdk_label != "main":
+                        cursor.execute(
+                            "UPDATE messages SET corpid = %s WHERE seq = %s",
+                            (sdk_label, msg_seq)
+                        )
+                        conn.commit()
+                    break
             if ret != 0:
                 return jsonify({"error": f"下载失败，错误码: {ret}"}), 500
 
