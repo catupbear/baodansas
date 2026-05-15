@@ -24,6 +24,8 @@ _contacts = None
 _cos = None
 _fetch_lock = threading.Lock()
 _fetching = False
+# corpid -> FinanceSDK 映射（多企业媒体下载用）
+_sdk_map = {}
 
 # 媒体文件本地临时目录
 MEDIA_DIR = "./data/media"
@@ -39,6 +41,11 @@ def init_api(db: Database, fetcher=None, finance_sdk=None, sdk_config: dict = No
     _sdk_config = sdk_config or {}
     _contacts = contacts
     _cos = cos_storage
+
+
+def register_extra_sdk(corpid: str, sdk):
+    """注册额外企业的 SDK（多企业媒体下载用）"""
+    _sdk_map[corpid] = sdk
 
 
 # 全局鉴权：消息查询 API 均需登录
@@ -218,7 +225,7 @@ def get_media(msg_seq):
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute(
-            "SELECT msgtype, parsed_content, raw_data FROM messages WHERE seq = %s",
+            "SELECT msgtype, parsed_content, raw_data, corpid FROM messages WHERE seq = %s",
             (msg_seq,)
         )
         row = cursor.fetchone()
@@ -251,10 +258,12 @@ def get_media(msg_seq):
         cos_filename = f"{file_hash}{ext}"
         save_path = os.path.join(MEDIA_DIR, cos_filename)
 
-        # 下载媒体文件到本地
+        # 下载媒体文件到本地（根据 corpid 选择对应的 SDK）
         if not os.path.exists(save_path):
             os.makedirs(MEDIA_DIR, exist_ok=True)
-            ret, _ = _finance_sdk.get_media_data(
+            msg_corpid = row.get("corpid", "")
+            sdk = _sdk_map.get(msg_corpid, _finance_sdk) if msg_corpid else _finance_sdk
+            ret, _ = sdk.get_media_data(
                 sdk_file_id=sdkfileid,
                 proxy=_sdk_config.get("proxy", ""),
                 passwd=_sdk_config.get("proxy_passwd", ""),

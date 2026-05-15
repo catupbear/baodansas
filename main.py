@@ -11,7 +11,7 @@ from flask import Flask, redirect, render_template, request
 
 from callback.crypto import WXBizMsgCrypt
 from callback.server import callback_bp, init_callback, create_callback_blueprint
-from web.api import api_bp, init_api
+from web.api import api_bp, init_api, register_extra_sdk
 from core.contacts import ContactsManager
 from core.decryptor import MessageDecryptor
 from core.fetcher import MessageFetcher
@@ -308,6 +308,10 @@ def create_app(config: dict) -> Flask:
 
         # 把 fetcher 和 SDK 传给 API
         init_api(db, fetcher, finance_sdk, sdk_config, contacts, cos_storage)
+
+        # 注册额外企业 SDK（媒体下载按 corpid 选择对应 SDK）
+        for ef in extra_fetchers:
+            register_extra_sdk(ef["fetcher"].corpid, ef["sdk"])
 
         # 更新保单识别的 SDK 引用
         insurance_handler.finance_sdk = finance_sdk
