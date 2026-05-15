@@ -183,6 +183,65 @@ class ContactsManager:
 
         return name or room_id
 
+    def get_room_members(self, room_id: str) -> list:
+        """获取群成员列表，返回 [{"userid": "xxx", "name": "张三"}, ...]"""
+        if not room_id:
+            return []
+
+        # 先尝试内部群接口
+        token = self._get_access_token()
+        if token:
+            url = f"https://qyapi.weixin.qq.com/cgi-bin/msgaudit/groupchat/get?access_token={token}"
+            body = json.dumps({"roomid": room_id}).encode("utf-8")
+            try:
+                req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                if data.get("errcode") == 0:
+                    members = data.get("members", [])
+                    result = []
+                    for m in members:
+                        mid = m.get("memberid", "")
+                        # 尝试从缓存获取名称
+                        name = self._get_cache(mid) if mid else ""
+                        if not name or name == "__unresolvable__":
+                            name = self.get_name(mid) if mid else ""
+                        result.append({"userid": mid, "name": name or mid})
+                    return result
+                elif data.get("errcode") != 301059:
+                    return []
+            except Exception as e:
+                logger.error("获取群成员异常 %s: %s", room_id, e)
+                return []
+
+        # 降级：外部群接口
+        token = self._get_external_access_token()
+        if not token:
+            return []
+
+        url = f"https://qyapi.weixin.qq.com/cgi-bin/externalcontact/groupchat/get?access_token={token}"
+        body = json.dumps({"chat_id": room_id, "need_name": 1}).encode("utf-8")
+        try:
+            req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            if data.get("errcode") == 0:
+                chat = data.get("group_chat", {})
+                members = chat.get("member_list", [])
+                result = []
+                for m in members:
+                    mid = m.get("userid", "")
+                    name = m.get("name", "")
+                    if not name:
+                        name = self._get_cache(mid) if mid else ""
+                        if not name or name == "__unresolvable__":
+                            name = mid
+                    result.append({"userid": mid, "name": name or mid})
+                return result
+        except Exception as e:
+            logger.error("获取外部群成员异常 %s: %s", room_id, e)
+        return []
+
     def _fetch_user(self, userid: str) -> str:
         """调用通讯录API获取员工信息"""
         token = self._get_access_token()

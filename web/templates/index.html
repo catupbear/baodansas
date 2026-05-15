@@ -294,6 +294,55 @@
             margin-top: 2px;
         }
 
+        .chat-members-btn {
+            background: none;
+            border: 1px solid #d0d0d0;
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .chat-members-btn:hover { background: #f0f2f5; color: #1a73e8; border-color: #1a73e8; }
+
+        .members-panel {
+            display: none;
+            background: #fff;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 8px 20px;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        .members-panel.show { display: block; }
+        .members-panel .members-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .members-panel .member-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+            background: #f0f2f5;
+            border-radius: 12px;
+            font-size: 12px;
+            color: #333;
+        }
+        .members-panel .member-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .members-panel .members-loading {
+            font-size: 12px;
+            color: #999;
+            padding: 4px 0;
+        }
+
         .chat-messages {
             flex: 1;
             overflow-y: auto;
@@ -754,7 +803,9 @@
                     <h2 id="chatTitle">-</h2>
                     <div class="chat-meta" id="chatMeta"></div>
                 </div>
+                <button class="chat-members-btn" id="membersBtn" style="display:none" onclick="toggleMembers()">群成员</button>
             </div>
+            <div class="members-panel" id="membersPanel"></div>
             <div class="chat-messages" id="chatMessages"></div>
         </div>
     </div>
@@ -955,9 +1006,13 @@ function renderConversations() {
 }
 
 // 选择会话
+let currentRoomId = "";  // 当前群 ID
+let membersCache = {};   // 群成员缓存 {roomid: [members]}
+
 function selectConv(convId, roomId, displayName) {
     currentConv = convId;
     currentConvName = displayName;
+    currentRoomId = roomId;
     chatMessages = [];
     chatPage = 0;
     lightboxImages = [];
@@ -973,8 +1028,70 @@ function selectConv(convId, roomId, displayName) {
     document.getElementById("chatMeta").textContent = "";
     document.getElementById("chatMessages").innerHTML = '<div class="loading-text"><span class="spinner"></span>加载消息...</div>';
 
+    // 群聊显示群成员按钮，私聊隐藏
+    const membersBtn = document.getElementById("membersBtn");
+    const membersPanel = document.getElementById("membersPanel");
+    if (roomId) {
+        membersBtn.style.display = "";
+        membersBtn.textContent = "群成员";
+    } else {
+        membersBtn.style.display = "none";
+    }
+    membersPanel.classList.remove("show");
+    membersPanel.innerHTML = "";
+
     // 加载最新消息（最后一页）
     loadChatMessages(true);
+}
+
+// 切换群成员面板
+async function toggleMembers() {
+    const panel = document.getElementById("membersPanel");
+    if (panel.classList.contains("show")) {
+        panel.classList.remove("show");
+        return;
+    }
+
+    // 用当前群的 roomid
+    const roomid = currentRoomId || currentConv;
+    if (!roomid || roomid.startsWith("private_")) return;
+
+    panel.classList.add("show");
+
+    // 有缓存直接显示
+    if (membersCache[roomid]) {
+        renderMembers(membersCache[roomid]);
+        return;
+    }
+
+    panel.innerHTML = '<div class="members-loading">加载中...</div>';
+    try {
+        const params = new URLSearchParams({ roomid });
+        if (currentCorpid) params.set("corpid", currentCorpid);
+        const res = await authFetch(`/api/room/members?${params}`);
+        const data = await res.json();
+        if (data.members) {
+            membersCache[roomid] = data.members;
+            renderMembers(data.members);
+            document.getElementById("membersBtn").textContent = `群成员 (${data.count})`;
+        } else {
+            panel.innerHTML = '<div class="members-loading">获取失败</div>';
+        }
+    } catch(e) {
+        panel.innerHTML = '<div class="members-loading">获取失败</div>';
+    }
+}
+
+function renderMembers(members) {
+    const panel = document.getElementById("membersPanel");
+    if (!members.length) {
+        panel.innerHTML = '<div class="members-loading">暂无成员信息</div>';
+        return;
+    }
+    panel.innerHTML = '<div class="members-list">' + members.map(m => {
+        const color = getSenderColor(m.userid);
+        return `<span class="member-tag"><span class="member-dot" style="background:${color}"></span>${escapeHtml(m.name)}</span>`;
+    }).join("") + '</div>';
 }
 
 // 加载聊天消息

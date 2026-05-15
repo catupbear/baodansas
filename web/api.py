@@ -364,6 +364,22 @@ def get_media(msg_seq):
     return send_file(save_path, mimetype=mimetype, as_attachment=as_attachment, download_name=orig_filename)
 
 
+@api_bp.route("/room/members", methods=["GET"])
+def get_room_members():
+    """获取群成员列表"""
+    roomid = request.args.get("roomid", "").strip()
+    if not roomid:
+        return jsonify({"error": "roomid 不能为空"}), 400
+
+    corpid = request.args.get("corpid", "")
+    contacts = _contacts_map.get(corpid) if corpid and corpid in _contacts_map else _contacts
+    if contacts is None:
+        return jsonify({"error": "通讯录模块未初始化"}), 503
+
+    members = contacts.get_room_members(roomid)
+    return jsonify({"members": members, "count": len(members)})
+
+
 @api_bp.route("/contacts/resolve", methods=["POST"])
 def resolve_contacts():
     """批量解析昵称"""
