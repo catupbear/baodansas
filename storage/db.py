@@ -63,7 +63,7 @@ class Database:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS messages (
                     id INT PRIMARY KEY AUTO_INCREMENT,
-                    seq INT UNIQUE,
+                    seq INT,
                     corpid VARCHAR(64) DEFAULT '',
                     msgid VARCHAR(128),
                     action VARCHAR(64),
@@ -117,6 +117,18 @@ class Database:
                     cursor.execute(idx_sql)
                 except Exception:
                     pass  # 索引已存在，忽略
+
+            # 迁移：seq 从全局唯一改为 (corpid, seq) 联合唯一（支持多企业 seq 独立）
+            try:
+                cursor.execute("ALTER TABLE messages DROP INDEX seq")
+                logger.info("已删除 messages.seq 唯一索引")
+            except Exception:
+                pass  # 索引不存在，忽略
+            try:
+                cursor.execute("CREATE UNIQUE INDEX uk_corpid_seq ON messages(corpid, seq)")
+                logger.info("已创建 messages(corpid, seq) 联合唯一索引")
+            except Exception:
+                pass  # 索引已存在，忽略
 
             # 迁移：为 messages 表添加 corpid 字段（已有表兼容）
             try:
