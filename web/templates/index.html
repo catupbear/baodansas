@@ -718,6 +718,9 @@
         <div class="nav-links">
             <a href="/">保单台账</a>
         </div>
+        <select id="corpSelect" class="btn btn-secondary" onchange="switchEnterprise()" style="appearance:auto;padding-right:8px;">
+            <option value="">加载中...</option>
+        </select>
         <button class="btn btn-secondary" id="syncContactsBtn" onclick="syncContacts()">同步通讯录</button>
         <button class="btn btn-primary" id="fetchBtn" onclick="manualFetch()">拉取消息</button>
         <label class="auto-refresh-label">
@@ -812,6 +815,7 @@ async function authFetch(url, options = {}) {
 if (!checkAuth()) throw new Error('redirect');
 
 // ===== 全局状态 =====
+let currentCorpid = "";        // 当前选中的企业 corpid
 let conversations = [];
 let currentConv = null;       // 当前选中的会话 conversation_id
 let currentConvName = "";
@@ -904,7 +908,10 @@ async function loadStats() {
 
 // ===== 会话列表 =====
 async function loadConversations(keyword) {
-    const params = keyword ? `?keyword=${encodeURIComponent(keyword)}` : "";
+    const qp = new URLSearchParams();
+    if (keyword) qp.set("keyword", keyword);
+    if (currentCorpid) qp.set("corpid", currentCorpid);
+    const params = qp.toString() ? `?${qp}` : "";
     try {
         const res = await authFetch(`/api/conversations${params}`);
         conversations = await res.json();
@@ -978,6 +985,7 @@ async function loadChatMessages(initial) {
         page_size: 50,
         order: "desc",  // 先倒序拿最新的
     });
+    if (currentCorpid) params.set("corpid", currentCorpid);
 
     // 判断会话类型
     if (currentConv.startsWith("private_")) {
@@ -1390,6 +1398,7 @@ async function refreshChat() {
         page: 1,
         order: "desc",
     });
+    if (currentCorpid) params.set("corpid", currentCorpid);
     if (currentConv.startsWith("private_")) {
         params.set("conversation_id", currentConv);
     } else {
@@ -1417,10 +1426,46 @@ function escapeHtml(str) {
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+// ===== 企业切换 =====
+async function loadEnterprises() {
+    try {
+        const res = await authFetch("/api/enterprises");
+        const list = await res.json();
+        const sel = document.getElementById("corpSelect");
+        if (!list.length) {
+            sel.innerHTML = '<option value="">无企业配置</option>';
+            return;
+        }
+        // 默认选午虎科技（第二个），没有则选第一个
+        const defaultIdx = list.length > 1 ? 1 : 0;
+        sel.innerHTML = list.map((e, i) =>
+            `<option value="${e.corpid}" ${i === defaultIdx ? 'selected' : ''}>${e.name}</option>`
+        ).join("");
+        currentCorpid = list[defaultIdx].corpid;
+    } catch(e) {
+        document.getElementById("corpSelect").innerHTML = '<option value="">加载失败</option>';
+    }
+}
+
+function switchEnterprise() {
+    currentCorpid = document.getElementById("corpSelect").value;
+    // 清空当前会话状态
+    currentConv = null;
+    chatMessages = [];
+    document.getElementById("chatContainer").style.display = "none";
+    document.getElementById("chatPlaceholder").style.display = "flex";
+    // 重新加载
+    loadConversations();
+    loadStats();
+}
+
 // ===== 初始化 =====
-loadStats();
-loadConversations();
-setupAutoRefresh();
+(async function init() {
+    await loadEnterprises();
+    loadStats();
+    loadConversations();
+    setupAutoRefresh();
+})();
 </script>
 </body>
 </html>

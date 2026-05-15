@@ -189,20 +189,25 @@ class Database:
         finally:
             conn.close()
 
-    def get_conversations(self, keyword: str = "") -> list:
+    def get_conversations(self, keyword: str = "", corpid: str = "") -> list:
         """
         获取会话列表，按最后消息时间倒序。
         私聊按双方 ID 排序组合分组（A→B 和 B→A 合并为一个会话）。
+        corpid: 按企业过滤，空字符串表示不过滤
         """
         conn = self.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
 
+            conditions = []
             params = []
-            where_clause = ""
             if keyword:
-                where_clause = "WHERE (summary LIKE %s OR sender LIKE %s OR roomid LIKE %s)"
+                conditions.append("(summary LIKE %s OR sender LIKE %s OR roomid LIKE %s)")
                 params.extend([f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"])
+            if corpid:
+                conditions.append("corpid = %s")
+                params.append(corpid)
+            where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
             # 私聊：用 LEAST/GREATEST 把双方 ID 排序组合，确保 A→B 和 B→A 归为同一个会话
             # tolist 是 JSON 数组如 '["userid"]'，用 JSON_UNQUOTE(JSON_EXTRACT(...)) 提取第一个元素
@@ -277,7 +282,8 @@ class Database:
                        msgtype: str = "", sender: str = "",
                        roomid: str = "", keyword: str = "",
                        order: str = "desc",
-                       conversation_id: str = "") -> dict:
+                       conversation_id: str = "",
+                       corpid: str = "") -> dict:
         """
         分页查询消息，支持筛选。
         order: "asc" 按时间正序（聊天模式），"desc" 按时间倒序（默认）
@@ -315,6 +321,9 @@ class Database:
         if keyword:
             conditions.append("summary LIKE %s")
             params.append(f"%{keyword}%")
+        if corpid:
+            conditions.append("corpid = %s")
+            params.append(corpid)
 
         where = " AND ".join(conditions)
         where_clause = f"WHERE {where}" if where else ""

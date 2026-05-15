@@ -26,6 +26,8 @@ _fetch_lock = threading.Lock()
 _fetching = False
 # corpid -> FinanceSDK 映射（多企业媒体下载用）
 _sdk_map = {}
+# corpid -> ContactsManager 映射（多企业通讯录解析用）
+_contacts_map = {}
 
 # 媒体文件本地临时目录
 MEDIA_DIR = "./data/media"
@@ -46,6 +48,21 @@ def init_api(db: Database, fetcher=None, finance_sdk=None, sdk_config: dict = No
 def register_extra_sdk(corpid: str, sdk):
     """注册额外企业的 SDK（多企业媒体下载用）"""
     _sdk_map[corpid] = sdk
+
+
+def register_extra_contacts(corpid: str, contacts):
+    """注册额外企业的通讯录（多企业通讯录解析用）"""
+    _contacts_map[corpid] = contacts
+
+
+# 企业列表（前端切换用）
+_enterprises = []
+
+
+def register_enterprises(enterprises: list):
+    """注册企业列表 [{"corpid": "xxx", "name": "午虎科技"}, ...]"""
+    global _enterprises
+    _enterprises = enterprises
 
 
 # 全局鉴权：消息查询 API 均需登录
@@ -81,17 +98,25 @@ def _require_login():
     }
 
 
+@api_bp.route("/enterprises")
+def get_enterprises():
+    """获取企业列表（前端切换用）"""
+    return jsonify(_enterprises)
+
+
 @api_bp.route("/conversations")
 def get_conversations():
     """
     获取会话列表
-    参数: keyword（搜索关键词）
+    参数: keyword（搜索关键词）, corpid（企业过滤）
     """
     keyword = request.args.get("keyword", "")
-    conversations = _db.get_conversations(keyword=keyword)
+    corpid = request.args.get("corpid", "")
+    conversations = _db.get_conversations(keyword=keyword, corpid=corpid)
 
-    # 批量解析昵称
-    if _contacts and conversations:
+    # 批量解析昵称（根据 corpid 选择对应的通讯录）
+    contacts = _contacts_map.get(corpid, _contacts) if corpid else _contacts
+    if contacts and conversations:
         user_ids = []
         room_ids = []
         for conv in conversations:
@@ -103,7 +128,7 @@ def get_conversations():
             for pid in conv.get("peer_ids", []):
                 if pid:
                     user_ids.append(pid)
-        names = _contacts.batch_resolve(user_ids, room_ids)
+        names = contacts.batch_resolve(user_ids, room_ids)
         for conv in conversations:
             if conv["roomid"]:
                 conv["display_name"] = names["rooms"].get(conv["roomid"], conv["roomid"])
@@ -132,6 +157,7 @@ def get_messages():
     keyword = request.args.get("keyword", "")
     order = request.args.get("order", "desc")
     conversation_id = request.args.get("conversation_id", "")
+    corpid = request.args.get("corpid", "")
 
     page_size = min(page_size, 200)
 
@@ -140,10 +166,12 @@ def get_messages():
         msgtype=msgtype, sender=sender,
         roomid=roomid, keyword=keyword,
         order=order, conversation_id=conversation_id,
+        corpid=corpid,
     )
 
-    # 批量解析昵称
-    if _contacts and result["messages"]:
+    # 批量解析昵称（根据 corpid 选择对应的通讯录）
+    contacts = _contacts_map.get(corpid, _contacts) if corpid else _contacts
+    if contacts and result["messages"]:
         user_ids = [m["sender"] for m in result["messages"]]
         room_ids = [m["roomid"] for m in result["messages"]]
         # 收集 tolist 中的用户 ID
@@ -153,7 +181,7 @@ def get_messages():
                 user_ids.extend(to_ids)
             except (json.JSONDecodeError, TypeError):
                 pass
-        names = _contacts.batch_resolve(user_ids, room_ids)
+        names = contacts.batch_resolve(user_ids, room_ids)
         for msg in result["messages"]:
             msg["sender_name"] = names["users"].get(msg["sender"], msg["sender"])
             msg["room_name"] = names["rooms"].get(msg["roomid"], msg["roomid"])
