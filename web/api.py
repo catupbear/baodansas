@@ -73,8 +73,8 @@ def _require_login():
     from auth.db import get_user_by_id
     from flask import g
 
-    # 媒体文件接口跳过 JWT 鉴权（监控页面通过 session 访问）
-    if request.path.startswith("/api/media/"):
+    # 媒体文件和企业列表接口跳过 JWT 鉴权（监控页面通过 session 访问）
+    if request.path.startswith("/api/media/") or request.path == "/api/enterprises":
         return None
 
     auth_header = request.headers.get("Authorization", "")
