@@ -379,36 +379,44 @@ class Database:
         finally:
             conn.close()
 
-    # 统计信息缓存（10秒 TTL，避免频繁 COUNT(*)）
-    _stats_cache = None
-    _stats_cache_time = 0
+    # 统计信息缓存（10秒 TTL，按 corpid 分别缓存）
+    _stats_cache = {}
+    _stats_cache_time = {}
 
-    def get_stats(self) -> dict:
-        """获取统计信息（带 10 秒内存缓存）"""
+    def get_stats(self, corpid: str = "", cursor_id: int = 1) -> dict:
+        """获取统计信息（带 10 秒内存缓存，支持按企业过滤）"""
         import time as _time
         now = _time.time()
-        if self._stats_cache and now - self._stats_cache_time < 10:
-            return dict(self._stats_cache)
+        cache_key = corpid or "__all__"
+        if cache_key in self._stats_cache and now - self._stats_cache_time.get(cache_key, 0) < 10:
+            return dict(self._stats_cache[cache_key])
 
         conn = self.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-            cursor.execute("SELECT COUNT(*) as cnt FROM messages")
-            total = cursor.fetchone()["cnt"]
-
-            cursor.execute(
-                "SELECT msgtype, COUNT(*) as cnt FROM messages GROUP BY msgtype ORDER BY cnt DESC"
-            )
+            if corpid:
+                cursor.execute("SELECT COUNT(*) as cnt FROM messages WHERE corpid = %s", (corpid,))
+                total = cursor.fetchone()["cnt"]
+                cursor.execute(
+                    "SELECT msgtype, COUNT(*) as cnt FROM messages WHERE corpid = %s GROUP BY msgtype ORDER BY cnt DESC",
+                    (corpid,)
+                )
+            else:
+                cursor.execute("SELECT COUNT(*) as cnt FROM messages")
+                total = cursor.fetchone()["cnt"]
+                cursor.execute(
+                    "SELECT msgtype, COUNT(*) as cnt FROM messages GROUP BY msgtype ORDER BY cnt DESC"
+                )
             type_stats = list(cursor.fetchall())
 
-            cursor.execute("SELECT seq FROM cursor_state WHERE id = 1")
+            cursor.execute("SELECT seq FROM cursor_state WHERE id = %s", (cursor_id,))
             row = cursor.fetchone()
             seq = row["seq"] if row else 0
 
             result = {"total_messages": total, "current_seq": seq, "type_stats": type_stats}
-            Database._stats_cache = result
-            Database._stats_cache_time = now
+            Database._stats_cache[cache_key] = result
+            Database._stats_cache_time[cache_key] = now
             return dict(result)
         finally:
             conn.close()

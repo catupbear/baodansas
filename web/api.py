@@ -199,10 +199,21 @@ def get_messages():
     return jsonify(result)
 
 
+# corpid → cursor_id 映射（stats 查 seq 用）
+_corpid_cursor_map = {}
+
+
+def register_corpid_cursor(corpid: str, cursor_id: int):
+    """注册 corpid 对应的游标 ID"""
+    _corpid_cursor_map[corpid] = cursor_id
+
+
 @api_bp.route("/stats")
 def get_stats():
-    """获取统计信息"""
-    stats = _db.get_stats()
+    """获取统计信息（支持按企业过滤）"""
+    corpid = request.args.get("corpid", "")
+    cursor_id = _corpid_cursor_map.get(corpid, 1)
+    stats = _db.get_stats(corpid=corpid, cursor_id=cursor_id)
     stats["fetching"] = _fetching
     return jsonify(stats)
 

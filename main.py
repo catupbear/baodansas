@@ -11,7 +11,8 @@ from flask import Flask, redirect, render_template, request
 
 from callback.crypto import WXBizMsgCrypt
 from callback.server import callback_bp, init_callback, create_callback_blueprint
-from web.api import api_bp, init_api, register_extra_sdk, register_extra_contacts, register_enterprises
+from web.api import (api_bp, init_api, register_extra_sdk, register_extra_contacts,
+                     register_enterprises, register_corpid_cursor)
 from core.contacts import ContactsManager
 from core.decryptor import MessageDecryptor
 from core.fetcher import MessageFetcher
@@ -309,10 +310,14 @@ def create_app(config: dict) -> Flask:
         # 把 fetcher 和 SDK 传给 API
         init_api(db, fetcher, finance_sdk, sdk_config, contacts, cos_storage)
 
-        # 注册额外企业 SDK 和通讯录（按 corpid 选择对应实例）
+        # 注册企业 corpid → cursor_id 映射（主企业 cursor_id=1）
+        register_corpid_cursor(main_corpid, 1)
+
+        # 注册额外企业 SDK、通讯录、游标映射
         for ef in extra_fetchers:
             register_extra_sdk(ef["fetcher"].corpid, ef["sdk"])
             register_extra_contacts(ef["fetcher"].corpid, ef["contacts"])
+            register_corpid_cursor(ef["fetcher"].corpid, ef["fetcher"].cursor_id)
 
         # 注册企业列表（前端切换用）
         enterprise_list = [
