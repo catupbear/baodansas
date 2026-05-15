@@ -620,7 +620,8 @@ def _extract_company_short(data: dict) -> str:
 
 def check_file_md5_exists(db, file_md5: str) -> dict | None:
     """
-    检查指定 MD5 的文件是否已有识别记录。
+    检查指定 MD5 的文件是否已有成功识别的记录。
+    只有 status='done' 的记录才视为已处理，避免跳过之前失败/处理中的文件。
     返回已有记录（dict）或 None。
     """
     if not file_md5:
@@ -629,7 +630,7 @@ def check_file_md5_exists(db, file_md5: str) -> dict | None:
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute(
-            "SELECT id, filename, status FROM insurance_records WHERE file_md5 = %s LIMIT 1",
+            "SELECT id, filename, status FROM insurance_records WHERE file_md5 = %s AND status = 'done' LIMIT 1",
             (file_md5,)
         )
         return cursor.fetchone()
