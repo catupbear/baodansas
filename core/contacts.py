@@ -195,13 +195,18 @@ class ContactsManager:
             return result
 
         # 兜底：从 messages 表查该群所有发送人
-        return self._get_room_members_from_db(room_id)
+        logger.warning("群 %s API 获取成员为空，从消息记录兜底", room_id)
+        fallback = self._get_room_members_from_db(room_id)
+        logger.info("群 %s 从消息记录提取到 %d 个发送人", room_id, len(fallback))
+        return fallback
 
     def _fetch_room_members_api(self, room_id: str) -> list:
         """通过企微 API 获取群成员"""
         # 先尝试内部群接口
         token = self._get_access_token()
-        if token:
+        if not token:
+            logger.warning("获取群成员 %s 失败: access_token 为空", room_id)
+        else:
             url = f"https://qyapi.weixin.qq.com/cgi-bin/msgaudit/groupchat/get?access_token={token}"
             body = json.dumps({"roomid": room_id}).encode("utf-8")
             try:
@@ -210,6 +215,7 @@ class ContactsManager:
                     data = json.loads(resp.read().decode("utf-8"))
                 if data.get("errcode") == 0:
                     members = data.get("members", [])
+                    logger.info("内部群接口获取成员成功 %s: %d 人", room_id, len(members))
                     result = []
                     for m in members:
                         mid = m.get("memberid", "")
@@ -218,16 +224,20 @@ class ContactsManager:
                             name = self.get_name(mid) if mid else ""
                         result.append({"userid": mid, "name": name or mid})
                     return result
-                elif data.get("errcode") != 301059:
-                    logger.debug("内部群接口获取成员失败 %s: errcode=%s", room_id, data.get("errcode"))
+                elif data.get("errcode") == 301059:
+                    logger.info("群 %s 非内部群(301059)，尝试外部群接口", room_id)
+                else:
+                    logger.warning("内部群接口获取成员失败 %s: errcode=%s, errmsg=%s",
+                                   room_id, data.get("errcode"), data.get("errmsg"))
                     return []
             except Exception as e:
-                logger.error("获取群成员异常 %s: %s", room_id, e)
+                logger.error("内部群接口获取成员异常 %s: %s", room_id, e)
                 return []
 
         # 降级：外部群接口
         token = self._get_external_access_token()
         if not token:
+            logger.warning("获取外部群成员 %s 失败: external_access_token 为空（未配置 external_secret？）", room_id)
             return []
 
         url = f"https://qyapi.weixin.qq.com/cgi-bin/externalcontact/groupchat/get?access_token={token}"
@@ -239,6 +249,7 @@ class ContactsManager:
             if data.get("errcode") == 0:
                 chat = data.get("group_chat", {})
                 members = chat.get("member_list", [])
+                logger.info("外部群接口获取成员成功 %s: %d 人", room_id, len(members))
                 result = []
                 for m in members:
                     mid = m.get("userid", "")
@@ -249,8 +260,11 @@ class ContactsManager:
                             name = mid
                     result.append({"userid": mid, "name": name or mid})
                 return result
+            else:
+                logger.warning("外部群接口获取成员失败 %s: errcode=%s, errmsg=%s",
+                               room_id, data.get("errcode"), data.get("errmsg"))
         except Exception as e:
-            logger.error("获取外部群成员异常 %s: %s", room_id, e)
+            logger.error("外部群接口获取成员异常 %s: %s", room_id, e)
         return []
 
     def _get_room_members_from_db(self, room_id: str) -> list:
