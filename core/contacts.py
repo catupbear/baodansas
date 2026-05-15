@@ -184,10 +184,21 @@ class ContactsManager:
         return name or room_id
 
     def get_room_members(self, room_id: str) -> list:
-        """获取群成员列表，返回 [{"userid": "xxx", "name": "张三"}, ...]"""
+        """获取群成员列表，返回 [{"userid": "xxx", "name": "张三"}, ...]
+        优先调用企微 API，获取不到时从 messages 表提取发送人兜底。
+        """
         if not room_id:
             return []
 
+        result = self._fetch_room_members_api(room_id)
+        if result:
+            return result
+
+        # 兜底：从 messages 表查该群所有发送人
+        return self._get_room_members_from_db(room_id)
+
+    def _fetch_room_members_api(self, room_id: str) -> list:
+        """通过企微 API 获取群成员"""
         # 先尝试内部群接口
         token = self._get_access_token()
         if token:
@@ -202,13 +213,13 @@ class ContactsManager:
                     result = []
                     for m in members:
                         mid = m.get("memberid", "")
-                        # 尝试从缓存获取名称
                         name = self._get_cache(mid) if mid else ""
                         if not name or name == "__unresolvable__":
                             name = self.get_name(mid) if mid else ""
                         result.append({"userid": mid, "name": name or mid})
                     return result
                 elif data.get("errcode") != 301059:
+                    logger.debug("内部群接口获取成员失败 %s: errcode=%s", room_id, data.get("errcode"))
                     return []
             except Exception as e:
                 logger.error("获取群成员异常 %s: %s", room_id, e)
@@ -241,6 +252,27 @@ class ContactsManager:
         except Exception as e:
             logger.error("获取外部群成员异常 %s: %s", room_id, e)
         return []
+
+    def _get_room_members_from_db(self, room_id: str) -> list:
+        """从 messages 表提取群内所有发送人作为成员列表（兜底方案）"""
+        conn = self.db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor.execute(
+                "SELECT DISTINCT sender FROM messages WHERE roomid = %s AND sender IS NOT NULL AND sender != ''",
+                (room_id,)
+            )
+            senders = [row["sender"] for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+        result = []
+        for sid in senders:
+            name = self._get_cache(sid) if sid else ""
+            if not name or name == "__unresolvable__":
+                name = sid
+            result.append({"userid": sid, "name": name or sid})
+        return result
 
     def _fetch_user(self, userid: str) -> str:
         """调用通讯录API获取员工信息"""
