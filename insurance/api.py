@@ -2627,6 +2627,51 @@ def toggle_monitor_config_api(config_id):
 
 
 # ============================================================
+# 补扫历史保单
+# ============================================================
+
+@insurance_bp.route("/api/insurance/rescan", methods=["POST"])
+def rescan_history():
+    """
+    补扫历史消息中的保单 PDF。
+    根据当前监控配置，查找历史消息中符合条件但未识别的 PDF，重新入队识别。
+    """
+    from flask import current_app
+
+    data = request.get_json(force=True) if request.data else {}
+    lookback_days = data.get("lookback_days", 5)
+    config_ids = data.get("config_ids")  # 可选，指定监控配置 ID
+    room_ids = data.get("room_ids")  # 可选，指定群 ID
+    force = data.get("force", False)  # 是否强制重新识别
+
+    # 参数校验
+    if not isinstance(lookback_days, int) or lookback_days < 1 or lookback_days > 365:
+        return jsonify({"code": 400, "msg": "回溯天数需为 1-365 之间的整数"}), 400
+
+    # 获取 fetcher 实例（从 app.extensions）
+    wxbot_ext = current_app.extensions.get("wxbot", {})
+    fetcher = wxbot_ext.get("fetcher")
+    if not fetcher:
+        return jsonify({"code": 500, "msg": "fetcher 未初始化"}), 500
+
+    try:
+        enqueued = fetcher.rescan_missed_insurance(
+            lookback_days=lookback_days,
+            config_ids=config_ids,
+            room_ids=room_ids,
+            force=force,
+        )
+        return jsonify({
+            "code": 0,
+            "msg": f"补扫完成，已入队 {enqueued} 条待识别",
+            "data": {"enqueued": enqueued}
+        })
+    except Exception as e:
+        logger.exception("补扫历史保单失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+# ============================================================
 # 字段配置（系统设置）相关路由
 # ============================================================
 

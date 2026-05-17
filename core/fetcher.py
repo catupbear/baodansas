@@ -80,23 +80,59 @@ class MessageFetcher:
 
         logger.info("%s本次共拉取 %d 条消息", self._log_prefix, total_count)
 
-    def rescan_missed_insurance(self, lookback_days: int = 5):
+    def rescan_missed_insurance(self, lookback_days: int = 5,
+                                config_ids: list = None,
+                                room_ids: list = None,
+                                force: bool = False):
         """
         补扫历史消息中漏掉的保单 PDF。
         查找最近 lookback_days 天内，在监控群/用户中的 PDF 文件消息，
         且未在 insurance_records 表中生成记录的，重新入队识别。
+
+        参数:
+            lookback_days: 回溯天数
+            config_ids: 指定监控配置 ID 列表，为空则使用全部启用配置
+            room_ids: 指定群 ID 列表（优先级高于 config_ids）
+            force: 是否强制重新识别已有记录的 PDF
+        返回:
+            int: 入队数量
         """
         handler = getattr(self, "insurance_handler", None)
         if not handler:
             logger.info("补扫跳过：insurance_handler 未绑定")
-            return
+            return 0
 
-        watch = handler.get_watch_config()
-        watch_rooms = watch.get("rooms", [])
-        watch_users = watch.get("users", [])
+        # 确定监控范围
+        if room_ids:
+            # 直接指定群 ID
+            watch_rooms = room_ids
+            watch_users = []
+        elif config_ids:
+            # 指定配置 ID，从中提取 rooms/users
+            from insurance.monitor_config_db import get_enabled_monitor_configs
+            configs = get_enabled_monitor_configs(self.db)
+            watch_rooms = []
+            watch_users = []
+            for cfg in configs:
+                if cfg.get("id") not in config_ids:
+                    continue
+                for r in (cfg.get("rooms") or []):
+                    rid = r["id"] if isinstance(r, dict) else r
+                    if rid:
+                        watch_rooms.append(rid)
+                for u in (cfg.get("users") or []):
+                    uid = u["id"] if isinstance(u, dict) else u
+                    if uid:
+                        watch_users.append(uid)
+        else:
+            # 使用全部启用配置
+            watch = handler.get_watch_config()
+            watch_rooms = watch.get("rooms", [])
+            watch_users = watch.get("users", [])
+
         if not watch_rooms and not watch_users:
             logger.info("补扫跳过：没有配置监控群/用户")
-            return
+            return 0
 
         import time
         cutoff_ms = int((time.time() - lookback_days * 86400) * 1000)
@@ -122,16 +158,28 @@ class MessageFetcher:
 
             where_source = " OR ".join(conditions)
 
-            sql = f"""
-                SELECT m.seq, m.roomid, m.sender, m.parsed_content
-                FROM messages m
-                LEFT JOIN insurance_records ir ON ir.msg_seq = m.seq
-                WHERE m.msgtime >= %s
-                  AND m.msgtype = 'file'
-                  AND ({where_source})
-                  AND ir.id IS NULL
-                ORDER BY m.seq ASC
-            """
+            if force:
+                # 强制模式：不排除已有记录
+                sql = f"""
+                    SELECT m.seq, m.roomid, m.sender, m.parsed_content
+                    FROM messages m
+                    WHERE m.msgtime >= %s
+                      AND m.msgtype = 'file'
+                      AND ({where_source})
+                    ORDER BY m.seq ASC
+                """
+            else:
+                # 默认模式：排除已有记录
+                sql = f"""
+                    SELECT m.seq, m.roomid, m.sender, m.parsed_content
+                    FROM messages m
+                    LEFT JOIN insurance_records ir ON ir.msg_seq = m.seq
+                    WHERE m.msgtime >= %s
+                      AND m.msgtype = 'file'
+                      AND ({where_source})
+                      AND ir.id IS NULL
+                    ORDER BY m.seq ASC
+                """
             cursor.execute(sql, params)
             rows = cursor.fetchall()
         finally:
@@ -139,7 +187,7 @@ class MessageFetcher:
 
         if not rows:
             logger.info("补扫完成：没有遗漏的保单 PDF")
-            return
+            return 0
 
         import json
         enqueued = 0
@@ -166,6 +214,7 @@ class MessageFetcher:
             enqueued += 1
 
         logger.info("补扫完成：共 %d 条遗漏 PDF 已入队", enqueued)
+        return enqueued
 
     def _process_item(self, item: dict):
         """处理单条加密消息"""

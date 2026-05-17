@@ -137,6 +137,45 @@
             padding: 12px 20px; border-top: 1px solid #e0e0e0;
         }
 
+        /* 补扫弹窗 */
+        .rescan-modal-mask {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: rgba(0,0,0,0.4);
+            justify-content: center;
+            align-items: center;
+        }
+        .rescan-modal-mask.show { display: flex; }
+        .rescan-modal {
+            background: #fff;
+            border-radius: 12px;
+            width: 420px;
+            max-width: 90vw;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        .rescan-form-group { margin-bottom: 14px; }
+        .rescan-form-group label {
+            display: block; font-size: 12px; font-weight: 600;
+            color: #666; margin-bottom: 4px;
+        }
+        .rescan-form-group select, .rescan-form-group input {
+            width: 100%; height: 36px; padding: 0 10px;
+            border: 1px solid #d0d0d0; border-radius: 6px;
+            font-size: 13px; outline: none;
+        }
+        .rescan-form-group select:focus, .rescan-form-group input:focus {
+            border-color: #1a73e8;
+        }
+        .rescan-checkbox-group {
+            display: flex; align-items: center; gap: 8px;
+            margin-bottom: 14px;
+        }
+        .rescan-checkbox-group label { margin: 0; font-size: 13px; color: #333; font-weight: normal; }
+        .rescan-configs { max-height: 150px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 6px; padding: 8px; margin-top: 6px; }
+        .rescan-configs label { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 4px 0; cursor: pointer; font-weight: normal; color: #333; }
+
         /* 头像可点击 */
         .conv-avatar, .msg-avatar { cursor: pointer; position: relative; }
         .conv-avatar:hover, .msg-avatar:hover { opacity: 0.8; }
@@ -771,6 +810,7 @@
             <option value="">加载中...</option>
         </select>
         <button class="btn btn-secondary" id="syncContactsBtn" onclick="syncContacts()">同步通讯录</button>
+        <button class="btn btn-secondary" onclick="openRescanModal()">补扫历史保单</button>
         <button class="btn btn-primary" id="fetchBtn" onclick="manualFetch()">拉取消息</button>
         <label class="auto-refresh-label">
             <input type="checkbox" id="autoRefresh" checked>
@@ -838,6 +878,43 @@
         <div class="contact-modal-footer">
             <button class="btn btn-secondary" onclick="closeContactModal()">取消</button>
             <button class="btn btn-primary" id="contactSaveBtn" onclick="saveContact()">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- 补扫历史保单弹窗 -->
+<div class="rescan-modal-mask" id="rescanModal" onclick="closeRescanModal(event)">
+    <div class="rescan-modal" onclick="event.stopPropagation()">
+        <div class="contact-modal-header">
+            <h3>补扫历史保单</h3>
+            <button class="contact-modal-close" onclick="closeRescanModal()">&times;</button>
+        </div>
+        <div class="contact-modal-body">
+            <div class="rescan-form-group">
+                <label>回溯天数</label>
+                <select id="rescanDays">
+                    <option value="5">5 天</option>
+                    <option value="15">15 天</option>
+                    <option value="30" selected>30 天</option>
+                    <option value="90">90 天</option>
+                    <option value="180">180 天</option>
+                    <option value="365">365 天</option>
+                </select>
+            </div>
+            <div class="rescan-form-group">
+                <label>监控配置范围</label>
+                <div class="rescan-configs" id="rescanConfigList">
+                    <div style="color:#999;font-size:12px;">加载中...</div>
+                </div>
+            </div>
+            <div class="rescan-checkbox-group">
+                <input type="checkbox" id="rescanForce">
+                <label for="rescanForce">强制重新识别（包含已识别过的 PDF）</label>
+            </div>
+        </div>
+        <div class="contact-modal-footer">
+            <button class="btn btn-secondary" onclick="closeRescanModal()">取消</button>
+            <button class="btn btn-primary" id="rescanSubmitBtn" onclick="submitRescan()">开始补扫</button>
         </div>
     </div>
 </div>
@@ -1578,6 +1655,83 @@ function switchEnterprise() {
 }
 
 // ===== 初始化 =====
+// ===== 补扫历史保单 =====
+async function openRescanModal() {
+    document.getElementById("rescanModal").classList.add("show");
+    // 加载监控配置列表
+    try {
+        const res = await authFetch("/api/monitor-configs");
+        const data = await res.json();
+        const configs = data.data || data || [];
+        const container = document.getElementById("rescanConfigList");
+        if (!configs.length) {
+            container.innerHTML = '<div style="color:#999;font-size:12px;">暂无监控配置</div>';
+            return;
+        }
+        container.innerHTML = `
+            <label style="font-weight:600;color:#1a73e8;margin-bottom:4px;">
+                <input type="checkbox" id="rescanSelectAll" checked onchange="toggleRescanAll(this)"> 全选
+            </label>
+        ` + configs.map(c => `
+            <label>
+                <input type="checkbox" class="rescan-cfg-checkbox" value="${c.id}" checked>
+                ${c.name || '配置 #' + c.id}${c.enabled ? '' : ' (已停用)'}
+            </label>
+        `).join("");
+    } catch(e) {
+        document.getElementById("rescanConfigList").innerHTML = '<div style="color:#e53935;font-size:12px;">加载失败</div>';
+    }
+}
+
+function closeRescanModal(e) {
+    if (e && e.target !== e.currentTarget) return;
+    document.getElementById("rescanModal").classList.remove("show");
+}
+
+function toggleRescanAll(el) {
+    document.querySelectorAll(".rescan-cfg-checkbox").forEach(cb => cb.checked = el.checked);
+}
+
+async function submitRescan() {
+    const btn = document.getElementById("rescanSubmitBtn");
+    btn.disabled = true;
+    btn.textContent = "补扫中...";
+
+    const lookback_days = parseInt(document.getElementById("rescanDays").value);
+    const force = document.getElementById("rescanForce").checked;
+
+    // 获取选中的配置 ID
+    const checkboxes = document.querySelectorAll(".rescan-cfg-checkbox:checked");
+    const allCheckbox = document.getElementById("rescanSelectAll");
+    let config_ids = null;
+    if (checkboxes.length && !(allCheckbox && allCheckbox.checked)) {
+        config_ids = Array.from(checkboxes).map(cb => parseInt(cb.value));
+    }
+
+    try {
+        const body = { lookback_days, force };
+        if (config_ids) body.config_ids = config_ids;
+
+        const res = await authFetch("/api/insurance/rescan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (data.code === 0) {
+            alert(`补扫完成，已入队 ${data.data.enqueued} 条待识别`);
+            closeRescanModal();
+        } else {
+            alert("补扫失败: " + (data.msg || "未知错误"));
+        }
+    } catch(e) {
+        alert("请求失败: " + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "开始补扫";
+    }
+}
+
 (async function init() {
     await loadEnterprises();
     loadStats();
