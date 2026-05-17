@@ -216,6 +216,100 @@ class MessageFetcher:
         logger.info("补扫完成：共 %d 条遗漏 PDF 已入队", enqueued)
         return enqueued
 
+    def rescan_quote_history(self, lookback_days: int = 5, room_ids: list = None):
+        """
+        补扫历史消息中的报价相关消息（图片/文本）。
+        查找最近 lookback_days 天内，符合报价绑定规则的群消息，重新入队。
+
+        参数:
+            lookback_days: 回溯天数
+            room_ids: 可选，指定群 ID 列表，为空则使用全部绑定的群
+        返回:
+            int: 入队数量
+        """
+        handler = getattr(self, "quote_handler", None)
+        if not handler:
+            logger.info("报价补扫跳过：quote_handler 未绑定")
+            return 0
+
+        # 获取所有绑定关系，提取关联的群 ID
+        bindings = handler.binding_service.get_bindings()
+        if not bindings:
+            logger.info("报价补扫跳过：没有绑定关系")
+            return 0
+
+        # 确定要扫描的群 ID
+        if room_ids:
+            target_rooms = set(room_ids)
+        else:
+            target_rooms = set()
+            for b in bindings:
+                gid = (b.get("group_id") or "").strip()
+                if gid:
+                    target_rooms.add(gid)
+
+        if not target_rooms:
+            logger.info("报价补扫跳过：没有绑定的群")
+            return 0
+
+        import time
+        cutoff_ms = int((time.time() - lookback_days * 86400) * 1000)
+
+        conn = self.db.pool.connection()
+        try:
+            import pymysql.cursors
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+            placeholders = ",".join(["%s"] * len(target_rooms))
+            params = [cutoff_ms] + list(target_rooms)
+
+            # 查找绑定群中的图片和文本消息
+            sql = f"""
+                SELECT m.seq, m.roomid, m.sender, m.msgtype, m.parsed_content
+                FROM messages m
+                WHERE m.msgtime >= %s
+                  AND m.msgtype IN ('image', 'text')
+                  AND m.roomid IN ({placeholders})
+                ORDER BY m.seq ASC
+            """
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
+        finally:
+            conn.close()
+
+        if not rows:
+            logger.info("报价补扫完成：没有符合条件的历史消息")
+            return 0
+
+        enqueued = 0
+        for row in rows:
+            roomid = row.get("roomid", "")
+            sender = row.get("sender", "")
+
+            # 检查是否匹配绑定规则
+            binding = handler.binding_service.find_binding(roomid, sender)
+            if not binding:
+                continue
+
+            try:
+                content = json.loads(row.get("parsed_content", "{}"))
+            except (json.JSONDecodeError, TypeError):
+                content = {}
+
+            logger.info("报价补扫入队: seq=%d, room=%s, type=%s",
+                        row["seq"], roomid, row["msgtype"])
+            handler.check_and_enqueue({
+                "msgtype": row["msgtype"],
+                "roomid": roomid,
+                "sender": sender,
+                "content": content,
+                "seq": row["seq"],
+            })
+            enqueued += 1
+
+        logger.info("报价补扫完成：共 %d 条消息已入队", enqueued)
+        return enqueued
+
     def _process_item(self, item: dict):
         """处理单条加密消息"""
         msg_seq = item.get("seq", 0)

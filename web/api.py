@@ -4,8 +4,11 @@
 
 import hashlib
 import json
+import logging
 import os
 import threading
+
+logger = logging.getLogger(__name__)
 
 import pymysql
 import pymysql.cursors
@@ -490,3 +493,39 @@ def update_contact():
         return jsonify({"success": True, "message": f"已更新: {contact_id} → {name}"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ============================================================
+# 报价补扫
+# ============================================================
+
+@api_bp.route("/quote/rescan", methods=["POST"])
+@login_required
+def rescan_quote_history():
+    """
+    补扫历史消息中的报价相关消息（图片/文本）。
+    根据绑定关系匹配历史群消息，重新入队报价识别。
+    """
+    if not _fetcher:
+        return jsonify({"code": 500, "msg": "fetcher 未初始化"}), 500
+
+    data = request.get_json(force=True) if request.data else {}
+    lookback_days = data.get("lookback_days", 5)
+    room_ids = data.get("room_ids")  # 可选，指定群 ID
+
+    if not isinstance(lookback_days, int) or lookback_days < 1 or lookback_days > 365:
+        return jsonify({"code": 400, "msg": "回溯天数需为 1-365 之间的整数"}), 400
+
+    try:
+        enqueued = _fetcher.rescan_quote_history(
+            lookback_days=lookback_days,
+            room_ids=room_ids,
+        )
+        return jsonify({
+            "code": 0,
+            "msg": f"报价补扫完成，已入队 {enqueued} 条待处理",
+            "data": {"enqueued": enqueued}
+        })
+    except Exception as e:
+        logger.exception("报价补扫失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500

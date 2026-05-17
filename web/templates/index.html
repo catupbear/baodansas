@@ -811,6 +811,7 @@
         </select>
         <button class="btn btn-secondary" id="syncContactsBtn" onclick="syncContacts()">同步通讯录</button>
         <button class="btn btn-secondary" onclick="openRescanModal()">补扫历史保单</button>
+        <button class="btn btn-secondary" onclick="openQuoteRescanModal()">补扫历史报价</button>
         <button class="btn btn-primary" id="fetchBtn" onclick="manualFetch()">拉取消息</button>
         <label class="auto-refresh-label">
             <input type="checkbox" id="autoRefresh" checked>
@@ -915,6 +916,32 @@
         <div class="contact-modal-footer">
             <button class="btn btn-secondary" onclick="closeRescanModal()">取消</button>
             <button class="btn btn-primary" id="rescanSubmitBtn" onclick="submitRescan()">开始补扫</button>
+        </div>
+    </div>
+</div>
+
+<!-- 补扫历史报价弹窗 -->
+<div class="rescan-modal-mask" id="quoteRescanModal" onclick="closeQuoteRescanModal(event)">
+    <div class="rescan-modal" onclick="event.stopPropagation()">
+        <div class="contact-modal-header">
+            <h3>补扫历史报价</h3>
+            <button class="contact-modal-close" onclick="closeQuoteRescanModal()">&times;</button>
+        </div>
+        <div class="contact-modal-body">
+            <p style="font-size:12px;color:#666;margin:0 0 14px;">根据已配置的报价绑定关系，重新扫描历史群消息中的图片和文本消息。</p>
+            <div class="rescan-form-group">
+                <label>回溯天数</label>
+                <select id="quoteRescanDays">
+                    <option value="3">3 天</option>
+                    <option value="5" selected>5 天</option>
+                    <option value="15">15 天</option>
+                    <option value="30">30 天</option>
+                </select>
+            </div>
+        </div>
+        <div class="contact-modal-footer">
+            <button class="btn btn-secondary" onclick="closeQuoteRescanModal()">取消</button>
+            <button class="btn btn-primary" id="quoteRescanSubmitBtn" onclick="submitQuoteRescan()">开始补扫</button>
         </div>
     </div>
 </div>
@@ -1723,6 +1750,44 @@ async function submitRescan() {
             closeRescanModal();
         } else {
             alert("补扫失败: " + (data.msg || "未知错误"));
+        }
+    } catch(e) {
+        alert("请求失败: " + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "开始补扫";
+    }
+}
+
+// ===== 补扫历史报价 =====
+function openQuoteRescanModal() {
+    document.getElementById("quoteRescanModal").classList.add("show");
+}
+
+function closeQuoteRescanModal(e) {
+    if (e && e.target !== e.currentTarget) return;
+    document.getElementById("quoteRescanModal").classList.remove("show");
+}
+
+async function submitQuoteRescan() {
+    const btn = document.getElementById("quoteRescanSubmitBtn");
+    btn.disabled = true;
+    btn.textContent = "补扫中...";
+
+    const lookback_days = parseInt(document.getElementById("quoteRescanDays").value);
+
+    try {
+        const res = await authFetch("/api/quote/rescan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lookback_days }),
+        });
+        const data = await res.json();
+        if (data.code === 0) {
+            alert(`报价补扫完成，已入队 ${data.data.enqueued} 条待处理`);
+            closeQuoteRescanModal();
+        } else {
+            alert("报价补扫失败: " + (data.msg || "未知错误"));
         }
     } catch(e) {
         alert("请求失败: " + e.message);
