@@ -266,10 +266,10 @@ class ContactsManager:
                     result.append({"userid": mid, "name": name or mid})
                 return result
             elif data.get("errcode") == 92002 and self._fallback_contacts:
-                # 92002: not allow to cross corp — 该群不属于本企业，回退到主企业查询
+                # 92002: not allow to cross corp — 该群不属于本企业，回退到主企业完整查询流程
                 logger.info("群 %s 不属于%s（92002 跨企业），回退到主企业查询",
                             room_id, self.enterprise_name or "本企业")
-                return self._fallback_contacts._fetch_room_members_api(room_id)
+                return self._fallback_contacts.get_room_members(room_id)
             else:
                 logger.warning("外部群接口获取成员失败 %s: errcode=%s, errmsg=%s",
                                room_id, data.get("errcode"), data.get("errmsg"))
