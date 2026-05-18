@@ -229,8 +229,10 @@ class ContactsManager:
                             name = self.get_name(mid) if mid else ""
                         result.append({"userid": mid, "name": name or mid})
                     return result
-                elif data.get("errcode") == 301059:
-                    logger.info("群 %s 非内部群(301059)，尝试外部群接口", room_id)
+                elif data.get("errcode") in (301059, 301039):
+                    # 301059: 非内部群; 301039: 群不在会话存档范围内
+                    logger.info("群 %s 非内部群(%s)，尝试外部群接口",
+                                room_id, data.get("errcode"))
                 else:
                     logger.warning("内部群接口获取成员失败 %s: errcode=%s, errmsg=%s",
                                    room_id, data.get("errcode"), data.get("errmsg"))
