@@ -345,6 +345,11 @@ class ContactsManager:
                 # 40096 = 无效的 external_userid（ID 截断或已失效），属于已知情况，降级为 DEBUG
                 if errcode == 40096:
                     logger.debug("外部联系人 ID 无效(已截断或失效) %s，已跳过", external_userid)
+                elif errcode == 84061 and self._fallback_contacts:
+                    # 84061: not external contact — 不是本企业的外部联系人，回退到主企业查询
+                    logger.info("联系人 %s 不属于%s（84061），回退到主企业查询",
+                                external_userid, self.enterprise_name or "本企业")
+                    return self._fallback_contacts._fetch_external_contact(external_userid)
                 else:
                     logger.warning("获取外部联系人失败 %s: errcode=%s, errmsg=%s",
                                    external_userid, errcode, data.get("errmsg"))
