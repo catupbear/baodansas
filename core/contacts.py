@@ -33,6 +33,7 @@ class ContactsManager:
         self._external_access_token = ""
         self._external_token_expires = 0
         self._log_prefix = f"[{enterprise_name}] " if enterprise_name else ""
+        self._fallback_contacts = None  # 跨企业回退用的主企业 contacts 实例
         self._init_cache_table()
         # 有外部应用 Secret 时，清除之前标记为不可解析的外部联系人/群，重新尝试
         if external_secret:
@@ -41,6 +42,10 @@ class ContactsManager:
     def set_cache_prefix(self, prefix: str):
         """设置缓存 key 前缀（多企业隔离用，主企业不设置以兼容历史数据）"""
         self._cache_prefix = prefix
+
+    def set_fallback_contacts(self, contacts):
+        """设置跨企业回退的主企业 contacts 实例（用于本企业查询失败时重试）"""
+        self._fallback_contacts = contacts
 
     def _clear_unresolvable(self):
         """清除外部联系人和外部群的 __unresolvable__ 标记，用新 Secret 重试"""
@@ -260,6 +265,11 @@ class ContactsManager:
                             name = mid
                     result.append({"userid": mid, "name": name or mid})
                 return result
+            elif data.get("errcode") == 92002 and self._fallback_contacts:
+                # 92002: not allow to cross corp — 该群不属于本企业，回退到主企业查询
+                logger.info("群 %s 不属于%s（92002 跨企业），回退到主企业查询",
+                            room_id, self.enterprise_name or "本企业")
+                return self._fallback_contacts._fetch_room_members_api(room_id)
             else:
                 logger.warning("外部群接口获取成员失败 %s: errcode=%s, errmsg=%s",
                                room_id, data.get("errcode"), data.get("errmsg"))

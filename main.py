@@ -274,6 +274,7 @@ def create_app(config: dict) -> Flask:
                     enterprise_name=cb_name,
                 )
                 extra_contacts.set_cache_prefix(cb_corpid)
+                extra_contacts.set_fallback_contacts(contacts)  # 跨企业群回退到主企业查询
                 extra_contacts.start_auto_resolve(interval=300)
 
                 def make_notify(f):
