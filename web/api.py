@@ -466,7 +466,11 @@ def update_contact():
         return jsonify({"error": "id 和 name 不能为空"}), 400
 
     try:
+        # 写入主企业缓存
         _contacts._set_cache(contact_id, contact_type, name)
+        # 同步写入所有额外企业的缓存（它们有独立的 cache_prefix）
+        for extra_contacts in _contacts_map.values():
+            extra_contacts._set_cache(contact_id, contact_type, name)
 
         # 同步更新 insurance_records 表中的冗余名称字段
         if _db:
