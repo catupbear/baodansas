@@ -345,31 +345,41 @@ class QuoteMatcher:
         ).start()
 
     def _do_submit(self, item: dict):
-        """实际提交请求"""
-        try:
-            payload = {"items": [item]}
-            logger.info("预报价提交请求参数: %s", payload)
-            resp = requests.post(
-                f"{BASE_URL}/insurance/pre-quote",
-                json=payload,
-                timeout=30,
-            )
-            resp.raise_for_status()
-            result = resp.json()
-            if result.get("ok") == 0:
-                data = result.get("data", {})
-                results = data.get("results", [])
-                for r in results:
-                    logger.info("预报价提交成功: state=%s(%s), order_id=%s, "
-                               "auto_quote=%s, missing=%s",
-                               r.get("state"), r.get("state_text"),
-                               r.get("order_info", {}).get("order_id"),
-                               r.get("auto_quote_triggered"),
-                               r.get("missing_fields", []))
-            else:
-                logger.error("预报价提交失败: %s", result.get("msg", "未知错误"))
-        except Exception as e:
-            logger.error("预报价提交异常: %s", e)
+        """实际提交请求，超时或网络异常自动重试"""
+        payload = {"items": [item]}
+        logger.info("预报价提交请求参数: %s", payload)
+        max_retries = 6
+        for attempt in range(1, max_retries + 1):
+            try:
+                resp = requests.post(
+                    f"{BASE_URL}/insurance/pre-quote",
+                    json=payload,
+                    timeout=60,
+                )
+                resp.raise_for_status()
+                result = resp.json()
+                if result.get("ok") == 0:
+                    data = result.get("data", {})
+                    results = data.get("results", [])
+                    for r in results:
+                        logger.info("预报价提交成功: state=%s(%s), order_id=%s, "
+                                   "auto_quote=%s, missing=%s",
+                                   r.get("state"), r.get("state_text"),
+                                   r.get("order_info", {}).get("order_id"),
+                                   r.get("auto_quote_triggered"),
+                                   r.get("missing_fields", []))
+                else:
+                    logger.error("预报价提交失败: %s", result.get("msg", "未知错误"))
+                return  # 请求成功（无论业务成功失败），不再重试
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                logger.warning("预报价提交第%d次尝试失败（共%d次）: %s", attempt, max_retries, e)
+                if attempt < max_retries:
+                    time.sleep(2 * attempt)  # 递增等待：2s, 4s
+                else:
+                    logger.error("预报价提交重试耗尽，放弃提交: %s", e)
+            except Exception as e:
+                logger.error("预报价提交异常: %s", e)
+                return  # 非网络异常不重试
 
     def check_and_submit_renewal(self, group_id: str, sender: str, text: str, binding: dict):
         """处理含"续保"关键词的文本消息，提取车牌/VIN/保单号后提交续保报价接口"""
@@ -397,24 +407,35 @@ class QuoteMatcher:
         threading.Thread(target=self._do_submit_renewal, args=(item,), daemon=True).start()
 
     def _do_submit_renewal(self, item: dict):
-        """提交续保报价请求"""
-        try:
-            resp = requests.post(
-                f"{BASE_URL}/insurance/renewal-quote",
-                json={"items": [item]},
-                timeout=30,
-            )
-            resp.raise_for_status()
-            result = resp.json()
-            if result.get("ok") == 0:
-                data = result.get("data", {})
-                results = data.get("results", [])
-                for r in results:
-                    logger.info("续保报价提交成功: state=%s, order_id=%s, auto_quote=%s",
-                                r.get("state"),
-                                r.get("order_info", {}).get("order_id"),
-                                r.get("auto_quote_triggered"))
-            else:
-                logger.error("续保报价提交失败: %s", result.get("msg", "未知错误"))
-        except Exception as e:
-            logger.error("续保报价提交异常: %s", e)
+        """提交续保报价请求，超时或网络异常自动重试"""
+        payload = {"items": [item]}
+        max_retries = 6
+        for attempt in range(1, max_retries + 1):
+            try:
+                resp = requests.post(
+                    f"{BASE_URL}/insurance/renewal-quote",
+                    json=payload,
+                    timeout=60,
+                )
+                resp.raise_for_status()
+                result = resp.json()
+                if result.get("ok") == 0:
+                    data = result.get("data", {})
+                    results = data.get("results", [])
+                    for r in results:
+                        logger.info("续保报价提交成功: state=%s, order_id=%s, auto_quote=%s",
+                                    r.get("state"),
+                                    r.get("order_info", {}).get("order_id"),
+                                    r.get("auto_quote_triggered"))
+                else:
+                    logger.error("续保报价提交失败: %s", result.get("msg", "未知错误"))
+                return  # 请求成功（无论业务成功失败），不再重试
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                logger.warning("续保报价提交第%d次尝试失败（共%d次）: %s", attempt, max_retries, e)
+                if attempt < max_retries:
+                    time.sleep(2 * attempt)  # 递增等待：2s, 4s
+                else:
+                    logger.error("续保报价提交重试耗尽，放弃提交: %s", e)
+            except Exception as e:
+                logger.error("续保报价提交异常: %s", e)
+                return  # 非网络异常不重试
