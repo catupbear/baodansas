@@ -15,6 +15,7 @@ import time
 from typing import Optional
 
 import hashlib
+import pymysql
 
 from insurance.db import (
     check_file_md5_exists,
@@ -429,7 +430,7 @@ class InsuranceHandler:
                 existing_full = get_insurance_record(self.db, existing["id"])
                 if existing_full and existing_full.get("sender") != sender:
                     logger.info(
-                        "PDF重复但发送人不同(MD5=%s), 原记录id=%d(sender=%s), 当前record_id=%d(sender=%s), 复制识别结果",
+                        "[COPY] PDF重复但发送人不同(MD5=%s), 原记录id=%d(sender=%s), 当前record_id=%d(sender=%s), 复制识别结果",
                         file_md5, existing["id"], existing_full.get("sender"), record_id, sender,
                     )
                     self._copy_recognition_result(record_id, existing_full, file_md5, config_user_id, config_enterprise_id)
@@ -911,7 +912,7 @@ class InsuranceHandler:
             }
             update_insurance_record(self.db, cur_id, updates)
             logger.info(
-                "复制识别结果到 record_id=%d (policy %d/%d, 源记录=%d)",
+                "[COPY] 复制识别结果到 record_id=%d (policy %d/%d, 源记录=%d)",
                 cur_id, idx + 1, total_policies, src["id"],
             )
 
