@@ -399,6 +399,12 @@ def _identify_policy_type(text: str) -> Optional[str]:
     if m:
         return m.group(1)
 
+    # 从标题提取含版本号/方案的完整产品名
+    # 如"阳光驾乘险（7座）-20万方案电子保险单"、"XX驾乘险A款（升级版）保险单"
+    m = re.search(r"([\u4e00-\u9fff]+险[\S]*?)(?:电子)?保险单", text[:500])
+    if m:
+        return m.group(1)
+
     # 兜底：无标题但包含交强险特征字段（赔偿限额），如华农交强险保单
     compulsory_indicators = [
         r"死亡伤残赔偿限额",
@@ -407,6 +413,10 @@ def _identify_policy_type(text: str) -> Optional[str]:
     ]
     if sum(1 for p in compulsory_indicators if re.search(p, text)) >= 2:
         return "机动车交通事故责任强制保险"
+
+    # 最终兜底：文本中含"驾乘"关键词但未匹配到具体险种名
+    if re.search(r"驾乘", text[:1000]):
+        return "驾乘人员意外伤害保险"
 
     return None
 
