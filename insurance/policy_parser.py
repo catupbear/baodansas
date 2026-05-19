@@ -131,7 +131,7 @@ PERSON_BLACKLIST = {
     "地址", "手机号", "信息", "名称", "保单验真码", "保单验真码:",
     "行驶证车主", "行驶证", "为", "身份证", "证件",
     "姓名", "证件类型", "证件号码", "申请", "投保申请", "个人信息",
-    "手机号码", "联系人", "通讯地址", "电子邮箱",
+    "手机号码", "联系人", "联系住址", "通讯地址", "电子邮箱",
     "法定", "法定受益人", "受益人", "主被保人", "特定",
     # 新增：各保司OCR常见误提取
     "出生日期", "手机电话", "联系电话", "机关",
@@ -744,6 +744,13 @@ def _extract_insured(text: str, text_merged: str, fields: dict, company_short: s
         if "被保险人" in fields:
             return
 
+    # ===== 驾乘险通用：被保险人为"驾驶或乘坐...车辆的人员"，用投保人代替 =====
+    # 安诚/京东安联等驾乘险，被保险人为车上人员描述而非具体姓名
+    if re.search(r"被保险人为[^。]*?驾驶或乘坐[^。]*?车[辆俩]的人员", text):
+        if "投保人" in fields:
+            fields["被保险人"] = fields["投保人"]
+            return
+
     # ===== 京东安联英文格式 =====
     if company_short == "京东安联":
         # "被保险人信息" 或 "Num of Insured" 格式
@@ -1311,6 +1318,13 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
                     if _is_valid_person(val):
                         fields["投保人"] = val
                         return
+            # 安诚驾乘险等格式：名字直接在"投保人"标签上一行
+            # "康鹰\n投保人\n证件类型"
+            prev = lines[i - 1].strip()
+            prev_cleaned = _clean_person_name(re.sub(r'\s+', '', prev))
+            if prev_cleaned and _is_valid_person(prev_cleaned):
+                fields["投保人"] = prev_cleaned
+                return
             break
 
     # 永诚/中华联合等格式："投保人信息\n姓名：李飞" 或 "投保人信息\n姓名/名称：深圳XXX公司"
@@ -1507,10 +1521,9 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
             plate = m.group(1).replace("-", "").rstrip(";；,，")
             # 清理车牌后面可能粘连的车架号等信息
             plate = re.split(r'[；;，,\s]', plate)[0]
-            # 中国车牌7位（普通）或8位（新能源），超出截断
-            if len(plate) > 8:
-                # 尝试8位：新能源车牌第3位为D/F，如"粤BD12345"
-                if re.match(rf'^[{PROVINCE_CHARS}][A-Z][DF][A-Z0-9]{{5}}$', plate[:8]):
+            # 中国车牌7位（普通）或8位（新能源，第3位为D/F），超出截断
+            if len(plate) > 7:
+                if len(plate) >= 8 and plate[2] in 'DF':
                     plate = plate[:8]
                 else:
                     plate = plate[:7]
