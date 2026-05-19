@@ -16,8 +16,18 @@ def _is_clause_page(text: str) -> bool:
     """判断是否为保险条款页（非保单数据页），用于多页识别时提前终止"""
     if not text or len(text) < 50:
         return False
-    # 条款页特征：含"第X条"、"总则"、"��任免除"等法律条文关键词
     import re
+    # 如果页面包含保单标题或保单号，说明是新保单开始，不是条款页
+    policy_header_patterns = [
+        r'交通事故责任强制保险',
+        r'(?:商业保险|综合险).*?(?:保险单|保\s*单)',
+        r'(?:驾乘|意外伤害).*?(?:保险单|保\s*单)',
+        r'保[险]?单号[：:\s]*[A-Za-z0-9]{10,}',
+    ]
+    for p in policy_header_patterns:
+        if re.search(p, text):
+            return False
+    # 条款页特征：含"第X条"、"总则"、"责任免除"等法律条文关键词
     clause_keywords = ['总则', '第一条', '第二条', '责任免除', '保险责任', '释义',
                         '理赔申请', '争议处理', '保险金申请', '条款', '注册号']
     hit_count = sum(1 for kw in clause_keywords if kw in text)
@@ -175,23 +185,24 @@ class BaiduOCR:
                 if result.get("success"):
                     page_text = result.get("text", "")
                     logger.info("百度OCR第%d/%d页识别成功，文字数=%d", page, pages_to_scan, len(page_text))
-                    # 至少扫描前2页（签单日期等字段常在第2页），第3页起检测条款页
+                    # 条款/广告页跳过（不加入文本），但继续扫描后续页（可能有新保单）
                     if page > 2 and _is_clause_page(page_text):
-                        logger.info("百度OCR第%d页检测为条款页，停止扫描", page)
-                        break
+                        logger.info("百度OCR第%d页检测为条款页，跳过该页继续扫描", page)
+                        continue
                     # 插入页码标记，供多保单拆分时追踪页码
                     all_texts.append(f"[PAGE:{page}]\n{page_text}")
-                    # 至少扫描前2页后，检查核心字段是否已提取完毕
-                    if page >= 2 and early_stop_check and len(all_texts) >= 2:
+                    # 扫过至少一半总页数后，才检查核心字段是否已提取完毕
+                    min_pages_before_stop = max(3, total_pages // 2)
+                    if page >= min_pages_before_stop and early_stop_check and len(all_texts) >= 2:
                         combined_so_far = "\n".join(all_texts)
                         if early_stop_check(combined_so_far):
-                            logger.info("百度OCR第%d页后核心字段已齐全，提前停止扫描", page)
+                            logger.info("百度OCR第%d页后核心字段已齐全，提前停止扫描（总页数%d）", page, total_pages)
                             break
                 else:
                     logger.warning("百度OCR第%d页识别失败: %s", page, result.get("error", ""))
             except Exception as e:
                 logger.warning("百度OCR第%d页异常: %s", page, e)
-                break
+                continue
 
         if not all_texts:
             return {"success": False, "error": "百度OCR多页识别均失败", "text": ""}

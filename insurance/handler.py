@@ -25,7 +25,7 @@ from insurance.db import (
 from insurance.monitor_config_db import get_enabled_monitor_configs
 from insurance.field_mapping import apply_mapping
 from insurance.ocr_service import extract_text_from_pdf_bytes
-from insurance.policy_parser import parse_policy_text, parse_policy_text_multi
+from insurance.policy_parser import parse_policy_text, parse_policy_text_multi, _find_policy_boundaries
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +42,24 @@ def _ocr_early_stop_check(combined_text: str) -> bool:
     try:
         result = parse_policy_text(combined_text)
         fields = result.get("fields", {})
-        # 多保单（交强+商业）需要完整扫描，不提前停止
         import re
-        has_compulsory = bool(re.search(r'交通事故责任强制保险', combined_text))
-        has_commercial = bool(re.search(r'(?:商业保险|综合险).*?(?:保险单|保\s*单)', combined_text))
-        if has_compulsory and has_commercial:
+        # 人保财险多保单PDF常见（交强+商业+驾乘），直接扫全部页不早停
+        company = fields.get("保险公司", "")
+        if "人民财产" in company or re.search(r'PICC.*中国人民保险|中国人民财产保险', combined_text):
+            return False
+        # 通用多保单检测：检查是否存在多个保单标题或多个不同保单号
+        boundaries = _find_policy_boundaries(combined_text)
+        if len(boundaries) > 1:
+            return False
+        # 兜底：即使标题匹配不足，也检查是否存在多个不同保单号
+        policy_no_pattern = r"保[险]?单号[：:\s]*([A-Za-z0-9]{10,30})"
+        seen_nos = []
+        for m in re.finditer(policy_no_pattern, combined_text):
+            no_val = m.group(1)
+            is_dup = any(no_val.startswith(sn) or sn.startswith(no_val) for sn in seen_nos)
+            if not is_dup:
+                seen_nos.append(no_val)
+        if len(seen_nos) > 1:
             return False
         # 所有导出所需字段全部提取到才提前停止
         required_fields = [
@@ -924,7 +937,7 @@ class InsuranceHandler:
             volc_circuit_open = (time.time() < self._volc_circuit_open_until)
             if self._volc_ocr and not volc_circuit_open:
                 try:
-                    volc_result = self._volc_ocr.recognize_pdf_multi_pages(pdf_bytes, max_pages=6, early_stop_check=_ocr_early_stop_check)
+                    volc_result = self._volc_ocr.recognize_pdf_multi_pages(pdf_bytes, max_pages=10, early_stop_check=_ocr_early_stop_check)
                     if volc_result.get("success"):
                         text = volc_result.get("text", "")
                         ocr_engine = "volc"
@@ -951,7 +964,7 @@ class InsuranceHandler:
             # 火山引擎失败或未配置，降级百度 OCR
             if not fallback_done and self._baidu_ocr:
                 try:
-                    baidu_result = self._baidu_ocr.recognize_pdf_multi_pages(pdf_bytes, max_pages=6, early_stop_check=_ocr_early_stop_check)
+                    baidu_result = self._baidu_ocr.recognize_pdf_multi_pages(pdf_bytes, max_pages=10, early_stop_check=_ocr_early_stop_check)
                     if baidu_result.get("success"):
                         text = baidu_result.get("text", "")
                         ocr_engine = "baidu"

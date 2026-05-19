@@ -138,6 +138,8 @@ PERSON_BLACKLIST = {
     "须如实告知",
     # 单独的通用词（非具体名称）
     "公司",
+    # 人保侧边栏/页脚OCR干扰
+    "尊敬的客户", "车主",
 }
 
 
@@ -777,6 +779,27 @@ def _extract_insured(text: str, text_merged: str, fields: dict, company_short: s
     # ===== 人保驾乘险："被保险人为以下车辆的驾驶人员及乘客"，无具体被保人 =====
     if company_short == "人民财产":
         if re.search(r"被保险人为以下车辆的驾驶人员及乘客", text):
+            return
+        # 人保商业险表格格式："被保险人  温扬敏\n车主  温扬敏"
+        # OCR 可能输出为 "被保险人\n车主\n温扬敏" 或 "被保险人 温扬敏"
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            # "被保险人  温扬敏"（同一行，空格分隔）
+            m = re.match(r'被\s*保\s*险\s*人\s+([一-鿿]{2,6})\s*$', stripped)
+            if m and _is_valid_person(m.group(1)):
+                fields["被保险人"] = m.group(1)
+                return
+            # "被保险人"独立行 → 下方1-3行找第一个有效人名
+            if stripped == '被保险人':
+                for j in range(i + 1, min(i + 4, len(lines))):
+                    candidate = lines[j].strip()
+                    candidate = _clean_person_name(re.sub(r'\s+', '', candidate))
+                    if candidate and _is_valid_person(candidate):
+                        fields["被保险人"] = candidate
+                        return
+                break
+        if "被保险人" in fields:
             return
 
     # ===== 紫金被保险人清单格式 =====
