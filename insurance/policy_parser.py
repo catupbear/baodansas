@@ -7,7 +7,10 @@
 """
 
 import re
+import logging
 from typing import Dict, Any, List, Optional
+
+logger = logging.getLogger(__name__)
 
 import jieba.posseg as pseg
 # 预加载 jieba 词典，避免首次调用延迟
@@ -199,7 +202,7 @@ def _is_valid_person(val: str) -> bool:
         r'|提出|提供|负责|承担|享有|具有|应当|可以|不得'
         r'|下列|上述|以下|以上|其中|根据|按照|依据'
         # 条款常见误提取
-        r'|本人|雇佣',
+        r'|本人|雇佣|义务|权利',
         val
     ):
         return False
@@ -926,7 +929,17 @@ def _extract_insured_yongcheng(text: str, text_merged: str, fields: dict):
     # 典型格式："被 保 险 人 张爱良\n有 敬\n异 的"
     # 合并空格后变成 "被保险人张爱良有敬异的"
 
-    # 先用合并文本匹配，然后清理干扰
+    # pdfplumber表格格式："名称 郭光清\n被保\n险人"（被保险人跨行，名称在另一列）
+    m = re.search(r"名称\s+([\u4e00-\u9fff]{2,6})\s*\n.*?被保", text)
+    if not m:
+        m = re.search(r"被保\s*\n\s*险人\s*\n\s*名称\s+([\u4e00-\u9fff]{2,6})", text)
+    if m:
+        val = _clean_person_name(m.group(1))
+        if _is_valid_person(val):
+            fields["被保险人"] = val
+            return
+
+    # 合并文本匹配，然后清理干扰
     m = re.search(r"被保险人\s*([\u4e00-\u9fff]{2,10})", text_merged)
     if m:
         val = _clean_person_name(m.group(1))
