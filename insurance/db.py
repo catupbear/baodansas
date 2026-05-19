@@ -928,16 +928,10 @@ def query_insurance_records(
     """
     conditions = []
     params = []
-    # 是否需要 JOIN 关联表
-    need_join = dedup or any([
-        search_company, search_policy_no, search_plate_no,
-        search_applicant, search_insured, search_salesperson,
-        sign_date_start, sign_date_end,
-        start_date_start, start_date_end,
-        end_date_start, end_date_end,
-    ])
+    # 是否需要 JOIN 关联表（排序始终需要 JOIN）
+    need_join = True
     # 主表别名前缀
-    col_prefix = "r." if need_join else ""
+    col_prefix = "r."
 
     # 去重模式下排除 duplicate 状态的记录
     if dedup:
@@ -1045,11 +1039,8 @@ def query_insurance_records(
 
     where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
-    # 构建 FROM 子句（有关联搜索时 JOIN）
-    if need_join:
-        from_clause = "insurance_records r LEFT JOIN insurance_policy_fields pf ON r.id = pf.record_id"
-    else:
-        from_clause = "insurance_records"
+    # 构建 FROM 子句（始终 JOIN 关联表，用于排序和搜索）
+    from_clause = "insurance_records r LEFT JOIN insurance_policy_fields pf ON r.id = pf.record_id"
 
     conn = db.pool.connection()
     try:
@@ -1096,18 +1087,9 @@ def query_insurance_records(
             cursor.execute(id_sql, params + params + [page_size, offset])
         else:
             # 按车牌号排序（需要 JOIN 关联表获取 plate_no）
-            if need_join:
-                order_clause = f"ORDER BY pf.plate_no ASC, {col_prefix}created_at DESC"
-            else:
-                order_clause = (
-                    "ORDER BY COALESCE(pf2.plate_no, '') ASC, insurance_records.created_at DESC"
-                )
-                from_clause_with_pf = f"{from_clause} LEFT JOIN insurance_policy_fields pf2 ON insurance_records.id = pf2.record_id"
-            id_from = from_clause_with_pf if not need_join else from_clause
-            id_col = f"{col_prefix}id" if need_join else "insurance_records.id"
             cursor.execute(
-                f"SELECT {id_col} FROM {id_from} {where_clause} "
-                f"{order_clause} LIMIT %s OFFSET %s",
+                f"SELECT r.id FROM {from_clause} {where_clause} "
+                f"ORDER BY COALESCE(pf.plate_no, '') ASC, r.created_at DESC LIMIT %s OFFSET %s",
                 params + [page_size, offset]
             )
         id_rows = cursor.fetchall()
