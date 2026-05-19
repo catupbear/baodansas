@@ -709,9 +709,11 @@ def save_insurance_record(db, record: dict) -> int:
         if field in data and not isinstance(data[field], str):
             data[field] = json.dumps(data[field], ensure_ascii=False)
 
-    # created_at / updated_at 由 MySQL DEFAULT 自动填充，无需手动传入
-    data.pop("created_at", None)
+    # updated_at 由 MySQL DEFAULT 自动填充，无需手动传入
+    # created_at 允许显式传入（重新识别新增保单时沿用历史创建时间）
     data.pop("updated_at", None)
+    if "created_at" in data and not data["created_at"]:
+        data.pop("created_at", None)
 
     columns = ", ".join(data.keys())
     # MySQL 参数占位符为 %s

@@ -1146,9 +1146,53 @@ def reocr_record(record_id):
             _apply_policy_to_record(sib["id"], policies[matched_idx], matched_idx)
             updated_count += 1
 
+        # 为多出的保单新建记录（沿用主记录的创建时间）
+        original_created_at = record.get("created_at", "")
+        new_sibling_ids = []
+        for i in range(len(policies)):
+            if i in used_policies:
+                continue
+            policy = policies[i]
+            pf = policy.get("fields", {})
+            _handler._cross_fill_by_plate(pf, record_id)
+            cs = pf.get("保险公司简称", "")
+            mf = apply_mapping(pf, cs)
+            extra_record = {
+                "msg_seq": record.get("msg_seq", 0),
+                "roomid": record.get("roomid", ""),
+                "room_name": record.get("room_name", ""),
+                "sender": record.get("sender", ""),
+                "sender_name": record.get("sender_name", ""),
+                "filename": record.get("filename", ""),
+                "filesize": record.get("filesize", 0),
+                "file_md5": file_md5,
+                "cos_url": cos_url,
+                "status": "done",
+                "source": record.get("source", "auto"),
+                "user_id": record.get("user_id", ""),
+                "enterprise_id": record.get("enterprise_id", ""),
+                "ocr_engine": ocr_engine,
+                "doc_category": policy.get("doc_category", ""),
+                "confidence": policy.get("confidence", 0.0),
+                "parsed_fields": pf,
+                "mapped_fields": mf,
+                "raw_text": policy.get("raw_text", ""),
+                "policy_count": total_policies,
+                "policy_index": i + 1,
+                "page_range": policy.get("page_range", ""),
+                "created_at": original_created_at,
+            }
+            try:
+                new_id = save_insurance_record(_db, extra_record)
+                new_sibling_ids.append(new_id)
+                updated_count += 1
+                logger.info("重新识别新增保单记录 record_id=%d, policy_index=%d/%d", new_id, i + 1, total_policies)
+            except Exception as e:
+                logger.error("重新识别新增第%d条记录失败: %s", i + 1, e)
+
         # 最终处理：统一更新所有兄弟记录的 policy_count + 字段互补
         if file_md5:
-            all_ids = [record_id] + [s["id"] for s in sibling_records]
+            all_ids = [record_id] + [s["id"] for s in sibling_records] + new_sibling_ids
             for rid in all_ids:
                 rec = get_insurance_record(_db, rid)
                 if not rec:
