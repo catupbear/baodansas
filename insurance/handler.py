@@ -456,6 +456,7 @@ class InsuranceHandler:
 
             policies = ocr_result.get("policies", [])
             ocr_engine = ocr_result.get("ocr_engine", "pdfplumber")
+            ocr_raw_text = ocr_result.get("ocr_text", "")
 
             if len(policies) > 1:
                 logger.info(
@@ -543,6 +544,8 @@ class InsuranceHandler:
                     "policy_index": policy_idx + 1,
                     "page_range": page_range,
                 }
+                if ocr_raw_text:
+                    updates["ocr_text"] = ocr_raw_text
                 update_insurance_record(self.db, cur_record_id, updates)
 
                 # 更新发送人名称
@@ -1191,12 +1194,14 @@ class InsuranceHandler:
         # --- 第四步：pdfplumber 关键字段缺失时，补充 OCR ---
         _SUPPLEMENT_KEYS = ['保险公司', '保单号', '险种类型', '车牌号', '投保人', '被保险人',
                             '签单日期', '保险起期', '保险止期', '保费合计']
+        ocr_raw_text = ""
         if ocr_engine == "pdfplumber" and policies:
             first_fields = policies[0].get("fields", {})
             missing_keys = [k for k in _SUPPLEMENT_KEYS if not first_fields.get(k)]
             if missing_keys:
                 ocr_text = self._run_ocr_engines(pdf_bytes)
                 if ocr_text:
+                    ocr_raw_text = ocr_text
                     try:
                         ocr_policies = parse_policy_text_multi(ocr_text)
                         if ocr_policies:
@@ -1219,6 +1224,7 @@ class InsuranceHandler:
             "policies": policies,
             "policy": policies[0] if policies else {},
             "ocr_engine": ocr_engine,
+            "ocr_text": ocr_raw_text,
             "error": "",
         }
 
@@ -1331,6 +1337,7 @@ class InsuranceHandler:
         ocr_engine = "unknown"
         policy = {}
         error_msg = ""
+        manual_ocr_text = ""
 
         try:
             # --- 图片走 OCR（优先火山引擎，降级百度）---
@@ -1374,6 +1381,7 @@ class InsuranceHandler:
                 text = ""  # _do_ocr 内部已处理，通过 policy 返回
                 ocr_engine = ocr_result.get("ocr_engine", "pdfplumber")
                 policy = ocr_result.get("policy", {})
+                manual_ocr_text = ocr_result.get("ocr_text", "")
 
             # 图片 OCR 需要单独解析字段
             if file_type != "pdf" and text:
@@ -1405,6 +1413,7 @@ class InsuranceHandler:
 
             # 保存记录（source=manual）
             try:
+                raw_text = policy.get("raw_text", "") if policy else ""
                 record = {
                     "filename": filename,
                     "filesize": len(pdf_bytes),
@@ -1414,18 +1423,27 @@ class InsuranceHandler:
                     "confidence": confidence,
                     "parsed_fields": parsed_fields,
                     "mapped_fields": mapped_fields,
+                    "raw_text": raw_text,
                     "status": "done",
                     "source": "manual",
                 }
+                if file_type == "pdf" and manual_ocr_text:
+                    record["ocr_text"] = manual_ocr_text
                 save_insurance_record(self.db, record)
             except Exception as e:
                 logger.warning("手动上传记录保存失败: %s", e)
 
             # 构建兼容返回格式（与原 baoxianOcr 接口保持兼容）
+            raw_text_for_return = policy.get("raw_text", "") if policy else ""
+            invoice = {"fields": mapped_fields} if mapped_fields else {}
+            if raw_text_for_return:
+                invoice["raw_text"] = raw_text_for_return
+            if file_type == "pdf" and manual_ocr_text:
+                invoice["ocr_text"] = manual_ocr_text
             return {
                 "success": True,
                 "file_name": filename,
-                "invoices": [{"fields": mapped_fields}] if mapped_fields else [],
+                "invoices": [invoice] if invoice else [],
                 "ocr_engine": ocr_engine,
             }
 

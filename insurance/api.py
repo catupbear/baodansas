@@ -431,8 +431,9 @@ def get_record_raw_text(record_id):
 
         # 优先从数据库缓存读取
         cached_text = record.get("raw_text", "")
+        ocr_text = record.get("ocr_text", "") or ""
         if cached_text:
-            return jsonify({"code": 0, "data": {"raw_text": cached_text}})
+            return jsonify({"code": 0, "data": {"raw_text": cached_text, "ocr_text": ocr_text}})
 
         # 数据库无缓存，从 COS 下载提取
         cos_url = record.get("cos_url", "")
@@ -463,7 +464,7 @@ def get_record_raw_text(record_id):
             except Exception:
                 pass
 
-        return jsonify({"code": 0, "data": {"raw_text": text}})
+        return jsonify({"code": 0, "data": {"raw_text": text, "ocr_text": ocr_text}})
     except Exception as e:
         logger.exception("获取保单原文 %d 失败", record_id)
         return jsonify({"code": 500, "msg": str(e)}), 500
@@ -1039,6 +1040,7 @@ def reocr_record(record_id):
 
         policies = ocr_result.get("policies", [])
         ocr_engine = ocr_result.get("ocr_engine", "pdfplumber")
+        reocr_ocr_text = ocr_result.get("ocr_text", "")
 
         if not policies:
             return jsonify({"code": 500, "msg": "OCR 未解析到任何保单"}), 500
@@ -1081,7 +1083,7 @@ def reocr_record(record_id):
         # 为当前记录匹配最佳 policy（通过保单号匹配）
         original_policy_no = ""
         try:
-            orig_fields = record.get("parsed_fields", {})
+            orig_fields = record.get("parsed_fields") or {}
             if isinstance(orig_fields, str):
                 orig_fields = json.loads(orig_fields) if orig_fields else {}
             original_policy_no = orig_fields.get("保单号", "")
@@ -1121,6 +1123,8 @@ def reocr_record(record_id):
                 "policy_index": policy_idx + 1,
                 "page_range": policy.get("page_range", ""),
             }
+            if reocr_ocr_text:
+                updates["ocr_text"] = reocr_ocr_text
             update_insurance_record(_db, rec_id, updates)
 
         _apply_policy_to_record(record_id, policies[best_idx], best_idx)

@@ -328,6 +328,7 @@ def init_insurance_tables(db):
             ("policy_count", "TINYINT DEFAULT 1 COMMENT '同一PDF中的保单总数'"),
             ("policy_index", "TINYINT DEFAULT 1 COMMENT '当前记录在同一PDF中的序号（从1开始）'"),
             ("page_range", "VARCHAR(32) DEFAULT '' COMMENT '提取数据来源页码范围（如1-2）'"),
+            ("ocr_text", "LONGTEXT COMMENT 'OCR识别原文（pdfplumber+ocr模式下保存OCR文本）'"),
         ]
         for col_name, col_def in new_columns:
             try:

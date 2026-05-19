@@ -114,6 +114,7 @@
         .badge-warning { background: #fffbeb; color: #d97706; }
         .badge-danger { background: #fef2f2; color: #dc2626; }
         .badge-info { background: #fff7ed; color: #c2410c; }
+        .badge-accent { background: #f0f9ff; color: #0369a1; }
         .badge-gray { background: #f3f4f6; color: #6b7280; }
 
         /* 卡片样式 */
@@ -659,8 +660,8 @@
                                 </td>
                                 <td v-if="isSuperAdmin" class="px-3 py-2">
                                     <span class="badge text-xs"
-                                          :class="r.ocr_engine === 'baidu' ? 'badge-info' : r.ocr_engine === 'volc' ? 'badge-warning' : 'badge-success'">
-                                        {{ r.ocr_engine === 'baidu' ? '百度OCR' : r.ocr_engine === 'volc' ? '火山引擎' : 'PDF提取' }}
+                                          :class="r.ocr_engine === 'baidu' ? 'badge-info' : r.ocr_engine === 'volc' ? 'badge-warning' : r.ocr_engine === 'pdfplumber+ocr' ? 'badge-accent' : 'badge-success'">
+                                        {{ r.ocr_engine === 'baidu' ? '百度OCR' : r.ocr_engine === 'volc' ? '火山引擎' : r.ocr_engine === 'pdfplumber+ocr' ? 'PDF+OCR' : 'PDF提取' }}
                                     </span>
                                 </td>
                                 <td v-if="isSuperAdmin" class="px-3 py-2">
@@ -716,8 +717,8 @@
                             </td>
                             <td v-if="isSuperAdmin" class="px-3 py-2">
                                 <span class="badge text-xs"
-                                      :class="r.ocr_engine === 'baidu' ? 'badge-info' : r.ocr_engine === 'volc' ? 'badge-warning' : 'badge-success'">
-                                    {{ r.ocr_engine === 'baidu' ? '百度OCR' : r.ocr_engine === 'volc' ? '火山引擎' : 'PDF提取' }}
+                                      :class="r.ocr_engine === 'baidu' ? 'badge-info' : r.ocr_engine === 'volc' ? 'badge-warning' : r.ocr_engine === 'pdfplumber+ocr' ? 'badge-accent' : 'badge-success'">
+                                    {{ r.ocr_engine === 'baidu' ? '百度OCR' : r.ocr_engine === 'volc' ? '火山引擎' : r.ocr_engine === 'pdfplumber+ocr' ? 'PDF+OCR' : 'PDF提取' }}
                                 </span>
                             </td>
                             <td v-if="isSuperAdmin" class="px-3 py-2">
@@ -976,7 +977,7 @@
                                 class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
                             <option value="">全部</option>
                             <option v-for="eng in recordStats.engines" :key="eng.name" :value="eng.name">
-                                {{ eng.name === 'pdfplumber' ? 'PDF提取' : eng.name === 'baidu' ? '百度OCR' : eng.name === 'volc' ? '火山引擎' : eng.name }} ({{ eng.cnt }})
+                                {{ eng.name === 'pdfplumber' ? 'PDF提取' : eng.name === 'pdfplumber+ocr' ? 'PDF+OCR' : eng.name === 'baidu' ? '百度OCR' : eng.name === 'volc' ? '火山引擎' : eng.name }} ({{ eng.cnt }})
                             </option>
                         </select>
                     </div>
@@ -1196,8 +1197,8 @@
                             <!-- 识别方式（仅超管可见） -->
                             <td v-if="isSuperAdmin">
                                 <span v-if="record.ocr_engine" class="badge text-xs"
-                                      :class="record.ocr_engine === 'baidu' ? 'badge-info' : record.ocr_engine === 'volc' ? 'badge-warning' : 'badge-success'">
-                                    {{ record.ocr_engine === 'baidu' ? '百度OCR' : record.ocr_engine === 'volc' ? '火山引擎' : 'PDF提取' }}
+                                      :class="record.ocr_engine === 'baidu' ? 'badge-info' : record.ocr_engine === 'volc' ? 'badge-warning' : record.ocr_engine === 'pdfplumber+ocr' ? 'badge-accent' : 'badge-success'">
+                                    {{ record.ocr_engine === 'baidu' ? '百度OCR' : record.ocr_engine === 'volc' ? '火山引擎' : record.ocr_engine === 'pdfplumber+ocr' ? 'PDF+OCR' : 'PDF提取' }}
                                 </span>
                                 <span v-else class="text-gray-400 text-sm">—</span>
                             </td>
@@ -1854,8 +1855,8 @@
                             </div>
                         </div>
                         <span v-if="isSuperAdmin && previewOcrEngine" class="badge text-xs"
-                              :class="previewOcrEngine === 'baidu' ? 'badge-info' : previewOcrEngine === 'volc' ? 'badge-warning' : 'badge-success'">
-                            {{ previewOcrEngine === 'baidu' ? '百度OCR' : previewOcrEngine === 'volc' ? '火山引擎' : 'PDF提取' }}
+                              :class="previewOcrEngine === 'baidu' ? 'badge-info' : previewOcrEngine === 'volc' ? 'badge-warning' : previewOcrEngine === 'pdfplumber+ocr' ? 'badge-accent' : 'badge-success'">
+                            {{ previewOcrEngine === 'baidu' ? '百度OCR' : previewOcrEngine === 'volc' ? '火山引擎' : previewOcrEngine === 'pdfplumber+ocr' ? 'PDF+OCR' : previewOcrEngine === 'pdfplumber' ? 'PDF提取' : previewOcrEngine }}
                         </span>
                     </div>
                     <div class="flex items-center gap-2">
@@ -1990,7 +1991,21 @@
                     <!-- 右侧：提取原文 -->
                     <div v-if="previewShowRaw" class="border-l flex flex-col" style="width: 420px; min-width: 320px;">
                         <div class="px-3 py-2 bg-gray-50 border-b text-xs text-gray-500 font-medium flex-shrink-0 flex items-center justify-between">
-                            <span>PDF提取原文</span>
+                            <div class="flex items-center gap-2">
+                                <template v-if="previewOcrRawText">
+                                    <button @click="previewRawTextTab = 'pdf'"
+                                            class="px-2 py-0.5 rounded cursor-pointer transition-colors"
+                                            :class="previewRawTextTab === 'pdf' ? 'bg-blue-100 text-blue-700 font-semibold' : 'text-gray-500 hover:text-gray-700'">
+                                        PDF提取原文
+                                    </button>
+                                    <button @click="previewRawTextTab = 'ocr'"
+                                            class="px-2 py-0.5 rounded cursor-pointer transition-colors"
+                                            :class="previewRawTextTab === 'ocr' ? 'bg-orange-100 text-orange-700 font-semibold' : 'text-gray-500 hover:text-gray-700'">
+                                        OCR识别原文
+                                    </button>
+                                </template>
+                                <span v-else>PDF提取原文</span>
+                            </div>
                             <button @click="copyRawText"
                                     class="px-2 py-0.5 rounded text-xs cursor-pointer transition-colors"
                                     :class="rawTextCopied ? 'bg-green-100 text-green-700' : 'bg-white text-gray-500 hover:text-gray-700 hover:bg-gray-100 border border-gray-200'">
@@ -2004,7 +2019,7 @@
                             </button>
                         </div>
                         <div class="flex-1 overflow-auto p-3">
-                            <div v-if="!previewRawText" class="text-center py-12 text-gray-400">
+                            <div v-if="!activeRawText" class="text-center py-12 text-gray-400">
                                 <svg class="w-6 h-6 animate-spin mx-auto mb-2 text-orange-400" fill="none" viewBox="0 0 24 24">
                                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
@@ -2291,6 +2306,8 @@ createApp({
         const previewShowFields = ref(false);
         const previewShowRules = ref(false);
         const previewRawText = ref('');
+        const previewOcrRawText = ref('');
+        const previewRawTextTab = ref('pdf');  // 'pdf' 或 'ocr'
         const rawTextCopied = ref(false);
         const extractionRules = ref({});
         const previewReocring = ref(false);
@@ -2366,10 +2383,18 @@ createApp({
             });
         });
 
+        // 当前展示的原文内容（根据 tab 切换）
+        const activeRawText = computed(() => {
+            if (previewRawTextTab.value === 'ocr' && previewOcrRawText.value) {
+                return previewOcrRawText.value;
+            }
+            return previewRawText.value;
+        });
+
         // 格式化原文：换行 + 高亮字段标签
         const formattedRawText = computed(() => {
-            if (!previewRawText.value) return '';
-            let text = previewRawText.value
+            if (!activeRawText.value) return '';
+            let text = activeRawText.value
                 .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             // 在字段标签前插入换行（如果前面不是行首）
             for (const label of RAW_TEXT_LABELS) {
@@ -2389,14 +2414,14 @@ createApp({
 
         // 复制原文到剪贴板
         function copyRawText() {
-            if (!previewRawText.value) return;
-            navigator.clipboard.writeText(previewRawText.value).then(() => {
+            if (!activeRawText.value) return;
+            navigator.clipboard.writeText(activeRawText.value).then(() => {
                 rawTextCopied.value = true;
                 setTimeout(() => { rawTextCopied.value = false; }, 2000);
             }).catch(() => {
                 // 降级方案
                 const ta = document.createElement('textarea');
-                ta.value = previewRawText.value;
+                ta.value = activeRawText.value;
                 ta.style.position = 'fixed';
                 ta.style.opacity = '0';
                 document.body.appendChild(ta);
@@ -2970,9 +2995,12 @@ createApp({
             if (r && r.invoices && r.invoices[0] && r.invoices[0].raw_text) {
                 previewHasRawText.value = true;
                 previewRawText.value = r.invoices[0].raw_text;
+                previewOcrRawText.value = r.invoices[0].ocr_text || '';
+                previewRawTextTab.value = 'pdf';
             } else {
                 previewHasRawText.value = false;
                 previewRawText.value = '';
+                previewOcrRawText.value = '';
             }
         }
 
@@ -3035,6 +3063,8 @@ createApp({
             // PDF 文件支持查看原文（懒加载）
             previewHasRawText.value = (ext === 'pdf');
             previewRawText.value = '';
+            previewOcrRawText.value = '';
+            previewRawTextTab.value = 'pdf';
             previewVisible.value = true;
             // 异步加载完整详情（含 parsed_fields 和兄弟记录）
             try {
@@ -3075,6 +3105,8 @@ createApp({
                     }
                     previewAutoRecord.value = detail;
                     previewRawText.value = '';
+                    previewOcrRawText.value = '';
+                    previewRawTextTab.value = 'pdf';
                     // 跳转到对应起始页（同一 PDF，通过 iframe contentWindow 跳页）
                     const startPage = getStartPage(detail.page_range);
                     Vue.nextTick(() => {
@@ -3102,6 +3134,8 @@ createApp({
                 const data = await resp.json();
                 if (data.code === 0 && data.data.raw_text) {
                     previewRawText.value = data.data.raw_text;
+                    previewOcrRawText.value = data.data.ocr_text || '';
+                    previewRawTextTab.value = 'pdf';
                 } else {
                     previewRawText.value = '（原文提取失败）';
                 }
@@ -4611,6 +4645,8 @@ createApp({
                     previewAutoRecord.value = record;
                     // 清空原文缓存并重新加载
                     previewRawText.value = '';
+                    previewOcrRawText.value = '';
+                    previewRawTextTab.value = 'pdf';
                     loadAutoRecordRawText();
                     // 刷新兄弟保单列表（重新识别可能新增/更新了兄弟记录）
                     try {
@@ -4820,7 +4856,7 @@ createApp({
             syncMessage, syncSuccess,
             previewVisible, previewSrc, previewLoading, previewIsImage, previewOcrEngine,
             previewType, previewFileName, previewHasRawText, previewShowRaw, previewShowFields, previewShowRules,
-            previewRawText, formattedRawText, previewFieldsList, rawTextCopied, copyRawText,
+            previewRawText, previewOcrRawText, previewRawTextTab, activeRawText, formattedRawText, previewFieldsList, rawTextCopied, copyRawText,
             extractionRules, loadExtractionRules,
             rawTextVisible, rawTextContent, rawTextFileName,
             successResults, abnormalResults, nonPolicyResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal, getPolicyHint, getRecordHint,
