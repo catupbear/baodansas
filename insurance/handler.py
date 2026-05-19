@@ -19,6 +19,7 @@ import hashlib
 from insurance.db import (
     check_file_md5_exists,
     get_insurance_config,
+    get_insurance_record,
     save_insurance_record,
     update_insurance_record,
 )
@@ -424,6 +425,16 @@ class InsuranceHandler:
 
             existing = check_file_md5_exists(self.db, file_md5)
             if existing and existing["id"] != record_id:
+                # 发送人不同时，复制已有识别结果到当前记录（不同人转发同一PDF）
+                existing_full = get_insurance_record(self.db, existing["id"])
+                if existing_full and existing_full.get("sender") != sender:
+                    logger.info(
+                        "PDF重复但发送人不同(MD5=%s), 原记录id=%d(sender=%s), 当前record_id=%d(sender=%s), 复制识别结果",
+                        file_md5, existing["id"], existing_full.get("sender"), record_id, sender,
+                    )
+                    self._copy_recognition_result(record_id, existing_full, file_md5, config_user_id, config_enterprise_id)
+                    return
+                # 同一发送人的重复文件，标记为 duplicate
                 logger.info(
                     "PDF文件重复(MD5=%s), 已有记录id=%d, 当前record_id=%d, 跳过识别",
                     file_md5, existing["id"], record_id,
@@ -809,6 +820,100 @@ class InsuranceHandler:
             logger.info("反向互补后重新同步钉钉: record_id=%d", record_id)
         except Exception as e:
             logger.warning("反向互补后重新同步钉钉失败: record_id=%d, %s", record_id, e)
+
+    # ------------------------------------------------------------------ #
+    # 重复 PDF 不同发送人：复制识别结果
+    # ------------------------------------------------------------------ #
+
+    def _copy_recognition_result(self, record_id: int, source_record: dict,
+                                  file_md5: str, user_id, enterprise_id):
+        """
+        将已有记录的识别结果复制到当前记录（不同发送人转发同一 PDF）。
+        同时处理多保单情况：源记录对应的所有兄弟记录也一并复制。
+        """
+        import json as _json
+        from insurance.field_mapping import apply_mapping
+
+        # 收集源 PDF 的所有记录（按 file_md5 查同一 PDF 的所有保单）
+        source_records = [source_record]
+        if file_md5:
+            conn = self.db.pool.connection()
+            try:
+                cursor = conn.cursor(pymysql.cursors.DictCursor)
+                cursor.execute(
+                    "SELECT * FROM insurance_records WHERE file_md5 = %s AND status = 'done' ORDER BY policy_index",
+                    (file_md5,)
+                )
+                all_source = cursor.fetchall()
+                if all_source:
+                    source_records = all_source
+            finally:
+                conn.close()
+
+        total_policies = len(source_records)
+
+        for idx, src in enumerate(source_records):
+            # 第一条复用已创建的 record_id，后续新建
+            if idx == 0:
+                cur_id = record_id
+            else:
+                extra = {
+                    "msg_seq": src.get("msg_seq", 0),
+                    "roomid": src.get("roomid", ""),
+                    "room_name": src.get("room_name", ""),
+                    "sender": "",  # 下面会被 updates 覆盖前先用当前记录的 sender
+                    "filename": src.get("filename", ""),
+                    "filesize": src.get("filesize", 0),
+                    "file_md5": file_md5,
+                    "status": "processing",
+                    "source": "auto",
+                    "user_id": user_id,
+                    "enterprise_id": enterprise_id,
+                }
+                # 从当前记录获取 sender 信息
+                cur_rec = get_insurance_record(self.db, record_id)
+                if cur_rec:
+                    extra["sender"] = cur_rec.get("sender", "")
+                    extra["sender_name"] = cur_rec.get("sender_name", "")
+                try:
+                    cur_id = save_insurance_record(self.db, extra)
+                except Exception as e:
+                    logger.error("复制多保单第%d条记录失败: %s", idx + 1, e)
+                    continue
+
+            # 解析源记录的 parsed_fields
+            pf = src.get("parsed_fields", {})
+            if isinstance(pf, str):
+                try:
+                    pf = _json.loads(pf) if pf else {}
+                except (_json.JSONDecodeError, TypeError):
+                    pf = {}
+
+            cs = pf.get("保险公司简称", "")
+            mf = apply_mapping(pf, cs)
+
+            updates = {
+                "status": "done",
+                "ocr_engine": src.get("ocr_engine", ""),
+                "doc_category": src.get("doc_category", ""),
+                "confidence": src.get("confidence", 0.0),
+                "parsed_fields": pf,
+                "mapped_fields": mf,
+                "raw_text": src.get("raw_text", ""),
+                "error_message": "",
+                "cos_url": src.get("cos_url", ""),
+                "file_md5": file_md5,
+                "policy_count": total_policies,
+                "policy_index": src.get("policy_index", idx + 1),
+                "page_range": src.get("page_range", ""),
+                "user_id": user_id,
+                "enterprise_id": enterprise_id,
+            }
+            update_insurance_record(self.db, cur_id, updates)
+            logger.info(
+                "复制识别结果到 record_id=%d (policy %d/%d, 源记录=%d)",
+                cur_id, idx + 1, total_policies, src["id"],
+            )
 
     # ------------------------------------------------------------------ #
     # COS 上传
