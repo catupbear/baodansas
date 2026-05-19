@@ -709,12 +709,33 @@ class InsuranceHandler:
     # 可从同车牌历史保单互补的字段
     CROSS_FILL_FIELDS = ["投保人", "被保险人", "车主"]
 
+    @staticmethod
+    def _is_vehicle_policy(parsed_fields: dict) -> bool:
+        """判断是否为车险（交强险/商业险）"""
+        policy_type = parsed_fields.get("险种类型", "")
+        if "交通事故责任强制" in policy_type:
+            return True
+        if "商业保险" in policy_type or "机动车辆保险" in policy_type or "机动车辆综合险" in policy_type:
+            return True
+        return False
+
+    @staticmethod
+    def _is_non_vehicle_policy(parsed_fields: dict) -> bool:
+        """判断是否为非车险（驾乘/意外/非车）"""
+        policy_type = parsed_fields.get("险种类型", "")
+        if not policy_type:
+            return False
+        from insurance.policy_parser import _get_policy_type_code
+        type_code, _ = _get_policy_type_code(policy_type)
+        return type_code in ("accident", "non_vehicle")
+
     def _cross_fill_by_plate(self, parsed_fields: dict, record_id: int = None):
         """
         同车牌保单双向字段互补：
         1. 正向：从历史记录补充当前保单的缺失字段
-        2. 反向：用当前保单的字段回填历史记录的缺失字段
-        仅补充空值字段，不覆盖已有值。
+        2. 非车险被保人覆盖：非车险的被保人以交强险/商业险为准
+        3. 反向：用当前保单的字段回填历史记录的缺失字段
+        仅补充空值字段，不覆盖已有值（非车险被保人除外）。
         """
         plate = parsed_fields.get("车牌号", "")
         if not plate:
@@ -738,6 +759,18 @@ class InsuranceHandler:
                     filled.append(f"{field}={val}")
                     break
 
+        # 非车险被保人覆盖：从交强险/商业险取被保人，覆盖非车险的被保人
+        if self._is_non_vehicle_policy(parsed_fields):
+            for rec in history:
+                hist_fields = rec.get("parsed_fields", {})
+                if self._is_vehicle_policy(hist_fields):
+                    vehicle_insured = hist_fields.get("被保险人", "")
+                    if vehicle_insured and vehicle_insured != parsed_fields.get("被保险人", ""):
+                        old_val = parsed_fields.get("被保险人", "")
+                        parsed_fields["被保险人"] = vehicle_insured
+                        filled.append(f"被保险人={vehicle_insured}(覆盖:{old_val})")
+                        break
+
         if filled:
             logger.info(
                 "同车牌互补(正向): plate=%s, record_id=%s, 补充=%s",
@@ -750,6 +783,8 @@ class InsuranceHandler:
         if not any(current_vals.values()):
             return
 
+        is_current_vehicle = self._is_vehicle_policy(parsed_fields)
+
         for rec in history:
             hist_fields = rec.get("parsed_fields", {})
             if not hist_fields:
@@ -759,6 +794,15 @@ class InsuranceHandler:
                 if not hist_fields.get(field) and current_vals.get(field):
                     hist_fields[field] = current_vals[field]
                     back_filled.append(f"{field}={current_vals[field]}")
+
+            # 反向覆盖：当前是车险，历史是非车险，覆盖历史非车险的被保人
+            if is_current_vehicle and self._is_non_vehicle_policy(hist_fields):
+                cur_insured = current_vals.get("被保险人", "")
+                hist_insured = hist_fields.get("被保险人", "")
+                if cur_insured and hist_insured != cur_insured:
+                    old_val = hist_insured
+                    hist_fields["被保险人"] = cur_insured
+                    back_filled.append(f"被保险人={cur_insured}(覆盖:{old_val})")
 
             if back_filled:
                 # 重新计算 mapped_fields
