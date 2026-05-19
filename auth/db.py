@@ -325,6 +325,10 @@ def get_bindings_by_user(db, user_id: int) -> list:
             if row.get("created_at") and not isinstance(row["created_at"], str):
                 row["created_at"] = str(row["created_at"])
         return rows
+    except pymysql.err.ProgrammingError as e:
+        if e.args[0] == 1146:
+            return []
+        raise
     finally:
         conn.close()
 
@@ -352,6 +356,10 @@ def get_binding_by_sender(db, sender: str, enterprise_id: int = None) -> dict | 
             (sender,),
         )
         return cursor.fetchone()
+    except pymysql.err.ProgrammingError as e:
+        if e.args[0] == 1146:
+            return None
+        raise
     finally:
         conn.close()
 
@@ -406,5 +414,10 @@ def list_all_bindings(db, enterprise_id: int = None) -> list:
             if row.get("created_at") and not isinstance(row["created_at"], str):
                 row["created_at"] = str(row["created_at"])
         return rows
+    except pymysql.err.ProgrammingError as e:
+        if e.args[0] == 1146:  # Table doesn't exist
+            logger.warning("user_sender_binding 表不存在，请重启服务自动建表")
+            return []
+        raise
     finally:
         conn.close()
