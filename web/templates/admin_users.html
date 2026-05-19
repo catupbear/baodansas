@@ -169,13 +169,13 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>手机号</th>
-                                <th>姓名</th>
-                                <th>角色</th>
-                                <th>所属企业</th>
-                                <th>绑定发送人</th>
-                                <th>状态</th>
-                                <th>创建时间</th>
+                                <th style="width:110px;">手机号</th>
+                                <th style="width:70px;">姓名</th>
+                                <th style="width:80px;">角色</th>
+                                <th style="width:140px;">所属企业</th>
+                                <th style="width:150px;">绑定发送人</th>
+                                <th style="width:50px;">状态</th>
+                                <th style="width:130px;">创建时间</th>
                                 <th>操作</th>
                             </tr>
                         </thead>
@@ -187,13 +187,14 @@
                                     <span class="badge" :class="roleBadgeClass(user.role)">{{ roleLabel(user.role) }}</span>
                                 </td>
                                 <td>{{ user.parent_name || '-' }}</td>
-                                <td>
-                                    <div class="flex flex-wrap gap-1">
+                                <td style="max-width:160px;">
+                                    <div style="display:flex;flex-wrap:wrap;gap:4px;">
                                         <span v-for="s in (user.bound_senders || [])" :key="s.sender"
-                                            class="badge badge-blue" style="font-size:11px;">
+                                            class="badge badge-blue" style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                                            :title="(s.sender_name || '') + ' (' + s.sender + ')'">
                                             {{ s.sender_name || s.sender }}
                                         </span>
-                                        <span v-if="!user.bound_senders || user.bound_senders.length === 0" class="text-gray-400">-</span>
+                                        <span v-if="!user.bound_senders || user.bound_senders.length === 0" style="color:#9ca3af;">-</span>
                                     </div>
                                 </td>
                                 <td>
