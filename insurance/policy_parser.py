@@ -505,21 +505,39 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
         fields["争议解决方式"] = m.group(1)
 
     # 匹配"制单："或"制单人："，排除"制单时间"
-    m = re.search(r"制单(?:人)?(?!时间)[：:\s]*(\S+?)(?:\s|$)", text)
-    if m:
-        fields["制单人"] = m.group(1).lstrip("：:")
+    # 制单人：按行匹配，排除"监制"等干扰
+    for _line in text.split('\n'):
+        m = re.search(r"制单(?:人)?(?!时间)[：:][^\S\n]*(\S+?)(?:\s|$)", _line)
+        if m:
+            _val = m.group(1).lstrip("：:")
+            if _val and _val not in ("：", ":") and "监制" not in _val:
+                fields["制单人"] = _val
+                break
+    m = None  # 清除防止后续误用
 
-    m = re.search(r"经办(?:人员?)?[：:]\s*([\u4e00-\u9fff](?:[^\S\n]?[\u4e00-\u9fff]){0,5})", text)
+
+    # 经办人：不跨行匹配
+    m = re.search(r"经办(?:人员?)?[：:][^\S\n]*([\u4e00-\u9fff](?:[^\S\n]?[\u4e00-\u9fff]){0,5})", text)
     if m:
         val = re.sub(r'\s+', '', m.group(1))  # 去除名字中的OCR空格
         if val:
             fields["经办人"] = val
 
+    # 华安等格式：值和标签分离，"自动核保 杨文 杨文" 对应 核保/制单/经办
+    lines_all = text.split('\n')
+    for line in lines_all:
+        m_auto = re.match(r'\s*(?:自动核保|自动)\s+([\u4e00-\u9fff]{2,6})\s+([\u4e00-\u9fff]{2,6})\s*$', line)
+        if m_auto:
+            if "制单人" not in fields:
+                fields["制单人"] = _clean_person_name(m_auto.group(1))
+            if "经办人" not in fields:
+                fields["经办人"] = _clean_person_name(m_auto.group(2))
+            break
+
     # 紫金等表格格式：值在标签行上方
     # "999999999 赖晨 王丽霞\n核保： 制单： 经办："
     # 经办人为上一行最后一个中文人名
     if "经办人" not in fields:
-        lines_all = text.split('\n')
         for i, line in enumerate(lines_all):
             if re.search(r'核保[：:]\s*制单[：:]\s*经办[：:]', line) and i > 0:
                 prev = lines_all[i - 1].strip()
@@ -2128,11 +2146,20 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
     # "2026年5月6日18时0分 2027年5月6日18时0分\n保险期间自 起至 止"
     # 或中间隔多行："...日期\n—\n终保日期\n—\n保险期间自 起至 止"
     period_lines = period_text.split('\n')
-    two_date_pattern = r'(\d{4}年\d{1,2}月\d{1,2}日)\d{1,2}时\d{1,2}分\s+(\d{4}年\d{1,2}月\d{1,2}日)'
+    two_date_pattern = r'(\d{4}年\d{1,2}月\d{1,2}日)\d{1,2}时\d{1,2}分\s*(\d{4}年\d{1,2}月\d{1,2}日)'
     for i, line in enumerate(period_lines):
         # 匹配"保险期间自起至止"或"保险期间自 起至 止"（合并/未合并空格均可）
         if re.search(r'保险期间\s*自\s*起\s*[至到]\s*止', line):
+            # 向前搜索（紫金等格式：日期在标签上方）
             for j in range(max(0, i - 8), i):
+                m = re.search(two_date_pattern, period_lines[j].strip())
+                if m:
+                    fields["保险起期"] = m.group(1)
+                    fields["保险止期"] = m.group(2)
+                    fields["保险期间"] = f"{m.group(1)} 至 {m.group(2)}"
+                    return
+            # 向后搜索（华安等格式：日期在标签下方很远处的数据块中）
+            for j in range(i + 1, len(period_lines)):
                 m = re.search(two_date_pattern, period_lines[j].strip())
                 if m:
                     fields["保险起期"] = m.group(1)
