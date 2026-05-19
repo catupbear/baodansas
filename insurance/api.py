@@ -1102,10 +1102,15 @@ def reocr_record(record_id):
             _handler._cross_fill_by_plate(pf, rec_id)
             cs = pf.get("保险公司简称", "")
             mf = apply_mapping(pf, cs)
+            doc_cat = policy.get("doc_category", "")
+            # 文件名带"投保"时文档类型标记为投保单
+            if doc_cat == "保单" and filename and "投保" in filename:
+                doc_cat = "投保单"
+                pf["文档类型"] = "投保单"
             updates = {
                 "status": "done",
                 "ocr_engine": ocr_engine,
-                "doc_category": policy.get("doc_category", ""),
+                "doc_category": doc_cat,
                 "confidence": policy.get("confidence", 0.0),
                 "parsed_fields": pf,
                 "mapped_fields": mf,

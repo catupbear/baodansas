@@ -2430,6 +2430,13 @@ def _identify_doc_category(text: str, fields: dict) -> str:
     if re.search(r'(?:电子批单|保险批单|批\s*单\s*号|批改日期|批改确认码)', text_head):
         return "批单"
 
+    # 投保单：标题含"投保单"/"投保书"（区别于正式保单）
+    # 如"神行车保系列产品投保单"、"机动车辆保险投保单"
+    # 需排除"投保单号"（这是保单中引用投保单号的字段）
+    if re.search(r'投保[单书](?!号)', text_head):
+        if _has_policy_markers:
+            return "投保单"
+
     # 有保单关键字段才认定为保单，否则标记为未知
     if _has_policy_markers:
         return "保单"
