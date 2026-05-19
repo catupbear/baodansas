@@ -1100,12 +1100,13 @@ def query_insurance_records(
                 order_clause = f"ORDER BY pf.plate_no ASC, {col_prefix}created_at DESC"
             else:
                 order_clause = (
-                    "ORDER BY COALESCE(pf2.plate_no, '') ASC, created_at DESC"
+                    "ORDER BY COALESCE(pf2.plate_no, '') ASC, insurance_records.created_at DESC"
                 )
                 from_clause_with_pf = f"{from_clause} LEFT JOIN insurance_policy_fields pf2 ON insurance_records.id = pf2.record_id"
             id_from = from_clause_with_pf if not need_join else from_clause
+            id_col = f"{col_prefix}id" if need_join else "insurance_records.id"
             cursor.execute(
-                f"SELECT {col_prefix}id FROM {id_from} {where_clause} "
+                f"SELECT {id_col} FROM {id_from} {where_clause} "
                 f"{order_clause} LIMIT %s OFFSET %s",
                 params + [page_size, offset]
             )
