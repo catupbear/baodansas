@@ -1104,7 +1104,7 @@ def reocr_record(record_id):
             mf = apply_mapping(pf, cs)
             doc_cat = policy.get("doc_category", "")
             # 文件名带"投保"时文档类型标记为投保单
-            if doc_cat == "保单" and filename and "投保" in filename:
+            if filename and "投保" in filename:
                 doc_cat = "投保单"
                 pf["文档类型"] = "投保单"
             updates = {

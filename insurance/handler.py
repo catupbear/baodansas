@@ -516,7 +516,7 @@ class InsuranceHandler:
                 confidence = policy.get("confidence", 0.0)
 
                 # 文件名带"投保"时文档类型标记为投保单
-                if doc_category == "保单" and filename and "投保" in filename:
+                if filename and "投保" in filename:
                     doc_category = "投保单"
                     parsed_fields["文档类型"] = "投保单"
 
