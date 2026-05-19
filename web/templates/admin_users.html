@@ -46,15 +46,17 @@
         }
 
         /* 数据表格 */
-        .data-table { font-size: 13px; border-collapse: collapse; width: 100%; }
+        .data-table { font-size: 13px; border-collapse: collapse; width: 100%; table-layout: fixed; }
         .data-table th {
             background: #faf8f5; color: #57534e; font-weight: 500;
-            text-align: left; padding: 10px 16px;
+            text-align: left; padding: 10px 12px;
             border-bottom: 1px solid #e7e0d8;
+            white-space: nowrap;
         }
         .data-table td {
-            padding: 10px 16px;
+            padding: 10px 12px;
             border-bottom: 1px solid #f5f0eb;
+            overflow: hidden; text-overflow: ellipsis;
         }
         .data-table tr:hover { background: #fffbf7; }
 
@@ -167,15 +169,25 @@
                 <!-- 表格 -->
                 <div v-else class="overflow-x-auto">
                     <table class="data-table">
+                        <colgroup>
+                            <col style="width:11%;"><!-- 手机号 -->
+                            <col style="width:7%;"><!-- 姓名 -->
+                            <col style="width:7%;"><!-- 角色 -->
+                            <col style="width:16%;"><!-- 所属企业 -->
+                            <col style="width:16%;"><!-- 绑定发送人 -->
+                            <col style="width:6%;"><!-- 状态 -->
+                            <col style="width:14%;"><!-- 创建时间 -->
+                            <col style="width:23%;"><!-- 操作 -->
+                        </colgroup>
                         <thead>
                             <tr>
-                                <th style="width:110px;">手机号</th>
-                                <th style="width:70px;">姓名</th>
-                                <th style="width:80px;">角色</th>
-                                <th style="width:140px;">所属企业</th>
-                                <th style="width:150px;">绑定发送人</th>
-                                <th style="width:50px;">状态</th>
-                                <th style="width:130px;">创建时间</th>
+                                <th>手机号</th>
+                                <th>姓名</th>
+                                <th>角色</th>
+                                <th>所属企业</th>
+                                <th>绑定发送人</th>
+                                <th>状态</th>
+                                <th>创建时间</th>
                                 <th>操作</th>
                             </tr>
                         </thead>
@@ -186,11 +198,11 @@
                                 <td>
                                     <span class="badge" :class="roleBadgeClass(user.role)">{{ roleLabel(user.role) }}</span>
                                 </td>
-                                <td>{{ user.parent_name || '-' }}</td>
-                                <td style="max-width:160px;">
-                                    <div style="display:flex;flex-wrap:wrap;gap:4px;">
+                                <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" :title="user.parent_name || ''">{{ user.parent_name || '-' }}</td>
+                                <td>
+                                    <div style="display:flex;flex-wrap:wrap;gap:3px;">
                                         <span v-for="s in (user.bound_senders || [])" :key="s.sender"
-                                            class="badge badge-blue" style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                                            class="badge badge-blue" style="font-size:11px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                                             :title="(s.sender_name || '') + ' (' + s.sender + ')'">
                                             {{ s.sender_name || s.sender }}
                                         </span>
