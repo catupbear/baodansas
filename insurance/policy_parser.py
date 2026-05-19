@@ -880,6 +880,19 @@ def _extract_insured_pingan(text: str, text_merged: str, fields: dict):
                 fields["被保险人"] = val
                 return
 
+    # 众安/平安跨行格式："姓 名: 黄宝兰 证件类型: ...\n被保\n险人 出生日期: ...\n信息"
+    # "被保"单独成行或"被保"开头，向前找"姓 名:"行
+    for i, line in enumerate(lines):
+        if line.strip() == '被保' or re.match(r'^\s*被保\s*$', line):
+            for j in range(max(0, i - 3), i):
+                m_name = re.search(r'姓\s*名[：:\s]\s*([一-鿿][一-鿿\w]+?)(?:\s|$)', lines[j])
+                if m_name:
+                    val = _clean_person_name(m_name.group(1))
+                    if _is_valid_person(val):
+                        fields["被保险人"] = val
+                        return
+            break
+
     # 平安标准格式：被保姓名 / 被保 正式名称
     for p in [
         r"被保姓名[：:]\s*(\S+)",
