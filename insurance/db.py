@@ -588,6 +588,14 @@ def _compute_abnormal(parsed_fields: dict, status: str, doc_category: str,
             continue
         missing.append(col)
 
+    # 日期完整性校验：日期不全（如"2026/05/"缺日）视为异常
+    _DATE_FIELDS = {'保险起期': '起保日期', '保险止期': '终保日期', '签单日期': '签单日期'}
+    incomplete_dates = []
+    for ocr_key, label in _DATE_FIELDS.items():
+        val = fields.get(ocr_key, '')
+        if val and not _re.search(r'\d{1,2}[日号]|\d{4}[-/]\d{1,2}[-/]\d{1,2}', val):
+            incomplete_dates.append(label)
+
     # 交强险仅缺投保人不算异常，但给提示
     policy_type = fields.get('险种类型', '')
     is_compulsory = '交强' in policy_type or '交通事故责任强制' in policy_type
@@ -596,9 +604,13 @@ def _compute_abnormal(parsed_fields: dict, status: str, doc_category: str,
     else:
         hint = ''
 
-    if not missing:
+    if incomplete_dates:
+        date_hint = '日期不全: ' + ','.join(incomplete_dates)
+        hint = f"{hint}; {date_hint}" if hint else date_hint
+
+    if not missing and not incomplete_dates:
         return False, hint
-    if is_compulsory and len(missing) == 1 and missing[0] == '投保人':
+    if not incomplete_dates and is_compulsory and len(missing) == 1 and missing[0] == '投保人':
         return False, hint
 
     return True, hint

@@ -1705,9 +1705,10 @@ def _extract_premium(text: str, fields: dict, company_short: str):
     """提取保费合计"""
 
     # 各保司通用模式列表
+    # 用(?:(?!其中).)*? 代替 .*? 防止跨越"其中"匹配到救助基金等子项金额
     patterns = [
-        r"保险?费合计.*?[￥¥][：:\s]*([\d,]+\.\d{1,2})",
-        r"保险?费合计.*?([\d,]+\.\d{1,2})\s*元",
+        r"保险?费合计(?:(?!其中).)*?[￥¥][：:\s]*([\d,]+\.?\d{0,2})\s*(?:元)?",
+        r"保险?费合计(?:(?!其中).)*?([\d,]+\.\d{1,2})\s*元",
         r"保险费[：:]\s*人民币\s*\S+[（(]RMB[:：]?\s*([\d,]+\.\d{2})(?:元)?[)）]",
         r"RMB[:：]?\s*([\d,]+\.\d{2})(?:元)?[)）]",
         r"[（(]小写[）)]\s*RMB\s*([\d,]+\.\d{2})",
@@ -1715,14 +1716,16 @@ def _extract_premium(text: str, fields: dict, company_short: str):
         r"RMB([\d,]+\.\d{2})",
         r"总保险费.*?[￥¥]([\d,]+\.\d{2})",
         r"实收保费[：:\s]*([\d,]+\.\d{2})",
-        r"总?保险?费[：:\s]*([\d,]+\.\d{2})",
+        r"(?<!税)总?保险?费[：:\s]*([\d,]+\.\d{2})",
         # 众安等格式：无小数点 "（小写）RMB 499元"
         r"总保险费.*?RMB\s*([\d,]+)元",
     ]
 
     # 太平洋格式："保险费及车船税合计金额 ￥：19544.56 元"（优先取含税合计）
+    # 太平洋跨行格式："保险费合计(人民币大写):叁仟...\n(¥:3262.56元)"
     if company_short == "太平洋":
         patterns.insert(0, r"保险费及车船税合计金额\s*[￥¥][：:\s]*([\d,]+\.\d{2})")
+        patterns.insert(1, r"保险费合计[\s\S]{0,80}?[（(][￥¥][：:\s]*([\d,]+\.?\d{0,2})\s*(?:元)?[)）]")
 
     # 人保等合并投保单："保险费+车船税合计（人民币大写）：... （￥ 5017.32 元）"
     m = re.search(r"保险费[+＋]车船税合计.*?[（(\s][￥¥]\s*([\d,]+\.\d{2})\s*(?:元)?[)）]", text)
@@ -1797,9 +1800,12 @@ def _extract_premium(text: str, fields: dict, company_short: str):
         patterns.insert(2, r"保\s*险\s*费\s*合\s*计.*?小写[：:\s]*RMB\s*([\d,]+\.\d{2})")
 
     # 阳光驾乘无忧："总保险费 人民币（大写）:壹佰捌拾捌元    ￥188.00"
+    # 阳光交强："保险费合计(人民币大写)：壹仟壹佰元整(¥：1100元 其中..."（整数金额）
     if company_short == "阳光":
-        patterns.insert(0, r"总保险费\s*人民币.*?[￥¥]\s*([\d,]+\.\d{2})")
-        patterns.insert(1, r"保险费合计\s*人民币.*?[￥¥]\s*([\d,]+\.\d{2})")
+        # 优先匹配"(¥：XXXX元"中"其中"之前的金额（避免匹配到救助基金等子项）
+        patterns.insert(0, r"保险?费合计[^￥¥]*?[（(][￥¥][：:\s]*([\d,]+\.?\d{0,2})\s*元")
+        patterns.insert(1, r"总保险费\s*人民币.*?[￥¥]\s*([\d,]+\.?\d{0,2})")
+        patterns.insert(2, r"保险费合计\s*人民币.*?[￥¥]\s*([\d,]+\.?\d{0,2})")
 
     # 永诚/太平驾意险："(小写)：200.00" 或 "小写： CNY 430.00" 或 "（小写）￥ 280.00"
     patterns.append(r"[（(]?小写[）)]?[：:\s]*(?:CNY\s*|[￥¥]\s*)?([\d,]+\.\d{2})")
@@ -1883,6 +1889,21 @@ def _extract_premium(text: str, fields: dict, company_short: str):
             val = _parse_chinese_amount(cn_amounts[-1].group(1))
             if val and float(val) > 50:  # 排除过小的金额
                 fields["保费合计"] = val
+
+    # 大写金额交叉验证：双向比对，容差1%，不一致时优先取大写金额
+    if "保费合计" in fields:
+        m_cn = re.search(r"保险?费合计[^壹贰叁肆伍陆柒捌玖零]*?((?:[壹贰叁肆伍陆柒捌玖零拾佰仟万亿]+元)(?:整|[壹贰叁肆伍陆柒捌玖零角分]+)?)", text)
+        if m_cn:
+            cn_val = _parse_chinese_amount(m_cn.group(1))
+            if cn_val:
+                extracted = float(fields["保费合计"])
+                cn_float = float(cn_val)
+                if cn_float > 0 and extracted > 0:
+                    diff_ratio = abs(cn_float - extracted) / max(cn_float, extracted)
+                    if diff_ratio > 0.01:
+                        logger.info("保费大写验证修正: 提取=%s, 大写=%s (差异%.1f%%), 使用大写金额",
+                                    fields["保费合计"], cn_val, diff_ratio * 100)
+                        fields["保费合计"] = cn_val
 
     # 不含税保费：兼容"不含税保费：1132.08"和"不含税保费（元）：1132.08"等
     m = re.search(r"不含税保[险]?费[^：:\d]*[：:\s]*([\d,]+\.\d{2})", text)

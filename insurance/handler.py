@@ -845,6 +845,44 @@ class InsuranceHandler:
     # OCR 流水线
     # ------------------------------------------------------------------ #
 
+    def _run_ocr_engines(self, pdf_bytes: bytes) -> str:
+        """调用 OCR 引擎提取文本（火山引擎优先，降级百度），返回文本或空字符串"""
+        volc_circuit_open = (time.time() < self._volc_circuit_open_until)
+        if self._volc_ocr and not volc_circuit_open:
+            try:
+                volc_result = self._volc_ocr.recognize_pdf_multi_pages(
+                    pdf_bytes, max_pages=10, early_stop_check=_ocr_early_stop_check)
+                if volc_result.get("success"):
+                    self._volc_fail_count = 0
+                    text = volc_result.get("text", "")
+                    logger.info("火山引擎 OCR 识别成功，文字数=%d", len(text))
+                    return text
+                self._volc_fail_count += 1
+                logger.warning("火山引擎 OCR 识别失败(%d/%d): %s",
+                               self._volc_fail_count, self._volc_fail_threshold,
+                               volc_result.get("error", ""))
+            except Exception as e:
+                self._volc_fail_count += 1
+                logger.error("火山引擎 OCR 调用异常(%d/%d): %s",
+                             self._volc_fail_count, self._volc_fail_threshold, e)
+            if self._volc_fail_count >= self._volc_fail_threshold:
+                self._volc_circuit_open_until = time.time() + 600
+                logger.warning("火山引擎 OCR 连续失败 %d 次，熔断 10 分钟", self._volc_fail_count)
+        elif volc_circuit_open:
+            logger.info("火山引擎 OCR 熔断中，跳过直接使用百度 OCR")
+        if self._baidu_ocr:
+            try:
+                baidu_result = self._baidu_ocr.recognize_pdf_multi_pages(
+                    pdf_bytes, max_pages=10, early_stop_check=_ocr_early_stop_check)
+                if baidu_result.get("success"):
+                    text = baidu_result.get("text", "")
+                    logger.info("百度 OCR 识别成功，文字数=%d", len(text))
+                    return text
+                logger.warning("百度 OCR 识别失败: %s", baidu_result.get("error", ""))
+            except Exception as e:
+                logger.error("百度 OCR 调用异常: %s", e, exc_info=True)
+        return ""
+
     def _do_ocr(self, pdf_bytes: bytes, filename: str) -> dict:
         """
         OCR 识别流水线：pdfplumber 提取文本 → 质量检查 → 降级百度 OCR → 解析保单字段。
@@ -899,15 +937,32 @@ class InsuranceHandler:
                     garbled_count += 1
                 elif cp < 0x20 and ch not in '\n\r\t':  # 控制字符
                     garbled_count += 1
-            # U+FFFE/U+FFFF 出现即降级（PDF字体编码损坏的确定性标志）
-            # 其他乱码字符按占比>5%降级
+            # U+FFFE/U+FFFF 出现时：白名单保司清理非字符后继续用 pdfplumber，其余降级 OCR
+            # 部分保司（如太平洋）PDF 虽含非字符但 pdfplumber 提取文本可用
+            _NONCHAR_WHITELIST = {"太平洋"}
             garbled_ratio = garbled_count / len(text) if text else 0
             if has_nonchar:
-                logger.info(
-                    "pdfplumber 提取文本含Unicode非字符（U+FFFE/U+FFFF），字体编码异常，降级 OCR（count=%d）",
-                    garbled_count,
-                )
-                needs_fallback = True
+                # 白名单保司的 PDF 虽含非字符但 pdfplumber 文本可用，跳过降级
+                _NONCHAR_KW = {"太平洋": "太平洋产险"}
+                matched_company = ""
+                for short, kw in _NONCHAR_KW.items():
+                    if kw in text:
+                        matched_company = short
+                        break
+                if matched_company:
+                    # 清理非字符后继续使用 pdfplumber 文本
+                    text = ''.join(ch for ch in text if ord(ch) not in
+                                   (0xFFFE, 0xFFFF) and not (0xFDD0 <= ord(ch) <= 0xFDEF))
+                    logger.info(
+                        "pdfplumber 含Unicode非字符（count=%d）但检测到[%s]，清理后继续使用",
+                        garbled_count, matched_company,
+                    )
+                else:
+                    logger.info(
+                        "pdfplumber 提取文本含Unicode非字符（U+FFFE/U+FFFF），字体编码异常，降级 OCR（count=%d）",
+                        garbled_count,
+                    )
+                    needs_fallback = True
             elif garbled_ratio > 0.05:
                 logger.info(
                     "pdfplumber 提取文本含大量乱码（占比=%.1f%%, count=%d），降级 OCR",
@@ -929,53 +984,14 @@ class InsuranceHandler:
                     logger.warning("初步质量检查失败: %s，降级百度 OCR", e)
                     needs_fallback = True
 
-        # --- 第二步（可选降级）：火山引擎 OCR → 百度 OCR ---
+        # --- 第二步（可选降级）：OCR 完全替换 pdfplumber 文本 ---
         if needs_fallback:
-            fallback_done = False
-
-            # 优先尝试火山引擎 OCR（熔断期内跳过）
-            volc_circuit_open = (time.time() < self._volc_circuit_open_until)
-            if self._volc_ocr and not volc_circuit_open:
-                try:
-                    volc_result = self._volc_ocr.recognize_pdf_multi_pages(pdf_bytes, max_pages=10, early_stop_check=_ocr_early_stop_check)
-                    if volc_result.get("success"):
-                        text = volc_result.get("text", "")
-                        ocr_engine = "volc"
-                        fallback_done = True
-                        self._volc_fail_count = 0  # 成功则重置计数
-                        logger.info("火山引擎 OCR 识别成功，文字数=%d", len(text))
-                    else:
-                        self._volc_fail_count += 1
-                        logger.warning("火山引擎 OCR 识别失败(%d/%d): %s",
-                                       self._volc_fail_count, self._volc_fail_threshold,
-                                       volc_result.get("error", ""))
-                except Exception as e:
-                    self._volc_fail_count += 1
-                    logger.error("火山引擎 OCR 调用异常(%d/%d): %s",
-                                 self._volc_fail_count, self._volc_fail_threshold, e)
-                # 连续失败达到阈值，熔断 10 分钟
-                if self._volc_fail_count >= self._volc_fail_threshold:
-                    self._volc_circuit_open_until = time.time() + 600
-                    logger.warning("火山引擎 OCR 连续失败 %d 次，熔断 10 分钟，切换百度 OCR",
-                                   self._volc_fail_count)
-            elif volc_circuit_open:
-                logger.info("火山引擎 OCR 熔断中，跳过直接使用百度 OCR")
-
-            # 火山引擎失败或未配置，降级百度 OCR
-            if not fallback_done and self._baidu_ocr:
-                try:
-                    baidu_result = self._baidu_ocr.recognize_pdf_multi_pages(pdf_bytes, max_pages=10, early_stop_check=_ocr_early_stop_check)
-                    if baidu_result.get("success"):
-                        text = baidu_result.get("text", "")
-                        ocr_engine = "baidu"
-                        fallback_done = True
-                        logger.info("百度 OCR 识别成功，文字数=%d", len(text))
-                    else:
-                        logger.warning("百度 OCR 识别失败: %s", baidu_result.get("error", ""))
-                except Exception as e:
-                    logger.error("百度 OCR 调用异常: %s", e, exc_info=True)
-
-            if not fallback_done:
+            ocr_text = self._run_ocr_engines(pdf_bytes)
+            if ocr_text:
+                text = ocr_text
+                ocr_engine = "ocr"
+                logger.info("OCR 降级成功，文字数=%d", len(text))
+            else:
                 logger.warning("所有 OCR 引擎均不可用或识别失败")
 
         if not text:
@@ -1003,10 +1019,36 @@ class InsuranceHandler:
         if len(policies) > 1:
             logger.info("检测到多保单PDF: %s, 共%d份保单", filename, len(policies))
 
+        # --- 第四步：pdfplumber 关键字段缺失时，补充 OCR ---
+        _SUPPLEMENT_KEYS = ['保险公司', '保单号', '险种类型', '车牌号', '投保人', '被保险人',
+                            '签单日期', '保险起期', '保险止期', '保费合计']
+        if ocr_engine == "pdfplumber" and policies:
+            first_fields = policies[0].get("fields", {})
+            missing_keys = [k for k in _SUPPLEMENT_KEYS if not first_fields.get(k)]
+            if missing_keys:
+                ocr_text = self._run_ocr_engines(pdf_bytes)
+                if ocr_text:
+                    try:
+                        ocr_policies = parse_policy_text_multi(ocr_text)
+                        if ocr_policies:
+                            ocr_fields = ocr_policies[0].get("fields", {})
+                            filled = []
+                            for key in missing_keys:
+                                if ocr_fields.get(key):
+                                    first_fields[key] = ocr_fields[key]
+                                    filled.append(key)
+                            if filled:
+                                ocr_engine = "pdfplumber+ocr"
+                                logger.info("OCR 补充了 pdfplumber 缺失字段: %s", ", ".join(filled))
+                            else:
+                                logger.info("OCR 补充未能填充缺失字段: %s", ", ".join(missing_keys))
+                    except Exception as e:
+                        logger.warning("OCR 补充解析失败: %s", e)
+
         return {
             "success": True,
             "policies": policies,
-            "policy": policies[0] if policies else {},  # 兼容旧代码
+            "policy": policies[0] if policies else {},
             "ocr_engine": ocr_engine,
             "error": "",
         }
