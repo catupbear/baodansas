@@ -1016,8 +1016,11 @@ class InsuranceHandler:
         volc_circuit_open = (time.time() < self._volc_circuit_open_until)
         if self._volc_ocr and not volc_circuit_open:
             try:
+                # 传入百度 OCR 作为单页兜底（火山引擎 429 限流重试耗尽时降级）
+                _page_fb = self._baidu_ocr.recognize_pdf_bytes if self._baidu_ocr else None
                 volc_result = self._volc_ocr.recognize_pdf_multi_pages(
-                    pdf_bytes, max_pages=10, early_stop_check=_ocr_early_stop_check)
+                    pdf_bytes, max_pages=10, early_stop_check=_ocr_early_stop_check,
+                    page_fallback=_page_fb)
                 if volc_result.get("success"):
                     self._volc_fail_count = 0
                     text = volc_result.get("text", "")

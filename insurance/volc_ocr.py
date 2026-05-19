@@ -216,7 +216,8 @@ class VolcOCR:
         return self.recognize_pdf(pdf_base64, page_num)
 
     def recognize_pdf_multi_pages(self, pdf_bytes: bytes, max_pages: int = 6,
-                                   early_stop_check=None) -> Dict[str, Any]:
+                                   early_stop_check=None,
+                                   page_fallback=None) -> Dict[str, Any]:
         """
         多页PDF识别，逐页调用并拼接结果。
         遇到条款页自动停止。
@@ -225,6 +226,7 @@ class VolcOCR:
             pdf_bytes: PDF 原始字节
             max_pages: 最多识别页数
             early_stop_check: 可选回调 fn(combined_text) -> bool，
+            page_fallback: 可选回调 fn(pdf_bytes, page_num) -> dict，单页识别失败时的兜底函数（如百度OCR）
                               返回 True 表示核心字段已提取完毕可以提前停止
         """
         try:
@@ -297,7 +299,20 @@ class VolcOCR:
                         except Exception as retry_e:
                             logger.warning("火山引擎OCR第%d页第%d次重试异常: %s", page, retry, retry_e)
                     else:
-                        logger.warning("火山引擎OCR第%d页限流重试3次仍失败，跳过", page)
+                        # 重试耗尽，尝试用兜底引擎识别该页
+                        if page_fallback:
+                            logger.info("火山引擎OCR第%d页限流重试3次仍失败，降级兜底引擎", page)
+                            try:
+                                fb_result = page_fallback(pdf_bytes, page)
+                                if fb_result and fb_result.get("success"):
+                                    fb_text = fb_result.get("text", "")
+                                    logger.info("兜底引擎第%d页识别成功，文字数=%d", page, len(fb_text))
+                                    if not (page > 2 and _is_clause_page(fb_text)):
+                                        all_texts.append(f"[PAGE:{page}]\n{fb_text}")
+                            except Exception as fb_e:
+                                logger.warning("兜底引擎第%d页识别异常: %s", page, fb_e)
+                        else:
+                            logger.warning("火山引擎OCR第%d页限流重试3次仍失败，跳过", page)
                     continue
                 logger.warning("火山引擎OCR第%d页异常: %s", page, e)
                 continue
