@@ -269,6 +269,38 @@ class VolcOCR:
                             break
                 else:
                     logger.warning("火山引擎OCR第%d页识别失败: %s", page, result.get("error", ""))
+            except requests.exceptions.HTTPError as e:
+                if e.response is not None and e.response.status_code == 429:
+                    # 限流：等待后重试，最多重试 3 次
+                    for retry in range(1, 4):
+                        wait = 2 * retry
+                        logger.info("火山引擎OCR第%d页触发限流(429)，%d秒后第%d次重试", page, wait, retry)
+                        time.sleep(wait)
+                        try:
+                            if page == 1:
+                                pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
+                                result = self.recognize_pdf(pdf_b64, page_num=1)
+                            else:
+                                page_b64 = self._extract_page_base64(pdf_bytes, page)
+                                if not page_b64:
+                                    break
+                                raw = self._call_ocr(page_b64)
+                                result = self._parse_result(raw)
+                            if result.get("success"):
+                                page_text = result.get("text", "")
+                                logger.info("火山引擎OCR第%d页重试成功，文字数=%d", page, len(page_text))
+                                if page > 2 and _is_clause_page(page_text):
+                                    logger.info("火山引擎OCR第%d页检测为条款页，跳过", page)
+                                    break
+                                all_texts.append(f"[PAGE:{page}]\n{page_text}")
+                                break
+                        except Exception as retry_e:
+                            logger.warning("火山引擎OCR第%d页第%d次重试异常: %s", page, retry, retry_e)
+                    else:
+                        logger.warning("火山引擎OCR第%d页限流重试3次仍失败，跳过", page)
+                    continue
+                logger.warning("火山引擎OCR第%d页异常: %s", page, e)
+                continue
             except Exception as e:
                 logger.warning("火山引擎OCR第%d页异常: %s", page, e)
                 # 跳过失败页继续扫描后续页（多保单PDF不能因单页失败丢失整个保单）
