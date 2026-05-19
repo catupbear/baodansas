@@ -283,13 +283,20 @@
                                     </button>
                                 </span>
                             </div>
-                            <!-- 下拉选择添加发送人 -->
-                            <select @change="addSender($event)" class="form-select" style="font-size:13px;">
-                                <option value="">选择发送人...</option>
-                                <option v-for="s in availableSenders" :key="s.sender" :value="s.sender">
-                                    {{ s.sender_name || s.sender }} ({{ s.record_count }}条记录)
-                                </option>
-                            </select>
+                            <!-- 下拉选择 / 手动输入 添加发送人 -->
+                            <div style="display:flex;gap:6px;align-items:center;">
+                                <select @change="addSender($event)" class="form-select" style="font-size:13px;flex:1;">
+                                    <option value="">选择已有发送人...</option>
+                                    <option v-for="s in availableSenders" :key="s.sender" :value="s.sender">
+                                        {{ s.sender_name || s.sender }} ({{ s.record_count }}条记录)
+                                    </option>
+                                </select>
+                                <input v-model="customSenderId" type="text" class="form-input"
+                                    placeholder="手动输入ID" style="width:130px;height:34px;font-size:13px;"
+                                    @keyup.enter="addCustomSender()">
+                                <button type="button" @click="addCustomSender()" class="btn btn-sm btn-outline"
+                                    style="white-space:nowrap;" :disabled="!customSenderId.trim()">添加</button>
+                            </div>
                         </div>
                     </div>
 
@@ -488,6 +495,24 @@ createApp({
             event.target.value = '';
         }
 
+        /* 手动输入发送人ID */
+        const customSenderId = ref('');
+        function addCustomSender() {
+            const sid = customSenderId.value.trim();
+            if (!sid) return;
+            if (form.bound_senders.some(s => s.sender === sid)) {
+                customSenderId.value = '';
+                return;
+            }
+            // 尝试从已有列表匹配名称
+            const existing = allSenders.value.find(s => s.sender === sid);
+            form.bound_senders.push({
+                sender: sid,
+                sender_name: existing ? (existing.sender_name || '') : '',
+            });
+            customSenderId.value = '';
+        }
+
         /* 移除发送人 */
         function removeSender(idx) {
             form.bound_senders.splice(idx, 1);
@@ -652,7 +677,7 @@ createApp({
             openResetPwdModal, closeResetPwdModal, submitResetPwd,
             toggleEnabled, logout, toast,
             roleLabel, roleBadgeClass, formatTime,
-            allSenders, availableSenders, addSender, removeSender,
+            allSenders, availableSenders, addSender, removeSender, customSenderId, addCustomSender,
         };
     }
 }).mount('#app');
