@@ -908,7 +908,14 @@
             </div>
             <!-- 日期筛选 -->
             <div class="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-100">
-                <span class="text-xs text-gray-500 font-medium whitespace-nowrap">创建日期:</span>
+                <select v-model="recordFilter.date_type" @change="loadRecords()"
+                        class="text-xs border border-gray-200 rounded-lg px-1.5 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 text-gray-600 font-medium cursor-pointer"
+                        style="min-width:80px;">
+                    <option value="created_at">创建日期</option>
+                    <option value="sign_date">签单日期</option>
+                    <option value="start_date">起保日期</option>
+                    <option value="end_date">终保日期</option>
+                </select>
                 <button v-for="s in dateShortcuts" :key="s.key"
                         @click="setDateShortcut(s.key)"
                         class="text-xs px-2.5 py-1 rounded-full transition-colors cursor-pointer"
@@ -3791,6 +3798,30 @@ createApp({
             nonpolicy: 0,
         });
         // 将关联表搜索/日期筛选参数追加到 URLSearchParams
+        // 根据日期类型下拉框，将 date_start/date_end 映射到正确的 API 参数
+        function _appendDateParams(params) {
+            if (!recordFilter.date_start && !recordFilter.date_end) return;
+            const type = recordFilter.date_type || 'created_at';
+            if (type === 'created_at') {
+                // created_at 是 TIMESTAMP，后端用 < end，快捷按钮的 end 是次日，正确
+                if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
+                if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+            } else {
+                // 保单日期是 DATE 类型，后端用 <= end
+                // 快捷按钮生成的 end 是"次日"（如今天=19号 → end=20号），需减一天
+                // 自定义日期由用户手动选择，直接使用原值
+                if (recordFilter.date_start) params.set(type + '_start', recordFilter.date_start);
+                if (recordFilter.date_end) {
+                    let endVal = recordFilter.date_end;
+                    if (recordFilter.date_shortcut && recordFilter.date_shortcut !== 'custom') {
+                        const d = new Date(endVal);
+                        d.setDate(d.getDate() - 1);
+                        endVal = _fmt(d);
+                    }
+                    params.set(type + '_end', endVal);
+                }
+            }
+        }
         function _appendAdvancedParams(params) {
             const keys = [
                 'search_company', 'search_policy_no', 'search_plate_no',
@@ -3819,8 +3850,7 @@ createApp({
             if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
             if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
             if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
-            if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
-            if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+            _appendDateParams(params);
             if (recordFilter.dedup) params.set('dedup', '1');
             _appendAdvancedParams(params);
             return params;
@@ -3945,8 +3975,7 @@ createApp({
                     if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
                     if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
                     if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
-                    if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
-                    if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+                    _appendDateParams(params);
                     _appendAdvancedParams(params);
 
                     const listResp = await authFetch(`/api/insurance/records?${params.toString()}`);
@@ -4048,8 +4077,7 @@ createApp({
                     if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
                     if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
                     if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
-                    if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
-                    if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+                    _appendDateParams(params);
                     _appendAdvancedParams(params);
 
                     const listResp = await authFetch(`/api/insurance/records?${params.toString()}`);
@@ -4190,8 +4218,7 @@ createApp({
                     if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
                     if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
                     if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
-                    if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
-                    if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+                    _appendDateParams(params);
                     if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');
                     _appendAdvancedParams(params);
 
@@ -4248,6 +4275,7 @@ createApp({
             status: '',
             keyword: '',
             ocr_engine: '',  // '': 全部, 'pdfplumber', 'baidu'
+            date_type: 'created_at',  // 日期类型：created_at/sign_date/start_date/end_date
             date_shortcut: 'today',  // 日期快捷：all/today/yesterday/thisWeek/lastWeek/thisMonth/lastMonth/custom
             date_start: '',     // 自定义开始日期 YYYY-MM-DD
             date_end: '',       // 自定义结束日期 YYYY-MM-DD
@@ -4472,8 +4500,7 @@ createApp({
                 if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
                 // 保司筛选改为服务端
                 if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
-                if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
-                if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+                _appendDateParams(params);
                 // 失败/待处理 tab 下不去重，避免记录被过滤掉
                 if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');
                 _appendAdvancedParams(params);
@@ -4585,6 +4612,15 @@ createApp({
                     // 清空原文缓存并重新加载
                     previewRawText.value = '';
                     loadAutoRecordRawText();
+                    // 刷新兄弟保单列表（重新识别可能新增/更新了兄弟记录）
+                    try {
+                        const detailResp = await authFetch(`/api/insurance/records/${record.id}`);
+                        const detailJson = await detailResp.json();
+                        if (detailJson.code === 0 && detailJson.siblings) {
+                            const curIdx = (detailJson.data || record).policy_index || 0;
+                            previewSiblings.value = detailJson.siblings.filter(s => s.policy_index !== curIdx);
+                        }
+                    } catch (_e) { /* 兄弟列表刷新失败不影响主流程 */ }
                     // 刷新列表数据和统计（兄弟记录可能也被更新了）
                     loadRecords(false);
                 } else {
