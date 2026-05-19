@@ -2180,6 +2180,8 @@ def export_excel():
             # 获取用户字段配置，导出时应用简称/日期格式/公式
             user = g.current_user
             user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
+            # 按车牌号排序
+            invoices.sort(key=lambda inv: (inv.get("fields", {}) if isinstance(inv, dict) else {}).get("车牌号", "") or "")
             for inv in invoices:
                 fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
                 # 应用用户配置（简称映射、日期格式、公式计算）

@@ -1095,9 +1095,18 @@ def query_insurance_records(
             )
             cursor.execute(id_sql, params + params + [page_size, offset])
         else:
+            # 按车牌号排序（需要 JOIN 关联表获取 plate_no）
+            if need_join:
+                order_clause = f"ORDER BY pf.plate_no ASC, {col_prefix}created_at DESC"
+            else:
+                order_clause = (
+                    "ORDER BY COALESCE(pf2.plate_no, '') ASC, created_at DESC"
+                )
+                from_clause_with_pf = f"{from_clause} LEFT JOIN insurance_policy_fields pf2 ON insurance_records.id = pf2.record_id"
+            id_from = from_clause_with_pf if not need_join else from_clause
             cursor.execute(
-                f"SELECT {col_prefix}id FROM {from_clause} {where_clause} "
-                f"ORDER BY {col_prefix}created_at DESC LIMIT %s OFFSET %s",
+                f"SELECT {col_prefix}id FROM {id_from} {where_clause} "
+                f"{order_clause} LIMIT %s OFFSET %s",
                 params + [page_size, offset]
             )
         id_rows = cursor.fetchall()
@@ -1106,15 +1115,16 @@ def query_insurance_records(
             placeholders = ",".join(["%s"] * len(ids))
             # 列表只返回轻量字段，parsed_fields 等大字段移到详情接口
             select_cols = (
-                "id, roomid, room_name, sender, sender_name, "
-                "filename, cos_url, ocr_engine, doc_category, confidence, "
-                "dingtalk_synced, status, source, created_at, "
-                "company_short, is_abnormal, hint, display_fields, "
-                "abnormal_override_reason"
+                "r2.id, r2.roomid, r2.room_name, r2.sender, r2.sender_name, "
+                "r2.filename, r2.cos_url, r2.ocr_engine, r2.doc_category, r2.confidence, "
+                "r2.dingtalk_synced, r2.status, r2.source, r2.created_at, "
+                "r2.company_short, r2.is_abnormal, r2.hint, r2.display_fields, "
+                "r2.abnormal_override_reason"
             )
             cursor.execute(
-                f"SELECT {select_cols} FROM insurance_records "
-                f"WHERE id IN ({placeholders}) ORDER BY created_at DESC",
+                f"SELECT {select_cols} FROM insurance_records r2 "
+                f"LEFT JOIN insurance_policy_fields pf3 ON r2.id = pf3.record_id "
+                f"WHERE r2.id IN ({placeholders}) ORDER BY COALESCE(pf3.plate_no, '') ASC, r2.created_at DESC",
                 ids
             )
             records = list(cursor.fetchall())
