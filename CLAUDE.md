@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 企业微信会话存档系统（wxbot）—— 基于 Flask 的消息拉取、解密、存储与查询平台。通过企业微信 Finance SDK（C 动态库）拉取加密消息，经 RSA + AES 两阶段解密后存入 MySQL，并提供 Web API 和前端查询界面。集成保单识别模块，支持指定群 PDF 自动识别并同步到钉钉多维表格。
 
+> 📂 项目目录结构详见 [docs/project-structure.md](docs/project-structure.md)
+
 ## 常用命令
 
 ```bash

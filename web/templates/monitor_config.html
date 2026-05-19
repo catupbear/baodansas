@@ -287,6 +287,15 @@
                             <span v-else style="font-size:13px;color:var(--text-muted);">未配置</span>
                         </div>
 
+                        <!-- 关联企业 -->
+                        <div class="flex items-center gap-2 mb-2">
+                            <span style="font-size:13px;color:var(--text-muted);min-width:65px;">关联企业:</span>
+                            <span v-if="config.bind_enterprise_name" class="badge badge-green">
+                                {{ config.bind_enterprise_name }}
+                            </span>
+                            <span v-else style="font-size:13px;color:var(--text-muted);">未绑定</span>
+                        </div>
+
                         <!-- 关联账号 -->
                         <div class="flex items-center gap-2 mb-2">
                             <span style="font-size:13px;color:var(--text-muted);min-width:65px;">关联账号:</span>
@@ -296,9 +305,6 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                                     </svg>
                                     {{ config.bind_user_info?.name || config.bind_user_info?.phone || '未知' }}
-                                </span>
-                                <span v-if="config.bind_enterprise_name" class="badge badge-green">
-                                    {{ config.bind_enterprise_name }}
                                 </span>
                             </template>
                             <span v-else style="font-size:13px;color:var(--text-muted);">未绑定</span>
@@ -428,12 +434,26 @@
                         <input v-model="form.dingtalk_doc_url" class="form-input" placeholder="请输入钉钉多维表格链接">
                     </div>
 
+                    <!-- 绑定企业 -->
+                    <div style="margin-bottom:20px;">
+                        <label class="form-label">绑定企业</label>
+                        <select v-model="form.bind_enterprise_id" class="form-input" style="cursor:pointer;" @change="onEnterpriseChange">
+                            <option value="">不绑定</option>
+                            <option v-for="ent in enterpriseOptions" :key="ent.id" :value="ent.id">
+                                {{ ent.name }}
+                            </option>
+                        </select>
+                        <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+                            绑定后，该企业下的管理员和员工可查看此配置的保单记录
+                        </p>
+                    </div>
+
                     <!-- 绑定账号 -->
                     <div style="margin-bottom:20px;">
                         <label class="form-label">绑定账号</label>
                         <select v-model="form.bind_user_id" class="form-input" style="cursor:pointer;">
                             <option value="">不绑定</option>
-                            <option v-for="u in bindUserOptions" :key="u.id" :value="u.id">
+                            <option v-for="u in filteredBindUsers" :key="u.id" :value="u.id">
                                 {{ u.name || u.phone }} ({{ u.phone }})
                             </option>
                         </select>
@@ -529,6 +549,20 @@ createApp({
     setup() {
         const currentUser = ref(getUser());
 
+        // 企业选项
+        const enterpriseOptions = ref([]);
+        async function loadEnterprises() {
+            try {
+                const res = await authFetch('/api/auth/enterprises');
+                const data = await res.json();
+                if (data.code === 0) {
+                    enterpriseOptions.value = data.data || [];
+                }
+            } catch (e) {
+                console.error('加载企业列表失败:', e);
+            }
+        }
+
         // 绑定账号选项
         const bindUserOptions = ref([]);
         async function loadBindUsers() {
@@ -540,6 +574,24 @@ createApp({
                 }
             } catch (e) {
                 console.error('加载绑定账号失败:', e);
+            }
+        }
+
+        // 按选中企业过滤的绑定账号列表
+        const filteredBindUsers = computed(() => {
+            const eid = form.value.bind_enterprise_id;
+            if (!eid) return bindUserOptions.value;
+            return bindUserOptions.value.filter(u => u.parent_id === parseInt(eid));
+        });
+
+        // 企业变更时，如果当前绑定账号不属于新企业则清空
+        function onEnterpriseChange() {
+            const eid = form.value.bind_enterprise_id;
+            if (eid && form.value.bind_user_id) {
+                const user = bindUserOptions.value.find(u => u.id === parseInt(form.value.bind_user_id));
+                if (user && user.parent_id !== parseInt(eid)) {
+                    form.value.bind_user_id = '';
+                }
             }
         }
 
@@ -563,6 +615,7 @@ createApp({
             room_ids: [],
             user_ids: [],
             dingtalk_doc_url: '',
+            bind_enterprise_id: '',
             bind_user_id: '',
         });
 
@@ -743,7 +796,7 @@ createApp({
         // 打开新增弹窗
         function openAddModal() {
             editingId.value = null;
-            form.value = { name: '', room_ids: [], user_ids: [], dingtalk_doc_url: '', bind_user_id: '' };
+            form.value = { name: '', room_ids: [], user_ids: [], dingtalk_doc_url: '', bind_enterprise_id: '', bind_user_id: '' };
             initFieldMapping(null);
             showModal.value = true;
         }
@@ -756,6 +809,7 @@ createApp({
                 room_ids: Array.isArray(config.room_ids) ? [...config.room_ids] : [],
                 user_ids: Array.isArray(config.user_ids) ? [...config.user_ids] : [],
                 dingtalk_doc_url: config.dingtalk_doc_url || '',
+                bind_enterprise_id: config.enterprise_id || '',
                 bind_user_id: config.bind_user_id || '',
             };
             initFieldMapping(config.field_mapping);
@@ -785,6 +839,7 @@ createApp({
                 user_ids: form.value.user_ids,
                 dingtalk_doc_url: form.value.dingtalk_doc_url.trim(),
                 field_mapping: buildFieldMapping(),
+                bind_enterprise_id: form.value.bind_enterprise_id || null,
                 bind_user_id: form.value.bind_user_id || null,
             };
             try {
@@ -858,11 +913,11 @@ createApp({
 
         onMounted(async () => {
             document.addEventListener('click', handleClickOutside);
-            await Promise.all([loadConfigs(), loadOptions(), loadBindUsers()]);
+            await Promise.all([loadConfigs(), loadOptions(), loadBindUsers(), loadEnterprises()]);
         });
 
         return {
-            currentUser, doLogout, bindUserOptions,
+            currentUser, doLogout, enterpriseOptions, bindUserOptions, filteredBindUsers, onEnterpriseChange,
             configs, loading, showModal, editingId, saving,
             form, roomSearch, userSearch, roomDropdownOpen, userDropdownOpen,
             fieldMappingRows, toast, refreshingOptions,

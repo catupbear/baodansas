@@ -2486,13 +2486,17 @@ def create_monitor_config_api():
         if doc_url:
             base_id, sheet_id = parse_dingtalk_doc_url(doc_url)
 
-        # 绑定账号：从 bind_user_id 获取 user_id 和 enterprise_id
+        # 绑定企业：优先使用前端直接传入的 bind_enterprise_id
+        bind_enterprise_id = body.get("bind_enterprise_id")
+        if bind_enterprise_id:
+            bind_enterprise_id = int(bind_enterprise_id)
+
+        # 绑定账号：从 bind_user_id 获取 user_id，若未单独指定企业则从账号推导
         bind_user_id = body.get("bind_user_id")
-        bind_enterprise_id = None
         if bind_user_id:
             from auth.db import get_user_by_id as _get_bind_user
             bind_user = _get_bind_user(_db, int(bind_user_id))
-            if bind_user:
+            if bind_user and not bind_enterprise_id:
                 bind_enterprise_id = bind_user.get("parent_id")
 
         config_id = create_monitor_config(_db, {
@@ -2511,8 +2515,8 @@ def create_monitor_config_api():
         config = get_monitor_config(_db, config_id)
         _add_id_fields(config)
 
-        # 回填历史记录
-        if bind_user_id:
+        # 回填历史记录（绑定了账号或企业时）
+        if bind_user_id or bind_enterprise_id:
             src_rooms = body.get("room_ids", body.get("rooms", []))
             src_users = body.get("user_ids", body.get("users", []))
             # 提取纯 ID
@@ -2520,7 +2524,7 @@ def create_monitor_config_api():
             u_ids = [u["id"] if isinstance(u, dict) else u for u in src_users]
             backfill_records_by_sources(
                 _db, r_ids, u_ids,
-                new_user_id=int(bind_user_id),
+                new_user_id=int(bind_user_id) if bind_user_id else None,
                 new_enterprise_id=bind_enterprise_id,
             )
 
@@ -2560,6 +2564,11 @@ def update_monitor_config_api(config_id):
                 updates["dingtalk_base_id"] = ""
                 updates["dingtalk_sheet_id"] = ""
 
+        # 绑定企业
+        if "bind_enterprise_id" in body:
+            eid = body["bind_enterprise_id"]
+            updates["enterprise_id"] = int(eid) if eid else None
+
         # 绑定账号
         if "bind_user_id" in body:
             bind_user_id = body["bind_user_id"]
@@ -2567,10 +2576,14 @@ def update_monitor_config_api(config_id):
                 from auth.db import get_user_by_id as _get_bind_user
                 bind_user = _get_bind_user(_db, int(bind_user_id))
                 updates["user_id"] = int(bind_user_id)
-                updates["enterprise_id"] = bind_user.get("parent_id") if bind_user else None
+                # 若未单独指定企业，则从账号推导
+                if "bind_enterprise_id" not in body:
+                    updates["enterprise_id"] = bind_user.get("parent_id") if bind_user else None
             else:
                 updates["user_id"] = None
-                updates["enterprise_id"] = None
+                # 若未单独指定企业，则清空
+                if "bind_enterprise_id" not in body:
+                    updates["enterprise_id"] = None
 
         ok = update_monitor_config(_db, config_id, updates)
         if not ok:
@@ -2579,8 +2592,8 @@ def update_monitor_config_api(config_id):
         config = get_monitor_config(_db, config_id)
         _add_id_fields(config)
 
-        # 绑定账号变更时回填历史记录
-        if "bind_user_id" in body:
+        # 绑定账号或企业变更时回填历史记录
+        if "bind_user_id" in body or "bind_enterprise_id" in body:
             src_rooms = config.get("rooms", [])
             src_users = config.get("users", [])
             r_ids = [r["id"] if isinstance(r, dict) else r for r in src_rooms]
