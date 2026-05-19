@@ -379,6 +379,17 @@ class InsuranceHandler:
             if config_user_id:
                 break
 
+        # 按 sender 绑定关系查找用户（优先级高于监控配置）
+        try:
+            from auth.db import get_binding_by_sender
+            bound = get_binding_by_sender(self.db, sender, config_enterprise_id)
+            if bound:
+                config_user_id = bound["user_id"]
+                if not config_enterprise_id and bound.get("enterprise_id"):
+                    config_enterprise_id = bound["enterprise_id"]
+        except Exception as e:
+            logger.warning("查找 sender 绑定用户失败: %s", e)
+
         # 3. 创建初始记录（状态: processing）
         initial_record = {
             "msg_seq": seq,

@@ -22,6 +22,9 @@ from .db import (
     get_enterprise_by_id,
     create_enterprise,
     update_enterprise,
+    get_bindings_by_user,
+    set_user_bindings,
+    list_all_bindings,
 )
 from .jwt_utils import generate_token
 from .decorators import login_required, admin_required
@@ -31,12 +34,14 @@ logger = logging.getLogger(__name__)
 auth_bp = Blueprint("auth", __name__)
 
 _db = None
+_insurance_db = None
 
 
-def init_auth_api(db):
-    """注入数据库实例"""
-    global _db
+def init_auth_api(db, insurance_db=None):
+    """注入数据库实例（insurance_db 用于保单记录回填）"""
+    global _db, _insurance_db
     _db = db
+    _insurance_db = insurance_db or db
 
 
 # ============================================================
@@ -124,6 +129,22 @@ def api_list_users():
             u["parent_name"] = ent_cache[pid]
         else:
             u["parent_name"] = ""
+
+    # 填充绑定的发送人信息
+    all_bindings = list_all_bindings(_db)
+    # 按 user_id 分组
+    binding_map = {}
+    for b in all_bindings:
+        uid = b["user_id"]
+        if uid not in binding_map:
+            binding_map[uid] = []
+        binding_map[uid].append({
+            "sender": b["sender"],
+            "sender_name": b.get("sender_name", ""),
+        })
+    for u in users:
+        u["bound_senders"] = binding_map.get(u["id"], [])
+
     return jsonify({"code": 0, "data": users})
 
 
@@ -163,6 +184,15 @@ def api_create_user():
 
     try:
         user_id = create_user(_db, phone, password, role, parent_id, name)
+
+        # 处理发送人绑定
+        bound_senders = data.get("bound_senders", [])
+        if bound_senders and user_id:
+            ent_id = int(parent_id) if parent_id else None
+            set_user_bindings(_db, user_id, bound_senders, ent_id)
+            # 回填历史保单记录
+            _backfill_records_by_senders(user_id, bound_senders, ent_id)
+
         return jsonify({"code": 0, "data": {"id": user_id}})
     except Exception as e:
         logger.exception("创建用户失败")
@@ -172,10 +202,23 @@ def api_create_user():
 @auth_bp.route("/api/auth/users/<int:user_id>", methods=["PUT"])
 @admin_required
 def api_update_user(user_id):
-    """更新用户信息（name, role, parent_id, enabled）"""
+    """更新用户信息（name, role, parent_id, enabled, bound_senders）"""
     data = request.get_json(silent=True) or {}
     try:
         update_user(_db, user_id, data)
+
+        # 处理发送人绑定（仅当请求中包含 bound_senders 字段时才更新）
+        if "bound_senders" in data:
+            bound_senders = data["bound_senders"] or []
+            # 获取用户的 enterprise_id（parent_id）
+            user = get_user_by_id(_db, user_id)
+            ent_id = data.get("parent_id") or (user.get("parent_id") if user else None)
+            if ent_id is not None:
+                ent_id = int(ent_id)
+            set_user_bindings(_db, user_id, bound_senders, ent_id)
+            # 回填历史保单记录
+            _backfill_records_by_senders(user_id, bound_senders, ent_id)
+
         return jsonify({"code": 0})
     except Exception as e:
         logger.exception("更新用户 %d 失败", user_id)
@@ -196,6 +239,97 @@ def api_reset_password(user_id):
     except Exception as e:
         logger.exception("重置密码 %d 失败", user_id)
         return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+# ============================================================
+# 发送人列表（供绑定选择）
+# ============================================================
+
+@auth_bp.route("/api/auth/senders", methods=["GET"])
+@admin_required
+def api_list_senders():
+    """从 insurance_records 去重取出所有发送人列表，供前端绑定选择"""
+    try:
+        import pymysql.cursors
+        conn = _insurance_db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor.execute("""
+                SELECT sender, sender_name, COUNT(*) AS record_count
+                FROM insurance_records
+                WHERE sender IS NOT NULL AND sender != ''
+                GROUP BY sender, sender_name
+                ORDER BY record_count DESC
+            """)
+            rows = cursor.fetchall()
+            # 同一个 sender 可能有不同的 sender_name（名称变化），去重取最新的
+            sender_map = {}
+            for row in rows:
+                sid = row["sender"]
+                if sid not in sender_map:
+                    sender_map[sid] = {
+                        "sender": sid,
+                        "sender_name": row.get("sender_name", ""),
+                        "record_count": row["record_count"],
+                    }
+                else:
+                    sender_map[sid]["record_count"] += row["record_count"]
+                    # 优先取非空名称
+                    if not sender_map[sid]["sender_name"] and row.get("sender_name"):
+                        sender_map[sid]["sender_name"] = row["sender_name"]
+            senders = list(sender_map.values())
+            senders.sort(key=lambda x: x["record_count"], reverse=True)
+            return jsonify({"code": 0, "data": senders})
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.exception("获取发送人列表失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+def _backfill_records_by_senders(user_id: int, senders: list, enterprise_id: int = None):
+    """回填历史保单记录：将匹配 sender 的记录归属到指定用户"""
+    if not senders:
+        return
+    try:
+        import pymysql.cursors
+        # 提取 sender ID 列表
+        sender_ids = []
+        for item in senders:
+            if isinstance(item, dict):
+                sid = item.get("sender", "")
+            else:
+                sid = str(item)
+            if sid:
+                sender_ids.append(sid)
+        if not sender_ids:
+            return
+
+        conn = _insurance_db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            placeholders = ", ".join(["%s"] * len(sender_ids))
+            params = [user_id] + sender_ids
+            if enterprise_id is not None:
+                sql = (
+                    f"UPDATE insurance_records SET user_id = %s "
+                    f"WHERE sender IN ({placeholders}) AND enterprise_id = %s"
+                )
+                params.append(enterprise_id)
+            else:
+                sql = (
+                    f"UPDATE insurance_records SET user_id = %s "
+                    f"WHERE sender IN ({placeholders})"
+                )
+            cursor.execute(sql, params)
+            affected = cursor.rowcount
+            conn.commit()
+            if affected > 0:
+                logger.info("回填保单记录: user_id=%d, senders=%s, 更新%d条", user_id, sender_ids, affected)
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning("回填保单记录失败: user_id=%d, %s", user_id, e)
 
 
 # ============================================================

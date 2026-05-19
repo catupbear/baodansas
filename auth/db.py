@@ -278,3 +278,133 @@ def get_enterprise_employee_ids(db, enterprise_id: int) -> list[int]:
         return ids
     finally:
         conn.close()
+
+
+# ============================================================
+# 发送人绑定（user_sender_binding）
+# ============================================================
+
+def init_sender_binding_table(db):
+    """
+    创建 user_sender_binding 表（幂等）。
+    记录员工账号与企业微信发送人的绑定关系。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_sender_binding (
+                id            INT PRIMARY KEY AUTO_INCREMENT,
+                user_id       INT NOT NULL COMMENT '用户ID → users.id',
+                sender        VARCHAR(64) NOT NULL COMMENT '企业微信发送人ID',
+                sender_name   VARCHAR(128) DEFAULT '' COMMENT '发送人显示名',
+                enterprise_id INT DEFAULT NULL COMMENT '企业ID',
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_sender_ent (sender, enterprise_id),
+                INDEX idx_binding_user (user_id)
+            )
+        """)
+        conn.commit()
+        logger.info("user_sender_binding 表初始化完成")
+    finally:
+        conn.close()
+
+
+def get_bindings_by_user(db, user_id: int) -> list:
+    """查询某用户的所有发送人绑定"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT id, user_id, sender, sender_name, enterprise_id, created_at "
+            "FROM user_sender_binding WHERE user_id = %s ORDER BY created_at",
+            (user_id,),
+        )
+        rows = cursor.fetchall()
+        for row in rows:
+            if row.get("created_at") and not isinstance(row["created_at"], str):
+                row["created_at"] = str(row["created_at"])
+        return rows
+    finally:
+        conn.close()
+
+
+def get_binding_by_sender(db, sender: str, enterprise_id: int = None) -> dict | None:
+    """
+    按 sender 查找绑定的用户。
+    如果传了 enterprise_id 则精确匹配，否则先匹配 enterprise_id 为 NULL 的全局绑定。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        if enterprise_id is not None:
+            # 先精确匹配企业，再兜底查全局绑定
+            cursor.execute(
+                "SELECT * FROM user_sender_binding WHERE sender = %s AND enterprise_id = %s LIMIT 1",
+                (sender, enterprise_id),
+            )
+            row = cursor.fetchone()
+            if row:
+                return row
+        # 查全局绑定（enterprise_id IS NULL）或任意匹配
+        cursor.execute(
+            "SELECT * FROM user_sender_binding WHERE sender = %s ORDER BY enterprise_id IS NULL, id LIMIT 1",
+            (sender,),
+        )
+        return cursor.fetchone()
+    finally:
+        conn.close()
+
+
+def set_user_bindings(db, user_id: int, senders: list, enterprise_id: int = None):
+    """
+    全量设置用户的发送人绑定列表（先删后插）。
+    senders: [{"sender": "xxx", "sender_name": "xxx"}, ...] 或 ["sender_id", ...]
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        # 删除该用户的旧绑定
+        cursor.execute("DELETE FROM user_sender_binding WHERE user_id = %s", (user_id,))
+        # 插入新绑定
+        for item in senders:
+            if isinstance(item, dict):
+                sender = item.get("sender", "")
+                sender_name = item.get("sender_name", "")
+            else:
+                sender = str(item)
+                sender_name = ""
+            if not sender:
+                continue
+            try:
+                cursor.execute(
+                    "INSERT INTO user_sender_binding (user_id, sender, sender_name, enterprise_id) "
+                    "VALUES (%s, %s, %s, %s)",
+                    (user_id, sender, sender_name, enterprise_id),
+                )
+            except pymysql.err.IntegrityError:
+                logger.warning("发送人 %s 已绑定其他用户，跳过", sender)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def list_all_bindings(db, enterprise_id: int = None) -> list:
+    """列出所有绑定记录（前端用户列表展示用）"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        if enterprise_id is not None:
+            cursor.execute(
+                "SELECT * FROM user_sender_binding WHERE enterprise_id = %s ORDER BY user_id, created_at",
+                (enterprise_id,),
+            )
+        else:
+            cursor.execute("SELECT * FROM user_sender_binding ORDER BY user_id, created_at")
+        rows = cursor.fetchall()
+        for row in rows:
+            if row.get("created_at") and not isinstance(row["created_at"], str):
+                row["created_at"] = str(row["created_at"])
+        return rows
+    finally:
+        conn.close()

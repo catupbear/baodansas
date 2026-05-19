@@ -24,7 +24,7 @@ from insurance.monitor_config_db import init_monitor_config_table, migrate_from_
 from insurance.handler import InsuranceHandler
 from insurance.api import insurance_bp, init_insurance_api
 from quote.handler import QuoteHandler
-from auth.db import init_users_table, init_enterprises_table
+from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table
 from auth.jwt_utils import init_jwt
 from auth.decorators import init_auth_decorators
 from auth.api import auth_bp, init_auth_api
@@ -85,6 +85,7 @@ def create_app(config: dict) -> Flask:
     # 初始化账号认证模块
     init_users_table(db)
     init_enterprises_table(db)
+    init_sender_binding_table(db)
     # JWT 密钥：优先 config.yaml，否则从数据库读取/自动生成持久化随机密钥
     jwt_secret = config.get("jwt_secret", "")
     if not jwt_secret:

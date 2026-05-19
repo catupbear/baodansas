@@ -173,6 +173,7 @@
                                 <th>姓名</th>
                                 <th>角色</th>
                                 <th>所属企业</th>
+                                <th>绑定发送人</th>
                                 <th>状态</th>
                                 <th>创建时间</th>
                                 <th>操作</th>
@@ -186,6 +187,15 @@
                                     <span class="badge" :class="roleBadgeClass(user.role)">{{ roleLabel(user.role) }}</span>
                                 </td>
                                 <td>{{ user.parent_name || '-' }}</td>
+                                <td>
+                                    <div class="flex flex-wrap gap-1">
+                                        <span v-for="s in (user.bound_senders || [])" :key="s.sender"
+                                            class="badge badge-blue" style="font-size:11px;">
+                                            {{ s.sender_name || s.sender }}
+                                        </span>
+                                        <span v-if="!user.bound_senders || user.bound_senders.length === 0" class="text-gray-400">-</span>
+                                    </div>
+                                </td>
                                 <td>
                                     <span class="badge" :class="user.enabled ? 'badge-green' : 'badge-gray'">
                                         {{ user.enabled ? '启用' : '禁用' }}
@@ -254,6 +264,29 @@
                                 <option :value="null">请选择企业</option>
                                 <option v-for="ent in enterprises" :key="ent.id" :value="ent.id">
                                     {{ ent.name || ent.phone }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <!-- 绑定发送人 -->
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-1">绑定发送人</label>
+                            <!-- 已绑定的发送人标签 -->
+                            <div v-if="form.bound_senders.length > 0" class="flex flex-wrap gap-1 mb-2">
+                                <span v-for="(s, idx) in form.bound_senders" :key="s.sender"
+                                    class="badge badge-blue flex items-center gap-1" style="font-size:12px;">
+                                    {{ s.sender_name || s.sender }}
+                                    <button @click="removeSender(idx)" type="button"
+                                        class="ml-1 text-blue-400 hover:text-blue-700" style="font-size:14px;line-height:1;">
+                                        &times;
+                                    </button>
+                                </span>
+                            </div>
+                            <!-- 下拉选择添加发送人 -->
+                            <select @change="addSender($event)" class="form-select" style="font-size:13px;">
+                                <option value="">选择发送人...</option>
+                                <option v-for="s in availableSenders" :key="s.sender" :value="s.sender">
+                                    {{ s.sender_name || s.sender }} ({{ s.record_count }}条记录)
                                 </option>
                             </select>
                         </div>
@@ -343,7 +376,7 @@ createApp({
         const showUserModal = ref(false);
         const isEdit = ref(false);
         const editUserId = ref(null);
-        const form = reactive({ phone: '', password: '', name: '', role: 'employee', parent_id: null });
+        const form = reactive({ phone: '', password: '', name: '', role: 'employee', parent_id: null, bound_senders: [] });
         const formError = ref('');
         const submitting = ref(false);
 
@@ -422,6 +455,43 @@ createApp({
             } catch {}
         }
 
+        /* 发送人列表（供绑定选择） */
+        const allSenders = ref([]);
+        async function fetchSenders() {
+            try {
+                const resp = await authFetch('/api/auth/senders');
+                const data = await resp.json();
+                if (data.code === 0) {
+                    allSenders.value = data.data || [];
+                }
+            } catch {}
+        }
+
+        /* 计算可选发送人（排除已绑定的） */
+        const availableSenders = Vue.computed(() => {
+            const boundIds = new Set(form.bound_senders.map(s => s.sender));
+            return allSenders.value.filter(s => !boundIds.has(s.sender));
+        });
+
+        /* 添加发送人 */
+        function addSender(event) {
+            const senderId = event.target.value;
+            if (!senderId) return;
+            const senderInfo = allSenders.value.find(s => s.sender === senderId);
+            if (senderInfo && !form.bound_senders.some(s => s.sender === senderId)) {
+                form.bound_senders.push({
+                    sender: senderInfo.sender,
+                    sender_name: senderInfo.sender_name || '',
+                });
+            }
+            event.target.value = '';
+        }
+
+        /* 移除发送人 */
+        function removeSender(idx) {
+            form.bound_senders.splice(idx, 1);
+        }
+
         /* 创建用户弹窗 */
         function openCreateModal() {
             isEdit.value = false;
@@ -431,9 +501,11 @@ createApp({
             form.name = '';
             form.role = 'employee';
             form.parent_id = null;
+            form.bound_senders = [];
             formError.value = '';
             showUserModal.value = true;
             fetchEnterprises();
+            fetchSenders();
         }
 
         /* 编辑用户弹窗 */
@@ -445,9 +517,14 @@ createApp({
             form.name = user.name || '';
             form.role = user.role;
             form.parent_id = user.parent_id || null;
+            form.bound_senders = (user.bound_senders || []).map(s => ({
+                sender: s.sender,
+                sender_name: s.sender_name || '',
+            }));
             formError.value = '';
             showUserModal.value = true;
             fetchEnterprises();
+            fetchSenders();
         }
 
         function closeUserModal() {
@@ -471,6 +548,7 @@ createApp({
                         name: form.name,
                         role: form.role,
                         parent_id: (form.role === 'employee' || form.role === 'enterprise') ? form.parent_id : null,
+                        bound_senders: form.bound_senders,
                     };
                 } else {
                     url = '/api/auth/users';
@@ -481,6 +559,7 @@ createApp({
                         name: form.name,
                         role: form.role,
                         parent_id: (form.role === 'employee' || form.role === 'enterprise') ? form.parent_id : null,
+                        bound_senders: form.bound_senders,
                     };
                 }
                 const resp = await authFetch(url, { method, body: JSON.stringify(body) });
@@ -572,6 +651,7 @@ createApp({
             openResetPwdModal, closeResetPwdModal, submitResetPwd,
             toggleEnabled, logout, toast,
             roleLabel, roleBadgeClass, formatTime,
+            allSenders, availableSenders, addSender, removeSender,
         };
     }
 }).mount('#app');
