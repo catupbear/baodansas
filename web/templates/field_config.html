@@ -577,6 +577,17 @@
                         <button class="btn btn-primary btn-sm" @click="saveColumnConfig('export_columns')" :disabled="activeSource === 'enterprise'">保存</button>
                     </div>
                 </div>
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; padding:12px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:500;" @click="mergeByPlate = !mergeByPlate">
+                        <div style="position:relative; width:36px; height:20px; flex-shrink:0;">
+                            <div style="position:absolute; inset:0; border-radius:10px; transition:background 0.2s;" :style="{ background: mergeByPlate ? 'var(--primary)' : '#d1d5db' }"></div>
+                            <div style="position:absolute; width:16px; height:16px; top:2px; border-radius:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); transition:left 0.2s;" :style="{ left: mergeByPlate ? '18px' : '2px' }"></div>
+                        </div>
+                        按车牌合并导出
+                    </label>
+                    <span style="font-size:11px; color:var(--text-muted);">开启后，同车牌的多条保单合并为一行，保费/保单号等按险种拆分为独立列</span>
+                    <button v-if="mergeByPlate" class="btn btn-outline btn-sm" @click="injectMergeColumns" style="margin-left:auto;">补充合并字段</button>
+                </div>
                 <div class="alias-table-wrap">
                     <table class="alias-table">
                         <thead>
@@ -787,6 +798,67 @@ createApp({
         // === Tab ===
         const activeTab = ref('alias');
 
+        // 合并开关
+        const mergeByPlate = ref(false);
+
+        // 合并差异字段列表
+        const MERGE_SPLIT_FIELDS = ['保单号', '保费', '签单日期', '起保日期', '终保日期',
+                                     '佣金率', '佣金', '采购费率', '公司利润', '跟单人利润'];
+        const MERGE_PREFIXES_LIST = ['商业险', '交强险', '非车险'];
+        const MERGE_EXTRA_COLUMNS = [];
+        for (const field of MERGE_SPLIT_FIELDS) {
+            for (const prefix of MERGE_PREFIXES_LIST) {
+                MERGE_EXTRA_COLUMNS.push(`${prefix}${field}`);
+            }
+        }
+
+        // 加载合并开关
+        async function loadMergeConfig() {
+            try {
+                const resp = await authFetch('/api/insurance/merge-config');
+                const data = await resp.json();
+                if (data.code === 0) {
+                    mergeByPlate.value = data.data.enabled;
+                }
+            } catch (e) {
+                console.error('加载合并配置失败:', e);
+            }
+        }
+
+        // 保存合并开关
+        async function saveMergeConfig() {
+            try {
+                await authFetch('/api/insurance/merge-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: mergeByPlate.value }),
+                });
+            } catch (e) {
+                console.error('保存合并配置失败:', e);
+            }
+        }
+
+        // 补充合并差异字段到导出列配置
+        function injectMergeColumns() {
+            const existingKeys = new Set(exportColItems.value.map(c => c.key));
+            let maxOrder = exportColItems.value.length;
+            let added = 0;
+            for (const col of MERGE_EXTRA_COLUMNS) {
+                if (!existingKeys.has(col)) {
+                    exportColItems.value.push({
+                        key: col, visible: true, order: maxOrder++,
+                        display_name: col, custom: true,
+                    });
+                    added++;
+                }
+            }
+            if (added > 0) {
+                showToast(`已补充 ${added} 个合并字段`);
+            } else {
+                showToast('合并字段已存在，无需补充');
+            }
+        }
+
         // === 列配置 ===
         const listColConfig = ref({ source: 'default', columns: [] });
         const exportColConfig = ref({ source: 'default', columns: [] });
@@ -848,6 +920,10 @@ createApp({
                 const data = await resp.json();
                 if (data.code === 0) {
                     showToast('列配置已保存');
+                    // 导出列配置保存时同时保存合并开关
+                    if (configType === 'export_columns') {
+                        await saveMergeConfig();
+                    }
                 }
             } catch (e) {
                 console.error('保存列配置失败:', e);
@@ -1513,6 +1589,7 @@ createApp({
             // 加载列配置
             loadColumnConfig('list_columns');
             loadColumnConfig('export_columns');
+            loadMergeConfig();
             // 初始加载完成后才启用自动保存
             nextTick(() => { configLoaded = true; });
         });
@@ -1540,6 +1617,7 @@ createApp({
             loadColumnConfig, saveColumnConfig, resetColumnConfig,
             dragState, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd,
             newColName, addCustomCol, removeCustomCol,
+            mergeByPlate, loadMergeConfig, saveMergeConfig, injectMergeColumns,
         };
     }
 }).mount('#app');
