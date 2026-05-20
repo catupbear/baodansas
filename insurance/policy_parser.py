@@ -1979,6 +1979,45 @@ def _extract_premium(text: str, fields: dict, company_short: str):
             if val:
                 fields["保费合计"] = val
 
+    # 非车险表格格式兜底：表头含"总保险费" + "赔付比例"
+    # 如阳光药诊保："10,000.000.008069.00"
+    # 列值粘连：保额 10,000.00 | 免赔额 0.00 | 赔付比例 80 | 总保费 69.00
+    if "保费合计" not in fields:
+        has_premium_header = re.search(r'总保险费', text)
+        has_ratio_header = re.search(r'赔付比例', text)
+        if has_premium_header:
+            lines = text.split('\n')
+            for line in lines:
+                if not re.search(r'主险|附加险', line):
+                    continue
+                all_amounts = re.findall(r'[\d,]+\.\d{2}', line)
+                if not all_amounts:
+                    continue
+                last_amt = all_amounts[-1].replace(",", "")
+                # 赔付比例（整数）与保费粘连：如 "8069.00" = 比例80 + 保费69.00
+                if has_ratio_header and len(last_amt.split('.')[0]) > 2:
+                    int_part = last_amt.split('.')[0]
+                    for pct_len in [2, 3]:
+                        if len(int_part) > pct_len:
+                            pct = int(int_part[:pct_len])
+                            premium = int_part[pct_len:] + '.' + last_amt.split('.')[1]
+                            if 50 <= pct <= 100 and re.match(r'\d+\.\d{2}$', premium):
+                                val = premium.lstrip('0') or '0'
+                                if '.' not in val:
+                                    val = premium
+                                elif not val.startswith('0.'):
+                                    val = val
+                                else:
+                                    val = premium
+                                if 0 < float(val) < 100000:
+                                    fields["保费合计"] = val
+                                    break
+                    if "保费合计" in fields:
+                        break
+                if "保费合计" not in fields and 0 < float(last_amt) < 100000:
+                    fields["保费合计"] = last_amt
+                break
+
     # 人保等兜底：险种明细表末尾的大写金额（如"800.00 陆仟叁佰玖拾玖元伍角肆分"）
     # 在"特别约定"或"车险"之前查找最后一个大写金额
     if "保费合计" not in fields and company_short == "人民财产":
