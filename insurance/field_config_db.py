@@ -526,9 +526,14 @@ def _fix_merge_columns(db, columns, scope, scope_id, user_id, role, parent_id):
         return columns
 
     valid_set = set(MERGE_EXTRA_COLUMNS)
-    split_set = set(MERGE_SPLIT_FIELDS)
     shared_set = set(MERGE_SHARED_FIELDS)
-    original = list(columns)
+    original_json = json.dumps(columns, ensure_ascii=False)
+
+    # 清理前端临时标记
+    for c in columns:
+        for k in list(c.keys()):
+            if k.startswith("_"):
+                del c[k]
 
     # 清理旧版 merge 字段
     columns = [c for c in columns if not c.get("merge") or c["key"] in valid_set]
@@ -548,7 +553,8 @@ def _fix_merge_columns(db, columns, scope, scope_id, user_id, role, parent_id):
             max_order += 1
 
     # 有变更则回写数据库
-    if len(columns) != len(original) or any(c["key"] != o["key"] for c, o in zip(columns, original)):
+    new_json = json.dumps(columns, ensure_ascii=False)
+    if new_json != original_json:
         save_column_config(db, "export_columns", scope, scope_id, columns)
         logger.debug("自动修正 export_columns 合并字段")
 
@@ -620,8 +626,14 @@ def save_column_config(db, config_type: str, scope: str, scope_id, columns: list
             [scope] + sid_params + [config_type]
         )
 
+        # 清理前端 UI 临时标记，不持久化
+        clean_columns = []
+        for c in columns:
+            col = {k: v for k, v in c.items() if not k.startswith("_")}
+            clean_columns.append(col)
+
         # 插入新记录
-        value = json.dumps(columns, ensure_ascii=False)
+        value = json.dumps(clean_columns, ensure_ascii=False)
         if scope_id is None:
             cursor.execute(
                 "INSERT INTO user_field_config "
