@@ -610,9 +610,9 @@
                                 @dragend="onDragEnd">
                                 <td><span class="drag-handle" :style="activeSource === 'enterprise' ? 'cursor:not-allowed;opacity:0.3' : ''">⠿</span></td>
                                 <td><input type="checkbox" v-model="col.visible" :disabled="activeSource === 'enterprise'"></td>
-                                <td style="color:var(--text-muted);">{{ col.key }}<span v-if="col.custom" style="margin-left:6px;font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:3px;">自定义</span></td>
+                                <td style="color:var(--text-muted);">{{ col.key }}<span v-if="col.merge" style="margin-left:6px;font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;">合并</span><span v-else-if="col.custom" style="margin-left:6px;font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:3px;">自定义</span></td>
                                 <td><input type="text" v-model="col.display_name" :disabled="activeSource === 'enterprise'" :placeholder="col.key" /></td>
-                                <td><button v-if="col.custom" @click="removeCustomCol(exportColItems, idx)" :disabled="activeSource === 'enterprise'" style="color:var(--danger);cursor:pointer;background:none;border:none;font-size:14px;" title="删除">✕</button></td>
+                                <td><button v-if="col.custom && !col.merge" @click="removeCustomCol(exportColItems, idx)" :disabled="activeSource === 'enterprise'" style="color:var(--danger);cursor:pointer;background:none;border:none;font-size:14px;" title="删除">✕</button></td>
                             </tr>
                         </tbody>
                     </table>
@@ -860,7 +860,7 @@ createApp({
                     if (!existingKeys.has(col)) {
                         exportColItems.value.push({
                             key: col, visible: true, order: maxOrder++,
-                            display_name: col, custom: true,
+                            display_name: col, merge: true,
                         });
                         added++;
                     }
