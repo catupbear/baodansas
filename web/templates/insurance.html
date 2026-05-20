@@ -1125,7 +1125,7 @@
                             </th>
                             <th class="sticky-col-name" style="min-width:150px;">文件名</th>
                             <th style="min-width:70px;">文档类型</th>
-                            <th v-for="col in outputColumns" :key="col" class="text-gray-600 font-medium" style="min-width:80px;">{{ col }}</th>
+                            <th v-for="col in visibleListColumns" :key="col.key" class="text-gray-600 font-medium" style="min-width:80px;">{{ col.display_name }}</th>
                             <th v-if="isSuperAdmin" style="min-width:70px;">识别方式</th>
                             <th v-if="isSuperAdmin" style="min-width:60px;">置信度</th>
                             <th style="min-width:80px;">状态</th>
@@ -1170,8 +1170,8 @@
                                 <span v-else class="text-gray-400 text-sm">—</span>
                             </td>
                             <!-- 动态字段列（使用预计算的 display_fields，可点击编辑） -->
-                            <td v-for="col in outputColumns" :key="col" class="text-gray-700 text-sm">
-                                <template v-if="listEditing.recordId === record.id && listEditing.col === col">
+                            <td v-for="col in visibleListColumns" :key="col.key" class="text-gray-700 text-sm">
+                                <template v-if="listEditing.recordId === record.id && listEditing.col === col.key">
                                     <div class="flex items-center gap-1">
                                         <input v-model="listEditing.value" type="text"
                                                class="text-sm border border-orange-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-orange-300"
@@ -1188,9 +1188,9 @@
                                 </template>
                                 <template v-else>
                                     <span class="cursor-pointer hover:text-orange-600 hover:bg-orange-50 px-1 py-0.5 rounded transition-colors"
-                                          @click="startListEdit(record, col)"
+                                          @click="startListEdit(record, col.key)"
                                           :title="'点击编辑'">
-                                        {{ (record.display_fields || {})[col] || '—' }}
+                                        {{ (record.display_fields || {})[col.key] || '—' }}
                                     </span>
                                 </template>
                             </td>
@@ -2444,6 +2444,18 @@ createApp({
             '佣金率', '佣金', '业务员', '采购费率', '公司利润',
             '跟单人', '跟单人利润', '出单渠道', '车船税',
         ]);
+        // 列配置（从后端 list_records 返回）
+        const listColumnConfig = ref([]);
+        // 计算实际显示的列（按 order 排序，只取 visible 的）
+        const visibleListColumns = computed(() => {
+            if (!listColumnConfig.value.length) {
+                return outputColumns.value.map(col => ({ key: col, display_name: col }));
+            }
+            return listColumnConfig.value
+                .filter(c => c.visible !== false)
+                .sort((a, b) => (a.order || 0) - (b.order || 0))
+                .map(c => ({ key: c.key, display_name: c.display_name || c.key }));
+        });
         const mappingConfig = ref({ default_mapping: {}, company_mappings: {} });
         const availableOcrFields = ref([]);
         const mappingModalVisible = ref(false);
@@ -4548,6 +4560,9 @@ createApp({
                     _syncing: false,
                     _reocring: false,
                 }));
+                if (data.column_config && data.column_config.columns) {
+                    listColumnConfig.value = data.column_config.columns;
+                }
                 recordPagination.total = data.total || 0;
                 recordPagination.totalPages = Math.ceil(recordPagination.total / recordPagination.pageSize) || 1;
             } catch (e) {
@@ -4860,7 +4875,7 @@ createApp({
             extractionRules, loadExtractionRules,
             rawTextVisible, rawTextContent, rawTextFileName,
             successResults, abnormalResults, nonPolicyResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal, getPolicyHint, getRecordHint,
-            outputColumns, getMappedValue, getDocCategory, docCategories,
+            outputColumns, listColumnConfig, visibleListColumns, getMappedValue, getDocCategory, docCategories,
             isLoadingFiles, loadingFileCount, loadingFileTotal, loadingPercent,
             handleFileSelect, handleDrop, removeFile, clearFiles,
             previewFile, previewResultFile, showRawText,
