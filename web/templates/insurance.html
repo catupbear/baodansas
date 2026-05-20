@@ -1946,9 +1946,9 @@
                         </div>
                         <!-- 识别完成：字段列表（支持点击编辑） -->
                         <div v-else class="flex-1 overflow-auto p-3">
-                            <div v-for="item in previewFieldsList" :key="item.label">
+                            <div v-for="item in previewFieldsList" :key="item.key || item.label">
                                 <!-- 承保公司字段上方：编辑提示 -->
-                                <div v-if="item.label === '承保公司' && previewAutoRecord"
+                                <div v-if="(item.key || item.label) === '承保公司' && previewAutoRecord"
                                      class="flex items-center gap-1.5 mb-2 px-2 py-1.5 rounded-lg" style="background: #ea580c;">
                                     <svg class="w-3.5 h-3.5 text-white flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
@@ -1958,12 +1958,12 @@
                                 <div class="flex items-center border-b border-gray-100 py-1.5 text-sm group">
                                 <span class="text-gray-500 w-24 flex-shrink-0 font-medium flex items-center gap-1">
                                     {{ item.label }}
-                                    <span v-if="isManualField(item.label)"
+                                    <span v-if="isManualField(item.key || item.label)"
                                           class="inline-block w-1.5 h-1.5 rounded-full bg-orange-400 flex-shrink-0"
                                           title="已手动修改"></span>
                                 </span>
                                 <!-- 编辑模式 -->
-                                <template v-if="editingField === item.label">
+                                <template v-if="editingField === (item.key || item.label)">
                                     <div class="flex-1 flex items-center gap-1 ml-2 min-w-0">
                                         <input id="field-edit-input"
                                                v-model="editingValue"
@@ -1985,8 +1985,8 @@
                                 <template v-else>
                                     <span v-if="previewAutoRecord"
                                           class="text-gray-800 ml-2 flex-1 cursor-pointer rounded px-1 -mx-1 hover:bg-orange-50 transition-colors"
-                                          :class="[item.value ? '' : 'text-gray-300', isManualField(item.label) ? 'font-medium text-orange-700' : '']"
-                                          @click="startEditField(item.label)"
+                                          :class="[item.value ? '' : 'text-gray-300', isManualField(item.key || item.label) ? 'font-medium text-orange-700' : '']"
+                                          @click="startEditField(item.key || item.label)"
                                           title="点击编辑">
                                         {{ item.value || '—' }}
                                     </span>
@@ -2043,7 +2043,7 @@
                     <!-- 右侧：提取规则 -->
                     <div v-if="previewShowRules" class="border-l flex flex-col" style="width: 480px; min-width: 380px;">
                         <div class="px-3 py-2 bg-orange-50 border-b text-xs text-orange-600 font-medium flex-shrink-0">
-                            提取规则（{{ previewFieldsList.length ? previewFieldsList.find(f => f.label === '承保公司')?.value || '通用' : '通用' }}）
+                            提取规则（{{ previewFieldsList.length ? previewFieldsList.find(f => (f.key || f.label) === '承保公司')?.value || '通用' : '通用' }}）
                         </div>
                         <div class="flex-1 overflow-auto p-3 space-y-2">
                             <div v-for="col in outputColumns" :key="col"
@@ -2356,21 +2356,23 @@ createApp({
             return r ? (r.ocr_engine || '') : '';
         });
 
-        // 当前预览文件的映射后字段列表
+        // 当前预览文件的映射后字段列表（使用动态列配置）
         const previewFieldsList = computed(() => {
+            // 使用动态列配置，与列表页一致
+            const cols = visibleListColumns.value;
             // 识别记录预览：直接用 parsed_fields
             if (previewAutoRecord.value) {
                 const fields = previewAutoRecord.value.parsed_fields || {};
-                return outputColumns.value.map(col => {
+                return cols.map(col => {
                     // parsed_fields 的 key 可能是 OCR 字段名，通过映射匹配导出列名
-                    let value = fields[col] || '';
+                    let value = fields[col.key] || '';
                     if (!value) {
                         const mapping = mappingConfig.value.default_mapping || {};
                         for (const [ocrField, outCol] of Object.entries(mapping)) {
-                            if (outCol === col && fields[ocrField]) { value = fields[ocrField]; break; }
+                            if (outCol === col.key && fields[ocrField]) { value = fields[ocrField]; break; }
                         }
                     }
-                    return { label: col, value };
+                    return { label: col.display_name, value, key: col.key };
                 });
             }
             // 手动上传预览
@@ -2384,12 +2386,12 @@ createApp({
             } else {
                 mapping = mappingConfig.value.default_mapping || {};
             }
-            return outputColumns.value.map(col => {
+            return cols.map(col => {
                 let value = '';
                 for (const [ocrField, outCol] of Object.entries(mapping)) {
-                    if (outCol === col && fields[ocrField]) { value = fields[ocrField]; break; }
+                    if (outCol === col.key && fields[ocrField]) { value = fields[ocrField]; break; }
                 }
-                return { label: col, value };
+                return { label: col.display_name, value, key: col.key };
             });
         });
 
@@ -3168,7 +3170,7 @@ createApp({
 
         // 开始编辑字段
         function startEditField(label) {
-            const item = previewFieldsList.value.find(f => f.label === label);
+            const item = previewFieldsList.value.find(f => (f.key || f.label) === label);
             editingField.value = label;
             editingValue.value = item ? (item.value || '') : '';
             // 自动聚焦输入框
