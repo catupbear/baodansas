@@ -397,6 +397,36 @@ def set_user_bindings(db, user_id: int, senders: list, enterprise_id: int = None
         conn.close()
 
 
+def get_sender_user_name_map(db, enterprise_id: int = None) -> dict:
+    """
+    查询 sender → 用户姓名 的映射表。
+    通过 user_sender_binding JOIN users 表，返回 {sender: user_name} 字典。
+    用于列表/导出时实时关联"跟单人"字段。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        if enterprise_id is not None:
+            cursor.execute(
+                "SELECT b.sender, u.name AS user_name "
+                "FROM user_sender_binding b JOIN users u ON b.user_id = u.id "
+                "WHERE b.enterprise_id = %s",
+                (enterprise_id,),
+            )
+        else:
+            cursor.execute(
+                "SELECT b.sender, u.name AS user_name "
+                "FROM user_sender_binding b JOIN users u ON b.user_id = u.id"
+            )
+        return {row["sender"]: row["user_name"] for row in cursor.fetchall() if row.get("user_name")}
+    except pymysql.err.ProgrammingError as e:
+        if e.args[0] == 1146:
+            return {}
+        raise
+    finally:
+        conn.close()
+
+
 def list_all_bindings(db, enterprise_id: int = None) -> list:
     """列出所有绑定记录（前端用户列表展示用）"""
     conn = db.pool.connection()

@@ -1738,30 +1738,45 @@
                         </label>
                         <span style="font-size:11px; color:#94a3b8;">同车牌多保单合并为一行</span>
                     </div>
-                    <div class="flex items-center justify-between mb-2">
-                        <p class="text-sm text-gray-600">选择要导出的表头字段：</p>
-                        <label class="flex items-center gap-1 text-xs text-green-600 cursor-pointer">
-                            <input type="checkbox" :checked="isAllExportFieldsSelected" @change="toggleAllExportFields">
-                            全选
-                        </label>
+                    <!-- 导出模式切换 -->
+                    <div class="flex items-center gap-2">
+                        <button @click="exportCustomMode = false"
+                                :class="['px-3 py-1.5 text-sm rounded-lg transition-colors cursor-pointer', !exportCustomMode ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200']">
+                            默认模板
+                        </button>
+                        <button @click="exportCustomMode = true"
+                                :class="['px-3 py-1.5 text-sm rounded-lg transition-colors cursor-pointer', exportCustomMode ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200']">
+                            自定义
+                        </button>
+                        <span v-if="!exportCustomMode" class="text-xs text-gray-400">按导出列配置导出</span>
                     </div>
-                    <div class="max-h-56 overflow-y-auto border rounded p-2 grid grid-cols-3 gap-1">
-                        <label v-for="f in exportAvailableFields" :key="f"
-                               class="flex items-center gap-1.5 text-sm text-gray-700 px-1.5 py-1 rounded hover:bg-gray-50 cursor-pointer">
-                            <input type="checkbox" :value="f" v-model="exportSelectedFields" class="text-green-600 rounded">
-                            <span class="truncate" :title="f">{{ f }}</span>
-                        </label>
-                    </div>
-                    <p class="text-xs text-gray-400 mt-1">已选 {{ exportSelectedFields.length }} / {{ exportAvailableFields.length }} 个字段</p>
+                    <!-- 自定义模式：显示字段勾选 -->
+                    <template v-if="exportCustomMode">
+                        <div class="flex items-center justify-between mb-2">
+                            <p class="text-sm text-gray-600">选择要导出的表头字段：</p>
+                            <label class="flex items-center gap-1 text-xs text-green-600 cursor-pointer">
+                                <input type="checkbox" :checked="isAllExportFieldsSelected" @change="toggleAllExportFields">
+                                全选
+                            </label>
+                        </div>
+                        <div class="max-h-56 overflow-y-auto border rounded p-2 grid grid-cols-3 gap-1">
+                            <label v-for="f in exportAvailableFields" :key="f"
+                                   class="flex items-center gap-1.5 text-sm text-gray-700 px-1.5 py-1 rounded hover:bg-gray-50 cursor-pointer">
+                                <input type="checkbox" :value="f" v-model="exportSelectedFields" class="text-green-600 rounded">
+                                <span class="truncate" :title="f">{{ f }}</span>
+                            </label>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-1">已选 {{ exportSelectedFields.length }} / {{ exportAvailableFields.length }} 个字段</p>
+                    </template>
                 </div>
                 <div class="px-5 py-3 border-t bg-gray-50 rounded-b-xl flex justify-end gap-2">
                     <button @click="exportModalVisible = false" class="btn btn-outline" style="font-size:13px;">取消</button>
-                    <button @click="confirmExport" :disabled="!exportSelectedFields.length"
+                    <button @click="confirmExport" :disabled="exportCustomMode && !exportSelectedFields.length"
                             class="btn btn-success" style="font-size:13px;">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
-                        导出（{{ exportSelectedFields.length }}列）
+                        {{ exportCustomMode ? `导出（${exportSelectedFields.length}列）` : '导出' }}
                     </button>
                 </div>
             </div>
@@ -3557,8 +3572,9 @@ createApp({
                 fieldNamesToUse = ['文件名', '失败原因'];
             }
             exportPendingType.value = type;
+            exportCustomMode.value = false; // 默认使用模板模式
             exportAvailableFields.value = [...fieldNamesToUse];
-            exportSelectedFields.value = [...fieldNamesToUse]; // 默认全选
+            exportSelectedFields.value = [...fieldNamesToUse]; // 自定义模式时默认全选
             // 加载合并默认值
             try {
                 const mergeResp = await authFetch('/api/insurance/merge-config');
@@ -3687,6 +3703,7 @@ createApp({
         const exportSelectedFields = ref([]);
         const exportAvailableFields = ref([]);
         const exportMergeByPlate = ref(false);   // 按车牌合并开关
+        const exportCustomMode = ref(false);     // 导出模式：false=默认模板, true=自定义
         const exportPendingType = ref('');       // 'success'|'abnormal'|'nonpolicy'|'failed'|'records'
         const exportPendingData = ref(null);     // 暂存导出数据
         const exportPendingFileName = ref('');
@@ -3703,14 +3720,15 @@ createApp({
         async function confirmExport() {
             exportModalVisible.value = false;
             const type = exportPendingType.value;
-            const selectedCols = exportSelectedFields.value;
+            // 默认模板模式传 null，让后端使用导出列配置；自定义模式传选中的列
+            const selectedCols = exportCustomMode.value ? exportSelectedFields.value : null;
 
             if (type === 'records') {
                 // 识别记录导出
                 await doExportRecordsExcel(selectedCols, exportMergeByPlate.value);
             } else {
                 // 手动上传结果导出
-                await doExportExcel(type, selectedCols, exportMergeByPlate.value);
+                await doExportExcel(type, selectedCols || exportSelectedFields.value, exportMergeByPlate.value);
             }
         }
 
@@ -4228,10 +4246,11 @@ createApp({
         // 导出识别记录（弹窗选择列）
         async function exportRecordsExcel() {
             exportPendingType.value = 'records';
+            exportCustomMode.value = false; // 默认使用模板模式
             const dynamicCols = visibleListColumns.value.map(c => c.key);
             const allCols = [...recordExtraColumns, ...dynamicCols];
             exportAvailableFields.value = allCols;
-            exportSelectedFields.value = [...allCols]; // 默认全选
+            exportSelectedFields.value = [...allCols]; // 自定义模式时默认全选
             // 加载合并默认值
             try {
                 const mergeResp = await authFetch('/api/insurance/merge-config');
@@ -4296,30 +4315,38 @@ createApp({
                     allRecords = (listJson.data || listJson).records || [];
                 }
 
+                // 额外列映射（基础元数据字段）
+                const extraMap = (r) => ({
+                    '文件名': r.filename || '',
+                    '文档类型': r.doc_category || '',
+                    '状态': statusLabel(r.status),
+                    '时间': formatTime(r.created_at),
+                    '群名': r.room_name || r.roomid || '',
+                    '发送人': r.sender_name || r.sender || '',
+                });
+
+                // 构建导出列：自定义模式按选中列过滤，默认模板模式传所有字段让后端决定
+                const colsToUse = selectedCols || [...recordExtraColumns, ...visibleListColumns.value.map(c => c.key)];
+
                 const data = allRecords
                     .filter(r => r.status === 'done' || r.status === 'success')
                     .map(r => {
                         const df = r.display_fields || {};
                         const row = {};
-                        // 额外列映射
-                        const extraMap = {
-                            '文件名': r.filename || '',
-                            '文档类型': r.doc_category || '',
-                            '状态': statusLabel(r.status),
-                            '时间': formatTime(r.created_at),
-                            '群名': r.room_name || r.roomid || '',
-                            '发送人': r.sender_name || r.sender || '',
-                        };
-                        for (const col of selectedCols) {
-                            row[col] = extraMap[col] !== undefined ? extraMap[col] : (df[col] || '');
+                        const em = extraMap(r);
+                        for (const col of colsToUse) {
+                            row[col] = em[col] !== undefined ? em[col] : (df[col] || '');
                         }
                         return { fields: row, filename: r.filename || '' };
                     });
                 if (!data.length) { showMessage('没有可导出的数据', false); return; }
 
+                const postBody = { invoices: data, export_type: 'success', merge_by_plate: mergeByPlate };
+                // 自定义模式才传 field_names，默认模板模式让后端用导出列配置
+                if (selectedCols) postBody.field_names = selectedCols;
                 const resp = await authFetch('/api/insurance/export/excel', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ invoices: data, field_names: selectedCols, export_type: 'success', merge_by_plate: mergeByPlate }),
+                    body: JSON.stringify(postBody),
                 });
                 if (!resp.ok) { showMessage('导出失败', false); return; }
                 const blob = await resp.blob();
@@ -4911,7 +4938,7 @@ createApp({
             addCompanyMapping, deleteCompanyMapping, resetMapping,
             addColumn, removeColumn, startRenameCol, finishRenameCol, onNewColFieldChange,
             // 导出列选择
-            exportModalVisible, exportSelectedFields, exportAvailableFields, exportMergeByPlate, exportPendingType,
+            exportModalVisible, exportSelectedFields, exportAvailableFields, exportMergeByPlate, exportPendingType, exportCustomMode,
             isAllExportFieldsSelected, toggleAllExportFields, confirmExport,
             // 钉钉
             targets, selectedTargetId, targetModalVisible,

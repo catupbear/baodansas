@@ -55,7 +55,7 @@ from .field_mapping import (
 from .policy_parser import get_extraction_rules, parse_policy_text, parse_policy_text_multi, get_policy_type_code
 from .ocr_service import extract_text_from_pdf
 from auth.decorators import login_required
-from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE
+from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, get_sender_user_name_map
 
 logger = logging.getLogger(__name__)
 
@@ -229,6 +229,14 @@ def list_records():
         user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
         has_config = user_config and any(user_config.get(k) for k in user_config)
 
+        # 构建 sender → 用户姓名映射，用于实时关联"跟单人"
+        sender_name_map = {}
+        try:
+            ent_id = _get_enterprise_id_filter()
+            sender_name_map = get_sender_user_name_map(_db, ent_id)
+        except Exception:
+            logger.debug("获取 sender→用户姓名映射失败，跟单人字段将为空")
+
         for record in result.get("records", []):
             # 反序列化 display_fields
             if isinstance(record.get("display_fields"), str):
@@ -236,6 +244,12 @@ def list_records():
                     record["display_fields"] = json.loads(record["display_fields"])
                 except (TypeError, json.JSONDecodeError):
                     record["display_fields"] = {}
+            # 实时关联跟单人：通过 sender 查找绑定用户姓名
+            sender = record.get("sender", "")
+            if sender and sender in sender_name_map:
+                if not record.get("display_fields"):
+                    record["display_fields"] = {}
+                record["display_fields"]["跟单人"] = sender_name_map[sender]
             # 应用用户配置（简称映射、日期格式、公式计算）
             if has_config and record.get("display_fields"):
                 record["display_fields"] = apply_user_config_to_fields(user_config, record["display_fields"])
@@ -278,6 +292,29 @@ def get_record(record_id):
         for ts_field in ("created_at", "updated_at"):
             if record.get(ts_field) and not isinstance(record[ts_field], str):
                 record[ts_field] = str(record[ts_field])
+
+        # 实时关联跟单人：通过 sender 查找绑定用户姓名
+        sender = record.get("sender", "")
+        if sender:
+            try:
+                from auth.db import get_binding_by_sender, get_user_by_id
+                bound = get_binding_by_sender(_db, sender)
+                if bound:
+                    user_info = get_user_by_id(_db, bound["user_id"])
+                    if user_info and user_info.get("name"):
+                        if isinstance(record.get("parsed_fields"), dict):
+                            record["parsed_fields"]["跟单人"] = user_info["name"]
+                        if isinstance(record.get("display_fields"), str):
+                            try:
+                                df = json.loads(record["display_fields"])
+                                df["跟单人"] = user_info["name"]
+                                record["display_fields"] = df
+                            except (TypeError, json.JSONDecodeError):
+                                pass
+                        elif isinstance(record.get("display_fields"), dict):
+                            record["display_fields"]["跟单人"] = user_info["name"]
+            except Exception:
+                pass
 
         # 同一 PDF 的兄弟记录摘要（有 file_md5 就查）
         siblings = []
