@@ -2209,6 +2209,12 @@ def export_excel():
             export_columns = export_col_config.get("columns", [])
             # 按 order 排序，只取 visible 的列
             visible_cols = sorted([c for c in export_columns if c.get("visible", True)], key=lambda c: c.get("order", 0))
+            # 合并模式下排除被拆分的基础字段（保费→商业险保费/交强险保费/非车险保费等）
+            merge_enabled = body.get("merge_by_plate", False)
+            if merge_enabled:
+                from insurance.field_config_db import MERGE_SPLIT_FIELDS
+                merge_hidden = set(MERGE_SPLIT_FIELDS) | {"险种"}
+                visible_cols = [c for c in visible_cols if c["key"] not in merge_hidden]
             field_names = [c["key"] for c in visible_cols]
             field_display_names = {c["key"]: c.get("display_name", c["key"]) for c in visible_cols}
         if not field_names:
