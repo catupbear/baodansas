@@ -601,6 +601,7 @@
                         </thead>
                         <tbody>
                             <tr v-for="(col, idx) in exportColItems" :key="col.key"
+                                v-show="!col._mergeHidden"
                                 :draggable="activeSource !== 'enterprise'"
                                 :class="{ dragging: dragState.dragging === idx && dragState.target === 'export', 'drag-over': dragState.over === idx && dragState.target === 'export' }"
                                 @dragstart="onDragStart($event, idx, 'export')"
@@ -825,6 +826,16 @@ createApp({
             }
         }
 
+        // 监听合并开关和导出列数据，自动标记隐藏的原始字段
+        watch([mergeByPlate, exportColItems], () => {
+            if (!exportColItems.value.length) return;
+            for (const col of exportColItems.value) {
+                if (MERGE_HIDDEN_ORIGINALS.has(col.key)) {
+                    col._mergeHidden = mergeByPlate.value ? true : undefined;
+                }
+            }
+        }, { deep: false });
+
         // 保存合并开关
         async function saveMergeConfig() {
             try {
@@ -845,11 +856,10 @@ createApp({
         function toggleMergeByPlate() {
             mergeByPlate.value = !mergeByPlate.value;
             if (mergeByPlate.value) {
-                // 开启：隐藏原始差异字段
+                // 开启：隐藏原始差异字段（从列表中隐藏，不改 visible）
                 for (const col of exportColItems.value) {
                     if (MERGE_HIDDEN_ORIGINALS.has(col.key)) {
-                        col._prevVisible = col.visible;
-                        col.visible = false;
+                        col._mergeHidden = true;
                     }
                 }
                 // 补充合并差异字段
@@ -871,11 +881,10 @@ createApp({
                 // 关闭：移除合并差异字段
                 const mergeSet = new Set(MERGE_EXTRA_COLUMNS);
                 exportColItems.value = exportColItems.value.filter(c => !mergeSet.has(c.key));
-                // 恢复原始差异字段的可见性
+                // 恢复原始差异字段显示
                 for (const col of exportColItems.value) {
                     if (MERGE_HIDDEN_ORIGINALS.has(col.key)) {
-                        col.visible = col._prevVisible !== undefined ? col._prevVisible : true;
-                        delete col._prevVisible;
+                        delete col._mergeHidden;
                     }
                 }
                 showToast('已移除合并字段，原始字段已恢复');
