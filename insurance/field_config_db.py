@@ -514,6 +514,40 @@ def get_effective_config(db, user_id: int, role: str, parent_id=None) -> dict:
 # 列配置读写（list_columns / export_columns）
 # ------------------------------------------------------------------ #
 
+def _fix_merge_columns(db, columns, scope, scope_id, user_id, role, parent_id):
+    """
+    自动修正 export_columns 中的合并字段：
+    - 合并开启时：清理不在 MERGE_EXTRA_COLUMNS 中的旧 merge 字段，补充缺失的
+    - 合并关闭时：不处理
+    修正后自动回写数据库。
+    """
+    merge_enabled = get_merge_by_plate(db, user_id, role, parent_id)
+    if not merge_enabled:
+        return columns
+
+    valid_set = set(MERGE_EXTRA_COLUMNS)
+    original = list(columns)
+
+    # 清理旧版 merge 字段
+    columns = [c for c in columns if not c.get("merge") or c["key"] in valid_set]
+
+    # 补充缺失的 merge 字段
+    existing_keys = {c["key"] for c in columns}
+    max_order = len(columns)
+    for col_name in MERGE_EXTRA_COLUMNS:
+        if col_name not in existing_keys:
+            columns.append({"key": col_name, "visible": True, "order": max_order,
+                            "display_name": col_name, "merge": True})
+            max_order += 1
+
+    # 有变更则回写数据库
+    if len(columns) != len(original) or any(c["key"] != o["key"] for c, o in zip(columns, original)):
+        save_column_config(db, "export_columns", scope, scope_id, columns)
+        logger.debug("自动修正 export_columns 合并字段")
+
+    return columns
+
+
 def get_column_config(db, config_type: str, user_id: int, role: str, parent_id=None) -> dict:
     """
     获取列配置（list_columns 或 export_columns），按优先级查找：
@@ -550,6 +584,9 @@ def get_column_config(db, config_type: str, user_id: int, role: str, parent_id=N
             if row:
                 try:
                     columns = json.loads(row["config_value"])
+                    # export_columns 自动修正合并字段（清理旧版 + 补充缺失）
+                    if config_type == "export_columns":
+                        columns = _fix_merge_columns(db, columns, scope, scope_id, user_id, role, parent_id)
                     return {"source": source_label, "columns": columns}
                 except (TypeError, json.JSONDecodeError):
                     pass
