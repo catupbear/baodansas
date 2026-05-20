@@ -1957,16 +1957,17 @@
                             <span class="text-xs text-gray-400 mt-1">请稍候，识别完成后将自动显示结果</span>
                         </div>
                         <!-- 识别完成：字段列表（支持点击编辑） -->
-                        <div v-else class="flex-1 overflow-auto p-3">
+                        <div v-else class="flex-1 flex flex-col min-h-0">
+                            <!-- 编辑提示（固定在顶部） -->
+                            <div v-if="previewAutoRecord"
+                                 class="flex items-center gap-1.5 mx-3 mt-3 mb-1 px-2 py-1.5 rounded-lg flex-shrink-0" style="background: #ea580c;">
+                                <svg class="w-3.5 h-3.5 text-white flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                </svg>
+                                <span class="text-xs text-white font-medium">识别有误？点击需要修改的数据，即可修改</span>
+                            </div>
+                            <div class="flex-1 overflow-auto p-3 pt-1">
                             <div v-for="item in previewFieldsList" :key="item.key || item.label">
-                                <!-- 承保公司字段上方：编辑提示 -->
-                                <div v-if="(item.key || item.label) === '承保公司' && previewAutoRecord"
-                                     class="flex items-center gap-1.5 mb-2 px-2 py-1.5 rounded-lg" style="background: #ea580c;">
-                                    <svg class="w-3.5 h-3.5 text-white flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-                                    </svg>
-                                    <span class="text-xs text-white font-medium">识别有误？点击需要修改的数据，即可修改</span>
-                                </div>
                                 <div class="flex items-center border-b border-gray-100 py-1.5 text-sm group">
                                 <span class="text-gray-500 w-24 flex-shrink-0 font-medium flex items-center gap-1">
                                     {{ item.label }}
@@ -1993,19 +1994,25 @@
                                         </button>
                                     </div>
                                 </template>
-                                <!-- 显示模式（点击进入编辑） -->
+                                <!-- 显示模式（点击进入编辑，记录级字段不可编辑） -->
                                 <template v-else>
-                                    <span v-if="previewAutoRecord"
+                                    <span v-if="previewAutoRecord && !['文件名','文档类型','状态','时间','群名','发送人'].includes(item.key)"
                                           class="text-gray-800 ml-2 flex-1 cursor-pointer rounded px-1 -mx-1 hover:bg-orange-50 transition-colors"
                                           :class="[item.value ? '' : 'text-gray-300', isManualField(item.key || item.label) ? 'font-medium text-orange-700' : '']"
                                           @click="startEditField(item.key || item.label)"
                                           title="点击编辑">
                                         {{ item.value || '—' }}
                                     </span>
+                                    <span v-else-if="previewAutoRecord"
+                                          class="text-gray-800 ml-2 flex-1"
+                                          :class="item.value ? '' : 'text-gray-300'">
+                                        {{ item.value || '—' }}
+                                    </span>
                                     <span v-else class="text-gray-800 ml-2" :class="item.value ? '' : 'text-gray-300'">
                                         {{ item.value || '—' }}
                                     </span>
                                 </template>
+                            </div>
                             </div>
                             </div>
                         </div>
