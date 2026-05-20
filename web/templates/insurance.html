@@ -4362,7 +4362,8 @@ createApp({
                     const plates = new Set(data.map(d => d.fields['车牌'] || d.fields['车牌号'] || ''));
                     exportCount = plates.size;
                 }
-                showMessage(`导出成功，共 ${exportCount} 条`, true);
+                const msg = mergeByPlate ? `导出成功，按车牌合并后共 ${exportCount} 条数据` : `导出成功，共 ${exportCount} 条数据`;
+                showMessage(msg, true);
             } catch (e) { showMessage(`导出失败: ${e.message}`, false); }
         }
 
