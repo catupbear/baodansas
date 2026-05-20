@@ -2553,10 +2553,12 @@ def _identify_doc_category(text: str, fields: dict) -> str:
     # 如"神行车保系列产品投保单"、"机动车辆保险投保单"
     # 需排除"投保单号"（保单中引用投保单号的字段）
     # 需排除"保险条款、投保单、保险单"（保单重要提示中的条款引用）
+    # 需排除"投保单是本保险单的不可分割的组成部分"（保单标准条文引用）
     if re.search(r'投保[单书](?!号)', text_head):
         if not re.search(r'保险条款[、，]投保单', text_head):
-            if _has_policy_markers:
-                return "投保单"
+            if not re.search(r'投保单是本保险[单合]', text_head):
+                if _has_policy_markers:
+                    return "投保单"
 
     # 有保单关键字段才认定为保单，否则标记为未知
     if _has_policy_markers:
