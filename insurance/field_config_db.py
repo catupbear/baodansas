@@ -566,11 +566,6 @@ def _fix_merge_columns(db, columns, scope, scope_id, user_id, role, parent_id):
     # 清理旧版 merge 字段
     columns = [c for c in columns if not c.get("merge") or c["key"] in valid_set]
 
-    # 恢复共享字段的可见性（之前版本可能错误隐藏了）
-    for c in columns:
-        if c["key"] in shared_set and not c.get("visible", True):
-            c["visible"] = True
-
     # 补充缺失的 merge 字段
     existing_keys = {c["key"] for c in columns}
     max_order = len(columns)
