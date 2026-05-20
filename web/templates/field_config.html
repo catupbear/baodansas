@@ -521,6 +521,7 @@
                         </span>
                     </div>
                     <div style="display:flex; gap:8px;">
+                        <button class="btn btn-outline btn-sm" @click="syncListToExport" :disabled="activeSource === 'enterprise'">同步到导出配置</button>
                         <button class="btn btn-outline btn-sm" @click="resetColumnConfig('list_columns')" :disabled="activeSource === 'enterprise'">恢复默认</button>
                         <button class="btn btn-primary btn-sm" @click="saveColumnConfig('list_columns')" :disabled="activeSource === 'enterprise'">保存</button>
                     </div>
@@ -990,14 +991,43 @@ createApp({
                 return;
             }
             items.push({ key: name, visible: true, order: items.length, display_name: name, custom: true });
-            if (target === 'list') newColName.list = '';
-            else newColName.export = '';
+            // 页面列添加时同步到导出列
+            if (target === 'list') {
+                newColName.list = '';
+                if (!exportColItems.value.some(c => c.key === name)) {
+                    exportColItems.value.push({ key: name, visible: true, order: exportColItems.value.length, display_name: name, custom: true });
+                }
+            } else {
+                newColName.export = '';
+            }
         };
 
         const removeCustomCol = (items, idx) => {
             if (!confirm(`确认删除自定义字段「${items[idx].key}」？`)) return;
             items.splice(idx, 1);
         };
+
+        // 同步页面列配置到导出列配置（补充导出列中缺少的字段）
+        function syncListToExport() {
+            let added = 0;
+            const exportKeys = new Set(exportColItems.value.map(c => c.key));
+            for (const col of listColItems.value) {
+                if (!exportKeys.has(col.key)) {
+                    exportColItems.value.push({
+                        key: col.key, visible: col.visible,
+                        order: exportColItems.value.length,
+                        display_name: col.display_name,
+                        custom: col.custom || false,
+                    });
+                    added++;
+                }
+            }
+            if (added > 0) {
+                showToast(`已同步 ${added} 个字段到导出配置`);
+            } else {
+                showToast('导出配置已包含所有页面列字段');
+            }
+        }
 
         // === Tab 1: 别名设置 - 列表模式 ===
         const aliasType = ref('company');
@@ -1622,7 +1652,7 @@ createApp({
             listColConfig, exportColConfig, listColItems, exportColItems,
             loadColumnConfig, saveColumnConfig, resetColumnConfig,
             dragState, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd,
-            newColName, addCustomCol, removeCustomCol,
+            newColName, addCustomCol, removeCustomCol, syncListToExport,
             mergeByPlate, loadMergeConfig, saveMergeConfig, toggleMergeByPlate,
         };
     }
