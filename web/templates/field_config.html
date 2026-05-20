@@ -826,16 +826,6 @@ createApp({
             }
         }
 
-        // 监听合并开关和导出列数据，自动标记隐藏的原始字段
-        watch([mergeByPlate, exportColItems], () => {
-            if (!exportColItems.value.length) return;
-            for (const col of exportColItems.value) {
-                if (MERGE_HIDDEN_ORIGINALS.has(col.key)) {
-                    col._mergeHidden = mergeByPlate.value ? true : undefined;
-                }
-            }
-        }, { deep: false });
-
         // 保存合并开关
         async function saveMergeConfig() {
             try {
@@ -896,6 +886,16 @@ createApp({
         const exportColConfig = ref({ source: 'default', columns: [] });
         const listColItems = ref([]);
         const exportColItems = ref([]);
+
+        // 监听合并开关和导出列数据，自动标记隐藏的原始字段
+        watch([mergeByPlate, exportColItems], () => {
+            if (!exportColItems.value.length) return;
+            for (const col of exportColItems.value) {
+                if (MERGE_HIDDEN_ORIGINALS.has(col.key)) {
+                    col._mergeHidden = mergeByPlate.value ? true : undefined;
+                }
+            }
+        }, { deep: false });
 
         const DEFAULT_COLUMNS = [
             {key:'承保公司',visible:true,order:0,display_name:'承保公司'},
