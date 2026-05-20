@@ -442,6 +442,22 @@ def init_insurance_tables(db):
         except Exception:
             logger.exception("回填 display_fields 失败")
 
+        # 回填 display_fields 中缺少的车主字段（从 insurance_policy_fields.owner 补充）
+        try:
+            cursor.execute("""
+                UPDATE insurance_records r
+                JOIN insurance_policy_fields pf ON pf.record_id = r.id
+                SET r.display_fields = JSON_SET(r.display_fields, '$."车主"', pf.owner)
+                WHERE pf.owner IS NOT NULL AND pf.owner != ''
+                  AND r.display_fields IS NOT NULL AND r.display_fields != ''
+                  AND (JSON_EXTRACT(r.display_fields, '$."车主"') IS NULL
+                       OR JSON_EXTRACT(r.display_fields, '$."车主"') = '')
+            """)
+            if cursor.rowcount:
+                logger.info("回填 display_fields 车主字段 %d 条", cursor.rowcount)
+        except Exception:
+            logger.exception("回填 display_fields 车主字段失败")
+
         # 回填 insurance_policy_fields（仅对有 parsed_fields 但无关联记录的）
         try:
             cursor.execute("""
