@@ -418,13 +418,18 @@ def _identify_policy_type(text: str) -> Optional[str]:
     if re.search(r"驾乘", text[:1000]):
         return "驾乘人员意外伤害保险"
 
+    # 兜底：从标题提取产品名（如"阳光药诊保A款"）
+    m = re.search(r'([一-鿿\w]+(?:保|险)[A-Za-z\d]*款?)(?:电子)?保险单', text[:300])
+    if m:
+        return m.group(1)
+
     return None
 
 
 def _get_policy_type_code(policy_type: str) -> tuple:
     """根据险种类型返回 (type_code, type_name)"""
     if not policy_type:
-        return "unknown", "未知"
+        return "accident", "驾乘/意外险"
     if "交通事故责任强制" in policy_type:
         return "compulsory", "交强险"
     if "商业保险" in policy_type or "机动车辆保险" in policy_type or "机动车辆综合险" in policy_type:
@@ -437,7 +442,8 @@ def _get_policy_type_code(policy_type: str) -> tuple:
         return "non_vehicle", "非车险"
     if "家财" in policy_type:
         return "non_vehicle", "非车险"
-    return "unknown", policy_type
+    # 非标准险种名（如"阳光药诊保A款"）归为驾意险
+    return "accident", "驾乘/意外险"
 
 
 # ============================================================
