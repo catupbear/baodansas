@@ -889,24 +889,23 @@ createApp({
         const listColItems = ref([]);
         const exportColItems = ref([]);
 
-        // 监听合并开关和导出列数据，自动标记隐藏 + 清理旧版 + 补充缺失
-        let _mergeWatchInited = false;
-        watch([mergeByPlate, exportColItems], async () => {
-            if (!exportColItems.value.length) return;
-            let needSave = false;
+        // 同步合并字段状态（清理旧版 + 补充缺失 + 标记隐藏），返回是否有变更
+        function syncMergeFields() {
+            if (!exportColItems.value.length) return false;
+            let changed = false;
             if (mergeByPlate.value) {
                 const validMergeSet = new Set(MERGE_EXTRA_COLUMNS);
                 // 清理旧版合并字段
                 const before = exportColItems.value.length;
                 exportColItems.value = exportColItems.value.filter(c => !c.merge || validMergeSet.has(c.key));
-                if (exportColItems.value.length < before) needSave = true;
+                if (exportColItems.value.length < before) changed = true;
                 // 补充缺失的合并字段
                 const existingKeys = new Set(exportColItems.value.map(c => c.key));
                 let maxOrder = exportColItems.value.length;
                 for (const col of MERGE_EXTRA_COLUMNS) {
                     if (!existingKeys.has(col)) {
                         exportColItems.value.push({ key: col, visible: true, order: maxOrder++, display_name: col, merge: true });
-                        needSave = true;
+                        changed = true;
                     }
                 }
             }
@@ -916,12 +915,11 @@ createApp({
                     col._mergeHidden = mergeByPlate.value ? true : undefined;
                 }
             }
-            // 加载后首次检测到需要清理/补充，自动保存
-            if (needSave && _mergeWatchInited) {
-                await saveColumnConfig('export_columns');
-            }
-            _mergeWatchInited = true;
-        }, { deep: false });
+            return changed;
+        }
+
+        // 只监听合并开关变化，标记隐藏状态
+        watch(mergeByPlate, () => { syncMergeFields(); });
 
         const DEFAULT_COLUMNS = [
             {key:'承保公司',visible:true,order:0,display_name:'承保公司'},
@@ -1674,8 +1672,12 @@ createApp({
             await autoLoadAliasFromDb();
             // 加载列配置
             loadColumnConfig('list_columns');
-            loadColumnConfig('export_columns');
-            loadMergeConfig();
+            // 导出列配置和合并开关都加载完后，同步合并字段状态
+            Promise.all([loadColumnConfig('export_columns'), loadMergeConfig()]).then(async () => {
+                if (syncMergeFields()) {
+                    await saveColumnConfig('export_columns');
+                }
+            });
             // 初始加载完成后才启用自动保存
             nextTick(() => { configLoaded = true; });
         });
