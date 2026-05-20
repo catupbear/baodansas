@@ -838,11 +838,21 @@ createApp({
             }
         }
 
-        // 切换合并开关，自动补充或移除合并字段
+        // 被拆分的原始字段（开启合并时应隐藏）
+        const MERGE_HIDDEN_ORIGINALS = new Set([...MERGE_SPLIT_FIELDS, '险种']);
+
+        // 切换合并开关，自动补充/移除合并字段，同时隐藏/恢复原始差异字段
         function toggleMergeByPlate() {
             mergeByPlate.value = !mergeByPlate.value;
             if (mergeByPlate.value) {
-                // 开启：补充合并差异字段
+                // 开启：隐藏原始差异字段
+                for (const col of exportColItems.value) {
+                    if (MERGE_HIDDEN_ORIGINALS.has(col.key)) {
+                        col._prevVisible = col.visible;
+                        col.visible = false;
+                    }
+                }
+                // 补充合并差异字段
                 const existingKeys = new Set(exportColItems.value.map(c => c.key));
                 let maxOrder = exportColItems.value.length;
                 let added = 0;
@@ -855,14 +865,20 @@ createApp({
                         added++;
                     }
                 }
-                if (added > 0) showToast(`已补充 ${added} 个合并字段`);
+                if (added > 0) showToast(`已补充 ${added} 个合并字段，原始差异字段已隐藏`);
+                else showToast('原始差异字段已隐藏');
             } else {
                 // 关闭：移除合并差异字段
                 const mergeSet = new Set(MERGE_EXTRA_COLUMNS);
-                const before = exportColItems.value.length;
                 exportColItems.value = exportColItems.value.filter(c => !mergeSet.has(c.key));
-                const removed = before - exportColItems.value.length;
-                if (removed > 0) showToast(`已移除 ${removed} 个合并字段`);
+                // 恢复原始差异字段的可见性
+                for (const col of exportColItems.value) {
+                    if (MERGE_HIDDEN_ORIGINALS.has(col.key)) {
+                        col.visible = col._prevVisible !== undefined ? col._prevVisible : true;
+                        delete col._prevVisible;
+                    }
+                }
+                showToast('已移除合并字段，原始字段已恢复');
             }
         }
 
