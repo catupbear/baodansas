@@ -118,6 +118,14 @@
             max-height: 400px; overflow-y: auto; border: 1px solid var(--border-light);
             border-radius: 8px;
         }
+        /* 拖拽排序 */
+        .drag-handle {
+            cursor: grab; color: var(--text-muted); font-size: 16px;
+            user-select: none; padding: 4px 8px; line-height: 1;
+        }
+        .drag-handle:active { cursor: grabbing; }
+        tr.dragging { opacity: 0.4; background: var(--primary-bg); }
+        tr.drag-over { border-top: 2px solid var(--primary-light); }
         .alias-batch-bar {
             display: flex; align-items: center; justify-content: space-between;
             margin-bottom: 12px;
@@ -521,19 +529,23 @@
                     <table class="alias-table">
                         <thead>
                             <tr>
+                                <th style="width:40px;"></th>
                                 <th style="width:50px;">显示</th>
-                                <th style="width:60px;">排序</th>
                                 <th>字段标识</th>
                                 <th style="width:180px;">显示名称</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="(col, idx) in listColItems" :key="col.key">
+                            <tr v-for="(col, idx) in listColItems" :key="col.key"
+                                :draggable="activeSource !== 'enterprise'"
+                                :class="{ dragging: dragState.dragging === idx && dragState.target === 'list', 'drag-over': dragState.over === idx && dragState.target === 'list' }"
+                                @dragstart="onDragStart($event, idx, 'list')"
+                                @dragover.prevent="onDragOver(idx, 'list')"
+                                @dragleave="onDragLeave(idx, 'list')"
+                                @drop.prevent="onDrop($event, idx, 'list')"
+                                @dragend="onDragEnd">
+                                <td><span class="drag-handle" :style="activeSource === 'enterprise' ? 'cursor:not-allowed;opacity:0.3' : ''">⠿</span></td>
                                 <td><input type="checkbox" v-model="col.visible" :disabled="activeSource === 'enterprise'"></td>
-                                <td style="display:flex; gap:2px;">
-                                    <button class="btn btn-outline btn-sm" @click="moveCol(listColItems, idx, -1)" :disabled="idx===0 || activeSource === 'enterprise'" style="padding:2px 6px;">↑</button>
-                                    <button class="btn btn-outline btn-sm" @click="moveCol(listColItems, idx, 1)" :disabled="idx===listColItems.length-1 || activeSource === 'enterprise'" style="padding:2px 6px;">↓</button>
-                                </td>
                                 <td style="color:var(--text-muted);">{{ col.key }}</td>
                                 <td><input type="text" v-model="col.display_name" :disabled="activeSource === 'enterprise'" :placeholder="col.key" /></td>
                             </tr>
@@ -560,19 +572,23 @@
                     <table class="alias-table">
                         <thead>
                             <tr>
+                                <th style="width:40px;"></th>
                                 <th style="width:50px;">导出</th>
-                                <th style="width:60px;">排序</th>
                                 <th>字段标识</th>
                                 <th style="width:180px;">Excel 列头</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="(col, idx) in exportColItems" :key="col.key">
+                            <tr v-for="(col, idx) in exportColItems" :key="col.key"
+                                :draggable="activeSource !== 'enterprise'"
+                                :class="{ dragging: dragState.dragging === idx && dragState.target === 'export', 'drag-over': dragState.over === idx && dragState.target === 'export' }"
+                                @dragstart="onDragStart($event, idx, 'export')"
+                                @dragover.prevent="onDragOver(idx, 'export')"
+                                @dragleave="onDragLeave(idx, 'export')"
+                                @drop.prevent="onDrop($event, idx, 'export')"
+                                @dragend="onDragEnd">
+                                <td><span class="drag-handle" :style="activeSource === 'enterprise' ? 'cursor:not-allowed;opacity:0.3' : ''">⠿</span></td>
                                 <td><input type="checkbox" v-model="col.visible" :disabled="activeSource === 'enterprise'"></td>
-                                <td style="display:flex; gap:2px;">
-                                    <button class="btn btn-outline btn-sm" @click="moveCol(exportColItems, idx, -1)" :disabled="idx===0 || activeSource === 'enterprise'" style="padding:2px 6px;">↑</button>
-                                    <button class="btn btn-outline btn-sm" @click="moveCol(exportColItems, idx, 1)" :disabled="idx===exportColItems.length-1 || activeSource === 'enterprise'" style="padding:2px 6px;">↓</button>
-                                </td>
                                 <td style="color:var(--text-muted);">{{ col.key }}</td>
                                 <td><input type="text" v-model="col.display_name" :disabled="activeSource === 'enterprise'" :placeholder="col.key" /></td>
                             </tr>
@@ -709,7 +725,7 @@ async function authFetch(url, options = {}) {
 // 进入页面检查登录
 if (!checkAuth()) throw new Error('redirect');
 
-const { createApp, ref, computed, watch, nextTick, onMounted } = Vue;
+const { createApp, ref, reactive, computed, watch, nextTick, onMounted } = Vue;
 
 createApp({
     setup() {
@@ -830,12 +846,35 @@ createApp({
             }
         };
 
-        const moveCol = (items, idx, direction) => {
-            const targetIdx = idx + direction;
-            if (targetIdx < 0 || targetIdx >= items.length) return;
-            const temp = items[idx];
-            items[idx] = items[targetIdx];
-            items[targetIdx] = temp;
+        // 拖拽排序状态和处理
+        const dragState = reactive({ dragging: null, over: null, target: null });
+
+        const onDragStart = (e, idx, target) => {
+            dragState.dragging = idx;
+            dragState.target = target;
+            e.dataTransfer.effectAllowed = 'move';
+        };
+        const onDragOver = (idx, target) => {
+            if (dragState.target !== target) return;
+            dragState.over = idx;
+        };
+        const onDragLeave = (idx, target) => {
+            if (dragState.over === idx && dragState.target === target) dragState.over = null;
+        };
+        const onDrop = (e, dropIdx, target) => {
+            const fromIdx = dragState.dragging;
+            if (fromIdx === null || fromIdx === dropIdx || dragState.target !== target) return;
+            const items = target === 'list' ? listColItems.value : exportColItems.value;
+            const moved = items.splice(fromIdx, 1)[0];
+            items.splice(dropIdx, 0, moved);
+            dragState.dragging = null;
+            dragState.over = null;
+            dragState.target = null;
+        };
+        const onDragEnd = () => {
+            dragState.dragging = null;
+            dragState.over = null;
+            dragState.target = null;
         };
 
         // === Tab 1: 别名设置 - 列表模式 ===
@@ -1458,7 +1497,8 @@ createApp({
             formulaError, previewExpression, previewResult,
             insertField, insertOp, openFormulaModal, saveFormula, deleteRule,
             listColConfig, exportColConfig, listColItems, exportColItems,
-            loadColumnConfig, saveColumnConfig, resetColumnConfig, moveCol,
+            loadColumnConfig, saveColumnConfig, resetColumnConfig,
+            dragState, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd,
         };
     }
 }).mount('#app');
