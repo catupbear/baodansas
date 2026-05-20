@@ -25,27 +25,36 @@ DEFAULT_TEMPLATE_NAME = "默认模板"
 
 # 默认列配置（与 field_mapping.py 的 OUTPUT_COLUMNS 保持一致）
 DEFAULT_COLUMNS = [
-    {"key": "承保公司", "visible": True, "order": 0, "display_name": "承保公司"},
-    {"key": "保单号",   "visible": True, "order": 1, "display_name": "保单号"},
-    {"key": "险种",     "visible": True, "order": 2, "display_name": "险种"},
-    {"key": "车牌",     "visible": True, "order": 3, "display_name": "车牌"},
-    {"key": "投保人",   "visible": True, "order": 4, "display_name": "投保人"},
-    {"key": "被保人",   "visible": True, "order": 5, "display_name": "被保人"},
-    {"key": "车主",     "visible": True, "order": 6, "display_name": "车主"},
-    {"key": "签单日期", "visible": True, "order": 7, "display_name": "签单日期"},
-    {"key": "起保日期", "visible": True, "order": 8, "display_name": "起保日期"},
-    {"key": "终保日期", "visible": True, "order": 9, "display_name": "终保日期"},
-    {"key": "保费",     "visible": True, "order": 10, "display_name": "保费"},
-    {"key": "佣金率",   "visible": True, "order": 11, "display_name": "佣金率"},
-    {"key": "佣金",     "visible": True, "order": 12, "display_name": "佣金"},
-    {"key": "业务员",   "visible": True, "order": 13, "display_name": "业务员"},
-    {"key": "采购费率", "visible": True, "order": 14, "display_name": "采购费率"},
-    {"key": "公司利润", "visible": True, "order": 15, "display_name": "公司利润"},
-    {"key": "跟单人",   "visible": True, "order": 16, "display_name": "跟单人"},
-    {"key": "跟单人利润", "visible": True, "order": 17, "display_name": "跟单人利润"},
-    {"key": "出单渠道", "visible": True, "order": 18, "display_name": "出单渠道"},
-    {"key": "车船税",   "visible": True, "order": 19, "display_name": "车船税"},
+    {"key": "文件名",   "visible": True, "order": 0, "display_name": "文件名",   "type": "record"},
+    {"key": "文档类型", "visible": True, "order": 1, "display_name": "文档类型", "type": "record"},
+    {"key": "承保公司", "visible": True, "order": 2, "display_name": "承保公司"},
+    {"key": "保单号",   "visible": True, "order": 3, "display_name": "保单号"},
+    {"key": "险种",     "visible": True, "order": 4, "display_name": "险种"},
+    {"key": "车牌",     "visible": True, "order": 5, "display_name": "车牌"},
+    {"key": "投保人",   "visible": True, "order": 6, "display_name": "投保人"},
+    {"key": "被保人",   "visible": True, "order": 7, "display_name": "被保人"},
+    {"key": "车主",     "visible": True, "order": 8, "display_name": "车主"},
+    {"key": "签单日期", "visible": True, "order": 9, "display_name": "签单日期"},
+    {"key": "起保日期", "visible": True, "order": 10, "display_name": "起保日期"},
+    {"key": "终保日期", "visible": True, "order": 11, "display_name": "终保日期"},
+    {"key": "保费",     "visible": True, "order": 12, "display_name": "保费"},
+    {"key": "佣金率",   "visible": True, "order": 13, "display_name": "佣金率"},
+    {"key": "佣金",     "visible": True, "order": 14, "display_name": "佣金"},
+    {"key": "业务员",   "visible": True, "order": 15, "display_name": "业务员"},
+    {"key": "采购费率", "visible": True, "order": 16, "display_name": "采购费率"},
+    {"key": "公司利润", "visible": True, "order": 17, "display_name": "公司利润"},
+    {"key": "跟单人",   "visible": True, "order": 18, "display_name": "跟单人"},
+    {"key": "跟单人利润", "visible": True, "order": 19, "display_name": "跟单人利润"},
+    {"key": "出单渠道", "visible": True, "order": 20, "display_name": "出单渠道"},
+    {"key": "车船税",   "visible": True, "order": 21, "display_name": "车船税"},
+    {"key": "状态",     "visible": True, "order": 22, "display_name": "状态",     "type": "record"},
+    {"key": "时间",     "visible": True, "order": 23, "display_name": "时间",     "type": "record"},
+    {"key": "群名",     "visible": True, "order": 24, "display_name": "群名",     "type": "record"},
+    {"key": "发送人",   "visible": True, "order": 25, "display_name": "发送人",   "type": "record"},
 ]
+
+# 记录级字段的 key 集合（用于前端区分渲染方式）
+RECORD_LEVEL_FIELDS = {"文件名", "文档类型", "状态", "时间", "群名", "发送人"}
 
 # ---- 按车牌合并导出 ----
 
@@ -514,6 +523,25 @@ def get_effective_config(db, user_id: int, role: str, parent_id=None) -> dict:
 # 列配置读写（list_columns / export_columns）
 # ------------------------------------------------------------------ #
 
+def _fix_missing_defaults(db, config_type, columns, scope, scope_id):
+    """
+    自动补充 DEFAULT_COLUMNS 中有但用户配置里不存在的字段到末尾。
+    例如新增了「车主」「文件名」等字段后，已保存的配置自动补上。
+    """
+    existing_keys = {c["key"] for c in columns}
+    max_order = len(columns)
+    added = 0
+    for dc in DEFAULT_COLUMNS:
+        if dc["key"] not in existing_keys:
+            columns.append({**dc, "order": max_order})
+            max_order += 1
+            added += 1
+    if added:
+        save_column_config(db, config_type, scope, scope_id, columns)
+        logger.debug("自动补充 %s 默认字段 %d 个", config_type, added)
+    return columns
+
+
 def _fix_merge_columns(db, columns, scope, scope_id, user_id, role, parent_id):
     """
     自动修正 export_columns 中的合并字段：
@@ -597,6 +625,8 @@ def get_column_config(db, config_type: str, user_id: int, role: str, parent_id=N
             if row:
                 try:
                     columns = json.loads(row["config_value"])
+                    # 自动补充 DEFAULT_COLUMNS 中新增的字段
+                    columns = _fix_missing_defaults(db, config_type, columns, scope, scope_id)
                     # export_columns 自动修正合并字段（清理旧版 + 补充缺失）
                     if config_type == "export_columns":
                         columns = _fix_merge_columns(db, columns, scope, scope_id, user_id, role, parent_id)

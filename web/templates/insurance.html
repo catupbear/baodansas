@@ -1123,16 +1123,14 @@
                             <th class="sticky-col-check" style="min-width:40px;">
                                 <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" class="cursor-pointer">
                             </th>
-                            <th class="sticky-col-name" style="min-width:150px;">文件名</th>
-                            <th style="min-width:70px;">文档类型</th>
-                            <th v-for="col in visibleListColumns" :key="col.key" class="text-gray-600 font-medium" style="min-width:80px;">{{ col.display_name }}</th>
+                            <th v-for="col in visibleListColumns" :key="col.key"
+                                :class="col.key === '文件名' ? 'sticky-col-name' : ''"
+                                class="text-gray-600 font-medium"
+                                :style="{ minWidth: col.key === '文件名' ? '150px' : col.key === '时间' ? '150px' : col.key === '群名' ? '100px' : '80px' }">
+                                {{ col.display_name }}
+                            </th>
                             <th v-if="isSuperAdmin" style="min-width:70px;">识别方式</th>
                             <th v-if="isSuperAdmin" style="min-width:60px;">置信度</th>
-                            <th style="min-width:80px;">状态</th>
-                            <!-- <th style="min-width:80px;">钉钉同步</th> -->
-                            <th style="min-width:150px;">时间</th>
-                            <th style="min-width:100px;">群名</th>
-                            <th style="min-width:80px;">发送人</th>
                             <th style="min-width:160px;">操作</th>
                         </tr>
                     </thead>
@@ -1143,55 +1141,88 @@
                             <td class="sticky-col-check">
                                 <input type="checkbox" :value="record.id" v-model="selectedRecordIds" class="cursor-pointer">
                             </td>
-                            <!-- 文件名（可点击预览） -->
-                            <td class="sticky-col-name">
-                                <span v-if="record.cos_url"
-                                      class="text-orange-600 hover:underline text-sm truncate block cursor-pointer" style="max-width:180px;"
-                                      :title="record.filename"
-                                      @click="previewRecord(record)">
-                                    {{ record.filename || '—' }}
-                                </span>
-                                <span v-else class="text-gray-600 text-sm truncate block" style="max-width:180px;" :title="record.filename">
-                                    {{ record.filename || '—' }}
-                                </span>
-                                <span v-if="record.policy_count > 1" class="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">多保单 {{ record.policy_index }}/{{ record.policy_count }}</span>
-                                <span v-if="record.page_range" class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">第{{ record.page_range }}页</span>
-                                <span v-if="record.hint" class="text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">{{ record.hint }}</span>
-                                <span v-if="record.abnormal_override_reason" class="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">已标记正常: {{ record.abnormal_override_reason }}</span>
-                            </td>
-                            <!-- 文档类型 -->
-                            <td>
-                                <span v-if="record.doc_category" class="text-xs px-1.5 py-0.5 rounded font-medium"
-                                      :class="record.doc_category === '保单' ? 'bg-green-100 text-green-700'
-                                            : record.doc_category === '电子标志' ? 'bg-yellow-100 text-yellow-700'
-                                            : 'bg-gray-100 text-gray-500'">
-                                    {{ record.doc_category }}
-                                </span>
-                                <span v-else class="text-gray-400 text-sm">—</span>
-                            </td>
-                            <!-- 动态字段列（使用预计算的 display_fields，可点击编辑） -->
-                            <td v-for="col in visibleListColumns" :key="col.key" class="text-gray-700 text-sm">
-                                <template v-if="listEditing.recordId === record.id && listEditing.col === col.key">
-                                    <div class="flex items-center gap-1">
-                                        <input v-model="listEditing.value" type="text"
-                                               class="text-sm border border-orange-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-orange-300"
-                                               style="width:160px;"
-                                               @keyup.enter="saveListEdit(record)"
-                                               @keyup.escape="cancelListEdit()"
-                                               ref="listEditInput">
-                                        <button @click="saveListEdit(record)" :disabled="listEditing.saving"
-                                                class="text-xs text-white rounded px-1.5 py-0.5 cursor-pointer"
-                                                style="background:#f97316;">{{ listEditing.saving ? '..' : '✓' }}</button>
-                                        <button @click="cancelListEdit()"
-                                                class="text-xs text-gray-400 hover:text-gray-600 cursor-pointer">✕</button>
-                                    </div>
-                                </template>
-                                <template v-else>
-                                    <span class="cursor-pointer hover:text-orange-600 hover:bg-orange-50 px-1 py-0.5 rounded transition-colors"
-                                          @click="startListEdit(record, col.key)"
-                                          :title="'点击编辑'">
-                                        {{ (record.display_fields || {})[col.key] || '—' }}
+                            <!-- 动态列（按列配置渲染） -->
+                            <td v-for="col in visibleListColumns" :key="col.key"
+                                :class="col.key === '文件名' ? 'sticky-col-name' : ''"
+                                class="text-gray-700 text-sm">
+                                <!-- 文件名 -->
+                                <template v-if="col.key === '文件名'">
+                                    <span v-if="record.cos_url"
+                                          class="text-orange-600 hover:underline text-sm truncate block cursor-pointer" style="max-width:180px;"
+                                          :title="record.filename"
+                                          @click="previewRecord(record)">
+                                        {{ record.filename || '—' }}
                                     </span>
+                                    <span v-else class="text-gray-600 text-sm truncate block" style="max-width:180px;" :title="record.filename">
+                                        {{ record.filename || '—' }}
+                                    </span>
+                                    <span v-if="record.policy_count > 1" class="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">多保单 {{ record.policy_index }}/{{ record.policy_count }}</span>
+                                    <span v-if="record.page_range" class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">第{{ record.page_range }}页</span>
+                                    <span v-if="record.hint" class="text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">{{ record.hint }}</span>
+                                    <span v-if="record.abnormal_override_reason" class="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">已标记正常: {{ record.abnormal_override_reason }}</span>
+                                </template>
+                                <!-- 文档类型 -->
+                                <template v-else-if="col.key === '文档类型'">
+                                    <span v-if="record.doc_category" class="text-xs px-1.5 py-0.5 rounded font-medium"
+                                          :class="record.doc_category === '保单' ? 'bg-green-100 text-green-700'
+                                                : record.doc_category === '电子标志' ? 'bg-yellow-100 text-yellow-700'
+                                                : 'bg-gray-100 text-gray-500'">
+                                        {{ record.doc_category }}
+                                    </span>
+                                    <span v-else class="text-gray-400 text-sm">—</span>
+                                </template>
+                                <!-- 状态 -->
+                                <template v-else-if="col.key === '状态'">
+                                    <span class="badge text-xs"
+                                          :class="record.status === 'done' ? 'badge-success'
+                                                : record.status === 'failed' ? 'badge-danger'
+                                                : record.status === 'processing' ? 'badge-warning'
+                                                : 'badge-gray'">
+                                        {{ statusLabel(record.status) }}
+                                    </span>
+                                </template>
+                                <!-- 时间 -->
+                                <template v-else-if="col.key === '时间'">
+                                    <span class="text-gray-500 text-xs">{{ formatTime(record.created_at) }}</span>
+                                </template>
+                                <!-- 群名 -->
+                                <template v-else-if="col.key === '群名'">
+                                    <span v-if="record.roomid" class="cursor-pointer hover:text-orange-600 hover:underline"
+                                          @click="openContactEdit(record.roomid, record.room_name, 'room')"
+                                          title="点击编辑群名">{{ record.room_name || record.roomid || '—' }}</span>
+                                    <span v-else>—</span>
+                                </template>
+                                <!-- 发送人 -->
+                                <template v-else-if="col.key === '发送人'">
+                                    <span v-if="record.sender" class="cursor-pointer hover:text-orange-600 hover:underline"
+                                          @click="openContactEdit(record.sender, record.sender_name, 'user')"
+                                          title="点击编辑发送人">{{ record.sender_name || record.sender || '—' }}</span>
+                                    <span v-else>—</span>
+                                </template>
+                                <!-- 保单字段（可点击编辑） -->
+                                <template v-else>
+                                    <template v-if="listEditing.recordId === record.id && listEditing.col === col.key">
+                                        <div class="flex items-center gap-1">
+                                            <input v-model="listEditing.value" type="text"
+                                                   class="text-sm border border-orange-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-orange-300"
+                                                   style="width:160px;"
+                                                   @keyup.enter="saveListEdit(record)"
+                                                   @keyup.escape="cancelListEdit()"
+                                                   ref="listEditInput">
+                                            <button @click="saveListEdit(record)" :disabled="listEditing.saving"
+                                                    class="text-xs text-white rounded px-1.5 py-0.5 cursor-pointer"
+                                                    style="background:#f97316;">{{ listEditing.saving ? '..' : '✓' }}</button>
+                                            <button @click="cancelListEdit()"
+                                                    class="text-xs text-gray-400 hover:text-gray-600 cursor-pointer">✕</button>
+                                        </div>
+                                    </template>
+                                    <template v-else>
+                                        <span class="cursor-pointer hover:text-orange-600 hover:bg-orange-50 px-1 py-0.5 rounded transition-colors"
+                                              @click="startListEdit(record, col.key)"
+                                              :title="'点击编辑'">
+                                            {{ (record.display_fields || {})[col.key] || '—' }}
+                                        </span>
+                                    </template>
                                 </template>
                             </td>
                             <!-- 识别方式（仅超管可见） -->
@@ -1210,40 +1241,6 @@
                                     {{ (record.confidence * 100).toFixed(0) }}%
                                 </span>
                                 <span v-else class="text-gray-400 text-sm">—</span>
-                            </td>
-                            <!-- 状态 -->
-                            <td>
-                                <span class="badge text-xs"
-                                      :class="record.status === 'done' ? 'badge-success'
-                                            : record.status === 'failed' ? 'badge-danger'
-                                            : record.status === 'processing' ? 'badge-warning'
-                                            : 'badge-gray'">
-                                    {{ statusLabel(record.status) }}
-                                </span>
-                            </td>
-                            <!-- 钉钉同步（已注释）
-                            <td>
-                                <span class="badge text-xs"
-                                      :class="record.dingtalk_synced ? 'badge-success' : 'badge-gray'">
-                                    {{ record.dingtalk_synced ? '已同步' : '未同步' }}
-                                </span>
-                            </td>
-                            -->
-                            <!-- 时间 -->
-                            <td class="text-gray-500 text-xs">{{ formatTime(record.created_at) }}</td>
-                            <!-- 群名（可点击编辑） -->
-                            <td class="text-gray-700 text-sm">
-                                <span v-if="record.roomid" class="cursor-pointer hover:text-orange-600 hover:underline"
-                                      @click="openContactEdit(record.roomid, record.room_name, 'room')"
-                                      title="点击编辑群名">{{ record.room_name || record.roomid || '—' }}</span>
-                                <span v-else>—</span>
-                            </td>
-                            <!-- 发送人（可点击编辑） -->
-                            <td class="text-gray-600 text-sm">
-                                <span v-if="record.sender" class="cursor-pointer hover:text-orange-600 hover:underline"
-                                      @click="openContactEdit(record.sender, record.sender_name, 'user')"
-                                      title="点击编辑发送人">{{ record.sender_name || record.sender || '—' }}</span>
-                                <span v-else>—</span>
                             </td>
                             <!-- 操作 -->
                             <td>
