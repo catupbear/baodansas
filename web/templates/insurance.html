@@ -2374,8 +2374,22 @@ createApp({
             const cols = visibleListColumns.value;
             // 识别记录预览：直接用 parsed_fields
             if (previewAutoRecord.value) {
-                const fields = previewAutoRecord.value.parsed_fields || {};
+                const rec = previewAutoRecord.value;
+                const fields = rec.parsed_fields || {};
+                // 记录级字段映射（非 OCR 提取，来自记录本身）
+                const recordFieldMap = {
+                    '文件名': rec.filename || '',
+                    '文档类型': rec.doc_category || '',
+                    '状态': statusLabel(rec.status),
+                    '时间': formatTime(rec.created_at),
+                    '群名': rec.room_name || rec.roomid || '',
+                    '发送人': rec.sender_name || rec.sender || '',
+                };
                 return cols.map(col => {
+                    // 优先使用记录级字段
+                    if (col.key in recordFieldMap) {
+                        return { label: col.display_name, value: recordFieldMap[col.key], key: col.key };
+                    }
                     // parsed_fields 的 key 可能是 OCR 字段名，通过映射匹配导出列名
                     let value = fields[col.key] || '';
                     if (!value) {
