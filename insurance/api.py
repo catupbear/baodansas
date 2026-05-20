@@ -33,6 +33,7 @@ from .field_config_db import (
     get_template_config, save_full_template,
     get_active_template, set_active_template,
     get_effective_config, apply_user_config_to_fields,
+    get_column_config, save_column_config, delete_column_config,
 )
 from .monitor_config_db import (
     list_monitor_configs,
@@ -240,6 +241,10 @@ def list_records():
             for ts_field in ("created_at",):
                 if record.get(ts_field) and not isinstance(record[ts_field], str):
                     record[ts_field] = str(record[ts_field])
+
+        # 获取页面列配置
+        list_col_config = get_column_config(_db, "list_columns", user["user_id"], user["role"], user.get("parent_id"))
+        result["column_config"] = list_col_config
 
         return jsonify({"code": 0, "data": result})
     except Exception as e:
@@ -2044,7 +2049,12 @@ def batch_sync_dingtalk():
         body = request.get_json(force=True) or {}
         target_id = body.get("target_id", "")
         record_ids = body.get("record_ids", [])
-        field_names = body.get("field_names", OUTPUT_COLUMNS)
+        field_names = body.get("field_names")
+        if not field_names:
+            user = g.current_user
+            export_col_config = get_column_config(_db, "export_columns", user["user_id"], user["role"], user.get("parent_id"))
+            visible_cols = sorted([c for c in export_col_config.get("columns", []) if c.get("visible", True)], key=lambda c: c.get("order", 0))
+            field_names = [c["key"] for c in visible_cols] or list(OUTPUT_COLUMNS)
 
         if not target_id:
             return jsonify({"code": 400, "msg": "缺少 target_id 参数"}), 400
@@ -2151,7 +2161,19 @@ def export_excel():
     try:
         body = request.get_json(force=True) or {}
         invoices = body.get("invoices", [])
-        field_names = body.get("field_names", OUTPUT_COLUMNS)
+        # 优先使用请求中传入的 field_names（兼容旧前端），否则读取用户的导出列配置
+        field_names = body.get("field_names")
+        field_display_names = None
+        if not field_names:
+            user = g.current_user
+            export_col_config = get_column_config(_db, "export_columns", user["user_id"], user["role"], user.get("parent_id"))
+            export_columns = export_col_config.get("columns", [])
+            # 按 order 排序，只取 visible 的列
+            visible_cols = sorted([c for c in export_columns if c.get("visible", True)], key=lambda c: c.get("order", 0))
+            field_names = [c["key"] for c in visible_cols]
+            field_display_names = {c["key"]: c.get("display_name", c["key"]) for c in visible_cols}
+        if not field_names:
+            field_names = list(OUTPUT_COLUMNS)
         export_type = body.get("export_type", "success")  # "success" 或 "failed"
         sheet_name = body.get("sheet_name", "保单数据")
 
@@ -2184,7 +2206,11 @@ def export_excel():
                 ])
         else:
             # 成功类型：完全按用户勾选的列导出
-            headers = list(field_names)
+            # 使用 display_name 作为表头（如有列配置），否则用原始 field_names
+            if field_display_names:
+                headers = [field_display_names.get(f, f) for f in field_names]
+            else:
+                headers = list(field_names)
             ws.append(headers)
             # 获取用户字段配置，导出时应用简称/日期格式/公式
             user = g.current_user
@@ -2842,6 +2868,56 @@ def apply_field_config_template():
         return jsonify({"code": 0, "msg": "已切换模板"})
     except Exception as e:
         logger.exception("切换模板失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/column-config", methods=["GET"])
+@login_required
+def get_column_config_api():
+    """获取列配置（list_columns 或 export_columns）"""
+    try:
+        config_type = request.args.get("config_type", "list_columns")
+        user = g.current_user
+        result = get_column_config(_db, config_type, user["user_id"], user["role"], user.get("parent_id"))
+        return jsonify({"code": 0, "data": result})
+    except Exception as e:
+        logger.exception("获取列配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/column-config", methods=["POST"])
+@login_required
+def save_column_config_api():
+    """保存列配置"""
+    try:
+        body = request.get_json(force=True) or {}
+        config_type = body.get("config_type", "list_columns")
+        columns = body.get("columns", [])
+
+        if config_type not in ("list_columns", "export_columns"):
+            return jsonify({"code": 400, "msg": "无效的 config_type"}), 400
+        if not columns:
+            return jsonify({"code": 400, "msg": "columns 不能为空"}), 400
+
+        scope, scope_id = _get_user_scope()
+        save_column_config(_db, config_type, scope, scope_id, columns)
+        return jsonify({"code": 0, "msg": "列配置已保存"})
+    except Exception as e:
+        logger.exception("保存列配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/column-config", methods=["DELETE"])
+@login_required
+def delete_column_config_api():
+    """重置列配置（删除当前 scope 的配置，回退到上级默认）"""
+    try:
+        config_type = request.args.get("config_type", "list_columns")
+        scope, scope_id = _get_user_scope()
+        delete_column_config(_db, config_type, scope, scope_id)
+        return jsonify({"code": 0, "msg": "已恢复默认"})
+    except Exception as e:
+        logger.exception("重置列配置失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
