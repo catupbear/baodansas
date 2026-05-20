@@ -34,6 +34,8 @@ from .field_config_db import (
     get_active_template, set_active_template,
     get_effective_config, apply_user_config_to_fields,
     get_column_config, save_column_config, delete_column_config,
+    get_merge_by_plate, save_merge_by_plate,
+    MERGE_SHARED_FIELDS, MERGE_SPLIT_FIELDS, MERGE_PREFIXES, MERGE_EXTRA_COLUMNS,
 )
 from .monitor_config_db import (
     list_monitor_configs,
@@ -50,7 +52,7 @@ from .field_mapping import (
     load_mapping_config,
     save_mapping_config,
 )
-from .policy_parser import get_extraction_rules, parse_policy_text, parse_policy_text_multi
+from .policy_parser import get_extraction_rules, parse_policy_text, parse_policy_text_multi, get_policy_type_code
 from .ocr_service import extract_text_from_pdf
 from auth.decorators import login_required
 from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE
@@ -2206,30 +2208,103 @@ def export_excel():
                 ])
         else:
             # 成功类型：完全按用户勾选的列导出
-            # 使用 display_name 作为表头（如有列配置），否则用原始 field_names
-            if field_display_names:
-                headers = [field_display_names.get(f, f) for f in field_names]
-            else:
-                headers = list(field_names)
-            ws.append(headers)
             # 获取用户字段配置，导出时应用简称/日期格式/公式
             user = g.current_user
             user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
-            # 按车牌号排序
-            invoices.sort(key=lambda inv: (inv.get("fields", {}) if isinstance(inv, dict) else {}).get("车牌号", "") or "")
-            for inv in invoices:
-                fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
-                # 应用用户配置（简称映射、日期格式、公式计算）
-                if user_config and any(user_config.get(k) for k in user_config):
-                    fields = apply_user_config_to_fields(user_config, fields)
-                row = []
-                for col in field_names:
-                    if col == "文件名":
-                        # 优先取 fields 中的值，兜底取 invoice 的 filename
-                        row.append(fields.get("文件名", "") or inv.get("file_name", inv.get("filename", "")))
-                    else:
-                        row.append(fields.get(col, ""))
-                ws.append(row)
+            has_config = user_config and any(user_config.get(k) for k in user_config)
+
+            # 检查是否启用按车牌合并
+            merge_enabled = body.get("merge_by_plate", False)
+
+            if merge_enabled:
+                # ---- 按车牌合并导出 ----
+                # 1. 按车牌分组
+                plate_groups = {}
+                for inv in invoices:
+                    fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
+                    if has_config:
+                        fields = apply_user_config_to_fields(user_config, fields)
+                    plate = fields.get("车牌", "") or fields.get("车牌号", "") or ""
+                    if not plate:
+                        plate = "__无车牌__"
+                    if plate not in plate_groups:
+                        plate_groups[plate] = []
+                    plate_groups[plate].append(fields)
+
+                # 2. 合并每组
+                merged_rows = []
+                for plate, group in plate_groups.items():
+                    merged = {}
+                    # 共享字段：互相补充
+                    for f in MERGE_SHARED_FIELDS:
+                        for record in group:
+                            val = record.get(f, "")
+                            if val:
+                                merged[f] = val
+                                break
+
+                    # 差异字段：按险种分配
+                    for record in group:
+                        policy_type = record.get("险种", "") or record.get("险种类型", "")
+                        type_code, _ = get_policy_type_code(policy_type)
+                        prefix = MERGE_PREFIXES.get(type_code, "非车险")
+                        for f in MERGE_SPLIT_FIELDS:
+                            col_name = f"{prefix}{f}"
+                            val = record.get(f, "")
+                            if val and not merged.get(col_name):
+                                merged[col_name] = val
+
+                    # 车船税（不拆分）
+                    for record in group:
+                        val = record.get("车船税", "")
+                        if val:
+                            merged["车船税"] = val
+                            break
+
+                    # 保留其他自定义字段（非共享非差异的字段互相补充）
+                    all_known = set(MERGE_SHARED_FIELDS) | set(MERGE_SPLIT_FIELDS) | {"车船税", "险种", "险种类型"}
+                    for record in group:
+                        for k, v in record.items():
+                            if k not in all_known and k not in merged and v:
+                                merged[k] = v
+
+                    merged_rows.append(merged)
+
+                # 3. 排序（按车牌）
+                merged_rows.sort(key=lambda r: r.get("车牌", ""))
+
+                # 4. 写入表头和数据
+                if field_display_names:
+                    headers = [field_display_names.get(f, f) for f in field_names]
+                else:
+                    headers = list(field_names)
+                ws.append(headers)
+
+                for row_data in merged_rows:
+                    row = []
+                    for col in field_names:
+                        row.append(row_data.get(col, ""))
+                    ws.append(row)
+            else:
+                # ---- 普通导出（原逻辑） ----
+                if field_display_names:
+                    headers = [field_display_names.get(f, f) for f in field_names]
+                else:
+                    headers = list(field_names)
+                ws.append(headers)
+
+                invoices.sort(key=lambda inv: (inv.get("fields", {}) if isinstance(inv, dict) else {}).get("车牌号", "") or "")
+                for inv in invoices:
+                    fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
+                    if has_config:
+                        fields = apply_user_config_to_fields(user_config, fields)
+                    row = []
+                    for col in field_names:
+                        if col == "文件名":
+                            row.append(fields.get("文件名", "") or inv.get("file_name", inv.get("filename", "")))
+                        else:
+                            row.append(fields.get(col, ""))
+                    ws.append(row)
 
         # 设置所有行高为 22
         for row_idx in range(1, ws.max_row + 1):
@@ -2918,6 +2993,32 @@ def delete_column_config_api():
         return jsonify({"code": 0, "msg": "已恢复默认"})
     except Exception as e:
         logger.exception("重置列配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/merge-config", methods=["GET"])
+def get_merge_config_api():
+    """获取合并导出开关"""
+    try:
+        user = g.current_user
+        enabled = get_merge_by_plate(_db, user["user_id"], user["role"], user.get("parent_id"))
+        return jsonify({"code": 0, "data": {"enabled": enabled}})
+    except Exception as e:
+        logger.exception("获取合并配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/merge-config", methods=["POST"])
+def save_merge_config_api():
+    """保存合并导出开关"""
+    try:
+        body = request.get_json(force=True) or {}
+        enabled = body.get("enabled", False)
+        scope, scope_id = _get_user_scope()
+        save_merge_by_plate(_db, scope, scope_id, enabled)
+        return jsonify({"code": 0, "msg": "已保存"})
+    except Exception as e:
+        logger.exception("保存合并配置失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
