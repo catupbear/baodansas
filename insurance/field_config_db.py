@@ -17,10 +17,34 @@ import pymysql.cursors
 logger = logging.getLogger(__name__)
 
 # 支持的 config_type 类型
-CONFIG_TYPES = ["company_alias", "policy_type_alias", "date_format", "fee_formula"]
+CONFIG_TYPES = ["company_alias", "policy_type_alias", "date_format", "fee_formula",
+                "list_columns", "export_columns"]
 
 # 默认模板名
 DEFAULT_TEMPLATE_NAME = "默认模板"
+
+# 默认列配置（与 field_mapping.py 的 OUTPUT_COLUMNS 保持一致）
+DEFAULT_COLUMNS = [
+    {"key": "承保公司", "visible": True, "order": 0, "display_name": "承保公司"},
+    {"key": "保单号",   "visible": True, "order": 1, "display_name": "保单号"},
+    {"key": "险种",     "visible": True, "order": 2, "display_name": "险种"},
+    {"key": "车牌",     "visible": True, "order": 3, "display_name": "车牌"},
+    {"key": "投保人",   "visible": True, "order": 4, "display_name": "投保人"},
+    {"key": "被保人",   "visible": True, "order": 5, "display_name": "被保人"},
+    {"key": "签单日期", "visible": True, "order": 6, "display_name": "签单日期"},
+    {"key": "起保日期", "visible": True, "order": 7, "display_name": "起保日期"},
+    {"key": "终保日期", "visible": True, "order": 8, "display_name": "终保日期"},
+    {"key": "保费",     "visible": True, "order": 9, "display_name": "保费"},
+    {"key": "佣金率",   "visible": True, "order": 10, "display_name": "佣金率"},
+    {"key": "佣金",     "visible": True, "order": 11, "display_name": "佣金"},
+    {"key": "业务员",   "visible": True, "order": 12, "display_name": "业务员"},
+    {"key": "采购费率", "visible": True, "order": 13, "display_name": "采购费率"},
+    {"key": "公司利润", "visible": True, "order": 14, "display_name": "公司利润"},
+    {"key": "跟单人",   "visible": True, "order": 15, "display_name": "跟单人"},
+    {"key": "跟单人利润", "visible": True, "order": 16, "display_name": "跟单人利润"},
+    {"key": "出单渠道", "visible": True, "order": 17, "display_name": "出单渠道"},
+    {"key": "车船税",   "visible": True, "order": 18, "display_name": "车船税"},
+]
 
 
 # ------------------------------------------------------------------ #
@@ -460,6 +484,111 @@ def get_effective_config(db, user_id: int, role: str, parent_id=None) -> dict:
             scope_id = user_id
 
     return get_template_config(db, scope, scope_id, template_name)
+
+
+# ------------------------------------------------------------------ #
+# 列配置读写（list_columns / export_columns）
+# ------------------------------------------------------------------ #
+
+def get_column_config(db, config_type: str, user_id: int, role: str, parent_id=None) -> dict:
+    """
+    获取列配置（list_columns 或 export_columns），按优先级查找：
+    user → enterprise → global → 代码默认值。
+
+    返回：{"source": "enterprise", "columns": [...]}
+    """
+    if config_type not in ("list_columns", "export_columns"):
+        return {"source": "default", "columns": list(DEFAULT_COLUMNS)}
+
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        # 按优先级依次查找
+        search_order = []
+        if role == "employee" and parent_id is not None:
+            search_order.append(("user", user_id, "user"))
+            search_order.append(("enterprise", parent_id, "enterprise"))
+        elif role == "enterprise":
+            search_order.append(("enterprise", parent_id or user_id, "enterprise"))
+        elif role == "super_admin":
+            search_order.append(("global", None, "global"))
+
+        for scope, scope_id, source_label in search_order:
+            sid_cond, sid_params = _scope_id_condition(scope_id)
+            cursor.execute(
+                f"SELECT config_value FROM user_field_config "
+                f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'columns' "
+                f"LIMIT 1",
+                [scope] + sid_params + [config_type]
+            )
+            row = cursor.fetchone()
+            if row:
+                try:
+                    columns = json.loads(row["config_value"])
+                    return {"source": source_label, "columns": columns}
+                except (TypeError, json.JSONDecodeError):
+                    pass
+
+        return {"source": "default", "columns": list(DEFAULT_COLUMNS)}
+    finally:
+        conn.close()
+
+
+def save_column_config(db, config_type: str, scope: str, scope_id, columns: list):
+    """
+    保存列配置。columns 为 [{"key":"xxx","visible":true,"order":0,"display_name":"xxx"}, ...]
+    使用 config_key = 'columns'，整体存为一条 JSON 记录。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        sid_cond, sid_params = _scope_id_condition(scope_id)
+
+        # 先删旧记录
+        cursor.execute(
+            f"DELETE FROM user_field_config "
+            f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'columns'",
+            [scope] + sid_params + [config_type]
+        )
+
+        # 插入新记录
+        value = json.dumps(columns, ensure_ascii=False)
+        if scope_id is None:
+            cursor.execute(
+                "INSERT INTO user_field_config "
+                "(scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
+                "VALUES (%s, NULL, %s, %s, 'columns', %s, 1)",
+                [scope, DEFAULT_TEMPLATE_NAME, config_type, value]
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO user_field_config "
+                "(scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
+                "VALUES (%s, %s, %s, %s, 'columns', %s, 1)",
+                [scope, scope_id, DEFAULT_TEMPLATE_NAME, config_type, value]
+            )
+        conn.commit()
+        logger.debug("列配置已保存: scope=%s config_type=%s", scope, config_type)
+    finally:
+        conn.close()
+
+
+def delete_column_config(db, config_type: str, scope: str, scope_id):
+    """删除列配置，回退到上一级默认。"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        sid_cond, sid_params = _scope_id_condition(scope_id)
+        cursor.execute(
+            f"DELETE FROM user_field_config "
+            f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'columns'",
+            [scope] + sid_params + [config_type]
+        )
+        conn.commit()
+        logger.debug("列配置已删除: scope=%s config_type=%s", scope, config_type)
+    finally:
+        conn.close()
 
 
 # ------------------------------------------------------------------ #
