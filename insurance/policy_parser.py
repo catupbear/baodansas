@@ -389,19 +389,19 @@ def _identify_policy_type(text: str) -> Optional[str]:
     if m:
         return m.group(1)
 
-    # 兜底：从标题提取，如"道路危险货物承运人责任险保险单"
-    m = re.search(r"([\u4e00-\u9fff]+(?:责任险|保险|意外险|综合险))保险单", text[:500])
+    # 兜底：从标题提取，如"道路危险货物承运人责任险保险单"、"建筑施工人员团体意外伤害保险保单"
+    m = re.search(r"([\u4e00-\u9fff]+(?:责任险|保险|意外险|综合险))保险?单(?!号)", text[:500])
     if m:
         return m.group(1)
 
     # 众诚等格式："非车险保险单(电子保单)"
-    m = re.search(r"([\u4e00-\u9fff]+险)保险单", text[:500])
+    m = re.search(r"([\u4e00-\u9fff]+险)保险?单(?!号)", text[:500])
     if m:
         return m.group(1)
 
     # 从标题提取含版本号/方案的完整产品名
     # 如"阳光驾乘险（7座）-20万方案电子保险单"、"XX驾乘险A款（升级版）保险单"
-    m = re.search(r"([\u4e00-\u9fff]+险[\S]*?)(?:电子)?保险单", text[:500])
+    m = re.search(r"([\u4e00-\u9fff]+险[\S]*?)(?:电子)?保险?单(?!号)", text[:500])
     if m:
         return m.group(1)
 
@@ -419,7 +419,7 @@ def _identify_policy_type(text: str) -> Optional[str]:
         return "驾乘人员意外伤害保险"
 
     # 兜底：从标题提取产品名（如"阳光药诊保A款"）
-    m = re.search(r'([一-鿿\w]+(?:保|险)[A-Za-z\d]*款?)(?:电子)?保险单', text[:300])
+    m = re.search(r'([一-鿿\w]+(?:保|险)[A-Za-z\d]*款?)(?:电子)?保险?单(?!号)', text[:300])
     if m:
         return m.group(1)
 
