@@ -3573,9 +3573,14 @@ createApp({
             }
             exportPendingType.value = type;
             exportCustomMode.value = false; // 默认使用模板模式
-            exportMergeByPlate.value = false; // 默认不合并
             exportAvailableFields.value = [...fieldNamesToUse];
             exportSelectedFields.value = [...fieldNamesToUse]; // 自定义模式时默认全选
+            // 加载合并默认值（按设置来）
+            try {
+                const mergeResp = await authFetch('/api/insurance/merge-config');
+                const mergeData = await mergeResp.json();
+                if (mergeData.code === 0) exportMergeByPlate.value = mergeData.data.enabled;
+            } catch (e) { /* ignore */ }
             exportModalVisible.value = true;
         }
 
@@ -4242,11 +4247,16 @@ createApp({
         async function exportRecordsExcel() {
             exportPendingType.value = 'records';
             exportCustomMode.value = false; // 默认使用模板模式
-            exportMergeByPlate.value = false; // 默认不合并，用户按需手动开启
             const dynamicCols = visibleListColumns.value.map(c => c.key);
             const allCols = [...recordExtraColumns, ...dynamicCols];
             exportAvailableFields.value = allCols;
             exportSelectedFields.value = [...allCols]; // 自定义模式时默认全选
+            // 加载合并默认值（按设置来）
+            try {
+                const mergeResp = await authFetch('/api/insurance/merge-config');
+                const mergeData = await mergeResp.json();
+                if (mergeData.code === 0) exportMergeByPlate.value = mergeData.data.enabled;
+            } catch (e) { /* ignore */ }
             exportModalVisible.value = true;
         }
 
@@ -4346,8 +4356,13 @@ createApp({
                 a.href = url; a.download = `保单识别记录_${dateStr}.xlsx`;
                 document.body.appendChild(a); a.click(); document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                const mergeNote = mergeByPlate ? '（已按车牌合并）' : '';
-                showMessage(`导出成功，共 ${data.length} 条记录${mergeNote}`, true);
+                // 计算实际导出行数：合并模式按车牌去重计数
+                let exportCount = data.length;
+                if (mergeByPlate) {
+                    const plates = new Set(data.map(d => d.fields['车牌'] || d.fields['车牌号'] || ''));
+                    exportCount = plates.size;
+                }
+                showMessage(`导出成功，共 ${exportCount} 条`, true);
             } catch (e) { showMessage(`导出失败: ${e.message}`, false); }
         }
 
