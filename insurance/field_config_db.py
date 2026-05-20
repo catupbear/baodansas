@@ -47,6 +47,29 @@ DEFAULT_COLUMNS = [
     {"key": "车船税",   "visible": True, "order": 19, "display_name": "车船税"},
 ]
 
+# ---- 按车牌合并导出 ----
+
+# 共享字段（合并后不拆分，多条记录互相补充）
+MERGE_SHARED_FIELDS = ["承保公司", "车牌", "投保人", "被保人", "车主", "业务员", "跟单人", "出单渠道"]
+
+# 需要按险种拆分的差异字段
+MERGE_SPLIT_FIELDS = ["保单号", "保费", "签单日期", "起保日期", "终保日期",
+                       "佣金率", "佣金", "采购费率", "公司利润", "跟单人利润"]
+
+# 险种前缀（与 policy_parser.get_policy_type_code 的分类对应）
+MERGE_PREFIXES = {
+    "commercial": "商业险",
+    "compulsory": "交强险",
+    "accident": "非车险",
+    "non_vehicle": "非车险",
+}
+
+# 合并后自动生成的差异列名列表
+MERGE_EXTRA_COLUMNS = []
+for _field in MERGE_SPLIT_FIELDS:
+    for _prefix in ["商业险", "交强险", "非车险"]:
+        MERGE_EXTRA_COLUMNS.append(f"{_prefix}{_field}")
+
 
 # ------------------------------------------------------------------ #
 # 内部工具函数
@@ -588,6 +611,71 @@ def delete_column_config(db, config_type: str, scope: str, scope_id):
         )
         conn.commit()
         logger.debug("列配置已删除: scope=%s config_type=%s", scope, config_type)
+    finally:
+        conn.close()
+
+
+def get_merge_by_plate(db, user_id: int, role: str, parent_id=None) -> bool:
+    """获取合并导出开关状态，按优先级查找，默认关闭。"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        search_order = []
+        if role == "employee" and parent_id is not None:
+            search_order.append(("user", user_id))
+            search_order.append(("enterprise", parent_id))
+        elif role == "enterprise":
+            search_order.append(("enterprise", parent_id or user_id))
+        elif role == "super_admin":
+            search_order.append(("global", None))
+
+        for scope, scope_id in search_order:
+            sid_cond, sid_params = _scope_id_condition(scope_id)
+            cursor.execute(
+                f"SELECT config_value FROM user_field_config "
+                f"WHERE scope = %s AND {sid_cond} AND config_type = 'export_columns' "
+                f"AND config_key = 'merge_by_plate' LIMIT 1",
+                [scope] + sid_params
+            )
+            row = cursor.fetchone()
+            if row:
+                return row["config_value"] == "1"
+        return False
+    finally:
+        conn.close()
+
+
+def save_merge_by_plate(db, scope: str, scope_id, enabled: bool):
+    """保存合并导出开关。"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        sid_cond, sid_params = _scope_id_condition(scope_id)
+
+        cursor.execute(
+            f"DELETE FROM user_field_config "
+            f"WHERE scope = %s AND {sid_cond} AND config_type = 'export_columns' "
+            f"AND config_key = 'merge_by_plate'",
+            [scope] + sid_params
+        )
+
+        value = "1" if enabled else "0"
+        if scope_id is None:
+            cursor.execute(
+                "INSERT INTO user_field_config "
+                "(scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
+                "VALUES (%s, NULL, %s, 'export_columns', 'merge_by_plate', %s, 1)",
+                [scope, DEFAULT_TEMPLATE_NAME, value]
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO user_field_config "
+                "(scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
+                "VALUES (%s, %s, %s, 'export_columns', 'merge_by_plate', %s, 1)",
+                [scope, scope_id, DEFAULT_TEMPLATE_NAME, value]
+            )
+        conn.commit()
+        logger.debug("合并开关已保存: scope=%s enabled=%s", scope, enabled)
     finally:
         conn.close()
 

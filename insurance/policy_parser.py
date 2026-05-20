@@ -426,7 +426,7 @@ def _identify_policy_type(text: str) -> Optional[str]:
     return None
 
 
-def _get_policy_type_code(policy_type: str) -> tuple:
+def get_policy_type_code(policy_type: str) -> tuple:
     """根据险种类型返回 (type_code, type_name)"""
     if not policy_type:
         return "accident", "驾乘/意外险"
@@ -444,6 +444,10 @@ def _get_policy_type_code(policy_type: str) -> tuple:
         return "non_vehicle", "非车险"
     # 非标准险种名（如"阳光药诊保A款"）归为驾意险
     return "accident", "驾乘/意外险"
+
+
+# 向后兼容别名
+_get_policy_type_code = get_policy_type_code
 
 
 # ============================================================
