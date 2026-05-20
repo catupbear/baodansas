@@ -889,22 +889,38 @@ createApp({
         const listColItems = ref([]);
         const exportColItems = ref([]);
 
-        // 监听合并开关和导出列数据，自动标记隐藏的原始字段 + 清理旧版合并字段
-        watch([mergeByPlate, exportColItems], () => {
+        // 监听合并开关和导出列数据，自动标记隐藏 + 清理旧版 + 补充缺失
+        let _mergeWatchInited = false;
+        watch([mergeByPlate, exportColItems], async () => {
             if (!exportColItems.value.length) return;
+            let needSave = false;
             if (mergeByPlate.value) {
-                // 清理旧版合并字段（不在当前 MERGE_EXTRA_COLUMNS 中的 merge 字段）
                 const validMergeSet = new Set(MERGE_EXTRA_COLUMNS);
-                const hasStale = exportColItems.value.some(c => c.merge && !validMergeSet.has(c.key));
-                if (hasStale) {
-                    exportColItems.value = exportColItems.value.filter(c => !c.merge || validMergeSet.has(c.key));
+                // 清理旧版合并字段
+                const before = exportColItems.value.length;
+                exportColItems.value = exportColItems.value.filter(c => !c.merge || validMergeSet.has(c.key));
+                if (exportColItems.value.length < before) needSave = true;
+                // 补充缺失的合并字段
+                const existingKeys = new Set(exportColItems.value.map(c => c.key));
+                let maxOrder = exportColItems.value.length;
+                for (const col of MERGE_EXTRA_COLUMNS) {
+                    if (!existingKeys.has(col)) {
+                        exportColItems.value.push({ key: col, visible: true, order: maxOrder++, display_name: col, merge: true });
+                        needSave = true;
+                    }
                 }
             }
+            // 标记原始差异字段隐藏
             for (const col of exportColItems.value) {
                 if (MERGE_HIDDEN_ORIGINALS.has(col.key)) {
                     col._mergeHidden = mergeByPlate.value ? true : undefined;
                 }
             }
+            // 加载后首次检测到需要清理/补充，自动保存
+            if (needSave && _mergeWatchInited) {
+                await saveColumnConfig('export_columns');
+            }
+            _mergeWatchInited = true;
         }, { deep: false });
 
         const DEFAULT_COLUMNS = [
