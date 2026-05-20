@@ -2556,7 +2556,7 @@ def _identify_doc_category(text: str, fields: dict) -> str:
     # 需排除"投保单是本保险单的不可分割的组成部分"（保单标准条文引用）
     if re.search(r'投保[单书](?!号)', text_head):
         if not re.search(r'保险条款[、，]投保单', text_head):
-            if not re.search(r'投保单是本保险[单合]', text_head):
+            if not re.search(r'投保单\s*是本保险[单合]', text_head):
                 if _has_policy_markers:
                     return "投保单"
 
