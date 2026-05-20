@@ -1219,10 +1219,6 @@ class InsuranceHandler:
                     except Exception as e:
                         logger.warning("OCR 补充解析失败: %s", e)
 
-            # 投保人兜底：车险中投保人为空时用被保险人
-            if not first_fields.get("投保人") and first_fields.get("被保险人"):
-                first_fields["投保人"] = first_fields["被保险人"]
-
         return {
             "success": True,
             "policies": policies,

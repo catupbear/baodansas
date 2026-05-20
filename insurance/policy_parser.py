@@ -1162,6 +1162,15 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
             fields["被保险人"] = val
             return
 
+    # 华安等表格格式："被保险人 名 称 深圳市XXX公司"（无冒号分隔）
+    for src in [text_merged, text]:
+        m = re.search(r'被保险人\s*名\s*称\s+([一-鿿][一-鿿\w（()）)]+)', src)
+        if m:
+            val = _clean_person_name(m.group(1))
+            if _is_valid_person(val):
+                fields["被保险人"] = val
+                return
+
     # 标准冒号格式
     for p in [
         r"被保险人名称[：:]\s*(\S+(?:[（(][^）)]+[）)])?)",
@@ -1403,6 +1412,15 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
         m = re.search(r'投保人为[：:]\s*(.+)', line.strip())
         if m:
             # 取冒号后的内容，清理空格
+            val = _clean_person_name(m.group(1))
+            if _is_valid_person(val):
+                fields["投保人"] = val
+                return
+
+    # 华安等格式：表格标签"投保 名 称"或"投保人名称"后跟公司名（无冒号分隔）
+    for src in [text_merged, text]:
+        m = re.search(r'投保(?:人)?\s*名\s*称\s+([一-鿿][一-鿿\w（()）)]+)', src)
+        if m:
             val = _clean_person_name(m.group(1))
             if _is_valid_person(val):
                 fields["投保人"] = val
@@ -2576,10 +2594,6 @@ def parse_policy_text(text: str) -> Dict[str, Any]:
     # ===== 识别文档类型 =====
     doc_category = _identify_doc_category(text, fields)
     fields["文档类型"] = doc_category
-
-    # ===== 投保人兜底：车险中投保人为空时用被保险人填充 =====
-    if not fields.get("投保人") and fields.get("被保险人"):
-        fields["投保人"] = fields["被保险人"]
 
     # ===== 计算置信度 =====
     key_fields = ["保单号", "被保险人", "车牌号", "保险起期", "保费合计"]
