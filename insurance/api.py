@@ -2212,7 +2212,6 @@ def export_excel():
             # 合并模式下排除被拆分的基础字段（保费→商业险保费/交强险保费/非车险保费等）
             merge_enabled = body.get("merge_by_plate", False)
             if merge_enabled:
-                from insurance.field_config_db import MERGE_SPLIT_FIELDS
                 merge_hidden = set(MERGE_SPLIT_FIELDS) | {"险种"}
                 visible_cols = [c for c in visible_cols if c["key"] not in merge_hidden]
             field_names = [c["key"] for c in visible_cols]
