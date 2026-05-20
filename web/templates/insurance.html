@@ -1731,6 +1731,16 @@
                     <button @click="exportModalVisible = false" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">&times;</button>
                 </div>
                 <div class="px-5 py-4 space-y-4">
+                    <div v-if="exportPendingType === 'records' || exportPendingType === 'success'" style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:4px;">
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:500;" @click="exportMergeByPlate = !exportMergeByPlate">
+                            <div style="position:relative; width:36px; height:20px; flex-shrink:0;">
+                                <div style="position:absolute; inset:0; border-radius:10px; transition:background 0.2s;" :style="{ background: exportMergeByPlate ? '#f97316' : '#d1d5db' }"></div>
+                                <div style="position:absolute; width:16px; height:16px; top:2px; border-radius:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); transition:left 0.2s;" :style="{ left: exportMergeByPlate ? '18px' : '2px' }"></div>
+                            </div>
+                            按车牌合并
+                        </label>
+                        <span style="font-size:11px; color:#94a3b8;">同车牌多保单合并为一行</span>
+                    </div>
                     <div class="flex items-center justify-between mb-2">
                         <p class="text-sm text-gray-600">选择要导出的表头字段：</p>
                         <label class="flex items-center gap-1 text-xs text-green-600 cursor-pointer">
@@ -3538,7 +3548,7 @@ createApp({
         const uploadExtraColumns = ['文件名', '文档类型'];
 
         // 导出Excel（弹窗选择列）
-        function exportExcel(type) {
+        async function exportExcel(type) {
             let fieldNamesToUse;
             if (type === 'success' || type === 'abnormal') {
                 fieldNamesToUse = [...uploadExtraColumns, ...outputColumns.value];
@@ -3550,6 +3560,12 @@ createApp({
             exportPendingType.value = type;
             exportAvailableFields.value = [...fieldNamesToUse];
             exportSelectedFields.value = [...fieldNamesToUse]; // 默认全选
+            // 加载合并默认值
+            try {
+                const mergeResp = await authFetch('/api/insurance/merge-config');
+                const mergeData = await mergeResp.json();
+                if (mergeData.code === 0) exportMergeByPlate.value = mergeData.data.enabled;
+            } catch (e) { /* ignore */ }
             exportModalVisible.value = true;
         }
 
@@ -3565,7 +3581,7 @@ createApp({
         }
 
         // 实际执行导出（手动上传结果）
-        async function doExportExcel(type, selectedCols) {
+        async function doExportExcel(type, selectedCols, mergeByPlate = false) {
             let data, fileName;
             if (type === 'success') {
                 data = enrichUploadData(buildMappedInvoices(), successResults.value);
@@ -3595,7 +3611,7 @@ createApp({
             try {
                 const resp = await authFetch('/api/insurance/export/excel', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ invoices: data, field_names: selectedCols, export_type: 'success' }),
+                    body: JSON.stringify({ invoices: data, field_names: selectedCols, export_type: 'success', merge_by_plate: mergeByPlate }),
                 });
                 if (!resp.ok) { const err = await resp.json(); showMessage(err.detail || '导出失败', false); return; }
                 const blob = await resp.blob();
@@ -3671,6 +3687,7 @@ createApp({
         const exportModalVisible = ref(false);
         const exportSelectedFields = ref([]);
         const exportAvailableFields = ref([]);
+        const exportMergeByPlate = ref(false);   // 按车牌合并开关
         const exportPendingType = ref('');       // 'success'|'abnormal'|'nonpolicy'|'failed'|'records'
         const exportPendingData = ref(null);     // 暂存导出数据
         const exportPendingFileName = ref('');
@@ -3691,10 +3708,10 @@ createApp({
 
             if (type === 'records') {
                 // 识别记录导出
-                await doExportRecordsExcel(selectedCols);
+                await doExportRecordsExcel(selectedCols, exportMergeByPlate.value);
             } else {
                 // 手动上传结果导出
-                await doExportExcel(type, selectedCols);
+                await doExportExcel(type, selectedCols, exportMergeByPlate.value);
             }
         }
 
@@ -4210,16 +4227,22 @@ createApp({
         const recordExtraColumns = ['文件名', '文档类型', '状态', '时间', '群名', '发送人'];
 
         // 导出识别记录（弹窗选择列）
-        function exportRecordsExcel() {
+        async function exportRecordsExcel() {
             exportPendingType.value = 'records';
             const allCols = [...recordExtraColumns, ...outputColumns.value];
             exportAvailableFields.value = allCols;
             exportSelectedFields.value = [...allCols]; // 默认全选
+            // 加载合并默认值
+            try {
+                const mergeResp = await authFetch('/api/insurance/merge-config');
+                const mergeData = await mergeResp.json();
+                if (mergeData.code === 0) exportMergeByPlate.value = mergeData.data.enabled;
+            } catch (e) { /* ignore */ }
             exportModalVisible.value = true;
         }
 
         // 实际执行导出（识别记录）：有勾选按勾选，否则按当前筛选条件全部导出
-        async function doExportRecordsExcel(selectedCols) {
+        async function doExportRecordsExcel(selectedCols, mergeByPlate = false) {
             try {
                 showMessage('正在导出，请稍候...', true);
 
@@ -4296,7 +4319,7 @@ createApp({
 
                 const resp = await authFetch('/api/insurance/export/excel', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ invoices: data, field_names: selectedCols, export_type: 'success' }),
+                    body: JSON.stringify({ invoices: data, field_names: selectedCols, export_type: 'success', merge_by_plate: mergeByPlate }),
                 });
                 if (!resp.ok) { showMessage('导出失败', false); return; }
                 const blob = await resp.blob();
@@ -4888,7 +4911,7 @@ createApp({
             addCompanyMapping, deleteCompanyMapping, resetMapping,
             addColumn, removeColumn, startRenameCol, finishRenameCol, onNewColFieldChange,
             // 导出列选择
-            exportModalVisible, exportSelectedFields, exportAvailableFields,
+            exportModalVisible, exportSelectedFields, exportAvailableFields, exportMergeByPlate,
             isAllExportFieldsSelected, toggleAllExportFields, confirmExport,
             // 钉钉
             targets, selectedTargetId, targetModalVisible,
