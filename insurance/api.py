@@ -244,11 +244,15 @@ def list_records():
                     record["display_fields"] = json.loads(record["display_fields"])
                 except (TypeError, json.JSONDecodeError):
                     record["display_fields"] = {}
+            # 补充车主：display_fields 缺失时从关联表补充
+            if not record.get("display_fields"):
+                record["display_fields"] = {}
+            pf_owner = record.pop("_pf_owner", None)
+            if pf_owner and not record["display_fields"].get("车主"):
+                record["display_fields"]["车主"] = pf_owner
             # 实时关联跟单人：通过 sender 查找绑定用户姓名
             sender = record.get("sender", "")
             if sender and sender in sender_name_map:
-                if not record.get("display_fields"):
-                    record["display_fields"] = {}
                 record["display_fields"]["跟单人"] = sender_name_map[sender]
             # 应用用户配置（简称映射、日期格式、公式计算）
             if has_config and record.get("display_fields"):

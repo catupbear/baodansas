@@ -1119,7 +1119,8 @@ def query_insurance_records(
                 "r2.filename, r2.cos_url, r2.ocr_engine, r2.doc_category, r2.confidence, "
                 "r2.dingtalk_synced, r2.status, r2.source, r2.created_at, "
                 "r2.company_short, r2.is_abnormal, r2.hint, r2.display_fields, "
-                "r2.abnormal_override_reason"
+                "r2.abnormal_override_reason, "
+                "pf3.owner AS _pf_owner"
             )
             cursor.execute(
                 f"SELECT {select_cols} FROM insurance_records r2 "
