@@ -4231,7 +4231,8 @@ createApp({
         // 导出识别记录（弹窗选择列）
         async function exportRecordsExcel() {
             exportPendingType.value = 'records';
-            const allCols = [...recordExtraColumns, ...outputColumns.value];
+            const dynamicCols = visibleListColumns.value.map(c => c.key);
+            const allCols = [...recordExtraColumns, ...dynamicCols];
             exportAvailableFields.value = allCols;
             exportSelectedFields.value = [...allCols]; // 默认全选
             // 加载合并默认值
@@ -4913,7 +4914,7 @@ createApp({
             addCompanyMapping, deleteCompanyMapping, resetMapping,
             addColumn, removeColumn, startRenameCol, finishRenameCol, onNewColFieldChange,
             // 导出列选择
-            exportModalVisible, exportSelectedFields, exportAvailableFields, exportMergeByPlate,
+            exportModalVisible, exportSelectedFields, exportAvailableFields, exportMergeByPlate, exportPendingType,
             isAllExportFieldsSelected, toggleAllExportFields, confirmExport,
             // 钉钉
             targets, selectedTargetId, targetModalVisible,
