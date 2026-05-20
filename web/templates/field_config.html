@@ -1009,24 +1009,21 @@ createApp({
 
         // 同步页面列配置到导出列配置（补充导出列中缺少的字段）
         function syncListToExport() {
-            let added = 0;
-            const exportKeys = new Set(exportColItems.value.map(c => c.key));
-            for (const col of listColItems.value) {
-                if (!exportKeys.has(col.key)) {
-                    exportColItems.value.push({
-                        key: col.key, visible: col.visible,
-                        order: exportColItems.value.length,
-                        display_name: col.display_name,
-                        custom: col.custom || false,
-                    });
-                    added++;
-                }
+            // 以页面列配置为基准，保留导出列中独有的字段（如合并字段）追加到末尾
+            const listKeys = new Set(listColItems.value.map(c => c.key));
+            // 导出列中独有的字段（页面列没有的）
+            const exportOnly = exportColItems.value.filter(c => !listKeys.has(c.key));
+            // 用页面列的顺序、可见性、显示名覆盖
+            const synced = listColItems.value.map((col, idx) => ({
+                key: col.key, visible: col.visible, order: idx,
+                display_name: col.display_name, custom: col.custom || false,
+            }));
+            // 追加导出列独有的字段
+            for (const col of exportOnly) {
+                synced.push({ ...col, order: synced.length });
             }
-            if (added > 0) {
-                showToast(`已同步 ${added} 个字段到导出配置`);
-            } else {
-                showToast('导出配置已包含所有页面列字段');
-            }
+            exportColItems.value = synced;
+            showToast('已同步页面列配置到导出配置（顺序、可见性、名称）');
         }
 
         // === Tab 1: 别名设置 - 列表模式 ===
