@@ -898,6 +898,50 @@ def find_records_by_plate(db, plate: str, exclude_id: int = None) -> list:
         conn.close()
 
 
+def find_records_by_person(db, applicant: str = "", insured: str = "", owner: str = "",
+                           exclude_id: int = None) -> list:
+    """
+    通过投保人/被保险人/车主匹配其他保单记录（用于无车牌时的字段互补）。
+    任一人名字段匹配即可。返回 parsed_fields 非空且 status=done 的记录列表。
+    优先返回车险（非"非车险/驾意险"），按 id DESC 排序。
+    """
+    names = [n for n in (applicant, insured, owner) if n]
+    if not names:
+        return []
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        # 用关联表按人名匹配
+        or_conditions = []
+        params = []
+        for name in names:
+            or_conditions.append("(pf.applicant = %s OR pf.insured = %s OR pf.owner = %s)")
+            params.extend([name, name, name])
+        where = " OR ".join(or_conditions)
+        sql = (
+            "SELECT r.id, r.parsed_fields FROM insurance_records r "
+            "JOIN insurance_policy_fields pf ON pf.record_id = r.id "
+            f"WHERE r.status = 'done' AND r.parsed_fields IS NOT NULL AND ({where})"
+        )
+        if exclude_id:
+            sql += " AND r.id != %s"
+            params.append(exclude_id)
+        sql += " ORDER BY r.id DESC LIMIT 20"
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        for row in rows:
+            if isinstance(row.get("parsed_fields"), str):
+                try:
+                    row["parsed_fields"] = json.loads(row["parsed_fields"])
+                except (TypeError, json.JSONDecodeError):
+                    row["parsed_fields"] = {}
+        return rows
+    except Exception:
+        return []
+    finally:
+        conn.close()
+
+
 def query_insurance_records(
     db,
     page: int = 1,

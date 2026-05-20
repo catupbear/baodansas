@@ -521,8 +521,10 @@ class InsuranceHandler:
                     doc_category = "投保单"
                     parsed_fields["文档类型"] = "投保单"
 
-                # 6. 同车牌保单字段互补
+                # 6. 保单字段互补（有车牌按车牌，无车牌按人名）
                 self._cross_fill_by_plate(parsed_fields, cur_record_id)
+                if not parsed_fields.get("车牌号"):
+                    self._cross_fill_by_person(parsed_fields, cur_record_id)
 
                 # 7. 字段映射
                 company_short = parsed_fields.get("保险公司简称", "")
@@ -829,6 +831,87 @@ class InsuranceHandler:
                     self._resync_record_to_dingtalk(rec["id"], mapped, hist_fields)
                 except Exception as e:
                     logger.warning("同车牌反向互补失败: record_id=%s, %s", rec["id"], e)
+
+    # 无车牌时按人名互补的字段（车牌号 + 交叉填充字段）
+    PERSON_FILL_FIELDS = ["车牌号", "投保人", "被保险人", "车主"]
+
+    def _cross_fill_by_person(self, parsed_fields: dict, record_id: int = None):
+        """
+        无车牌保单按人名匹配互补：
+        通过投保人/被保险人/车主查找其他保单，优先匹配车险（非 非车险/驾意险），
+        从匹配到的保单补充缺失字段（车牌号、投保人、被保险人、车主）。
+        """
+        applicant = parsed_fields.get("投保人", "")
+        insured = parsed_fields.get("被保险人", "")
+        owner = parsed_fields.get("车主", "")
+        if not applicant and not insured and not owner:
+            return
+
+        from insurance.db import find_records_by_person, update_insurance_record
+        from insurance.field_mapping import apply_mapping
+        history = find_records_by_person(self.db, applicant, insured, owner, exclude_id=record_id)
+        if not history:
+            return
+
+        # 排序：车险优先（非车险/驾意险排后面）
+        def sort_key(rec):
+            hf = rec.get("parsed_fields", {})
+            if self._is_non_vehicle_policy(hf):
+                return 1  # 非车险排后面
+            return 0  # 车险优先
+        history.sort(key=sort_key)
+
+        # 正向互补：历史 → 当前
+        missing = [f for f in self.PERSON_FILL_FIELDS if not parsed_fields.get(f)]
+        if not missing:
+            return
+
+        filled = []
+        for field in missing:
+            for rec in history:
+                hist_fields = rec.get("parsed_fields", {})
+                val = hist_fields.get(field, "")
+                if val:
+                    parsed_fields[field] = val
+                    filled.append(f"{field}={val}(from record:{rec['id']})")
+                    break
+
+        if filled:
+            logger.info(
+                "按人名互补(正向): applicant=%s, insured=%s, owner=%s, record_id=%s, 补充=%s",
+                applicant, insured, owner, record_id, ", ".join(filled),
+            )
+
+        # 反向互补：当前 → 历史缺失记录
+        current_vals = {f: parsed_fields.get(f, "") for f in self.PERSON_FILL_FIELDS}
+        if not any(current_vals.values()):
+            return
+
+        for rec in history:
+            hist_fields = rec.get("parsed_fields", {})
+            if not hist_fields:
+                continue
+            back_filled = []
+            for field in self.PERSON_FILL_FIELDS:
+                if not hist_fields.get(field) and current_vals.get(field):
+                    hist_fields[field] = current_vals[field]
+                    back_filled.append(f"{field}={current_vals[field]}")
+
+            if back_filled:
+                company_short = hist_fields.get("保险公司简称", "")
+                mapped = apply_mapping(hist_fields, company_short)
+                try:
+                    update_insurance_record(self.db, rec["id"], {
+                        "parsed_fields": hist_fields,
+                        "mapped_fields": mapped,
+                    })
+                    logger.info(
+                        "按人名互补(反向): 回填record_id=%s, 补充=%s",
+                        rec["id"], ", ".join(back_filled),
+                    )
+                    self._resync_record_to_dingtalk(rec["id"], mapped, hist_fields)
+                except Exception as e:
+                    logger.warning("按人名反向互补失败: record_id=%s, %s", rec["id"], e)
 
     def _resync_record_to_dingtalk(self, record_id: int, mapped_fields: dict, parsed_fields: dict):
         """
