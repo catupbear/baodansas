@@ -385,6 +385,8 @@
                 <button class="tab-btn" :class="{active: activeTab==='alias'}" @click="activeTab='alias'">别名设置</button>
                 <button class="tab-btn" :class="{active: activeTab==='date'}" @click="activeTab='date'">日期格式</button>
                 <button class="tab-btn" :class="{active: activeTab==='formula'}" @click="activeTab='formula'">自动计算公式</button>
+                <button class="tab-btn" :class="{active: activeTab==='listCols'}" @click="activeTab='listCols'">页面列配置</button>
+                <button class="tab-btn" :class="{active: activeTab==='exportCols'}" @click="activeTab='exportCols'">导出列配置</button>
             </div>
 
             <!-- Tab 1: 别名设置 -->
@@ -499,6 +501,84 @@
                         </tr>
                     </tbody>
                 </table>
+            </div>
+
+            <!-- Tab 4: 页面列配置 -->
+            <div v-show="activeTab==='listCols'" style="padding:24px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+                    <div style="font-size:13px; color:var(--text-muted);">
+                        配置页面列表中显示的字段、顺序和名称
+                        <span v-if="listColConfig.source && listColConfig.source !== 'default'" style="margin-left:8px; font-size:11px; background:var(--primary-bg); color:var(--primary); padding:2px 8px; border-radius:4px;">
+                            来源: {{ listColConfig.source === 'enterprise' ? '企业配置' : listColConfig.source === 'global' ? '全局配置' : '个人配置' }}
+                        </span>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-outline btn-sm" @click="resetColumnConfig('list_columns')" :disabled="activeSource === 'enterprise'">恢复默认</button>
+                        <button class="btn btn-primary btn-sm" @click="saveColumnConfig('list_columns')" :disabled="activeSource === 'enterprise'">保存</button>
+                    </div>
+                </div>
+                <div class="alias-table-wrap">
+                    <table class="alias-table">
+                        <thead>
+                            <tr>
+                                <th style="width:50px;">显示</th>
+                                <th style="width:60px;">排序</th>
+                                <th>字段标识</th>
+                                <th style="width:180px;">显示名称</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(col, idx) in listColItems" :key="col.key">
+                                <td><input type="checkbox" v-model="col.visible" :disabled="activeSource === 'enterprise'"></td>
+                                <td style="display:flex; gap:2px;">
+                                    <button class="btn btn-outline btn-sm" @click="moveCol(listColItems, idx, -1)" :disabled="idx===0 || activeSource === 'enterprise'" style="padding:2px 6px;">↑</button>
+                                    <button class="btn btn-outline btn-sm" @click="moveCol(listColItems, idx, 1)" :disabled="idx===listColItems.length-1 || activeSource === 'enterprise'" style="padding:2px 6px;">↓</button>
+                                </td>
+                                <td style="color:var(--text-muted);">{{ col.key }}</td>
+                                <td><input type="text" v-model="col.display_name" :disabled="activeSource === 'enterprise'" :placeholder="col.key" /></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab 5: 导出列配置 -->
+            <div v-show="activeTab==='exportCols'" style="padding:24px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+                    <div style="font-size:13px; color:var(--text-muted);">
+                        配置 Excel 导出时包含的字段、顺序和列头名称
+                        <span v-if="exportColConfig.source && exportColConfig.source !== 'default'" style="margin-left:8px; font-size:11px; background:var(--primary-bg); color:var(--primary); padding:2px 8px; border-radius:4px;">
+                            来源: {{ exportColConfig.source === 'enterprise' ? '企业配置' : exportColConfig.source === 'global' ? '全局配置' : '个人配置' }}
+                        </span>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-outline btn-sm" @click="resetColumnConfig('export_columns')" :disabled="activeSource === 'enterprise'">恢复默认</button>
+                        <button class="btn btn-primary btn-sm" @click="saveColumnConfig('export_columns')" :disabled="activeSource === 'enterprise'">保存</button>
+                    </div>
+                </div>
+                <div class="alias-table-wrap">
+                    <table class="alias-table">
+                        <thead>
+                            <tr>
+                                <th style="width:50px;">导出</th>
+                                <th style="width:60px;">排序</th>
+                                <th>字段标识</th>
+                                <th style="width:180px;">Excel 列头</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(col, idx) in exportColItems" :key="col.key">
+                                <td><input type="checkbox" v-model="col.visible" :disabled="activeSource === 'enterprise'"></td>
+                                <td style="display:flex; gap:2px;">
+                                    <button class="btn btn-outline btn-sm" @click="moveCol(exportColItems, idx, -1)" :disabled="idx===0 || activeSource === 'enterprise'" style="padding:2px 6px;">↑</button>
+                                    <button class="btn btn-outline btn-sm" @click="moveCol(exportColItems, idx, 1)" :disabled="idx===exportColItems.length-1 || activeSource === 'enterprise'" style="padding:2px 6px;">↓</button>
+                                </td>
+                                <td style="color:var(--text-muted);">{{ col.key }}</td>
+                                <td><input type="text" v-model="col.display_name" :disabled="activeSource === 'enterprise'" :placeholder="col.key" /></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- 底部提示 -->
@@ -672,6 +752,91 @@ createApp({
 
         // === Tab ===
         const activeTab = ref('alias');
+
+        // === 列配置 ===
+        const listColConfig = ref({ source: 'default', columns: [] });
+        const exportColConfig = ref({ source: 'default', columns: [] });
+        const listColItems = ref([]);
+        const exportColItems = ref([]);
+
+        const DEFAULT_COLUMNS = [
+            {key:'承保公司',visible:true,order:0,display_name:'承保公司'},
+            {key:'保单号',visible:true,order:1,display_name:'保单号'},
+            {key:'险种',visible:true,order:2,display_name:'险种'},
+            {key:'车牌',visible:true,order:3,display_name:'车牌'},
+            {key:'投保人',visible:true,order:4,display_name:'投保人'},
+            {key:'被保人',visible:true,order:5,display_name:'被保人'},
+            {key:'签单日期',visible:true,order:6,display_name:'签单日期'},
+            {key:'起保日期',visible:true,order:7,display_name:'起保日期'},
+            {key:'终保日期',visible:true,order:8,display_name:'终保日期'},
+            {key:'保费',visible:true,order:9,display_name:'保费'},
+            {key:'佣金率',visible:true,order:10,display_name:'佣金率'},
+            {key:'佣金',visible:true,order:11,display_name:'佣金'},
+            {key:'业务员',visible:true,order:12,display_name:'业务员'},
+            {key:'采购费率',visible:true,order:13,display_name:'采购费率'},
+            {key:'公司利润',visible:true,order:14,display_name:'公司利润'},
+            {key:'跟单人',visible:true,order:15,display_name:'跟单人'},
+            {key:'跟单人利润',visible:true,order:16,display_name:'跟单人利润'},
+            {key:'出单渠道',visible:true,order:17,display_name:'出单渠道'},
+            {key:'车船税',visible:true,order:18,display_name:'车船税'},
+        ];
+
+        const loadColumnConfig = async (configType) => {
+            try {
+                const resp = await authFetch(`/api/insurance/column-config?config_type=${configType}`);
+                const data = await resp.json();
+                if (data.code === 0) {
+                    const config = data.data;
+                    const columns = config.columns && config.columns.length ? config.columns : JSON.parse(JSON.stringify(DEFAULT_COLUMNS));
+                    columns.sort((a, b) => (a.order || 0) - (b.order || 0));
+                    if (configType === 'list_columns') {
+                        listColConfig.value = config;
+                        listColItems.value = columns;
+                    } else {
+                        exportColConfig.value = config;
+                        exportColItems.value = columns;
+                    }
+                }
+            } catch (e) {
+                console.error('加载列配置失败:', e);
+            }
+        };
+
+        const saveColumnConfig = async (configType) => {
+            const items = configType === 'list_columns' ? listColItems.value : exportColItems.value;
+            const columns = items.map((col, idx) => ({ ...col, order: idx }));
+            try {
+                const resp = await authFetch('/api/insurance/column-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ config_type: configType, columns }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showToast('列配置已保存');
+                }
+            } catch (e) {
+                console.error('保存列配置失败:', e);
+            }
+        };
+
+        const resetColumnConfig = async (configType) => {
+            if (!confirm('确认恢复默认列配置？')) return;
+            try {
+                await authFetch(`/api/insurance/column-config?config_type=${configType}`, { method: 'DELETE' });
+                await loadColumnConfig(configType);
+            } catch (e) {
+                console.error('重置列配置失败:', e);
+            }
+        };
+
+        const moveCol = (items, idx, direction) => {
+            const targetIdx = idx + direction;
+            if (targetIdx < 0 || targetIdx >= items.length) return;
+            const temp = items[idx];
+            items[idx] = items[targetIdx];
+            items[targetIdx] = temp;
+        };
 
         // === Tab 1: 别名设置 - 列表模式 ===
         const aliasType = ref('company');
@@ -1266,6 +1431,9 @@ createApp({
             await loadConfig();
             // 自动加载数据库中已有保单数据，合并到简称列表
             await autoLoadAliasFromDb();
+            // 加载列配置
+            loadColumnConfig('list_columns');
+            loadColumnConfig('export_columns');
             // 初始加载完成后才启用自动保存
             nextTick(() => { configLoaded = true; });
         });
@@ -1289,6 +1457,8 @@ createApp({
             companyShortList, policyTypeShortList, availableFields, operators,
             formulaError, previewExpression, previewResult,
             insertField, insertOp, openFormulaModal, saveFormula, deleteRule,
+            listColConfig, exportColConfig, listColItems, exportColItems,
+            loadColumnConfig, saveColumnConfig, resetColumnConfig, moveCol,
         };
     }
 }).mount('#app');
