@@ -2577,6 +2577,10 @@ def parse_policy_text(text: str) -> Dict[str, Any]:
     doc_category = _identify_doc_category(text, fields)
     fields["文档类型"] = doc_category
 
+    # ===== 投保人兜底：车险中投保人为空时用被保险人填充 =====
+    if not fields.get("投保人") and fields.get("被保险人"):
+        fields["投保人"] = fields["被保险人"]
+
     # ===== 计算置信度 =====
     key_fields = ["保单号", "被保险人", "车牌号", "保险起期", "保费合计"]
     hit_count = sum(1 for f in key_fields if f in fields)
