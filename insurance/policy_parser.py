@@ -1177,6 +1177,21 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
                 fields["被保险人"] = val
                 return
 
+    # 跨行表格格式："被保险人名\n本人 向飞\n系 称"
+    lines = text.split('\n')
+    for i, line in enumerate(lines):
+        if re.search(r'被保险人名\s*$', line) and i + 1 < len(lines):
+            next_line = lines[i + 1].strip()
+            # 去除"与投保人关系"值（本人/配偶等），取剩余中文名
+            next_line = re.sub(r'^(本人|配偶|父[母亲]|母[亲]?|子女|其他)\s+', '', next_line)
+            m = re.match(r'([一-鿿][一-鿿\w（()）)]+)', next_line)
+            if m:
+                val = _clean_person_name(m.group(1))
+                if _is_valid_person(val):
+                    fields["被保险人"] = val
+                    return
+            break
+
     # 标准冒号格式
     for p in [
         r"被保险人名称[：:]\s*(\S+(?:[（(][^）)]+[）)])?)",
