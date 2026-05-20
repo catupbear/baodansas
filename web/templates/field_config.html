@@ -846,7 +846,10 @@ createApp({
         function toggleMergeByPlate() {
             mergeByPlate.value = !mergeByPlate.value;
             if (mergeByPlate.value) {
-                // 开启：隐藏原始差异字段（从列表中隐藏，不改 visible）
+                // 开启：先清理旧版本的合并字段（不在当前 MERGE_EXTRA_COLUMNS 中的 merge 字段）
+                const validMergeSet = new Set(MERGE_EXTRA_COLUMNS);
+                exportColItems.value = exportColItems.value.filter(c => !c.merge || validMergeSet.has(c.key));
+                // 隐藏原始差异字段（从列表中隐藏，不改 visible）
                 for (const col of exportColItems.value) {
                     if (MERGE_HIDDEN_ORIGINALS.has(col.key)) {
                         col._mergeHidden = true;
@@ -868,9 +871,8 @@ createApp({
                 if (added > 0) showToast(`已补充 ${added} 个合并字段，原始差异字段已隐藏`);
                 else showToast('原始差异字段已隐藏');
             } else {
-                // 关闭：移除合并差异字段
-                const mergeSet = new Set(MERGE_EXTRA_COLUMNS);
-                exportColItems.value = exportColItems.value.filter(c => !mergeSet.has(c.key));
+                // 关闭：移除所有合并字段（含旧版本）
+                exportColItems.value = exportColItems.value.filter(c => !c.merge);
                 // 恢复原始差异字段显示
                 for (const col of exportColItems.value) {
                     if (MERGE_HIDDEN_ORIGINALS.has(col.key)) {
@@ -887,9 +889,17 @@ createApp({
         const listColItems = ref([]);
         const exportColItems = ref([]);
 
-        // 监听合并开关和导出列数据，自动标记隐藏的原始字段
+        // 监听合并开关和导出列数据，自动标记隐藏的原始字段 + 清理旧版合并字段
         watch([mergeByPlate, exportColItems], () => {
             if (!exportColItems.value.length) return;
+            if (mergeByPlate.value) {
+                // 清理旧版合并字段（不在当前 MERGE_EXTRA_COLUMNS 中的 merge 字段）
+                const validMergeSet = new Set(MERGE_EXTRA_COLUMNS);
+                const hasStale = exportColItems.value.some(c => c.merge && !validMergeSet.has(c.key));
+                if (hasStale) {
+                    exportColItems.value = exportColItems.value.filter(c => !c.merge || validMergeSet.has(c.key));
+                }
+            }
             for (const col of exportColItems.value) {
                 if (MERGE_HIDDEN_ORIGINALS.has(col.key)) {
                     col._mergeHidden = mergeByPlate.value ? true : undefined;
