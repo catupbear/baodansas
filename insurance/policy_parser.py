@@ -1158,6 +1158,19 @@ def _extract_insured_zhonghua(text: str, text_merged: str, fields: dict):
 
 def _extract_insured_common(text: str, text_merged: str, fields: dict):
     """通用被保险人提取"""
+    # 非车险表格格式："被保人 XXX"（"被保人"而非"被保险人"，无冒号）
+    for line in text.split('\n'):
+        m = re.match(r'\s*被保人\s+([\u4e00-\u9fff].+)', line)
+        if m:
+            val = _clean_person_name(m.group(1).strip())
+            if _is_valid_person(val):
+                fields["被保险人"] = val
+                return
+            # 团体险被保人为项目描述（如"XX工程的施工人员"），非人名/公司名也接受
+            raw = m.group(1).strip()
+            if len(raw) >= 4 and len(raw) <= 60:
+                fields["被保险人"] = raw
+                return
     # OCR带空格格式："被 保 险 人 深圳市中立咨询有限公司"（原始text匹配，优先于冒号格式）
     m = re.search(r"被\s+保\s+险\s+人\s+([\u4e00-\u9fff][\u4e00-\u9fff\w（()）)]{1,29})", text)
     if m:
@@ -1445,6 +1458,15 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
     # 华安等格式：表格标签"投保 名 称"或"投保人名称"后跟公司名（无冒号分隔）
     for src in [text_merged, text]:
         m = re.search(r'投保(?:人)?\s*名\s*称\s+([一-鿿][一-鿿\w（()）)]+)', src)
+        if m:
+            val = _clean_person_name(m.group(1))
+            if _is_valid_person(val):
+                fields["投保人"] = val
+                return
+
+    # 非车险表格格式："投保人 深圳市建筑装饰（集团）有限公司"（无冒号，公司名含全角括号）
+    for line in lines:
+        m = re.match(r'\s*投保人\s+([\u4e00-\u9fff][\u4e00-\u9fff\w（()）)]*(?:公司|集团|合伙))', line)
         if m:
             val = _clean_person_name(m.group(1))
             if _is_valid_person(val):
