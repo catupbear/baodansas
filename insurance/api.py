@@ -2396,7 +2396,9 @@ def export_excel():
         wb.save(output)
         output.seek(0)
 
-        download_name = f"保单导出_{sheet_name}.xlsx"
+        from datetime import datetime
+        time_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        download_name = f"保单导出_{sheet_name}_{time_str}.xlsx"
         return send_file(
             output,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

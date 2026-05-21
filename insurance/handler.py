@@ -686,25 +686,38 @@ class InsuranceHandler:
         同一 PDF 内多份保单之间互补基础字段。
         例如：第1份保单有车牌号和投保人，第2份保单缺失这些字段时自动补充。
         """
-        # 收集所有保单中已有的字段值（取第一个非空值）
+        # 收集所有保单中已有的字段值
+        # 人名类字段取最长值（短值可能是OCR误提取），其他字段取第一个非空值
+        PERSON_FIELDS = {"投保人", "被保险人", "车主"}
         merged = {}
         for policy in policies:
             fields = policy.get("fields", {})
             for f in self.SAME_PDF_FILL_FIELDS:
-                if f not in merged and fields.get(f):
-                    merged[f] = fields[f]
+                val = fields.get(f, "")
+                if not val:
+                    continue
+                if f in PERSON_FIELDS:
+                    # 人名字段：取最长的值（更可信）
+                    if f not in merged or len(val) > len(merged[f]):
+                        merged[f] = val
+                elif f not in merged:
+                    merged[f] = val
 
         if not merged:
             return
 
-        # 回填到每份保单的缺失字段
+        # 回填到每份保单的缺失或较短的人名字段
         for policy in policies:
             fields = policy.get("fields", {})
             filled = []
             for f, val in merged.items():
-                if not fields.get(f):
+                cur = fields.get(f, "")
+                if not cur:
                     fields[f] = val
                     filled.append(f"{f}={val}")
+                elif f in PERSON_FIELDS and cur != val and len(val) > len(cur):
+                    fields[f] = val
+                    filled.append(f"{f}={val}(校验替换:{cur})")
             if filled:
                 logger.info(
                     "同PDF互补: 险种=%s, 补充=%s",
@@ -769,6 +782,23 @@ class InsuranceHandler:
                     filled.append(f"{field}={val}")
                     break
 
+        # 车险交叉校验：同车牌的交强险与商业险，投保人/被保险人/车主应一致
+        # 当值不同时取更长的（短值往往是OCR从条款文本误提取的片段）
+        if self._is_vehicle_policy(parsed_fields):
+            for rec in history:
+                hist_fields = rec.get("parsed_fields", {})
+                if not self._is_vehicle_policy(hist_fields):
+                    continue
+                for field in self.CROSS_FILL_FIELDS:
+                    cur_val = parsed_fields.get(field, "")
+                    hist_val = hist_fields.get(field, "")
+                    if cur_val and hist_val and cur_val != hist_val:
+                        # 取更长的值（更可信）
+                        if len(hist_val) > len(cur_val):
+                            parsed_fields[field] = hist_val
+                            filled.append(f"{field}={hist_val}(校验替换:{cur_val})")
+                break  # 只对比一条同类车险
+
         # 非车险覆盖：从交强险/商业险取投保人、被保人、车主，覆盖非车险对应字段
         if self._is_non_vehicle_policy(parsed_fields):
             override_fields = ["投保人", "被保险人", "车主"]
@@ -806,6 +836,16 @@ class InsuranceHandler:
                 if not hist_fields.get(field) and current_vals.get(field):
                     hist_fields[field] = current_vals[field]
                     back_filled.append(f"{field}={current_vals[field]}")
+
+            # 反向校验：当前是车险，历史也是车险，短值被长值替换
+            if is_current_vehicle and self._is_vehicle_policy(hist_fields):
+                for field in self.CROSS_FILL_FIELDS:
+                    cur_val = current_vals.get(field, "")
+                    hist_val = hist_fields.get(field, "")
+                    if cur_val and hist_val and cur_val != hist_val and len(cur_val) > len(hist_val):
+                        old_val = hist_val
+                        hist_fields[field] = cur_val
+                        back_filled.append(f"{field}={cur_val}(校验替换:{old_val})")
 
             # 反向覆盖：当前是车险，历史是非车险，覆盖历史非车险的投保人、被保人、车主
             if is_current_vehicle and self._is_non_vehicle_policy(hist_fields):
