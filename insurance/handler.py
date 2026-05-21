@@ -521,10 +521,9 @@ class InsuranceHandler:
                     doc_category = "投保单"
                     parsed_fields["文档类型"] = "投保单"
 
-                # 6. 保单字段互补（有车牌按车牌，无车牌按人名）
+                # 6. 保单字段互补（有车牌按车牌，按人名始终执行以回填无车牌记录）
                 self._cross_fill_by_plate(parsed_fields, cur_record_id)
-                if not parsed_fields.get("车牌号"):
-                    self._cross_fill_by_person(parsed_fields, cur_record_id)
+                self._cross_fill_by_person(parsed_fields, cur_record_id)
 
                 # 7. 字段映射
                 company_short = parsed_fields.get("保险公司简称", "")
@@ -935,24 +934,22 @@ class InsuranceHandler:
 
         # 正向互补：历史 → 当前
         missing = [f for f in self.PERSON_FILL_FIELDS if not parsed_fields.get(f)]
-        if not missing:
-            return
-
         filled = []
-        for field in missing:
-            for rec in history:
-                hist_fields = rec.get("parsed_fields", {})
-                val = hist_fields.get(field, "")
-                if val:
-                    parsed_fields[field] = val
-                    filled.append(f"{field}={val}(from record:{rec['id']})")
-                    break
+        if missing:
+            for field in missing:
+                for rec in history:
+                    hist_fields = rec.get("parsed_fields", {})
+                    val = hist_fields.get(field, "")
+                    if val:
+                        parsed_fields[field] = val
+                        filled.append(f"{field}={val}(from record:{rec['id']})")
+                        break
 
-        if filled:
-            logger.info(
-                "按人名互补(正向): applicant=%s, insured=%s, owner=%s, record_id=%s, 补充=%s",
-                applicant, insured, owner, record_id, ", ".join(filled),
-            )
+            if filled:
+                logger.info(
+                    "按人名互补(正向): applicant=%s, insured=%s, owner=%s, record_id=%s, 补充=%s",
+                    applicant, insured, owner, record_id, ", ".join(filled),
+                )
 
         # 反向互补：当前 → 历史缺失记录
         current_vals = {f: parsed_fields.get(f, "") for f in self.PERSON_FILL_FIELDS}
