@@ -250,10 +250,18 @@ def list_records():
             pf_owner = record.pop("_pf_owner", None)
             if pf_owner and not record["display_fields"].get("车主"):
                 record["display_fields"]["车主"] = pf_owner
-            # 实时关联跟单人：通过 sender 查找绑定用户姓名
+            # 实时关联跟单人：通过 sender 查找绑定用户姓名，无 sender 时取上传用户姓名
             sender = record.get("sender", "")
             if sender and sender in sender_name_map:
                 record["display_fields"]["跟单人"] = sender_name_map[sender]
+            elif not sender and record.get("user_id"):
+                try:
+                    from auth.db import get_user_by_id
+                    upload_user = get_user_by_id(_db, record["user_id"])
+                    if upload_user and upload_user.get("name"):
+                        record["display_fields"]["跟单人"] = upload_user["name"]
+                except Exception:
+                    pass
             # 应用用户配置（简称映射、日期格式、公式计算）
             if has_config and record.get("display_fields"):
                 record["display_fields"] = apply_user_config_to_fields(user_config, record["display_fields"])
@@ -297,7 +305,8 @@ def get_record(record_id):
             if record.get(ts_field) and not isinstance(record[ts_field], str):
                 record[ts_field] = str(record[ts_field])
 
-        # 实时关联跟单人：通过 sender 查找绑定用户姓名
+        # 实时关联跟单人：通过 sender 查找绑定用户姓名，无 sender 时取上传用户姓名
+        tracker_name = ""
         sender = record.get("sender", "")
         if sender:
             try:
@@ -306,19 +315,29 @@ def get_record(record_id):
                 if bound:
                     user_info = get_user_by_id(_db, bound["user_id"])
                     if user_info and user_info.get("name"):
-                        if isinstance(record.get("parsed_fields"), dict):
-                            record["parsed_fields"]["跟单人"] = user_info["name"]
-                        if isinstance(record.get("display_fields"), str):
-                            try:
-                                df = json.loads(record["display_fields"])
-                                df["跟单人"] = user_info["name"]
-                                record["display_fields"] = df
-                            except (TypeError, json.JSONDecodeError):
-                                pass
-                        elif isinstance(record.get("display_fields"), dict):
-                            record["display_fields"]["跟单人"] = user_info["name"]
+                        tracker_name = user_info["name"]
             except Exception:
                 pass
+        elif record.get("user_id"):
+            try:
+                from auth.db import get_user_by_id
+                upload_user = get_user_by_id(_db, record["user_id"])
+                if upload_user and upload_user.get("name"):
+                    tracker_name = upload_user["name"]
+            except Exception:
+                pass
+        if tracker_name:
+            if isinstance(record.get("parsed_fields"), dict):
+                record["parsed_fields"]["跟单人"] = tracker_name
+            if isinstance(record.get("display_fields"), str):
+                try:
+                    df = json.loads(record["display_fields"])
+                    df["跟单人"] = tracker_name
+                    record["display_fields"] = df
+                except (TypeError, json.JSONDecodeError):
+                    pass
+            elif isinstance(record.get("display_fields"), dict):
+                record["display_fields"]["跟单人"] = tracker_name
 
         # 同一 PDF 的兄弟记录摘要（有 file_md5 就查）
         siblings = []

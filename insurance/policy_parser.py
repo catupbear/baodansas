@@ -1627,12 +1627,6 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
             plate = m.group(1).replace("-", "").rstrip(";；,，")
             # 清理车牌后面可能粘连的车架号等信息
             plate = re.split(r'[；;，,\s]', plate)[0]
-            # 中国车牌7位（普通）或8位（新能源，第3位为D/F），超出截断
-            if len(plate) > 7:
-                if len(plate) >= 8 and plate[2] in 'DF':
-                    plate = plate[:8]
-                else:
-                    plate = plate[:7]
             if len(plate) >= 6:
                 fields["车牌号"] = plate
                 break

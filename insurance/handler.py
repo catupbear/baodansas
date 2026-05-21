@@ -769,17 +769,19 @@ class InsuranceHandler:
                     filled.append(f"{field}={val}")
                     break
 
-        # 非车险被保人覆盖：从交强险/商业险取被保人，覆盖非车险的被保人
+        # 非车险覆盖：从交强险/商业险取投保人、被保人、车主，覆盖非车险对应字段
         if self._is_non_vehicle_policy(parsed_fields):
+            override_fields = ["投保人", "被保险人", "车主"]
             for rec in history:
                 hist_fields = rec.get("parsed_fields", {})
                 if self._is_vehicle_policy(hist_fields):
-                    vehicle_insured = hist_fields.get("被保险人", "")
-                    if vehicle_insured and vehicle_insured != parsed_fields.get("被保险人", ""):
-                        old_val = parsed_fields.get("被保险人", "")
-                        parsed_fields["被保险人"] = vehicle_insured
-                        filled.append(f"被保险人={vehicle_insured}(覆盖:{old_val})")
-                        break
+                    for field in override_fields:
+                        vehicle_val = hist_fields.get(field, "")
+                        if vehicle_val and vehicle_val != parsed_fields.get(field, ""):
+                            old_val = parsed_fields.get(field, "")
+                            parsed_fields[field] = vehicle_val
+                            filled.append(f"{field}={vehicle_val}(覆盖:{old_val})")
+                    break
 
         if filled:
             logger.info(
@@ -805,14 +807,15 @@ class InsuranceHandler:
                     hist_fields[field] = current_vals[field]
                     back_filled.append(f"{field}={current_vals[field]}")
 
-            # 反向覆盖：当前是车险，历史是非车险，覆盖历史非车险的被保人
+            # 反向覆盖：当前是车险，历史是非车险，覆盖历史非车险的投保人、被保人、车主
             if is_current_vehicle and self._is_non_vehicle_policy(hist_fields):
-                cur_insured = current_vals.get("被保险人", "")
-                hist_insured = hist_fields.get("被保险人", "")
-                if cur_insured and hist_insured != cur_insured:
-                    old_val = hist_insured
-                    hist_fields["被保险人"] = cur_insured
-                    back_filled.append(f"被保险人={cur_insured}(覆盖:{old_val})")
+                for field in self.CROSS_FILL_FIELDS:
+                    cur_val = current_vals.get(field, "")
+                    hist_val = hist_fields.get(field, "")
+                    if cur_val and hist_val != cur_val:
+                        old_val = hist_val
+                        hist_fields[field] = cur_val
+                        back_filled.append(f"{field}={cur_val}(覆盖:{old_val})")
 
             if back_filled:
                 # 重新计算 mapped_fields
