@@ -317,6 +317,18 @@ def _identify_company(text: str) -> Dict[str, str]:
                     result["保险公司"] = company_name
                     break
 
+    # 联合承保：识别到平安时，检查文本中是否同时存在众安，有则取众安
+    if "平安" in result.get("保险公司", ""):
+        za_base = "众安在线财产保险股份有限公司"
+        if za_base in company_text:
+            result["保险公司"] = za_base
+
+    # 联合承保：识别到平安时，检查文本中是否同时存在众安，有则取众安
+    if "平安" in result.get("保险公司", ""):
+        za_base = "众安在线财产保险股份有限公司"
+        if za_base in company_text:
+            result["保险公司"] = za_base
+
     # 映射简称
     for keyword, short in COMPANY_SHORT_MAP.items():
         if keyword in result.get("保险公司", ""):
