@@ -1395,10 +1395,10 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
             params.append(filters["ocr_engine"])
         if filters.get("date_start"):
             where_parts.append(f"{col_prefix}created_at >= %s")
-            params.append(filters["date_start"] + " 00:00:00")
+            params.append(filters["date_start"])
         if filters.get("date_end"):
-            where_parts.append(f"{col_prefix}created_at <= %s")
-            params.append(filters["date_end"] + " 23:59:59")
+            where_parts.append(f"{col_prefix}created_at < %s")
+            params.append(filters["date_end"])
         # 按账号权限过滤
         if filters.get("user_ids") is not None:
             uid_list = filters["user_ids"]
