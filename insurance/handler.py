@@ -718,6 +718,21 @@ class InsuranceHandler:
                 elif f in PERSON_FIELDS and cur != val and len(val) > len(cur):
                     fields[f] = val
                     filled.append(f"{f}={val}(校验替换:{cur})")
+            # 交强险保司校验：交强险是平安时，从同PDF其他保单取保司
+            policy_type = fields.get("险种类型", "")
+            cur_company = fields.get("保险公司", "")
+            if "交通事故责任强制" in policy_type and "平安" in cur_company:
+                for other in policies:
+                    other_fields = other.get("fields", {})
+                    if other_fields is fields:
+                        continue
+                    other_company = other_fields.get("保险公司", "")
+                    if other_company and "平安" not in other_company:
+                        fields["保险公司"] = other_company
+                        fields["保险公司简称"] = other_fields.get("保险公司简称", "")
+                        filled.append(f"保险公司={other_company}(交强险校验替换:{cur_company})")
+                        break
+
             if filled:
                 logger.info(
                     "同PDF互补: 险种=%s, 补充=%s",
@@ -798,6 +813,20 @@ class InsuranceHandler:
                             parsed_fields[field] = hist_val
                             filled.append(f"{field}={hist_val}(校验替换:{cur_val})")
                 break  # 只对比一条同类车险
+
+        # 交强险保司校验：交强险识别为平安时，从同车牌其他保单取保司
+        policy_type = parsed_fields.get("险种类型", "")
+        cur_company = parsed_fields.get("保险公司", "")
+        if "交通事故责任强制" in policy_type and "平安" in cur_company:
+            for rec in history:
+                hist_fields = rec.get("parsed_fields", {})
+                hist_company = hist_fields.get("保险公司", "")
+                hist_short = hist_fields.get("保险公司简称", "")
+                if hist_company and "平安" not in hist_company:
+                    parsed_fields["保险公司"] = hist_company
+                    parsed_fields["保险公司简称"] = hist_short
+                    filled.append(f"保险公司={hist_company}(交强险校验替换:{cur_company})")
+                    break
 
         # 非车险覆盖：从交强险/商业险取投保人、被保人、车主，覆盖非车险对应字段
         if self._is_non_vehicle_policy(parsed_fields):
