@@ -968,6 +968,7 @@ def manual_ocr():
         for idx, policy in enumerate(valid_policies):
             if _handler and policy.get("fields"):
                 _handler._cross_fill_by_plate(policy["fields"])
+                _handler._cross_fill_by_person(policy["fields"])
             rid, is_upd = _save_manual_record(
                 file_name, policy, ocr_engine,
                 file_data_b64=file_data_b64, upload_cos=upload_cos,
@@ -1169,6 +1170,7 @@ def reocr_record(record_id):
         def _apply_policy_to_record(rec_id, policy, policy_idx):
             pf = policy.get("fields", {})
             _handler._cross_fill_by_plate(pf, rec_id)
+            _handler._cross_fill_by_person(pf, rec_id)
             cs = pf.get("保险公司简称", "")
             mf = apply_mapping(pf, cs)
             doc_cat = policy.get("doc_category", "")
@@ -1231,6 +1233,7 @@ def reocr_record(record_id):
             policy = policies[i]
             pf = policy.get("fields", {})
             _handler._cross_fill_by_plate(pf, record_id)
+            _handler._cross_fill_by_person(pf, record_id)
             cs = pf.get("保险公司简称", "")
             mf = apply_mapping(pf, cs)
             extra_record = {
@@ -1487,8 +1490,9 @@ def batch_reocr_sync():
                 if rec_md5:
                     _cross_fill_from_siblings(_db, rid, rec_md5, parsed_fields)
 
-                # 同车牌互补
+                # 同车牌互补 + 按人名互补
                 _handler._cross_fill_by_plate(parsed_fields, rid)
+                _handler._cross_fill_by_person(parsed_fields, rid)
 
                 # 字段映射
                 company_short = parsed_fields.get("保险公司简称", "")
