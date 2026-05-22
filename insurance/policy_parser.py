@@ -2258,23 +2258,22 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
 
     # 渤海等格式：保险期间标签后日期在连续两行，无"至"分隔
     # "保险期间:自\n2026年5月30日0时0分\n2027年5月30日0时0分"
-    if company_short == "渤海":
-        _lines = text.split('\n')
-        for _i, _line in enumerate(_lines):
-            if '保险期间' in _line and '交强险' not in _line:
-                # 在标签后5行内搜索两个连续的日期行
-                _dates = []
-                for _j in range(_i, min(_i + 5, len(_lines))):
-                    _m = re.search(r'(\d{4}年\d{1,2}月\d{1,2}日)', _lines[_j])
-                    if _m:
-                        _dates.append(_m.group(1))
-                    if len(_dates) == 2:
-                        break
+    _lines = text.split('\n')
+    for _i, _line in enumerate(_lines):
+        if '保险期间' in _line and '交强险' not in _line:
+            # 在标签后5行内搜索两个连续的日期行
+            _dates = []
+            for _j in range(_i, min(_i + 5, len(_lines))):
+                _m = re.search(r'(\d{4}年\d{1,2}月\d{1,2}日)', _lines[_j])
+                if _m:
+                    _dates.append(_m.group(1))
                 if len(_dates) == 2:
-                    fields["保险起期"] = _dates[0]
-                    fields["保险止期"] = _dates[1]
-                    fields["保险期间"] = f"{_dates[0]} 至 {_dates[1]}"
-                    return
+                    break
+            if len(_dates) == 2:
+                fields["保险起期"] = _dates[0]
+                fields["保险止期"] = _dates[1]
+                fields["保险期间"] = f"{_dates[0]} 至 {_dates[1]}"
+                return
 
     # 紫金等格式：同一行有两个"YYYY年M月D日HH时M分"日期，标签在其他行
     # 直接在全文中匹配，不依赖标签位置
@@ -2916,6 +2915,11 @@ def _find_policy_boundaries(text: str) -> List[dict]:
         for m in re.finditer(policy_no_pattern, text):
             no_val = m.group(1)
             pos = m.start()
+            # 排除"交强险保单号"等引用性保单号（非独立保单，只是商业险中引用交强险号）
+            _ctx_start = max(0, pos - 20)
+            _ctx = text[_ctx_start:pos]
+            if '交强险' in _ctx:
+                continue
             # 排除重复/近似的保单号（互为前缀关系视为同一保单号，如 OCR 截断差异）
             is_dup = any(no_val.startswith(sn) or sn.startswith(no_val) for sn in seen_nos)
             if not is_dup:
