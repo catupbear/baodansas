@@ -958,6 +958,8 @@ def query_insurance_records(
     company_short: str = "",
     date_start: str = "",
     date_end: str = "",
+    updated_at_date_start: str = "",
+    updated_at_date_end: str = "",
     user_ids: list = None,
     enterprise_id: int = None,
     # 关联表模糊搜索
@@ -1052,6 +1054,12 @@ def query_insurance_records(
     if date_end:
         conditions.append(f"{col_prefix}created_at < %s")
         params.append(date_end)
+    if updated_at_date_start:
+        conditions.append(f"{col_prefix}updated_at >= %s")
+        params.append(updated_at_date_start)
+    if updated_at_date_end:
+        conditions.append(f"{col_prefix}updated_at < %s")
+        params.append(updated_at_date_end)
     # 按账号权限过滤
     if user_ids is not None:
         if user_ids:
@@ -1341,7 +1349,7 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
     """
     获取保单识别统计信息，支持筛选条件。
     filters 支持: roomid, source_type, source, sender, keyword, company_short,
-                   ocr_engine, date_start, date_end,
+                   ocr_engine, date_start, date_end, updated_at_date_start, updated_at_date_end,
                    search_company, search_policy_no, search_plate_no,
                    search_applicant, search_insured, search_salesperson,
                    sign_date_start, sign_date_end, start_date_start, start_date_end,
@@ -1399,6 +1407,12 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
         if filters.get("date_end"):
             where_parts.append(f"{col_prefix}created_at < %s")
             params.append(filters["date_end"])
+        if filters.get("updated_at_date_start"):
+            where_parts.append(f"{col_prefix}updated_at >= %s")
+            params.append(filters["updated_at_date_start"])
+        if filters.get("updated_at_date_end"):
+            where_parts.append(f"{col_prefix}updated_at < %s")
+            params.append(filters["updated_at_date_end"])
         # 按账号权限过滤
         if filters.get("user_ids") is not None:
             uid_list = filters["user_ids"]

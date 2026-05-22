@@ -174,6 +174,8 @@ def list_records():
     company_short = request.args.get("company_short", "")
     date_start = request.args.get("date_start", "")
     date_end = request.args.get("date_end", "")
+    updated_at_date_start = request.args.get("updated_at_date_start", "")
+    updated_at_date_end = request.args.get("updated_at_date_end", "")
     # 关联表模糊搜索
     search_company = request.args.get("search_company", "")
     search_policy_no = request.args.get("search_policy_no", "")
@@ -207,6 +209,8 @@ def list_records():
             company_short=company_short,
             date_start=date_start,
             date_end=date_end,
+            updated_at_date_start=updated_at_date_start,
+            updated_at_date_end=updated_at_date_end,
             user_ids=_get_user_ids_filter(),
             enterprise_id=_get_enterprise_id_filter(),
             search_company=search_company,
@@ -544,6 +548,7 @@ def get_stats():
         filters = {}
         for key in ("roomid", "source_type", "source", "sender", "keyword",
                      "company_short", "ocr_engine", "date_start", "date_end",
+                     "updated_at_date_start", "updated_at_date_end",
                      "search_company", "search_policy_no", "search_plate_no",
                      "search_applicant", "search_insured", "search_salesperson",
                      "sign_date_start", "sign_date_end",

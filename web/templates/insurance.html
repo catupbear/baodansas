@@ -913,6 +913,7 @@
                         class="text-xs border border-gray-200 rounded-lg px-1.5 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 text-gray-600 font-medium cursor-pointer"
                         style="min-width:80px;">
                     <option value="created_at">创建日期</option>
+                    <option value="updated_at">识别日期</option>
                     <option value="sign_date">签单日期</option>
                     <option value="start_date">起保日期</option>
                     <option value="end_date">终保日期</option>
@@ -1126,7 +1127,7 @@
                             <th v-for="col in visibleListColumns" :key="col.key"
                                 :class="col.key === '文件名' ? 'sticky-col-name' : ''"
                                 class="text-gray-600 font-medium"
-                                :style="{ minWidth: col.key === '文件名' ? '150px' : col.key === '时间' ? '150px' : col.key === '群名' ? '100px' : '80px' }">
+                                :style="{ minWidth: col.key === '文件名' ? '150px' : (col.key === '创建时间' || col.key === '识别时间') ? '150px' : col.key === '群名' ? '100px' : '80px' }">
                                 {{ col.display_name }}
                             </th>
                             <th v-if="isSuperAdmin" style="min-width:70px;">识别方式</th>
@@ -1181,9 +1182,13 @@
                                         {{ statusLabel(record.status) }}
                                     </span>
                                 </template>
-                                <!-- 时间 -->
-                                <template v-else-if="col.key === '时间'">
+                                <!-- 创建时间 -->
+                                <template v-else-if="col.key === '创建时间'">
                                     <span class="text-gray-500 text-xs">{{ formatTime(record.created_at) }}</span>
+                                </template>
+                                <!-- 识别时间 -->
+                                <template v-else-if="col.key === '识别时间'">
+                                    <span class="text-gray-500 text-xs">{{ formatTime(record.updated_at) }}</span>
                                 </template>
                                 <!-- 群名 -->
                                 <template v-else-if="col.key === '群名'">
@@ -1996,7 +2001,7 @@
                                 </template>
                                 <!-- 显示模式（点击进入编辑，记录级字段不可编辑） -->
                                 <template v-else>
-                                    <span v-if="previewAutoRecord && !['文件名','文档类型','状态','时间','群名','发送人'].includes(item.key)"
+                                    <span v-if="previewAutoRecord && !['文件名','文档类型','状态','创建时间','识别时间','群名','发送人'].includes(item.key)"
                                           class="text-gray-800 ml-2 flex-1 cursor-pointer rounded px-1 -mx-1 hover:bg-orange-50 transition-colors"
                                           :class="[item.value ? '' : 'text-gray-300', isManualField(item.key || item.label) ? 'font-medium text-orange-700' : '']"
                                           @click="startEditField(item.key || item.label)"
@@ -2152,6 +2157,10 @@
                         <div>
                             <label class="text-xs text-gray-500 font-medium">创建时间</label>
                             <p class="text-sm text-gray-800 mt-0.5">{{ formatTime(currentRecord?.created_at) }}</p>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500 font-medium">识别时间</label>
+                            <p class="text-sm text-gray-800 mt-0.5">{{ formatTime(currentRecord?.updated_at) }}</p>
                         </div>
                         <div v-if="currentRecord?.error_message">
                             <label class="text-xs text-gray-500 font-medium">错误信息</label>
@@ -2388,7 +2397,8 @@ createApp({
                     '文件名': rec.filename || '',
                     '文档类型': rec.doc_category || '',
                     '状态': statusLabel(rec.status),
-                    '时间': formatTime(rec.created_at),
+                    '创建时间': formatTime(rec.created_at),
+                    '识别时间': formatTime(rec.updated_at),
                     '群名': rec.room_name || rec.roomid || '',
                     '发送人': rec.sender_name || rec.sender || '',
                 };
@@ -3903,10 +3913,11 @@ createApp({
         function _appendDateParams(params) {
             if (!recordFilter.date_start && !recordFilter.date_end) return;
             const type = recordFilter.date_type || 'created_at';
-            if (type === 'created_at') {
-                // created_at 是 TIMESTAMP，后端用 < end，快捷按钮的 end 是次日，正确
-                if (recordFilter.date_start) params.set('date_start', recordFilter.date_start);
-                if (recordFilter.date_end) params.set('date_end', recordFilter.date_end);
+            if (type === 'created_at' || type === 'updated_at') {
+                // created_at/updated_at 是 TIMESTAMP，后端用 < end，快捷按钮的 end 是次日，正确
+                const paramPrefix = type === 'updated_at' ? 'updated_at_' : '';
+                if (recordFilter.date_start) params.set(paramPrefix + 'date_start', recordFilter.date_start);
+                if (recordFilter.date_end) params.set(paramPrefix + 'date_end', recordFilter.date_end);
             } else {
                 // 保单日期是 DATE 类型，后端用 <= end
                 // 快捷按钮生成的 end 是"次日"（如今天=19号 → end=20号），需减一天
@@ -4262,7 +4273,7 @@ createApp({
         }
 
         // 识别记录导出的额外列（与列表展示一致）
-        const recordExtraColumns = ['文件名', '文档类型', '状态', '时间', '群名', '发送人'];
+        const recordExtraColumns = ['文件名', '文档类型', '状态', '创建时间', '识别时间', '群名', '发送人'];
 
         // 导出识别记录（弹窗选择列）
         async function exportRecordsExcel() {
@@ -4341,7 +4352,8 @@ createApp({
                     '文件名': r.filename || '',
                     '文档类型': r.doc_category || '',
                     '状态': statusLabel(r.status),
-                    '时间': formatTime(r.created_at),
+                    '创建时间': formatTime(r.created_at),
+                    '识别时间': formatTime(r.updated_at),
                     '群名': r.room_name || r.roomid || '',
                     '发送人': r.sender_name || r.sender || '',
                 });

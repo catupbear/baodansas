@@ -48,13 +48,14 @@ DEFAULT_COLUMNS = [
     {"key": "出单渠道", "visible": True, "order": 20, "display_name": "出单渠道"},
     {"key": "车船税",   "visible": True, "order": 21, "display_name": "车船税"},
     {"key": "状态",     "visible": True, "order": 22, "display_name": "状态",     "type": "record"},
-    {"key": "时间",     "visible": True, "order": 23, "display_name": "时间",     "type": "record"},
-    {"key": "群名",     "visible": True, "order": 24, "display_name": "群名",     "type": "record"},
-    {"key": "发送人",   "visible": True, "order": 25, "display_name": "发送人",   "type": "record"},
+    {"key": "创建时间", "visible": True, "order": 23, "display_name": "创建时间", "type": "record"},
+    {"key": "识别时间", "visible": True, "order": 24, "display_name": "识别时间", "type": "record"},
+    {"key": "群名",     "visible": True, "order": 25, "display_name": "群名",     "type": "record"},
+    {"key": "发送人",   "visible": True, "order": 26, "display_name": "发送人",   "type": "record"},
 ]
 
 # 记录级字段的 key 集合（用于前端区分渲染方式）
-RECORD_LEVEL_FIELDS = {"文件名", "文档类型", "状态", "时间", "群名", "发送人"}
+RECORD_LEVEL_FIELDS = {"文件名", "文档类型", "状态", "创建时间", "识别时间", "群名", "发送人"}
 
 # ---- 按车牌合并导出 ----
 
@@ -527,7 +528,16 @@ def _fix_missing_defaults(db, config_type, columns, scope, scope_id):
     """
     自动补充 DEFAULT_COLUMNS 中有但用户配置里不存在的字段到末尾。
     例如新增了「车主」「文件名」等字段后，已保存的配置自动补上。
+    同时迁移已废弃的列名（如「时间」→「创建时间」）。
     """
+    changed = False
+    # 迁移旧列名：「时间」→「创建时间」
+    for c in columns:
+        if c["key"] == "时间":
+            c["key"] = "创建时间"
+            c["display_name"] = c.get("display_name", "").replace("时间", "创建时间") or "创建时间"
+            changed = True
+
     existing_keys = {c["key"] for c in columns}
     max_order = len(columns)
     added = 0
@@ -536,9 +546,12 @@ def _fix_missing_defaults(db, config_type, columns, scope, scope_id):
             columns.append({**dc, "order": max_order})
             max_order += 1
             added += 1
-    if added:
+    if added or changed:
         save_column_config(db, config_type, scope, scope_id, columns)
-        logger.debug("自动补充 %s 默认字段 %d 个", config_type, added)
+        if added:
+            logger.debug("自动补充 %s 默认字段 %d 个", config_type, added)
+        if changed:
+            logger.debug("迁移 %s 旧列名（时间→创建时间）", config_type)
     return columns
 
 
