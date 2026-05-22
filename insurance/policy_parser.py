@@ -546,12 +546,24 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
     m = None  # 清除防止后续误用
 
 
-    # 经办人：不跨行匹配
+    # 经办人：同行匹配
     m = re.search(r"经办(?:人员?)?[：:][^\S\n]*([\u4e00-\u9fff](?:[^\S\n]?[\u4e00-\u9fff]){0,5})", text)
     if m:
         val = re.sub(r'\s+', '', m.group(1))  # 去除名字中的OCR空格
         if val:
             fields["经办人"] = val
+    # 渤海等格式：经办标签在行末，名字在下一行
+    # "代理人/经纪人:海腾保险代理有限公司湖南分经办:\n唐景云"
+    if "经办人" not in fields:
+        for _i, _line in enumerate(lines_all):
+            if re.search(r'经办[：:]\s*$', _line) and _i + 1 < len(lines_all):
+                _next = lines_all[_i + 1].strip()
+                _nm = re.match(r'^([\u4e00-\u9fff]{2,6})', _next)
+                if _nm:
+                    _name = _clean_person_name(_nm.group(1))
+                    if _name and len(_name) >= 2:
+                        fields["经办人"] = _name
+                        break
 
     # 华安等格式：值和标签分离，"自动核保 杨文 杨文" 对应 核保/制单/经办
     lines_all = text.split('\n')
@@ -563,6 +575,26 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
             if "经办人" not in fields:
                 fields["经办人"] = _clean_person_name(m_auto.group(2))
             break
+
+    # 渤海等格式：制单/经办标签后值在下一行（可能跨多行）
+    # "制单:\nadmin\n唐景云"  或  "经办:\n唐景云"
+    if "制单人" not in fields or "经办人" not in fields:
+        for i, line in enumerate(lines_all):
+            _label_m = re.match(r'\s*(制单|经办)[人]?\s*[：:]\s*$', line)
+            if _label_m and i + 1 < len(lines_all):
+                _label = _label_m.group(1)
+                # 向下搜索中文人名（跳过英文行如"admin"）
+                for _j in range(i + 1, min(i + 3, len(lines_all))):
+                    _next = lines_all[_j].strip()
+                    _nm = re.match(r'^([\u4e00-\u9fff]{2,6})$', _next)
+                    if _nm:
+                        _name = _clean_person_name(_nm.group(1))
+                        if _name and len(_name) >= 2:
+                            if _label == "制单" and "制单人" not in fields:
+                                fields["制单人"] = _name
+                            elif _label == "经办" and "经办人" not in fields:
+                                fields["经办人"] = _name
+                        break
 
     # 紫金等表格格式：值在标签行上方
     # "999999999 赖晨 王丽霞\n核保： 制单： 经办："
@@ -683,18 +715,27 @@ def _extract_policy_no(text: str, fields: dict, company_short: str, policy_type:
                 fields["收费确认时间"] = m.group(2)
                 return
 
-    # 渤海格式：多列标签在同一行，值在下一行拼接
-    # "保险单号： 收费确认时间： No.\n24301038020260149112026-05-1012:40:26264301005822156"
-    # 保单号为日期格式 YYYY-MM-DD 之前的数字序列
+    # 渤海格式：保单号与其他字段拼接或独立一行
+    # 格式1（pdfplumber）："保险单号： 收费确认时间： No.\n24301038020260149112026-05-1012:40:26..."
+    # 格式2（百度 OCR）："保险单号:\n收费确认时间:...\nNo. ...\n2430103802026014911"
     if company_short == "渤海":
         _lines = text.split('\n')
         for _i, _line in enumerate(_lines):
-            if '保险单号' in _line and _i + 1 < len(_lines):
-                _next = _lines[_i + 1].strip()
-                _m = re.match(r'(\d+?)(\d{4}-\d{2}-\d{2})', _next)
-                if _m and len(_m.group(1)) >= 10:
-                    fields["保单号"] = _m.group(1)
-                    return
+            if '保险单号' in _line:
+                # 格式1：下一行是拼接的数字+日期
+                if _i + 1 < len(_lines):
+                    _next = _lines[_i + 1].strip()
+                    _m = re.match(r'(\d+?)(\d{4}-\d{2}-\d{2})', _next)
+                    if _m and len(_m.group(1)) >= 10:
+                        fields["保单号"] = _m.group(1)
+                        return
+                # 格式2：保单号在后续几行内独立一行（纯数字≥15位）
+                for _j in range(_i + 1, min(_i + 5, len(_lines))):
+                    _next = _lines[_j].strip()
+                    if re.match(r'^\d{15,25}$', _next):
+                        fields["保单号"] = _next
+                        return
+                break
 
     # 华农等格式："保单号\n保单号：XXX\n流水号 流水号：YYY"，优先取保单号而非流水号
     m = re.search(r"保单号[：:]\s*(\d{15,30})", text)
@@ -2032,7 +2073,11 @@ def _extract_premium(text: str, fields: dict, company_short: str):
                 # 同行没找到，检查下一行（安诚格式："(¥:1617.85元)"在下一行）
                 if i + 1 < len(lines):
                     next_cleaned = re.sub(r'\s+', '', lines[i + 1])
+                    # 优先匹配带右括号的格式
                     m = re.search(r'[（(][￥¥][：:]\s*([\d,]+\.?\d{0,2})\s*(?:元)?[)）]', next_cleaned)
+                    # 渤海等格式：无右括号 "(¥:1186.15"
+                    if not m:
+                        m = re.search(r'[（(][￥¥][：:]\s*([\d,]+\.\d{2})', next_cleaned)
                     if m:
                         val = m.group(1).replace(",", "")
                         if float(val) > 0:
@@ -2209,6 +2254,27 @@ def _extract_tax(text: str, fields: dict):
 
 def _extract_period(text: str, text_merged: str, fields: dict, company_short: str):
     """提取保险期间"""
+
+    # 渤海等格式：保险期间标签后日期在连续两行，无"至"分隔
+    # "保险期间:自\n2026年5月30日0时0分\n2027年5月30日0时0分"
+    if company_short == "渤海":
+        _lines = text.split('\n')
+        for _i, _line in enumerate(_lines):
+            if '保险期间' in _line and '交强险' not in _line:
+                # 在标签后5行内搜索两个连续的日期行
+                _dates = []
+                for _j in range(_i, min(_i + 5, len(_lines))):
+                    _m = re.search(r'(\d{4}年\d{1,2}月\d{1,2}日)', _lines[_j])
+                    if _m:
+                        _dates.append(_m.group(1))
+                    if len(_dates) == 2:
+                        break
+                if len(_dates) == 2:
+                    fields["保险起期"] = _dates[0]
+                    fields["保险止期"] = _dates[1]
+                    fields["保险期间"] = f"{_dates[0]} 至 {_dates[1]}"
+                    return
+
     # 紫金等格式：同一行有两个"YYYY年M月D日HH时M分"日期，标签在其他行
     # 直接在全文中匹配，不依赖标签位置
     if company_short == "紫金":
