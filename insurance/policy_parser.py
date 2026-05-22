@@ -1745,6 +1745,11 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
             if re.search(r"(?:号[1]?牌[1]?号[1]?码|车牌号码?)[：:\s]*\*[-\s]*\*", text):
                 fields["车牌号"] = "新车"
 
+    # 号牌号码直接标注"新车"（无省份简称，常见于未上牌新车）
+    if "车牌号" not in fields:
+        if re.search(r"(?:号\s*牌\s*号\s*码|号牌号码|车牌号码?)[：:\s]*新车", plate_text):
+            fields["车牌号"] = "新车"
+
     # 新车用车架号后几位作为车牌（如"车牌号:LSB08602"，非省份简称开头）
     if "车牌号" not in fields:
         m = re.search(r"(?:号牌号码|车牌号码?)[：:\s]*([A-Z0-9]{6,17})", text)
