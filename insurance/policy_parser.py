@@ -615,7 +615,7 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
     # ===== 业务员 / 代理人 =====
     # 注意："代理人名称"是中介机构公司名，不是业务员
     for p in [
-        r"业务员[姓名称]*[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
+        r"业务(?:人员|员[姓名称]*)[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
         r"销售人员[名称]*[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
         r"代理人[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
     ]:
