@@ -552,6 +552,10 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
         val = re.sub(r'\s+', '', m.group(1))  # 去除名字中的OCR空格
         if val:
             fields["经办人"] = val
+
+    # 华安等格式：值和标签分离，"自动核保 杨文 杨文" 对应 核保/制单/经办
+    lines_all = text.split('\n')
+
     # 渤海等格式：经办标签在行末，名字在下一行
     # "代理人/经纪人:海腾保险代理有限公司湖南分经办:\n唐景云"
     if "经办人" not in fields:
@@ -564,9 +568,6 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
                     if _name and len(_name) >= 2:
                         fields["经办人"] = _name
                         break
-
-    # 华安等格式：值和标签分离，"自动核保 杨文 杨文" 对应 核保/制单/经办
-    lines_all = text.split('\n')
     for line in lines_all:
         m_auto = re.match(r'\s*(?:自动核保|自动)\s+([\u4e00-\u9fff]{2,6})\s+([\u4e00-\u9fff]{2,6})\s*$', line)
         if m_auto:
