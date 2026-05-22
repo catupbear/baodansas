@@ -363,6 +363,7 @@ def _identify_policy_type(text: str) -> Optional[str]:
         r"(平安车主尊享保障)",
         r"(E车无忧\S*保险?)",              # 阳光E车无忧守护版
         r"(交通出行人身意外伤害保险)",
+        r"(交通出行意外伤害医疗保险)",      # 华安车主尊享格式
         r"(交通出行意外伤害保险)",
         r"(交通工具意外伤害保险)",          # 安盛天平/平安格式
         r"(锦程交通意外伤害保险)",          # 申能格式
@@ -2081,6 +2082,18 @@ def _extract_premium(text: str, fields: dict, company_short: str):
                 if "保费合计" not in fields and 0 < float(last_amt) < 100000:
                     fields["保费合计"] = last_amt
                 break
+
+    # 保障方案表兜底：表头含"保险费"列，数据行中保额与保费粘连
+    # 华安车主尊享等格式："乘坐客运轮船意外医疗 300000.0300.0"
+    # 其中300000.0是保额，300.0是保费，PDF提取时粘连在一起
+    if "保费合计" not in fields:
+        if re.search(r'保险费[（(]人民币', text):
+            for line in text.split('\n'):
+                # 保额（≥5位整数部分）后紧跟保费（≤4位整数部分）
+                m = re.search(r'(\d{5,}\.\d)(\d{1,4}\.\d+)', line)
+                if m:
+                    fields["保费合计"] = m.group(2)
+                    break
 
     # 人保等兜底：险种明细表末尾的大写金额（如"800.00 陆仟叁佰玖拾玖元伍角肆分"）
     # 在"特别约定"或"车险"之前查找最后一个大写金额
