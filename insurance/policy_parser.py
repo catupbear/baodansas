@@ -683,6 +683,19 @@ def _extract_policy_no(text: str, fields: dict, company_short: str, policy_type:
                 fields["收费确认时间"] = m.group(2)
                 return
 
+    # 渤海格式：多列标签在同一行，值在下一行拼接
+    # "保险单号： 收费确认时间： No.\n24301038020260149112026-05-1012:40:26264301005822156"
+    # 保单号为日期格式 YYYY-MM-DD 之前的数字序列
+    if company_short == "渤海":
+        _lines = text.split('\n')
+        for _i, _line in enumerate(_lines):
+            if '保险单号' in _line and _i + 1 < len(_lines):
+                _next = _lines[_i + 1].strip()
+                _m = re.match(r'(\d+?)(\d{4}-\d{2}-\d{2})', _next)
+                if _m and len(_m.group(1)) >= 10:
+                    fields["保单号"] = _m.group(1)
+                    return
+
     # 华农等格式："保单号\n保单号：XXX\n流水号 流水号：YYY"，优先取保单号而非流水号
     m = re.search(r"保单号[：:]\s*(\d{15,30})", text)
     if m:
@@ -2411,6 +2424,18 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
             fields["保险期间"] = f"{m.group(1)} 至 {m.group(2)}"
             return
 
+    # 渤海等格式：两个 YYYY-MM-DD 日期拼接在同一行（无分隔符），附近有保险期间关键词
+    # "2026-05-112027-05-10" 或 "2026-05-1100:00:002027-05-1024:00:00"
+    for i, line in enumerate(lines):
+        _m = re.search(r'(\d{4}-\d{2}-\d{2})(?:\d{2}:\d{2}(?::\d{2})?)?\s*(\d{4}-\d{2}-\d{2})', line)
+        if _m:
+            context = '\n'.join(lines[max(0, i - 3):min(len(lines), i + 3)])
+            if re.search(r'保险期间|起保日期|终保日期|起[至到]|零时起', context):
+                fields["保险起期"] = _m.group(1)
+                fields["保险止期"] = _m.group(2)
+                fields["保险期间"] = f"{_m.group(1)} 至 {_m.group(2)}"
+                return
+
 
 # ============================================================
 # 签单日期提取
@@ -2481,6 +2506,19 @@ def _extract_sign_date(text: str, fields: dict, company_short: str):
         if m:
             fields["签单日期"] = m.group(1)
             return
+
+    # 兜底：渤海等格式 — 多列标签在同一行，日期在下一行拼接
+    # "电子保单生成时间：\nV0201...2026-05-1012:36:25..."
+    # "收费确认时间： No.\n...2026-05-1012:40:26..."
+    if "签单日期" not in fields:
+        _lines = text.split('\n')
+        for _i, _line in enumerate(_lines):
+            if ('电子保单生成时间' in _line or '收费确认时间' in _line) and _i + 1 < len(_lines):
+                _next = _lines[_i + 1].strip()
+                _m = re.search(r'(\d{4}-\d{2}-\d{2})', _next)
+                if _m:
+                    fields["签单日期"] = _m.group(1)
+                    return
 
     # 兜底：华泰驾乘险等 — "制单:XXX"或"复核:XXX"上方紧邻的日期行
     # 格式："2026年05月08日\n绿单专用章\n复核:自动核保\n制单:贾子河"
