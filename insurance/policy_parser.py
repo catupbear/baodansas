@@ -1200,6 +1200,18 @@ def _extract_insured_qianhai(text: str, text_merged: str, fields: dict):
 
 def _extract_insured_guoshou(text: str, text_merged: str, fields: dict):
     """国寿被保险人提取"""
+    # 国寿人意险表格格式：被保险人区域有"名称/姓名 曹桂举 性别 男性"
+    # 优先在"被保险人"标记之后查找，避免误取投保人区域的同名字段
+    insured_pos = re.search(r'被保险人', text)
+    if insured_pos:
+        after_insured = text[insured_pos.start():]
+        m = re.search(r"名称/姓名\s+([\u4e00-\u9fff]{2,6})\s", after_insured)
+        if m:
+            val = _clean_person_name(m.group(1))
+            if _is_valid_person(val):
+                fields["被保险人"] = val
+                return
+
     # 国寿驾乘险格式："名称/姓名 梁书敏 441322..."
     m = re.search(r"名称/姓名\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s+\d|\s*$)", text)
     if m:
@@ -1420,6 +1432,21 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
 
 def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: str):
     """提取投保人"""
+
+    # 国寿人意险表格格式："投保人 名称/姓名 曹桂举 ..."
+    # 在投保人区域（被保险人标记之前）查找"名称/姓名"
+    if company_short == "国寿财产":
+        insured_pos = re.search(r'被保险人', text)
+        end = insured_pos.start() if insured_pos else len(text)
+        proposer_pos = re.search(r'投保人', text)
+        if proposer_pos:
+            region = text[proposer_pos.start():end]
+            m = re.search(r"名称/姓名\s+([\u4e00-\u9fff]{2,6})\s", region)
+            if m:
+                val = _clean_person_name(m.group(1))
+                if _is_valid_person(val):
+                    fields["投保人"] = val
+                    return
 
     # 永诚特殊处理：清理OCR干扰
     if company_short == "永诚":
