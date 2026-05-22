@@ -124,6 +124,7 @@ COMPANY_FALLBACK_SIGNALS = [
     (r"95544|安诚财产|安诚保险", "安诚财产保险股份有限公司"),
     (r"956030|guorenpcic|国任财产|国任保险", "国任财产保险股份有限公司"),
     (r"95522|tkol\.com|泰康在线|泰康财产", "泰康在线财产保险股份有限公司"),
+    (r"95502|yaic\.com|永安保险|永安财产", "永安财产保险股份有限公司"),
 ]
 
 
@@ -316,6 +317,7 @@ def _identify_company(text: str) -> Dict[str, str]:
                 (r'^6203', "申能财产保险股份有限公司"),                # 申能
                 (r'^6260', "国任财产保险股份有限公司"),                # 国任
                 (r'^PDEJ', "中国大地财产保险股份有限公司"),            # 大地
+                (r'^3440', "永安财产保险股份有限公司"),                # 永安
             ]
             for prefix_pat, company_name in prefix_map:
                 if re.match(prefix_pat, pno):
@@ -899,6 +901,30 @@ def _extract_insured(text: str, text_merged: str, fields: dict, company_short: s
     # ===== 前海联合特殊格式 =====
     if company_short == "前海联合":
         _extract_insured_qianhai(text, text_merged, fields)
+        if "被保险人" in fields:
+            return
+
+    # ===== 永安商业险特殊格式 =====
+    # 永安表格OCR："姓名\n王劲辉\n被保\n...险人"，姓名在"被保"标记之前
+    if company_short == "永安":
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped == '被保' or re.match(r'^被保\s*$', stripped):
+                # 向前找"姓名"行，取其下一行或同行值
+                for j in range(max(0, i - 4), i):
+                    if lines[j].strip() == '姓名' and j + 1 < i:
+                        val = _clean_person_name(lines[j + 1].strip())
+                        if _is_valid_person(val):
+                            fields["被保险人"] = val
+                            break
+                    m_name = re.match(r'姓名\s+([\u4e00-\u9fff]{2,6})', lines[j].strip())
+                    if m_name:
+                        val = _clean_person_name(m_name.group(1))
+                        if _is_valid_person(val):
+                            fields["被保险人"] = val
+                            break
+                break
         if "被保险人" in fields:
             return
 
