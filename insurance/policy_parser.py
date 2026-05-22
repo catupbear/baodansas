@@ -482,9 +482,9 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
     if m:
         fields["投保确认码"] = m.group(1)
 
-    # ===== 人员信息 =====
-    _extract_insured(text, text_merged, fields, company_short)
+    # ===== 人员信息（投保人先于被保险人，因为部分被保人逻辑依赖投保人） =====
     _extract_proposer(text, text_merged, fields, company_short)
+    _extract_insured(text, text_merged, fields, company_short)
 
     # ===== 车辆信息 =====
     _extract_vehicle_info(text, fields, company_short)
@@ -794,6 +794,20 @@ def _extract_insured(text: str, text_merged: str, fields: dict, company_short: s
     if company_short == "太平":
         _extract_insured_taiping(text, text_merged, fields)
         if "被保险人" in fields:
+            return
+
+    # ===== "与投保人关系 本人"：被保险人信息区域仅标注关系，无具体姓名 =====
+    # 华安车主尊享等格式："被保险人信息\n与投保人关系 本人"
+    if re.search(r'与投保人关系\s*本人', text):
+        if "投保人" in fields:
+            fields["被保险人"] = fields["投保人"]
+            return
+
+    # ===== "与投保人关系 本人"：被保险人信息区域仅标注关系，无具体姓名 =====
+    # 华安车主尊享等格式："被保险人信息\n与投保人关系 本人"
+    if re.search(r'与投保人关系\s*本人', text):
+        if "投保人" in fields:
+            fields["被保险人"] = fields["投保人"]
             return
 
     # ===== 驾乘险通用：被保险人为"驾驶或乘坐...车辆的人员"，用投保人代替 =====
@@ -1361,8 +1375,8 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
             if _is_valid_person(val):
                 fields["投保人"] = val
                 return
-        # 表格格式："投保人姓名 XXX 性别 男" 或 "投保人姓名 XXX 手机号码"
-        m = re.search(r"投保人姓名\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)\s+(?:性别|证件|手机)", text)
+        # 表格格式："投保人姓名 XXX 性别 男" 或 "投保人姓名 XXX 手机号码/联系电话"
+        m = re.search(r"投保人姓名\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)\s+(?:性别|证件|手机|联系)", text)
         if m:
             val = _clean_person_name(m.group(1))
             if _is_valid_person(val):
@@ -1592,9 +1606,9 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
             if _is_valid_person(val):
                 fields["投保人"] = val
 
-    # "投保人姓名 XXX 性别/手机号码" 格式（阳光驾乘无忧、E车无忧等）
+    # "投保人姓名 XXX 性别/手机号码/联系电话" 格式（阳光驾乘无忧、E车无忧等）
     if "投保人" not in fields:
-        m = re.search(r"投保人姓名\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)\s+(?:性别|证件|手机)", text)
+        m = re.search(r"投保人姓名\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)\s+(?:性别|证件|手机|联系)", text)
         if m:
             val = _clean_person_name(m.group(1))
             if _is_valid_person(val):
