@@ -1361,8 +1361,8 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
             if _is_valid_person(val):
                 fields["投保人"] = val
                 return
-        # 表格格式："投保人姓名 XXX 性别 男"
-        m = re.search(r"投保人姓名\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)\s+(?:性别|证件)", text)
+        # 表格格式："投保人姓名 XXX 性别 男" 或 "投保人姓名 XXX 手机号码"
+        m = re.search(r"投保人姓名\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)\s+(?:性别|证件|手机)", text)
         if m:
             val = _clean_person_name(m.group(1))
             if _is_valid_person(val):
@@ -1592,9 +1592,9 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
             if _is_valid_person(val):
                 fields["投保人"] = val
 
-    # "投保人姓名 XXX 性别" 格式（阳光驾乘无忧、E车无忧等）
+    # "投保人姓名 XXX 性别/手机号码" 格式（阳光驾乘无忧、E车无忧等）
     if "投保人" not in fields:
-        m = re.search(r"投保人姓名\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)\s+(?:性别|证件)", text)
+        m = re.search(r"投保人姓名\s+([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)\s+(?:性别|证件|手机)", text)
         if m:
             val = _clean_person_name(m.group(1))
             if _is_valid_person(val):
@@ -2556,7 +2556,14 @@ def _identify_doc_category(text: str, fields: dict) -> str:
 
     # 投保人声明 / 免责事项说明书 / 授权委托书
     # 这些文档本身含"投保人"等关键词，会触发 _has_policy_markers，需优先独立判断
-    if '投保人声明' in text_head or '免责事项说明书' in text_head:
+    # 但正式保单封面页常列出附件清单（如"已确认的《投保人声明事项》"），
+    # 此时"投保人声明"仅是引用而非文档本身——需用强保单标记排除
+    _has_strong_policy_markers = any(x in text_head for x in [
+        '保险单号', '保单号', '号牌号码', '电子保单', '投保确认',
+    ])
+    if '免责事项说明书' in text_head:
+        return "条款"
+    if '投保人声明' in text_head and not _has_strong_policy_markers:
         return "条款"
     if '授权委托书' in text_head:
         return "其他"
