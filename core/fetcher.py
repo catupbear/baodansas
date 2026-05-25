@@ -169,11 +169,12 @@ class MessageFetcher:
                     ORDER BY m.seq ASC
                 """
             else:
-                # 默认模式：排除已有记录
+                # 默认模式：排除已成功/重复的记录，保留失败的可重试
                 sql = f"""
                     SELECT m.seq, m.roomid, m.sender, m.parsed_content
                     FROM messages m
                     LEFT JOIN insurance_records ir ON ir.msg_seq = m.seq
+                      AND ir.status NOT IN ('failed')
                     WHERE m.msgtime >= %s
                       AND m.msgtype = 'file'
                       AND ({where_source})

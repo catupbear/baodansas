@@ -2893,19 +2893,30 @@ def rescan_history():
     if not isinstance(lookback_days, int) or lookback_days < 1 or lookback_days > 365:
         return jsonify({"code": 400, "msg": "回溯天数需为 1-365 之间的整数"}), 400
 
-    # 获取 fetcher 实例（从 app.extensions）
+    # 获取所有 fetcher 实例（主企业 + 额外企业）
     wxbot_ext = current_app.extensions.get("wxbot", {})
     fetcher = wxbot_ext.get("fetcher")
     if not fetcher:
         return jsonify({"code": 500, "msg": "fetcher 未初始化"}), 500
 
     try:
+        # 主企业补扫
         enqueued = fetcher.rescan_missed_insurance(
             lookback_days=lookback_days,
             config_ids=config_ids,
             room_ids=room_ids,
             force=force,
         )
+        # 额外企业补扫（各企业使用各自的 SDK）
+        for ef in wxbot_ext.get("extra_fetchers", []):
+            extra_f = ef.get("fetcher")
+            if extra_f and hasattr(extra_f, "rescan_missed_insurance"):
+                enqueued += extra_f.rescan_missed_insurance(
+                    lookback_days=lookback_days,
+                    config_ids=config_ids,
+                    room_ids=room_ids,
+                    force=force,
+                )
         return jsonify({
             "code": 0,
             "msg": f"补扫完成，已入队 {enqueued} 条待识别",
