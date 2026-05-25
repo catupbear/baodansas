@@ -1433,6 +1433,51 @@
         </div>
     </div>
 
+    <!-- ========== 批量重新识别失败明细弹窗 ========== -->
+    <div v-if="batchFailModal.visible" class="fixed inset-0 z-[1000] flex items-center justify-center" style="background:rgba(0,0,0,0.4);" @click.self="batchFailModal.visible = false">
+        <div style="background:#fff;border-radius:12px;width:520px;max-width:90vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+            <div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <svg style="width:20px;height:20px;color:#ef4444;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                    </svg>
+                    <span style="font-size:15px;font-weight:600;color:#1f2937;">识别失败明细（{{ batchFailModal.errors.length }} 条）</span>
+                </div>
+                <button @click="batchFailModal.visible = false" style="color:#9ca3af;cursor:pointer;font-size:20px;line-height:1;border:none;background:none;">&times;</button>
+            </div>
+            <div style="padding:12px 20px;overflow-y:auto;flex:1;">
+                <div v-for="(item, idx) in batchFailModal.errors" :key="item.id"
+                     style="padding:10px 12px;margin-bottom:8px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;">
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-size:13px;font-weight:500;color:#1f2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" :title="item.filename">
+                                {{ item.filename }}
+                            </div>
+                            <div style="font-size:12px;color:#dc2626;margin-top:4px;">{{ item.error }}</div>
+                        </div>
+                        <div style="display:flex;gap:6px;flex-shrink:0;">
+                            <button @click="batchFailRetry(item)" style="padding:4px 10px;font-size:11px;border-radius:6px;background:#3b82f6;color:#fff;border:none;cursor:pointer;white-space:nowrap;">
+                                重新识别
+                            </button>
+                            <label style="padding:4px 10px;font-size:11px;border-radius:6px;background:#f97316;color:#fff;border:none;cursor:pointer;white-space:nowrap;">
+                                重新上传
+                                <input type="file" accept=".pdf" style="display:none;" @change="batchFailUpload(item, $event)">
+                            </label>
+                        </div>
+                    </div>
+                    <div v-if="item.status" style="font-size:11px;margin-top:4px;" :style="{ color: item.status === 'success' ? '#16a34a' : item.status === 'retrying' ? '#f97316' : '#ef4444' }">
+                        {{ item.statusMsg }}
+                    </div>
+                </div>
+            </div>
+            <div style="padding:12px 20px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;">
+                <button @click="batchFailModal.visible = false" style="padding:6px 16px;font-size:13px;border-radius:6px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;cursor:pointer;">
+                    关闭
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- ========== 批量下载进度浮窗 ========== -->
     <div v-if="downloadTask.visible" class="fixed bottom-6 right-6 z-50"
          style="width:320px;background:white;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.15);border:1px solid #e5e7eb;overflow:hidden;">
@@ -4042,6 +4087,8 @@ createApp({
 
         // 批量进度
         const batchProgress = reactive({ total: 0, current: 0, success: 0, failed: 0, currentFile: '' });
+        // 批量失败明细弹窗
+        const batchFailModal = reactive({ visible: false, errors: [] });
 
         // 批量重新识别（逐条处理，实时进度）：有勾选按勾选，否则按当前筛选条件全部处理
         async function batchReocrSync() {
@@ -4095,10 +4142,12 @@ createApp({
 
                 batchProcessing.value = true;
                 Object.assign(batchProgress, { total: ids.length, current: 0, success: 0, failed: 0, currentFile: '' });
+                const failedItems = [];
 
                 for (const rid of ids) {
                     const rec = records.value.find(r => r.id === rid);
-                    batchProgress.currentFile = rec ? (rec.filename || `#${rid}`) : `#${rid}`;
+                    const fname = rec ? (rec.filename || `#${rid}`) : `#${rid}`;
+                    batchProgress.currentFile = fname;
 
                     try {
                         const resp = await authFetch('/api/insurance/batch-reocr-sync', {
@@ -4108,12 +4157,20 @@ createApp({
                         });
                         const data = await resp.json();
                         if (data.code === 0 && data.data) {
-                            batchProgress.success += (data.data.sync_success || data.data.reocr_success || 0);
-                            batchProgress.failed += (data.data.reocr_failed || 0);
+                            if (data.data.reocr_failed > 0) {
+                                const errMsg = (data.data.errors || []).map(e => e.error).join('; ') || '识别失败';
+                                const needResend = (data.data.errors || []).some(e => (e.error || '').includes('过期'));
+                                failedItems.push({ id: rid, filename: fname, error: errMsg, needResend });
+                                batchProgress.failed++;
+                            } else {
+                                batchProgress.success += (data.data.sync_success || data.data.reocr_success || 0);
+                            }
                         } else {
+                            failedItems.push({ id: rid, filename: fname, error: data.msg || '请求失败', needResend: false });
                             batchProgress.failed++;
                         }
                     } catch (e) {
+                        failedItems.push({ id: rid, filename: fname, error: e.message, needResend: false });
                         batchProgress.failed++;
                     }
                     batchProgress.current++;
@@ -4123,10 +4180,78 @@ createApp({
                 selectedRecordIds.value = [];
                 await loadRecords();
 
+                // 有失败的弹窗显示明细
+                if (failedItems.length > 0) {
+                    batchFailModal.errors = failedItems;
+                    batchFailModal.visible = true;
+                }
+
                 setTimeout(() => { batchProcessing.value = false; }, 1500);
             } catch (e) {
                 showMessage('批量重新识别失败: ' + e.message, false);
                 batchProcessing.value = false;
+            }
+        }
+
+        // 失败明细弹窗：重新识别
+        async function batchFailRetry(item) {
+            item.status = 'retrying';
+            item.statusMsg = '重新识别中...';
+            try {
+                const resp = await authFetch('/api/insurance/batch-reocr-sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ record_ids: [item.id] }),
+                });
+                const data = await resp.json();
+                if (data.code === 0 && data.data && data.data.reocr_failed === 0) {
+                    item.status = 'success';
+                    item.statusMsg = '识别成功';
+                    loadRecords(false);
+                } else {
+                    const errMsg = (data.data?.errors || []).map(e => e.error).join('; ') || data.msg || '识别失败';
+                    item.status = 'failed';
+                    item.statusMsg = errMsg;
+                    item.error = errMsg;
+                }
+            } catch (e) {
+                item.status = 'failed';
+                item.statusMsg = e.message;
+            }
+        }
+
+        // 失败明细弹窗：重新上传 PDF
+        async function batchFailUpload(item, event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            event.target.value = '';
+            item.status = 'retrying';
+            item.statusMsg = '上传中...';
+            try {
+                const base64 = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result.split(',')[1]);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+                item.statusMsg = '识别中...';
+                const resp = await authFetch(`/api/insurance/reupload-reocr/${item.id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_data: base64, file_name: file.name }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    item.status = 'success';
+                    item.statusMsg = '上传识别成功';
+                    loadRecords(false);
+                } else {
+                    item.status = 'failed';
+                    item.statusMsg = data.msg || '识别失败';
+                }
+            } catch (e) {
+                item.status = 'failed';
+                item.statusMsg = e.message;
             }
         }
 
@@ -4987,7 +5112,7 @@ createApp({
             duplicateVisible, duplicateList, confirmSyncSkipDuplicates, confirmSyncUpdateDuplicates, cancelSync,
             // 识别记录
             records, filteredRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
-            isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask,
+            isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask, batchFailModal, batchFailRetry, batchFailUpload,
             roomList, monitorRooms, monitorUsers,
             recordFilter, statusLabel, onSourceTypeChange, clearAllFilters, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
             recordPagination, visiblePages, recordStats,

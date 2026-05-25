@@ -1171,6 +1171,97 @@ def retry_record(record_id):
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
+@insurance_bp.route("/api/insurance/reupload-reocr/<int:record_id>", methods=["POST"])
+def reupload_reocr(record_id):
+    """
+    重新上传 PDF 并识别，更新已有记录。
+    请求体: {file_data(base64), file_name}
+    """
+    import base64 as b64mod
+
+    if not _handler:
+        return jsonify({"code": 503, "msg": "识别服务未初始化"}), 503
+
+    try:
+        record = get_insurance_record(_db, record_id)
+        if not record:
+            return jsonify({"code": 404, "msg": "记录不存在"}), 404
+
+        body = request.get_json(force=True) or {}
+        file_data_b64 = body.get("file_data", "")
+        file_name = body.get("file_name", record.get("filename", "upload.pdf"))
+
+        if not file_data_b64:
+            return jsonify({"code": 400, "msg": "缺少 file_data 参数"}), 400
+
+        pdf_bytes = b64mod.b64decode(file_data_b64)
+
+        # 上传到 COS
+        cos_url = ""
+        if _handler.cos_storage:
+            try:
+                roomid = record.get("roomid", "manual")
+                sender = record.get("sender", "manual")
+                cos_key = f"insurance/{roomid}/{sender}/{file_name}"
+                cos_url = _handler.cos_storage.upload_bytes(pdf_bytes, cos_key)
+            except Exception as e:
+                logger.warning("重新上传 COS 失败: %s", e)
+
+        # 更新 COS URL 和文件名
+        update_fields = {"filename": file_name}
+        if cos_url:
+            update_fields["cos_url"] = cos_url
+        file_md5 = hashlib.md5(pdf_bytes).hexdigest()
+        update_fields["file_md5"] = file_md5
+        update_insurance_record(_db, record_id, update_fields)
+
+        # OCR 识别
+        ocr_result = _handler._do_ocr(pdf_bytes, file_name)
+        if not ocr_result.get("success"):
+            return jsonify({"code": 500, "msg": f"OCR 识别失败: {ocr_result.get('error', '未知错误')}"}), 500
+
+        policies = ocr_result.get("policies", [])
+        ocr_engine = ocr_result.get("ocr_engine", "pdfplumber")
+
+        if not policies:
+            return jsonify({"code": 500, "msg": "OCR 未解析到任何保单"}), 500
+
+        best_policy = policies[0]
+        parsed_fields = best_policy.get("fields") or {}
+
+        if len(policies) > 1:
+            _handler._cross_fill_same_pdf(policies)
+            parsed_fields = best_policy.get("fields") or {}
+
+        _handler._cross_fill_by_plate(parsed_fields, record_id)
+        _handler._cross_fill_by_person(parsed_fields, record_id)
+
+        from insurance.field_mapping import apply_mapping
+        company_short = parsed_fields.get("保险公司简称", "")
+        mapped_fields = apply_mapping(parsed_fields, company_short)
+
+        raw_text = best_policy.get("raw_text", "")
+        update_insurance_record(_db, record_id, {
+            "status": "done",
+            "ocr_engine": ocr_engine,
+            "doc_category": best_policy.get("doc_category", ""),
+            "confidence": best_policy.get("confidence", 0.0),
+            "parsed_fields": parsed_fields,
+            "mapped_fields": mapped_fields,
+            "raw_text": raw_text,
+            "error_message": "",
+            "policy_count": len(policies),
+            "policy_index": 1,
+        })
+
+        updated = get_insurance_record(_db, record_id)
+        return jsonify({"code": 0, "msg": "重新上传识别成功", "data": updated})
+
+    except Exception as e:
+        logger.exception("重新上传识别记录 %d 失败", record_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
 @insurance_bp.route("/api/insurance/reocr/<int:record_id>", methods=["POST"])
 def reocr_record(record_id):
     """
