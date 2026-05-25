@@ -771,12 +771,14 @@ def _cross_fill_from_siblings(db, record_id: int, file_md5: str, parsed_fields: 
 
     filled = []
     for row in rows:
-        pf = row.get("parsed_fields", {})
+        pf = row.get("parsed_fields") or {}
         if isinstance(pf, str):
             try:
-                pf = json.loads(pf) if pf else {}
+                pf = json.loads(pf) or {}
             except (TypeError, json.JSONDecodeError):
                 continue
+        if not isinstance(pf, dict):
+            continue
         for f in list(missing):
             val = pf.get(f, "")
             if val:
@@ -1647,6 +1649,7 @@ def batch_reocr_sync():
                 results["reocr_success"] += 1
 
             except Exception as e:
+                logger.exception("批量重新识别 record_id=%d 异常", rid)
                 results["errors"].append({"id": rid, "error": f"识别异常: {str(e)[:200]}"})
                 results["reocr_failed"] += 1
                 continue
