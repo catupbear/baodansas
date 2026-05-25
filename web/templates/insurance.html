@@ -1441,43 +1441,50 @@
 
     <!-- ========== 批量重新识别失败明细弹窗 ========== -->
     <div v-if="batchFailModal.visible" class="fixed inset-0 z-[1000] flex items-center justify-center" style="background:rgba(0,0,0,0.4);" @click.self="batchFailModal.visible = false">
-        <div style="background:#fff;border-radius:12px;width:520px;max-width:90vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-            <div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;">
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <svg style="width:20px;height:20px;color:#ef4444;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 16.5c-.77.833.192 2.5 1.732 2.5z"/>
-                    </svg>
-                    <span style="font-size:15px;font-weight:600;color:#1f2937;">识别失败明细（{{ batchFailModal.errors.length }} 条）</span>
-                </div>
-                <button @click="batchFailModal.visible = false" style="color:#9ca3af;cursor:pointer;font-size:20px;line-height:1;border:none;background:none;">&times;</button>
+        <div style="background:#fff;border-radius:12px;width:560px;max-width:90vw;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+            <div style="padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;">
+                <span style="font-size:14px;font-weight:600;color:#1f2937;">识别失败明细（{{ batchFailModal.errors.length }} 条）</span>
+                <button @click="batchFailModal.visible = false" style="color:#9ca3af;cursor:pointer;font-size:18px;line-height:1;border:none;background:none;">&times;</button>
             </div>
-            <div style="padding:12px 20px;overflow-y:auto;flex:1;">
-                <div v-for="(item, idx) in batchFailModal.errors" :key="item.id"
-                     style="padding:10px 12px;margin-bottom:8px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;">
-                    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
-                        <div style="flex:1;min-width:0;">
-                            <div style="font-size:13px;font-weight:500;color:#1f2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" :title="item.filename">
+            <div style="overflow-y:auto;flex:1;">
+                <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                    <thead>
+                        <tr style="background:#f9fafb;position:sticky;top:0;">
+                            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-weight:500;border-bottom:1px solid #e5e7eb;">文件名</th>
+                            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-weight:500;border-bottom:1px solid #e5e7eb;width:180px;">失败原因</th>
+                            <th style="padding:8px 10px;text-align:center;color:#6b7280;font-weight:500;border-bottom:1px solid #e5e7eb;width:130px;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="item in batchFailModal.errors" :key="item.id" style="border-bottom:1px solid #f3f4f6;"
+                            :style="{ background: item.status === 'success' ? '#f0fdf4' : '' }">
+                            <td style="padding:6px 12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="item.filename">
                                 {{ item.filename }}
-                            </div>
-                            <div style="font-size:12px;color:#dc2626;margin-top:4px;">{{ item.error }}</div>
-                        </div>
-                        <div style="display:flex;gap:6px;flex-shrink:0;">
-                            <button @click="batchFailRetry(item)" style="padding:4px 10px;font-size:11px;border-radius:6px;background:#3b82f6;color:#fff;border:none;cursor:pointer;white-space:nowrap;">
-                                重新识别
-                            </button>
-                            <label style="padding:4px 10px;font-size:11px;border-radius:6px;background:#f97316;color:#fff;border:none;cursor:pointer;white-space:nowrap;">
-                                重新上传
-                                <input type="file" accept=".pdf" style="display:none;" @change="batchFailUpload(item, $event)">
-                            </label>
-                        </div>
-                    </div>
-                    <div v-if="item.status" style="font-size:11px;margin-top:4px;" :style="{ color: item.status === 'success' ? '#16a34a' : item.status === 'retrying' ? '#f97316' : '#ef4444' }">
-                        {{ item.statusMsg }}
-                    </div>
-                </div>
+                            </td>
+                            <td style="padding:6px 12px;">
+                                <span v-if="item.status === 'success'" style="color:#16a34a;">{{ item.statusMsg }}</span>
+                                <span v-else-if="item.status === 'retrying'" style="color:#f97316;">{{ item.statusMsg }}</span>
+                                <span v-else style="color:#dc2626;">{{ item.statusMsg || item.error }}</span>
+                            </td>
+                            <td style="padding:6px 10px;text-align:center;">
+                                <div v-if="item.status !== 'success'" style="display:inline-flex;gap:4px;">
+                                    <button @click="batchFailRetry(item)" :disabled="item.status === 'retrying'"
+                                            style="padding:2px 8px;font-size:11px;border-radius:4px;background:#3b82f6;color:#fff;border:none;cursor:pointer;white-space:nowrap;">
+                                        重试
+                                    </button>
+                                    <label style="padding:2px 8px;font-size:11px;border-radius:4px;background:#f97316;color:#fff;border:none;cursor:pointer;white-space:nowrap;">
+                                        上传
+                                        <input type="file" accept=".pdf" style="display:none;" @change="batchFailUpload(item, $event)">
+                                    </label>
+                                </div>
+                                <span v-else style="color:#16a34a;font-size:11px;">✓</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
-            <div style="padding:12px 20px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;">
-                <button @click="batchFailModal.visible = false" style="padding:6px 16px;font-size:13px;border-radius:6px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;cursor:pointer;">
+            <div style="padding:10px 16px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;">
+                <button @click="batchFailModal.visible = false" style="padding:5px 14px;font-size:12px;border-radius:6px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;cursor:pointer;">
                     关闭
                 </button>
             </div>
