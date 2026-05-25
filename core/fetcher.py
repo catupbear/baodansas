@@ -311,6 +311,12 @@ class MessageFetcher:
                 "sender": sender,
                 "content": content,
                 "seq": row["seq"],
+                "finance_sdk": self.finance_sdk,
+                "sdk_config": {
+                    "proxy": self.proxy,
+                    "proxy_passwd": self.passwd,
+                    "timeout": self.timeout,
+                },
             })
             enqueued += 1
 
@@ -424,4 +430,10 @@ class MessageFetcher:
             "sender": sender,
             "content": content,
             "seq": seq,
+            "finance_sdk": self.finance_sdk,
+            "sdk_config": {
+                "proxy": self.proxy,
+                "proxy_passwd": self.passwd,
+                "timeout": self.timeout,
+            },
         })

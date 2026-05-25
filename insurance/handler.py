@@ -637,9 +637,11 @@ class InsuranceHandler:
         """
         sdk = msg_sdk or self.finance_sdk
         sdk_conf = msg_sdk_config or self.sdk_config
+        sdk_source = "消息携带" if msg_sdk else "默认"
         if not sdk:
             logger.warning("finance_sdk 未初始化，无法下载媒体文件")
             return b""
+        logger.info("下载媒体文件使用 %s SDK (id=%s)", sdk_source, id(sdk))
 
         proxy = sdk_conf.get("proxy", "")
         passwd = sdk_conf.get("proxy_passwd", "")

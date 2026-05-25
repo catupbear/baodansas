@@ -336,6 +336,9 @@ def create_app(config: dict) -> Flask:
         # 更新保单识别的 SDK 引用
         insurance_handler.finance_sdk = finance_sdk
         insurance_handler.sdk_config = sdk_config
+        logger.info("主企业 SDK id=%s", id(finance_sdk))
+        for ef in extra_fetchers:
+            logger.info("额外企业 [%s] SDK id=%s", ef["name"], id(ef["sdk"]))
 
         # 将 insurance_handler 绑定到 fetcher（用于自动触发）
         fetcher.insurance_handler = insurance_handler

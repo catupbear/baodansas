@@ -108,15 +108,19 @@ class QuoteHandler:
             logger.warning("报价：OCR 未初始化，跳过 seq=%d", seq)
             return
 
-        # 1. 通过 SDK 下载图片到内存
+        # 1. 通过 SDK 下载图片到内存（优先使用消息携带的 SDK，支持多企业）
         image_bytes = None
+        msg_sdk = msg.get("finance_sdk") or self.finance_sdk
+        msg_sdk_config = msg.get("sdk_config") or self.sdk_config
+        sdk_source = "消息携带" if msg.get("finance_sdk") else "默认"
+        logger.info("报价：下载图片使用 %s SDK (id=%s), seq=%d", sdk_source, id(msg_sdk) if msg_sdk else "None", seq)
         try:
-            if self.finance_sdk and self.sdk_config:
-                ret, data = self.finance_sdk.get_media_data_bytes(
+            if msg_sdk and msg_sdk_config:
+                ret, data = msg_sdk.get_media_data_bytes(
                     sdkfileid,
-                    proxy=self.sdk_config.get("proxy", ""),
-                    passwd=self.sdk_config.get("proxy_passwd", ""),
-                    timeout=self.sdk_config.get("timeout", 10),
+                    proxy=msg_sdk_config.get("proxy", ""),
+                    passwd=msg_sdk_config.get("proxy_passwd", ""),
+                    timeout=msg_sdk_config.get("timeout", 10),
                 )
                 if ret != 0:
                     logger.error("报价：下载图片失败 seq=%d, 错误码=%d", seq, ret)

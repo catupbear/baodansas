@@ -81,6 +81,79 @@ def init_insurance_api(db, handler=None, contacts=None):
     _contacts = contacts
 
 
+def _try_sdk_download(record: dict) -> bytes:
+    """尝试通过企业微信 SDK 重新下载媒体文件，返回 bytes 或 b""。"""
+    from flask import current_app
+
+    msg_seq = record.get("msg_seq")
+    if not msg_seq:
+        return b""
+
+    # 从 messages 表获取 sdkfileid 和 corpid
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT parsed_content, corpid FROM messages WHERE seq = %s",
+            (msg_seq,)
+        )
+        msg_row = cursor.fetchone()
+    finally:
+        conn.close()
+
+    if not msg_row:
+        return b""
+
+    parsed_content = msg_row.get("parsed_content") or "{}"
+    if isinstance(parsed_content, str):
+        try:
+            parsed_content = json.loads(parsed_content)
+        except (TypeError, json.JSONDecodeError):
+            return b""
+
+    sdkfileid = parsed_content.get("sdkfileid", "")
+    if not sdkfileid:
+        return b""
+
+    # 根据消息的 corpid 选择正确的 SDK
+    msg_corpid = msg_row.get("corpid", "")
+    wxbot_ext = current_app.extensions.get("wxbot", {})
+    sdk = None
+    sdk_config = {}
+
+    # 先从额外企业 fetcher 中查找匹配的 SDK
+    if msg_corpid:
+        for ef in wxbot_ext.get("extra_fetchers", []):
+            f = ef.get("fetcher")
+            if f and getattr(f, "corpid", "") == msg_corpid:
+                sdk = f.finance_sdk
+                sdk_config = {"proxy": f.proxy, "proxy_passwd": f.passwd, "timeout": f.timeout}
+                break
+
+    # 未找到则用主企业 SDK
+    if not sdk and _handler:
+        sdk = _handler.finance_sdk
+        sdk_config = _handler.sdk_config
+
+    if not sdk:
+        return b""
+
+    filesize = record.get("filesize", 0) or parsed_content.get("filesize", 0)
+    proxy = sdk_config.get("proxy", "")
+    passwd = sdk_config.get("proxy_passwd", "")
+    timeout = sdk_config.get("timeout", 30)
+
+    try:
+        ret, data = sdk.get_media_data_bytes(sdkfileid, proxy, passwd, timeout)
+        if ret != 0:
+            logger.warning("SDK 重新下载失败, ret=%d, seq=%s", ret, msg_seq)
+            return b""
+        return data if data else b""
+    except Exception as e:
+        logger.warning("SDK 重新下载异常, seq=%s: %s", msg_seq, e)
+        return b""
+
+
 # ============================================================
 # 全局鉴权：所有保单识别 API 均需登录
 # ============================================================
@@ -1082,7 +1155,7 @@ def retry_record(record_id):
 @insurance_bp.route("/api/insurance/reocr/<int:record_id>", methods=["POST"])
 def reocr_record(record_id):
     """
-    重新识别：从 COS 下载文件重新 OCR，更新记录中的识别结果。
+    重新识别：优先从 COS 下载，无 COS URL 时尝试通过 SDK 重新下载。
     不会自动同步钉钉，需要用户预览确认后手动触发同步。
     """
     import requests as http_requests
@@ -1096,14 +1169,36 @@ def reocr_record(record_id):
             return jsonify({"code": 404, "msg": "记录不存在"}), 404
 
         cos_url = record.get("cos_url", "")
-        if not cos_url:
-            return jsonify({"code": 400, "msg": "记录无文件 URL，无法重新识别"}), 400
+        pdf_bytes = b""
 
-        # 1. 从 COS 下载 PDF
-        resp = http_requests.get(cos_url, timeout=60)
-        if resp.status_code != 200:
-            return jsonify({"code": 502, "msg": "文件下载失败"}), 502
-        pdf_bytes = resp.content
+        if cos_url:
+            # 优先从 COS 下载
+            resp = http_requests.get(cos_url, timeout=60)
+            if resp.status_code == 200:
+                pdf_bytes = resp.content
+
+        if not pdf_bytes:
+            # 无 COS URL 或 COS 下载失败，尝试通过 SDK 重新下载
+            pdf_bytes = _try_sdk_download(record)
+            if pdf_bytes and _handler and _handler.cos_storage:
+                # SDK 下载成功，上传到 COS 以便后续使用
+                try:
+                    roomid = record.get("roomid", "unknown")
+                    sender = record.get("sender", "unknown")
+                    filename = record.get("filename", "file.pdf")
+                    cos_key = f"insurance/{roomid}/{sender}/{filename}"
+                    cos_url = _handler.cos_storage.upload_bytes(pdf_bytes, cos_key)
+                    if cos_url:
+                        update_insurance_record(_db, record_id, {"cos_url": cos_url})
+                except Exception as e:
+                    logger.warning("重新识别时上传 COS 失败: %s", e)
+
+        if not pdf_bytes:
+            return jsonify({
+                "code": 400,
+                "msg": "文件已过期无法下载，请在群内重新发送该保单文件",
+                "need_resend": True,
+            }), 400
 
         # 2. 重新 OCR
         filename = record.get("filename", "file.pdf")
