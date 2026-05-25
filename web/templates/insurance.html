@@ -1267,6 +1267,12 @@
                                             class="btn btn-primary" style="padding:3px 8px;font-size:11px;">
                                         {{ record._reocring ? '识别中...' : '重新识别' }}
                                     </button>
+                                    <!-- 重新上传保单（失败且无COS URL） -->
+                                    <label v-if="record.status === 'failed' && !record.cos_url"
+                                           class="btn" style="padding:3px 8px;font-size:11px;background:#f97316;color:#fff;border:1px solid #ea580c;cursor:pointer;">
+                                        {{ record._reuploading ? '上传中...' : '重新上传' }}
+                                        <input type="file" accept=".pdf" style="display:none;" @change="reuploadRecord(record, $event)" :disabled="record._reuploading">
+                                    </label>
                                     <!-- 标记正常（提取异常记录） -->
                                     <button v-if="record.is_abnormal && !record.abnormal_override_reason"
                                             @click="openMarkNormal(record)"
@@ -4897,6 +4903,47 @@ createApp({
             }
         }
 
+        // 重新上传保单
+        async function reuploadRecord(record, event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            event.target.value = '';
+            record._reuploading = true;
+            try {
+                const base64 = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result.split(',')[1]);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+                const resp = await authFetch(`/api/insurance/reupload-reocr/${record.id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_data: base64, file_name: file.name }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showMessage('上传识别成功', true);
+                    if (data.data) {
+                        Object.assign(record, {
+                            ...data.data,
+                            parsed_fields: typeof data.data.parsed_fields === 'string'
+                                ? (() => { try { return JSON.parse(data.data.parsed_fields); } catch { return {}; } })()
+                                : (data.data.parsed_fields || {}),
+                            _reuploading: false, _reocring: false,
+                        });
+                    }
+                    loadRecords(false);
+                } else {
+                    showMessage(data.msg || '上传识别失败', false);
+                }
+            } catch (e) {
+                showMessage(`上传失败: ${e.message}`, false);
+            } finally {
+                record._reuploading = false;
+            }
+        }
+
         // ===== 标记正常 =====
         const markNormalVisible = ref(false);
         const markNormalRecord = ref(null);
@@ -5119,7 +5166,7 @@ createApp({
             recordActiveTab, recordTabs, recordCompanyFilter, recordDocTypeFilter,
             recordCompanyList, recordDocTypes, exportRecordsExcel,
             loadRecords, loadRecordStats, gotoRecordPage, getParsedField, getRecordMappedValue, formatTime,
-            retryRecord, reocrRecord, reocrPreviewFile, previewReocring, syncRecordToDingtalk, previewRecord, previewAutoRecord, previewSiblings, siblingDropdownOpen, switchToSibling, loadAutoRecordRawText,
+            retryRecord, reocrRecord, reuploadRecord, reocrPreviewFile, previewReocring, syncRecordToDingtalk, previewRecord, previewAutoRecord, previewSiblings, siblingDropdownOpen, switchToSibling, loadAutoRecordRawText,
             markNormalVisible, markNormalRecord, markNormalReason, markNormalSaving, getQuickReasons, openMarkNormal, confirmMarkNormal, undoMarkNormal,
             editingField, editingValue, fieldSaving, startEditField, cancelEditField, saveEditField, isManualField,
             listEditing, startListEdit, cancelListEdit, saveListEdit,
