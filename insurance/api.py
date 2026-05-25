@@ -1284,7 +1284,7 @@ def reocr_record(record_id):
 
         # 更新当前记录
         def _apply_policy_to_record(rec_id, policy, policy_idx):
-            pf = policy.get("fields", {})
+            pf = policy.get("fields") or {}
             _handler._cross_fill_by_plate(pf, rec_id)
             _handler._cross_fill_by_person(pf, rec_id)
             cs = pf.get("保险公司简称", "")
@@ -1606,14 +1606,14 @@ def batch_reocr_sync():
                             best_policy = p
                             break
 
-                parsed_fields = best_policy.get("fields", {})
+                parsed_fields = best_policy.get("fields") or {}
                 doc_category = best_policy.get("doc_category", "")
                 confidence = best_policy.get("confidence", 0.0)
 
                 # 同一 PDF 多保单互补
                 if len(policies) > 1:
                     _handler._cross_fill_same_pdf(policies)
-                    parsed_fields = best_policy.get("fields", {})
+                    parsed_fields = best_policy.get("fields") or {}
 
                 # 同 file_md5 兄弟记录互补
                 rec_md5 = record.get("file_md5", "")
