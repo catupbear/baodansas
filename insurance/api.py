@@ -115,43 +115,50 @@ def _try_sdk_download(record: dict) -> bytes:
     if not sdkfileid:
         return b""
 
-    # 根据消息的 corpid 选择正确的 SDK
+    # 构建待尝试的 SDK 列表：先按 corpid 匹配，再加其他所有 SDK
     msg_corpid = msg_row.get("corpid", "")
     wxbot_ext = current_app.extensions.get("wxbot", {})
-    sdk = None
-    sdk_config = {}
+    sdks_to_try = []
 
-    # 先从额外企业 fetcher 中查找匹配的 SDK
+    # 主企业 SDK
+    if _handler and _handler.finance_sdk:
+        sdks_to_try.append(("主企业", _handler.finance_sdk, _handler.sdk_config))
+
+    # 额外企业 SDK
+    for ef in wxbot_ext.get("extra_fetchers", []):
+        f = ef.get("fetcher")
+        if f and f.finance_sdk:
+            conf = {"proxy": f.proxy, "proxy_passwd": f.passwd, "timeout": f.timeout}
+            sdks_to_try.append((ef.get("name", "额外企业"), f.finance_sdk, conf))
+
+    # 如果 corpid 匹配到额外企业，优先排到最前面
     if msg_corpid:
-        for ef in wxbot_ext.get("extra_fetchers", []):
-            f = ef.get("fetcher")
-            if f and getattr(f, "corpid", "") == msg_corpid:
-                sdk = f.finance_sdk
-                sdk_config = {"proxy": f.proxy, "proxy_passwd": f.passwd, "timeout": f.timeout}
-                break
+        for i, (name, sdk, conf) in enumerate(sdks_to_try):
+            for ef in wxbot_ext.get("extra_fetchers", []):
+                f = ef.get("fetcher")
+                if f and f.finance_sdk is sdk and getattr(f, "corpid", "") == msg_corpid:
+                    sdks_to_try.insert(0, sdks_to_try.pop(i))
+                    break
 
-    # 未找到则用主企业 SDK
-    if not sdk and _handler:
-        sdk = _handler.finance_sdk
-        sdk_config = _handler.sdk_config
-
-    if not sdk:
+    if not sdks_to_try:
         return b""
 
-    filesize = record.get("filesize", 0) or parsed_content.get("filesize", 0)
-    proxy = sdk_config.get("proxy", "")
-    passwd = sdk_config.get("proxy_passwd", "")
-    timeout = sdk_config.get("timeout", 30)
+    # 依次尝试每个 SDK 下载
+    for name, sdk, conf in sdks_to_try:
+        proxy = conf.get("proxy", "")
+        passwd = conf.get("proxy_passwd", "")
+        timeout = conf.get("timeout", 30)
+        try:
+            ret, data = sdk.get_media_data_bytes(sdkfileid, proxy, passwd, timeout)
+            if ret == 0 and data:
+                logger.info("SDK 重新下载成功, 使用[%s], seq=%s, 大小=%d", name, msg_seq, len(data))
+                return data
+            logger.info("SDK 重新下载失败[%s], ret=%d, seq=%s, 继续尝试下一个", name, ret, msg_seq)
+        except Exception as e:
+            logger.warning("SDK 重新下载异常[%s], seq=%s: %s", name, msg_seq, e)
 
-    try:
-        ret, data = sdk.get_media_data_bytes(sdkfileid, proxy, passwd, timeout)
-        if ret != 0:
-            logger.warning("SDK 重新下载失败, ret=%d, seq=%s", ret, msg_seq)
-            return b""
-        return data if data else b""
-    except Exception as e:
-        logger.warning("SDK 重新下载异常, seq=%s: %s", msg_seq, e)
-        return b""
+    logger.warning("所有 SDK 均无法下载, seq=%s", msg_seq)
+    return b""
 
 
 # ============================================================
