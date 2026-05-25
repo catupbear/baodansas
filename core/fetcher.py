@@ -158,6 +158,12 @@ class MessageFetcher:
 
             where_source = " OR ".join(conditions)
 
+            # 按 corpid 过滤，每个企业只扫自己的消息
+            corpid_filter = ""
+            if self.corpid:
+                corpid_filter = " AND m.corpid = %s"
+                params.append(self.corpid)
+
             if force:
                 # 强制模式：不排除已有记录
                 sql = f"""
@@ -166,6 +172,7 @@ class MessageFetcher:
                     WHERE m.msgtime >= %s
                       AND m.msgtype = 'file'
                       AND ({where_source})
+                      {corpid_filter}
                     ORDER BY m.seq ASC
                 """
             else:
@@ -179,6 +186,7 @@ class MessageFetcher:
                       AND m.msgtype = 'file'
                       AND ({where_source})
                       AND ir.id IS NULL
+                      {corpid_filter}
                     ORDER BY m.seq ASC
                 """
             cursor.execute(sql, params)
@@ -271,12 +279,19 @@ class MessageFetcher:
             params = [cutoff_ms] + list(target_rooms)
 
             # 查找绑定群中的图片和文本消息
+            # 按 corpid 过滤，每个企业只扫自己的消息
+            corpid_filter = ""
+            if self.corpid:
+                corpid_filter = " AND m.corpid = %s"
+                params.append(self.corpid)
+
             sql = f"""
                 SELECT m.seq, m.roomid, m.sender, m.msgtype, m.parsed_content
                 FROM messages m
                 WHERE m.msgtime >= %s
                   AND m.msgtype IN ('image', 'text')
                   AND m.roomid IN ({placeholders})
+                  {corpid_filter}
                 ORDER BY m.seq ASC
             """
             cursor.execute(sql, params)

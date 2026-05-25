@@ -368,11 +368,13 @@ def create_app(config: dict) -> Flask:
                 fetcher.rescan_missed_insurance(lookback_days=5)
                 logger.info("[车物家] 启动补扫完成")
 
-                # 额外企业补拉
+                # 额外企业补拉 + 补扫
                 for ef in extra_fetchers:
                     logger.info("[%s] 启动补拉：开始拉取中断期间的历史消息...", ef["name"])
                     ef["fetcher"].fetch_new_messages()
-                    logger.info("[%s] 启动补拉完成", ef["name"])
+                    logger.info("[%s] 启动补拉完成，开始补扫漏掉的保单 PDF...", ef["name"])
+                    ef["fetcher"].rescan_missed_insurance(lookback_days=5)
+                    logger.info("[%s] 启动补扫完成", ef["name"])
 
                 # 预热报价绑定列表缓存
                 try:
