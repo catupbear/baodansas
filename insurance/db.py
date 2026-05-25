@@ -342,7 +342,7 @@ def init_insurance_tables(db):
             "CREATE INDEX idx_insurance_is_abnormal ON insurance_records(is_abnormal)",
             # 复合索引：加速列表页常见筛选组合（status + is_abnormal + created_at 范围）
             "CREATE INDEX idx_insurance_status_abnormal_created ON insurance_records(status, is_abnormal, created_at)",
-            "CREATE UNIQUE INDEX idx_insurance_file_md5 ON insurance_records(file_md5)",
+            "CREATE INDEX idx_insurance_file_md5 ON insurance_records(file_md5)",
             "CREATE INDEX idx_insurance_user_id ON insurance_records(user_id)",
             "CREATE INDEX idx_insurance_enterprise_id ON insurance_records(enterprise_id)",
         ]:
@@ -350,6 +350,16 @@ def init_insurance_tables(db):
                 cursor.execute(idx_sql)
             except Exception:
                 pass
+
+        # 修复：将 file_md5 的 UNIQUE INDEX 降级为普通 INDEX（多保单PDF共享同一MD5）
+        try:
+            cursor.execute("SHOW INDEX FROM insurance_records WHERE Key_name = 'idx_insurance_file_md5' AND Non_unique = 0")
+            if cursor.fetchone():
+                cursor.execute("DROP INDEX idx_insurance_file_md5 ON insurance_records")
+                cursor.execute("CREATE INDEX idx_insurance_file_md5 ON insurance_records(file_md5)")
+                logger.info("已将 file_md5 唯一索引降级为普通索引（支持多保单PDF）")
+        except Exception:
+            pass
 
         # 回填 company_short（仅对已有数据且 company_short 为空的记录）
         try:

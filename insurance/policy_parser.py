@@ -386,6 +386,7 @@ def _identify_policy_type(text: str) -> Optional[str]:
         r"(信用卡盗用保险)",               # 国任非车险
         r"(家财守护(?:[（(]\S+?[)）])?)",  # 家财守护（单交经济版）等家财险产品
         r"(司乘人员\S*意外伤害保险)",       # 安华农业等司乘团体险
+        r"(雇主责任保险(?:[（(]\S+?[)）])?)",  # 华安等雇主责任险
     ]:
         m = re.search(p, text)
         if m:
@@ -459,6 +460,8 @@ def get_policy_type_code(policy_type: str) -> tuple:
     if "驾乘" in policy_type or "意外" in policy_type or "出行险" in policy_type or "出行无忧" in policy_type or "安心行" in policy_type or "E车无忧" in policy_type or "卓越全意保" in policy_type:
         return "accident", "驾乘/意外险"
     if "账户" in policy_type or "资金安全" in policy_type or "信用卡" in policy_type or "盗用" in policy_type:
+        return "non_vehicle", "非车险"
+    if "雇主" in policy_type:
         return "non_vehicle", "非车险"
     if "承运人" in policy_type or "货运" in policy_type or "货物" in policy_type or "责任险" in policy_type:
         return "non_vehicle", "非车险"
@@ -2786,11 +2789,16 @@ def _identify_doc_category(text: str, fields: dict) -> str:
     # 需排除"投保单号"（保单中引用投保单号的字段）
     # 需排除"保险条款、投保单、保险单"（保单重要提示中的条款引用）
     # 需排除"投保单是本保险单的不可分割的组成部分"（保单标准条文引用）
+    # 需排除"保险合同由投保单及其附件"（保单正文中引用投保单作为合同组成部分）
+    # 需排除有强保单标记的文档（含保险单号/电子保单/保单号的文档是正式保单，
+    #   其中的"投保单"仅为引用，如"填写投保单"、"由投保单及其附件"等）
     if re.search(r'投保[单书](?!号)', text_head):
-        if not re.search(r'保险条款[、，]投保单', text_head):
-            if not re.search(r'投保单\s*是本保险[单合]', text_head):
-                if _has_policy_markers:
-                    return "投保单"
+        if not _has_strong_policy_markers:
+            if not re.search(r'保险条款[、，]投保单', text_head):
+                if not re.search(r'投保单\s*是本保险[单合]', text_head):
+                    if not re.search(r'由投保单', text_head):
+                        if _has_policy_markers:
+                            return "投保单"
 
     # 有保单关键字段才认定为保单，否则标记为未知
     if _has_policy_markers:
