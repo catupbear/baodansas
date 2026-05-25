@@ -415,8 +415,10 @@ class InsuranceHandler:
         pdf_bytes = b""
         cos_url = ""
         try:
-            # 3. 下载媒体文件
-            pdf_bytes = self._download_media(sdkfileid, filesize)
+            # 3. 下载媒体文件（优先使用消息携带的 SDK，支持多企业）
+            msg_sdk = msg.get("finance_sdk")
+            msg_sdk_config = msg.get("sdk_config")
+            pdf_bytes = self._download_media(sdkfileid, filesize, msg_sdk, msg_sdk_config)
             if not pdf_bytes:
                 raise RuntimeError("媒体文件下载失败或内容为空")
 
@@ -615,27 +617,33 @@ class InsuranceHandler:
     # 媒体下载
     # ------------------------------------------------------------------ #
 
-    def _download_media(self, sdkfileid: str, filesize: int) -> bytes:
+    def _download_media(self, sdkfileid: str, filesize: int,
+                        msg_sdk=None, msg_sdk_config: dict = None) -> bytes:
         """
         从企业微信 SDK 下载媒体文件。
 
+        - 优先使用消息携带的 SDK（支持多企业）
         - filesize > MAX_MEMORY_SIZE 时走临时文件
         - 否则直接下载到内存
 
         Args:
-            sdkfileid: SDK 文件 ID
-            filesize:  文件大小（字节）
+            sdkfileid:      SDK 文件 ID
+            filesize:       文件大小（字节）
+            msg_sdk:        消息来源企业的 SDK 实例（优先使用）
+            msg_sdk_config: 消息来源企业的 SDK 配置
 
         Returns:
             文件字节内容，失败返回 b""
         """
-        if not self.finance_sdk:
+        sdk = msg_sdk or self.finance_sdk
+        sdk_conf = msg_sdk_config or self.sdk_config
+        if not sdk:
             logger.warning("finance_sdk 未初始化，无法下载媒体文件")
             return b""
 
-        proxy = self.sdk_config.get("proxy", "")
-        passwd = self.sdk_config.get("proxy_passwd", "")
-        timeout = self.sdk_config.get("timeout", 30)
+        proxy = sdk_conf.get("proxy", "")
+        passwd = sdk_conf.get("proxy_passwd", "")
+        timeout = sdk_conf.get("timeout", 30)
 
         try:
             if filesize > MAX_MEMORY_SIZE:
@@ -643,7 +651,7 @@ class InsuranceHandler:
                 tmp_fd, tmp_path = tempfile.mkstemp(suffix=".pdf")
                 os.close(tmp_fd)
                 try:
-                    ret, _ = self.finance_sdk.get_media_data(
+                    ret, _ = sdk.get_media_data(
                         sdkfileid, proxy, passwd, timeout, tmp_path
                     )
                     if ret != 0:
@@ -658,7 +666,7 @@ class InsuranceHandler:
                         pass
             else:
                 # 小文件直接下载到内存
-                ret, data = self.finance_sdk.get_media_data_bytes(
+                ret, data = sdk.get_media_data_bytes(
                     sdkfileid, proxy, passwd, timeout
                 )
                 if ret != 0:

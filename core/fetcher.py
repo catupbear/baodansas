@@ -210,6 +210,12 @@ class MessageFetcher:
                 "filename": filename,
                 "sdkfileid": content.get("sdkfileid", ""),
                 "filesize": content.get("filesize", 0),
+                "finance_sdk": self.finance_sdk,
+                "sdk_config": {
+                    "proxy": self.proxy,
+                    "proxy_passwd": self.passwd,
+                    "timeout": self.timeout,
+                },
             })
             enqueued += 1
 
@@ -384,6 +390,12 @@ class MessageFetcher:
             "filename": filename,
             "sdkfileid": content.get("sdkfileid", ""),
             "filesize": content.get("filesize", 0),
+            "finance_sdk": self.finance_sdk,
+            "sdk_config": {
+                "proxy": self.proxy,
+                "proxy_passwd": self.passwd,
+                "timeout": self.timeout,
+            },
         })
 
     def _check_quote_trigger(self, seq: int, msg_data: dict, parsed: dict):
