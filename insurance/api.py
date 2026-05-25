@@ -106,8 +106,9 @@ def _try_sdk_download(record: dict) -> bytes:
         logger.warning("SDK 重新下载跳过: seq=%s 在 messages 表中不存在", msg_seq)
         return b""
 
-    logger.info("SDK 重新下载: seq=%s, 找到 %d 条消息记录, corpids=%s",
-                msg_seq, len(msg_rows), [r.get("corpid", "") for r in msg_rows])
+    filename = record.get("filename", "")
+    logger.info("SDK 重新下载: seq=%s, filename=%s, 找到 %d 条消息记录, corpids=%s",
+                msg_seq, filename, len(msg_rows), [r.get("corpid", "") for r in msg_rows])
 
     # 收集所有候选的 sdkfileid（不同 corpid 可能不同）
     wxbot_ext = current_app.extensions.get("wxbot", {})
@@ -166,7 +167,7 @@ def _try_sdk_download(record: dict) -> bytes:
             except Exception as e:
                 logger.warning("SDK 重新下载异常: [%s] seq=%s: %s", name, msg_seq, e)
 
-    logger.warning("所有 SDK 均无法下载, seq=%s", msg_seq)
+    logger.warning("所有 SDK 均无法下载, seq=%s, filename=%s", msg_seq, filename)
     return b""
 
 
