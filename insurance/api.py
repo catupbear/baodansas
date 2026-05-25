@@ -87,9 +87,10 @@ def _try_sdk_download(record: dict) -> bytes:
 
     msg_seq = record.get("msg_seq")
     if not msg_seq:
+        logger.warning("SDK 重新下载跳过: record_id=%s 无 msg_seq", record.get("id"))
         return b""
 
-    # 从 messages 表获取 sdkfileid 和 corpid
+    # 从 messages 表获取 sdkfileid 和 corpid（可能有多条同 seq 不同 corpid）
     conn = _db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -97,65 +98,73 @@ def _try_sdk_download(record: dict) -> bytes:
             "SELECT parsed_content, corpid FROM messages WHERE seq = %s",
             (msg_seq,)
         )
-        msg_row = cursor.fetchone()
+        msg_rows = cursor.fetchall()
     finally:
         conn.close()
 
-    if not msg_row:
+    if not msg_rows:
+        logger.warning("SDK 重新下载跳过: seq=%s 在 messages 表中不存在", msg_seq)
         return b""
 
-    parsed_content = msg_row.get("parsed_content") or "{}"
-    if isinstance(parsed_content, str):
-        try:
-            parsed_content = json.loads(parsed_content)
-        except (TypeError, json.JSONDecodeError):
-            return b""
+    logger.info("SDK 重新下载: seq=%s, 找到 %d 条消息记录, corpids=%s",
+                msg_seq, len(msg_rows), [r.get("corpid", "") for r in msg_rows])
 
-    sdkfileid = parsed_content.get("sdkfileid", "")
-    if not sdkfileid:
-        return b""
-
-    # 构建待尝试的 SDK 列表：先按 corpid 匹配，再加其他所有 SDK
-    msg_corpid = msg_row.get("corpid", "")
+    # 收集所有候选的 sdkfileid（不同 corpid 可能不同）
     wxbot_ext = current_app.extensions.get("wxbot", {})
-    sdks_to_try = []
 
-    # 主企业 SDK
+    # 构建 corpid → SDK 映射
+    sdk_map = {}
     if _handler and _handler.finance_sdk:
-        sdks_to_try.append(("主企业", _handler.finance_sdk, _handler.sdk_config))
+        # 主企业
+        main_fetcher = wxbot_ext.get("fetcher")
+        main_corpid = getattr(main_fetcher, "corpid", "") if main_fetcher else ""
+        sdk_map[main_corpid] = ("主企业", _handler.finance_sdk, _handler.sdk_config)
 
-    # 额外企业 SDK
     for ef in wxbot_ext.get("extra_fetchers", []):
         f = ef.get("fetcher")
         if f and f.finance_sdk:
             conf = {"proxy": f.proxy, "proxy_passwd": f.passwd, "timeout": f.timeout}
-            sdks_to_try.append((ef.get("name", "额外企业"), f.finance_sdk, conf))
+            sdk_map[f.corpid] = (ef.get("name", "额外企业"), f.finance_sdk, conf)
 
-    # 如果 corpid 匹配到额外企业，优先排到最前面
-    if msg_corpid:
-        for i, (name, sdk, conf) in enumerate(sdks_to_try):
-            for ef in wxbot_ext.get("extra_fetchers", []):
-                f = ef.get("fetcher")
-                if f and f.finance_sdk is sdk and getattr(f, "corpid", "") == msg_corpid:
-                    sdks_to_try.insert(0, sdks_to_try.pop(i))
-                    break
+    logger.info("SDK 重新下载: 可用SDK=%s", list(sdk_map.keys()))
 
-    if not sdks_to_try:
-        return b""
+    # 对每条消息记录，用对应 corpid 的 SDK 尝试下载
+    for msg_row in msg_rows:
+        parsed_content = msg_row.get("parsed_content") or "{}"
+        if isinstance(parsed_content, str):
+            try:
+                parsed_content = json.loads(parsed_content)
+            except (TypeError, json.JSONDecodeError):
+                continue
 
-    # 依次尝试每个 SDK 下载
-    for name, sdk, conf in sdks_to_try:
-        proxy = conf.get("proxy", "")
-        passwd = conf.get("proxy_passwd", "")
-        timeout = conf.get("timeout", 30)
-        try:
-            ret, data = sdk.get_media_data_bytes(sdkfileid, proxy, passwd, timeout)
-            if ret == 0 and data:
-                logger.info("SDK 重新下载成功, 使用[%s], seq=%s, 大小=%d", name, msg_seq, len(data))
-                return data
-            logger.info("SDK 重新下载失败[%s], ret=%d, seq=%s, 继续尝试下一个", name, ret, msg_seq)
-        except Exception as e:
-            logger.warning("SDK 重新下载异常[%s], seq=%s: %s", name, msg_seq, e)
+        sdkfileid = parsed_content.get("sdkfileid", "")
+        if not sdkfileid:
+            continue
+
+        msg_corpid = msg_row.get("corpid", "")
+
+        # 优先用匹配 corpid 的 SDK，然后尝试其他所有 SDK
+        sdks_to_try = []
+        if msg_corpid in sdk_map:
+            sdks_to_try.append(sdk_map[msg_corpid])
+        for cid, entry in sdk_map.items():
+            if entry not in sdks_to_try:
+                sdks_to_try.append(entry)
+
+        for name, sdk, conf in sdks_to_try:
+            proxy = conf.get("proxy", "")
+            passwd = conf.get("proxy_passwd", "")
+            timeout = conf.get("timeout", 30)
+            try:
+                ret, data = sdk.get_media_data_bytes(sdkfileid, proxy, passwd, timeout)
+                if ret == 0 and data:
+                    logger.info("SDK 重新下载成功: [%s], seq=%s, corpid=%s, 大小=%d",
+                                name, msg_seq, msg_corpid, len(data))
+                    return data
+                logger.info("SDK 重新下载失败: [%s] ret=%d, seq=%s, corpid=%s",
+                            name, ret, msg_seq, msg_corpid)
+            except Exception as e:
+                logger.warning("SDK 重新下载异常: [%s] seq=%s: %s", name, msg_seq, e)
 
     logger.warning("所有 SDK 均无法下载, seq=%s", msg_seq)
     return b""
