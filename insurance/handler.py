@@ -483,8 +483,17 @@ class InsuranceHandler:
 
             # 6-9. 逐条处理每份保单（多保单PDF会产生多条记录）
             total_policies = len(policies)
+            logger.info(
+                "开始逐条处理多保单, 共%d份, record_id=%d, file_md5=%s",
+                total_policies, record_id, file_md5,
+            )
             for policy_idx, policy in enumerate(policies):
                 cur_record_id = record_id  # 第一条复用已创建的记录
+                policy_type = policy.get("fields", {}).get("险种类型", "未知")
+                logger.info(
+                    "处理第%d/%d份保单: 险种=%s, confidence=%.2f",
+                    policy_idx + 1, total_policies, policy_type, policy.get("confidence", 0),
+                )
 
                 if policy_idx > 0:
                     # 多保单的第2条及之后，创建新记录
@@ -508,11 +517,15 @@ class InsuranceHandler:
                     try:
                         cur_record_id = save_insurance_record(self.db, extra_record)
                         logger.info(
-                            "多保单PDF第%d/%d条, 新建record_id=%d",
-                            policy_idx + 1, len(policies), cur_record_id,
+                            "多保单PDF第%d/%d条, 新建record_id=%d, 险种=%s",
+                            policy_idx + 1, len(policies), cur_record_id, policy_type,
                         )
                     except Exception as e:
-                        logger.error("多保单创建第%d条记录失败: %s", policy_idx + 1, e)
+                        logger.error(
+                            "多保单创建第%d/%d条记录失败(险种=%s, file_md5=%s): %s",
+                            policy_idx + 1, len(policies), policy_type, file_md5, e,
+                            exc_info=True,
+                        )
                         continue
 
                 parsed_fields = policy.get("fields", {})

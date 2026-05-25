@@ -1410,6 +1410,13 @@ def reocr_record(record_id):
         updated_count = 1
 
         # 为每条兄弟记录匹配 policy 并更新
+        # 同步主记录的归属信息到兄弟记录（企业ID、用户ID）
+        owner_sync = {}
+        if record.get("enterprise_id") is not None:
+            owner_sync["enterprise_id"] = record["enterprise_id"]
+        if record.get("user_id") is not None:
+            owner_sync["user_id"] = record["user_id"]
+
         for sib in sibling_records:
             sib_pf = sib.get("parsed_fields", {})
             sib_no = sib_pf.get("保单号", "") if isinstance(sib_pf, dict) else ""
@@ -1432,16 +1439,28 @@ def reocr_record(record_id):
 
             used_policies.add(matched_idx)
             _apply_policy_to_record(sib["id"], policies[matched_idx], matched_idx)
+            # 同步归属信息
+            if owner_sync:
+                update_insurance_record(_db, sib["id"], owner_sync)
             updated_count += 1
 
         # 为多出的保单新建记录（沿用主记录的创建时间）
         original_created_at = record.get("created_at", "")
         new_sibling_ids = []
+        logger.info(
+            "重新识别多保单: total_policies=%d, used_policies=%s, sibling_count=%d, file_md5=%s",
+            total_policies, used_policies, len(sibling_records), file_md5,
+        )
         for i in range(len(policies)):
             if i in used_policies:
                 continue
             policy = policies[i]
             pf = policy.get("fields", {})
+            policy_type = pf.get("险种类型", "未知")
+            logger.info(
+                "重新识别需新建第%d/%d份保单: 险种=%s, file_md5=%s",
+                i + 1, total_policies, policy_type, file_md5,
+            )
             _handler._cross_fill_by_plate(pf, record_id)
             _handler._cross_fill_by_person(pf, record_id)
             cs = pf.get("保险公司简称", "")
@@ -1475,9 +1494,13 @@ def reocr_record(record_id):
                 new_id = save_insurance_record(_db, extra_record)
                 new_sibling_ids.append(new_id)
                 updated_count += 1
-                logger.info("重新识别新增保单记录 record_id=%d, policy_index=%d/%d", new_id, i + 1, total_policies)
+                logger.info("重新识别新增保单记录成功 record_id=%d, policy_index=%d/%d, 险种=%s", new_id, i + 1, total_policies, policy_type)
             except Exception as e:
-                logger.error("重新识别新增第%d条记录失败: %s", i + 1, e)
+                logger.error(
+                    "重新识别新增第%d/%d条记录失败(险种=%s, file_md5=%s): %s",
+                    i + 1, total_policies, policy_type, file_md5, e,
+                    exc_info=True,
+                )
 
         # 最终处理：统一更新所有兄弟记录的 policy_count + 字段互补
         if file_md5:

@@ -876,6 +876,12 @@
                 </div>
                 <!-- 常用搜索字段 -->
                 <div class="flex items-center gap-1.5">
+                    <span class="text-xs text-gray-500 font-medium whitespace-nowrap">文件名:</span>
+                    <input v-model="recordFilter.keyword" type="text" placeholder="模糊搜索..."
+                           class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
+                           style="width:120px;" @input="debounceLoadRecords()">
+                </div>
+                <div class="flex items-center gap-1.5">
                     <span class="text-xs text-gray-500 font-medium whitespace-nowrap">保单号:</span>
                     <input v-model="recordFilter.search_policy_no" type="text" placeholder="模糊搜索..."
                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
