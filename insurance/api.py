@@ -1594,11 +1594,12 @@ def batch_reocr_sync():
                 # 匹配原记录对应的保单
                 original_policy_no = ""
                 try:
-                    orig_fields = record.get("parsed_fields", {})
+                    orig_fields = record.get("parsed_fields") or {}
                     if isinstance(orig_fields, str):
-                        orig_fields = json.loads(orig_fields) if orig_fields else {}
-                    original_policy_no = orig_fields.get("保单号", "")
-                except (TypeError, json.JSONDecodeError):
+                        orig_fields = json.loads(orig_fields) or {}
+                    if isinstance(orig_fields, dict):
+                        original_policy_no = orig_fields.get("保单号", "")
+                except Exception:
                     pass
 
                 best_policy = policies[0]
