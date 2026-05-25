@@ -1519,10 +1519,11 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
 
     # 华泰/国任/亚太等表格格式："姓名\n付琴\n联系电话\n...\n投保人\n证件类型"
     # 或亚太格式："姓名 王忠武 联系电话...\n投保人 证件类型 身份证..."
-    # "投保人"是区域标题，投保人姓名在前面"姓名"字段的下一行或同一行
+    # 永安等格式："姓名 王劲辉 联系电话...\n投保人信息\n证件号码..."
+    # "投保人"/"投保人信息"是区域标题，投保人姓名在前面"姓名"字段的下一行或同一行
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if (stripped == '投保人' or re.match(r'^投保人\s+证件', stripped)) and i >= 1:
+        if (stripped == '投保人' or stripped == '投保人信息' or re.match(r'^投保人\s+证件', stripped)) and i >= 1:
             # 向前找"姓名"行（不含/名称，区别于浙商格式）
             for j in range(max(0, i - 6), i):
                 if lines[j].strip() == '姓名' and j + 1 < i:
@@ -2083,6 +2084,10 @@ def _extract_premium(text: str, fields: dict, company_short: str):
         # "保 险 费 合 计 人民币大写：...，小写：RMB4636.16元（其中 不含税保费...）"
         # OCR 可能将"保险费合计"拆成带空格的形式
         patterns.insert(2, r"保\s*险\s*费\s*合\s*计.*?小写[：:\s]*RMB\s*([\d,]+\.\d{2})")
+
+    # 永安格式："保险费（人民币：元） 叁佰叁拾陆元 ￥ 336.00"
+    if company_short == "永安":
+        patterns.insert(0, r"保险费[（(]人民币[：:]元[)）]\s*\S+\s*[￥¥]\s*([\d,]+\.\d{2})")
 
     # 泰康在线驾乘格式："驾乘意外险费合计 （人民币大写）玖拾捌元整 ￥：98.00 元"
     if company_short == "泰康在线":
