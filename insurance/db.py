@@ -317,7 +317,7 @@ def init_insurance_tables(db):
         new_columns = [
             ("raw_text", "LONGTEXT COMMENT 'OCR提取原文'"),
             ("company_short", "VARCHAR(64) DEFAULT '' COMMENT '保险公司简称（冗余列，加速统计）'"),
-            ("is_abnormal", "TINYINT DEFAULT 0 COMMENT '是否提取异常（预计算，加速列表筛选）'"),
+            ("is_abnormal", "TINYINT DEFAULT 0 COMMENT '是否需人工补充（预计算，加速列表筛选）'"),
             ("hint", "VARCHAR(64) DEFAULT '' COMMENT '提示信息（如：保单无投保人）'"),
             ("display_fields", "TEXT COMMENT '映射后的展示字段JSON（列表轻量展示用）'"),
             ("file_md5", "VARCHAR(32) DEFAULT NULL COMMENT 'PDF文件MD5（用于去重）'"),

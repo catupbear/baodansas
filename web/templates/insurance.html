@@ -583,7 +583,7 @@
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                     </svg>
-                    导出提取异常
+                    导出需人工补充
                 </button>
                 <button v-if="nonPolicyResults.length" @click="exportExcel('nonpolicy')"
                         class="btn" style="padding:6px 14px;font-size:13px;background:#fefce8;color:#ca8a04;border:1px solid #fde68a;">
@@ -679,10 +679,10 @@
                 </table>
             </div>
 
-            <!-- 提取异常表格 -->
+            <!-- 需人工补充表格 -->
             <div v-if="(activeTab === 'abnormal' || activeTab === 'all') && abnormalResults.length" class="table-scroll-wrapper">
                 <div v-if="activeTab === 'all'" class="px-4 pt-3 pb-1">
-                    <span class="text-xs font-semibold text-orange-600">提取异常 ({{ abnormalResults.length }})</span>
+                    <span class="text-xs font-semibold text-orange-600">需人工补充 ({{ abnormalResults.length }})</span>
                 </div>
                 <table class="result-table text-left">
                     <thead class="bg-orange-50">
@@ -801,7 +801,7 @@
                 <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
-                <p class="text-gray-400 text-sm">暂无提取异常记录</p>
+                <p class="text-gray-400 text-sm">暂无需人工补充记录</p>
             </div>
             <div v-if="activeTab === 'nonpolicy' && !nonPolicyResults.length" class="p-12 text-center">
                 <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1279,7 +1279,7 @@
                                         {{ record._reuploading ? '上传中...' : '重新上传' }}
                                         <input type="file" accept=".pdf" style="display:none;" @change="reuploadRecord(record, $event)" :disabled="record._reuploading">
                                     </label>
-                                    <!-- 标记正常（提取异常记录） -->
+                                    <!-- 标记正常（需人工补充记录） -->
                                     <button v-if="record.is_abnormal && !record.abnormal_override_reason"
                                             @click="openMarkNormal(record)"
                                             class="btn" style="padding:3px 8px;font-size:11px;background:#fef3c7;border:1px solid #fbbf24;color:#92400e;">
@@ -2862,7 +2862,7 @@ createApp({
             });
         }
 
-        // 提取异常必检字段（导出列名）：除车船税和无法自动提取的字段外，其余必须有值
+        // 需人工补充必检字段（导出列名）：除车船税和无法自动提取的字段外，其余必须有值
         // 不参与异常检测：车船税、佣金率、佣金、业务员、采购费率、公司利润、跟单人、跟单人利润、出单渠道
         const REQUIRED_FIELDS = ['承保公司', '保单号', '险种', '车牌', '投保人', '被保人', '签单日期', '起保日期', '终保日期', '保费'];
 
@@ -2880,7 +2880,7 @@ createApp({
             '保费': ['保费合计'],
         };
 
-        // 检查识别记录是否提取异常（parsed_fields 使用 OCR 字段名）
+        // 检查识别记录是否需人工补充（parsed_fields 使用 OCR 字段名）
         function isRecordAbnormal(record) {
             if (!record || (record.status !== 'done' && record.status !== 'success')) return false;
             const cat = record.doc_category || '';
@@ -2940,7 +2940,7 @@ createApp({
             return policyType.includes('交强') || policyType.includes('交通事故责任强制');
         }
 
-        // 判断是否提取异常（成功识别的保单但必填字段缺失即为异常）
+        // 判断是否需人工补充（成功识别的保单但必填字段缺失即为异常）
         // 交强险且同车牌仅一份时，缺少投保人不算异常
         function isAbnormal(r) {
             if (!r.success || isNonPolicy(r)) return false;
@@ -3049,7 +3049,7 @@ createApp({
         const tabs = computed(() => [
             { key: 'all', label: '全部', count: (docCategoryFilter.value === 'all' && companyFilter.value === 'all') ? results.value.length : displayResults.value.length },
             { key: 'success', label: '成功', count: filteredSuccessResults.value.length },
-            { key: 'abnormal', label: '提取异常', count: abnormalResults.value.length },
+            { key: 'abnormal', label: '需人工补充', count: abnormalResults.value.length },
             { key: 'nonpolicy', label: '非保单', count: nonPolicyResults.value.length },
             { key: 'failed', label: '失败', count: failedResults.value.length },
         ]);
@@ -3622,7 +3622,7 @@ createApp({
             crossFillByPlate();
         }
 
-        // 构建提取异常的导出数据
+        // 构建需人工补充的导出数据
         function buildAbnormalInvoices() {
             return abnormalResults.value.map(r => {
                 const fields = r.invoices && r.invoices[0] ? r.invoices[0].fields : {};
@@ -3692,7 +3692,7 @@ createApp({
                 fileName = '保单识别结果.xlsx';
             } else if (type === 'abnormal') {
                 data = enrichUploadData(buildAbnormalInvoices(), abnormalResults.value);
-                fileName = '提取异常清单.xlsx';
+                fileName = '需人工补充清单.xlsx';
             } else if (type === 'nonpolicy') {
                 data = nonPolicyResults.value.map(r => ({
                     file_name: r.file_name,
@@ -4052,18 +4052,18 @@ createApp({
                 console.error('加载统计失败', e);
             }
         }
-        // 状态 Tab（成功=保单且置信度>=0.5，提取异常=置信度<0.5，非保单=doc_category非保单）
+        // 状态 Tab（成功=保单且置信度>=0.5，需人工补充=置信度<0.5，非保单=doc_category非保单）
         const recordActiveTab = ref('done');
         // Tab 统计数来自服务端，不再依赖前端 parsed_fields 计算
         const recordTabs = computed(() => [
             { key: 'all', label: '全部', count: recordStats.total },
             { key: 'done', label: '成功', count: recordStats.done - recordStats.abnormal - recordStats.nonpolicy },
-            { key: 'abnormal', label: '提取异常', count: recordStats.abnormal },
+            { key: 'abnormal', label: '需人工补充', count: recordStats.abnormal },
             { key: 'nonpolicy', label: '非保单', count: recordStats.nonpolicy },
             { key: 'failed', label: '失败', count: recordStats.failed },
         ]);
 
-        // 前端过滤（提取异常/非保单 Tab 需要从 done 记录中二次筛选）
+        // 前端过滤（需人工补充/非保单 Tab 需要从 done 记录中二次筛选）
         // 筛选已移至服务端，前端直接返回列表数据
         const filteredRecords = computed(() => records.value);
 

@@ -498,7 +498,7 @@ def update_record_fields(record_id):
 
 @insurance_bp.route("/api/insurance/records/<int:record_id>/mark-normal", methods=["PUT"])
 def mark_record_normal(record_id):
-    """手动标记提取异常记录为正常，需提供原因"""
+    """手动标记需人工补充记录为正常，需提供原因"""
     _require_login()
     try:
         record = get_insurance_record(_db, record_id)
