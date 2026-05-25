@@ -6,6 +6,7 @@
 """
 
 import gc
+import json
 import logging
 import os
 import queue
@@ -799,7 +800,12 @@ class InsuranceHandler:
         filled = []
         for field in missing:
             for rec in history:
-                hist_fields = rec.get("parsed_fields", {})
+                hist_fields = rec.get("parsed_fields") or {}
+                if isinstance(hist_fields, str):
+                    try:
+                        hist_fields = json.loads(hist_fields) or {}
+                    except (TypeError, json.JSONDecodeError, ValueError):
+                        hist_fields = {}
                 val = hist_fields.get(field, "")
                 if val:
                     parsed_fields[field] = val
@@ -810,7 +816,12 @@ class InsuranceHandler:
         # 当值不同时取更长的（短值往往是OCR从条款文本误提取的片段）
         if self._is_vehicle_policy(parsed_fields):
             for rec in history:
-                hist_fields = rec.get("parsed_fields", {})
+                hist_fields = rec.get("parsed_fields") or {}
+                if isinstance(hist_fields, str):
+                    try:
+                        hist_fields = json.loads(hist_fields) or {}
+                    except (TypeError, json.JSONDecodeError, ValueError):
+                        hist_fields = {}
                 if not self._is_vehicle_policy(hist_fields):
                     continue
                 for field in self.CROSS_FILL_FIELDS:
@@ -828,7 +839,12 @@ class InsuranceHandler:
         cur_company = parsed_fields.get("保险公司", "")
         if "交通事故责任强制" in policy_type and "平安" in cur_company:
             for rec in history:
-                hist_fields = rec.get("parsed_fields", {})
+                hist_fields = rec.get("parsed_fields") or {}
+                if isinstance(hist_fields, str):
+                    try:
+                        hist_fields = json.loads(hist_fields) or {}
+                    except (TypeError, json.JSONDecodeError, ValueError):
+                        hist_fields = {}
                 hist_company = hist_fields.get("保险公司", "")
                 hist_short = hist_fields.get("保险公司简称", "")
                 if hist_company and "平安" not in hist_company:
@@ -841,7 +857,12 @@ class InsuranceHandler:
         if self._is_non_vehicle_policy(parsed_fields):
             override_fields = ["投保人", "被保险人", "车主"]
             for rec in history:
-                hist_fields = rec.get("parsed_fields", {})
+                hist_fields = rec.get("parsed_fields") or {}
+                if isinstance(hist_fields, str):
+                    try:
+                        hist_fields = json.loads(hist_fields) or {}
+                    except (TypeError, json.JSONDecodeError, ValueError):
+                        hist_fields = {}
                 if self._is_vehicle_policy(hist_fields):
                     for field in override_fields:
                         vehicle_val = hist_fields.get(field, "")
@@ -948,7 +969,12 @@ class InsuranceHandler:
         if missing:
             for field in missing:
                 for rec in history:
-                    hist_fields = rec.get("parsed_fields", {})
+                    hist_fields = rec.get("parsed_fields") or {}
+                if isinstance(hist_fields, str):
+                    try:
+                        hist_fields = json.loads(hist_fields) or {}
+                    except (TypeError, json.JSONDecodeError, ValueError):
+                        hist_fields = {}
                     val = hist_fields.get(field, "")
                     if val:
                         parsed_fields[field] = val
