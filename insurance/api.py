@@ -1530,20 +1530,34 @@ def batch_reocr_sync():
                 continue
 
             cos_url = record.get("cos_url", "")
-            if not cos_url:
-                results["errors"].append({"id": rid, "error": "无文件URL"})
-                results["reocr_failed"] += 1
-                continue
 
             # 2. 重新识别
             try:
-                resp = http_requests.get(cos_url, timeout=60)
-                if resp.status_code != 200:
-                    results["errors"].append({"id": rid, "error": "文件下载失败"})
+                pdf_bytes = b""
+                if cos_url:
+                    resp = http_requests.get(cos_url, timeout=60)
+                    if resp.status_code == 200:
+                        pdf_bytes = resp.content
+
+                if not pdf_bytes:
+                    # 无 COS URL 或 COS 下载失败，尝试 SDK 重新下载
+                    pdf_bytes = _try_sdk_download(record)
+                    if pdf_bytes and _handler and _handler.cos_storage:
+                        try:
+                            roomid = record.get("roomid", "unknown")
+                            sender = record.get("sender", "unknown")
+                            fname = record.get("filename", "file.pdf")
+                            cos_key = f"insurance/{roomid}/{sender}/{fname}"
+                            new_cos_url = _handler.cos_storage.upload_bytes(pdf_bytes, cos_key)
+                            if new_cos_url:
+                                update_insurance_record(_db, rid, {"cos_url": new_cos_url})
+                        except Exception:
+                            pass
+
+                if not pdf_bytes:
+                    results["errors"].append({"id": rid, "error": "文件已过期无法下载，请在群内重新发送"})
                     results["reocr_failed"] += 1
                     continue
-
-                pdf_bytes = resp.content
                 filename = record.get("filename", "file.pdf")
                 ocr_result = _handler._do_ocr(pdf_bytes, filename)
                 if not ocr_result.get("success"):
