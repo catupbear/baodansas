@@ -2982,6 +2982,10 @@ def _find_policy_boundaries(text: str) -> List[dict]:
             # 跳过已被更高优先级匹配覆盖的位置（±50字符内视为同一位置）
             if any(abs(pos - sp) < 50 for sp in seen_positions):
                 continue
+            # 跳过条款名称清单页的标题（如"非营业货车驾乘险意外伤害保险保险单\n保险条款名称清单"）
+            after_text = text[m.end():m.end() + 80]
+            if re.search(r'^\s*\n?\s*保险条款名称', after_text):
+                continue
             found.append({
                 "pos": pos,
                 "type_code": type_code,
