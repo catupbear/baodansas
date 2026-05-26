@@ -2536,18 +2536,31 @@ def export_excel():
 
             if merge_enabled:
                 # ---- 按车牌合并导出 ----
-                # 1. 按车牌分组
+                # 判断车牌是否可合并（空、新车、*-* 格式的不合并）
+                def _plate_mergeable(plate: str) -> bool:
+                    if not plate:
+                        return False
+                    p = plate.strip()
+                    if not p or p == "新车":
+                        return False
+                    if p in ("*-*", "*—*"):
+                        return False
+                    return True
+
+                # 1. 按车牌分组，不可合并的记录单独作为独立行
                 plate_groups = {}
+                standalone_rows = []
                 for inv in invoices:
                     fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
                     if has_config:
                         fields = apply_user_config_to_fields(user_config, fields)
                     plate = fields.get("车牌", "") or fields.get("车牌号", "") or ""
-                    if not plate:
-                        plate = "__无车牌__"
-                    if plate not in plate_groups:
-                        plate_groups[plate] = []
-                    plate_groups[plate].append(fields)
+                    if not _plate_mergeable(plate):
+                        standalone_rows.append(fields)
+                    else:
+                        if plate not in plate_groups:
+                            plate_groups[plate] = []
+                        plate_groups[plate].append(fields)
 
                 # 2. 合并每组
                 merged_rows = []
@@ -2587,6 +2600,30 @@ def export_excel():
                                 merged[k] = v
 
                     merged_rows.append(merged)
+
+                # 不可合并的记录也按险种拆分字段（保持列结构一致）
+                for fields in standalone_rows:
+                    row = {}
+                    for f in MERGE_SHARED_FIELDS:
+                        val = fields.get(f, "")
+                        if val:
+                            row[f] = val
+                    policy_type = fields.get("险种", "") or fields.get("险种类型", "")
+                    type_code, _ = get_policy_type_code(policy_type)
+                    prefix = MERGE_PREFIXES.get(type_code, "非车险")
+                    for f in MERGE_SPLIT_FIELDS:
+                        col_name = f"{prefix}{f}"
+                        val = fields.get(f, "")
+                        if val:
+                            row[col_name] = val
+                    val = fields.get("车船税", "")
+                    if val:
+                        row["车船税"] = val
+                    all_known = set(MERGE_SHARED_FIELDS) | set(MERGE_SPLIT_FIELDS) | {"车船税", "险种", "险种类型"}
+                    for k, v in fields.items():
+                        if k not in all_known and k not in row and v:
+                            row[k] = v
+                    merged_rows.append(row)
 
                 # 3. 排序（按车牌）
                 merged_rows.sort(key=lambda r: r.get("车牌", ""))
