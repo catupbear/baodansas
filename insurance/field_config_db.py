@@ -889,13 +889,16 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
                 result["险种"] = alias
 
     # 3. 日期格式化
-    for item in config.get("date_format", []):
-        field_name = item.get("key", "")
-        fmt = item.get("value", "")
+    date_fmt_map = {item.get("key", ""): item.get("value", "") for item in config.get("date_format", [])}
+    for field_name, fmt in date_fmt_map.items():
         if field_name and fmt and field_name in result:
             raw_date = result[field_name]
             if raw_date:
                 result[field_name] = _format_date(str(raw_date), fmt)
+    # 创建时间/识别时间：如果没有用户配置格式，默认格式化为 YYYY-MM-DD
+    for ts_field in ("创建时间", "识别时间"):
+        if ts_field in result and ts_field not in date_fmt_map and result[ts_field]:
+            result[ts_field] = _format_date(str(result[ts_field]), "YYYY-MM-DD")
 
     # 4. 公式计算（key格式："目标字段:公司简称:险种简称"）
     # 先用原始数值计算所有公式，最后再转百分比显示，避免"率"字段被提前转成"10%"影响后续公式

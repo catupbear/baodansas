@@ -2456,8 +2456,8 @@ createApp({
                     '文件名': rec.filename || '',
                     '文档类型': rec.doc_category || '',
                     '状态': statusLabel(rec.status),
-                    '创建时间': formatTime(rec.created_at),
-                    '识别时间': formatTime(rec.updated_at),
+                    '创建时间': rec.created_at || '',
+                    '识别时间': rec.updated_at || '',
                     '群名': rec.room_name || rec.roomid || '',
                     '发送人': rec.sender_name || rec.sender || '',
                 };
@@ -4487,12 +4487,13 @@ createApp({
                 }
 
                 // 额外列映射（基础元数据字段）
+                // 创建时间/识别时间发送原始值，由后端按日期格式配置统一处理
                 const extraMap = (r) => ({
                     '文件名': r.filename || '',
                     '文档类型': r.doc_category || '',
                     '状态': statusLabel(r.status),
-                    '创建时间': formatTime(r.created_at),
-                    '识别时间': formatTime(r.updated_at),
+                    '创建时间': r.created_at || '',
+                    '识别时间': r.updated_at || '',
                     '群名': r.room_name || r.roomid || '',
                     '发送人': r.sender_name || r.sender || '',
                 });
