@@ -2048,6 +2048,11 @@ def _extract_premium(text: str, fields: dict, company_short: str):
         # "含税保险费合计" 格式
         patterns.insert(2, r"含税保险费合计.*?[（(][￥¥][：:\s]*([\d,]+\.?\d{0,2})\s*(?:元)?[)）]")
 
+    # 华泰驾乘险格式："保险费 人民币（大写）贰佰元整 （小写）¥200.00"
+    if company_short == "华泰":
+        patterns.insert(0, r"保险费.*?[（(]小写[）)]\s*[￥¥]?\s*([\d,]+\.?\d{0,2})")
+        patterns.insert(1, r"保险费.*?[￥¥]([\d,]+\.?\d{0,2})")
+
     # 安盛天平驾乘格式："总保险费(含税价): RMB 保费：￥180.32 税费：￥9.68 价税合计：￥190.00"
     # 优先取"价税合计"金额
     if company_short == "安盛天平":
@@ -2366,6 +2371,15 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
     period_text = re.sub(r'(时|分)\s+(\d)', r'\1\2', period_text)
     # 清理冒号周围的空格（人保投保单OCR："0 : 00" → "0:00"）
     period_text = re.sub(r'(\d)\s*:\s*(\d)', r'\1:\2', period_text)
+
+    # 华泰驾乘险格式："自2026年05月27日00:00:时起（北京时间）至2027年05月26日 24:00:时止（北京时间）"
+    # 起/止后跟"（北京时间）"等注释文字
+    m = re.search(r"保险期间.*?自?\s*(\d{4}年\d{1,2}月\d{1,2}日)\s*[\d:时分秒]+\s*起.*?[至到]\s*(\d{4}年\d{1,2}月\d{1,2}日)", period_text, re.DOTALL)
+    if m:
+        fields["保险起期"] = m.group(1)
+        fields["保险止期"] = m.group(2)
+        fields["保险期间"] = f"{m.group(1)} 至 {m.group(2)}"
+        return
 
     # 通用模式（使用re.DOTALL让.匹配换行，支持"保险期间"与日期跨行的情况）
     for p in [
@@ -3239,7 +3253,8 @@ def get_extraction_rules(company_short: str = "") -> Dict[str, Dict[str, str]]:
         "华泰": {
             "保单号": "格式'保险单号 ： 606EA...'（冒号前后都有空格）",
             "被保人": "华泰格式：'被保险人(名称)'后提取，过滤'行驶证车主'等干扰",
-            "保费": "特殊格式'（¥： 1,850.00 元）'",
+            "保费": "特殊格式'（¥： 1,850.00 元）'或驾乘险格式'（小写）¥200.00'",
+            "保险期间": "驾乘险格式'自...日00:00:时起（北京时间）至...日24:00:时止（北京时间）'",
         },
         "永诚": {
             "保单号": "保单号可能每字符间有空格，如'1 1 2 B 5 0 3...'，自动合并",
