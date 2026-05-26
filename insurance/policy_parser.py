@@ -2811,13 +2811,14 @@ def _identify_doc_category(text: str, fields: dict) -> str:
     # 需排除"保险条款、投保单、保险单"（保单重要提示中的条款引用）
     # 需排除"投保单是本保险单的不可分割的组成部分"（保单标准条文引用）
     # 需排除"保险合同由投保单及其附件"（保单正文中引用投保单作为合同组成部分）
+    # 需排除"包括投保单"（如鼎和"本保险单还包括投保单及其附件"）
     # 需排除有强保单标记的文档（含保险单号/电子保单/保单号的文档是正式保单，
     #   其中的"投保单"仅为引用，如"填写投保单"、"由投保单及其附件"等）
     if re.search(r'投保[单书](?!号)', text_head):
         if not _has_strong_policy_markers:
             if not re.search(r'保险条款[、，]投保单', text_head):
                 if not re.search(r'投保单\s*是本保险[单合]', text_head):
-                    if not re.search(r'由投保单', text_head):
+                    if not re.search(r'(?:由|包括)投保单', text_head):
                         if _has_policy_markers:
                             return "投保单"
 
