@@ -461,8 +461,8 @@
                 <div style="background:var(--surface-secondary); border-radius:8px; padding:4px 20px;">
                     <div class="date-row" v-for="field in dateFields" :key="field.name">
                         <div style="font-size:14px; font-weight:500;">{{ field.name }}</div>
-                        <select v-model="field.format" style="width:100%; max-width:240px;" :disabled="activeSource === 'enterprise'">
-                            <option v-for="f in dateFormats" :value="f.value">{{ f.label }}</option>
+                        <select v-model="field.format" style="width:100%; max-width:280px;" :disabled="activeSource === 'enterprise'">
+                            <option v-for="f in (DATETIME_FIELDS.has(field.name) ? datetimeFormats : dateFormats)" :value="f.value">{{ f.label }}</option>
                         </select>
                         <div class="date-preview">{{ formatDate(sampleDate, field.format) }}</div>
                     </div>
@@ -1108,20 +1108,29 @@ createApp({
             { label: 'DD/MM/YYYY（07/05/2026）', value: 'DD/MM/YYYY' },
             { label: 'YYYYMMDD（20260507）', value: 'YYYYMMDD' },
         ];
+        const datetimeFormats = [
+            ...dateFormats,
+            { label: 'YYYY-MM-DD HH:mm（2026-05-07 14:30）', value: 'YYYY-MM-DD HH:mm' },
+            { label: 'YYYY/MM/DD HH:mm（2026/05/07 14:30）', value: 'YYYY/MM/DD HH:mm' },
+            { label: 'YYYY年MM月DD日 HH:mm（2026年05月07日 14:30）', value: 'YYYY年MM月DD日 HH:mm' },
+        ];
+        const DATETIME_FIELDS = new Set(['创建时间', '识别时间']);
         const dateFields = ref([
             { name: '签单日期', format: 'YYYY-MM-DD' },
             { name: '起保日期', format: 'YYYY-MM-DD' },
             { name: '终保日期', format: 'YYYY-MM-DD' },
-            { name: '创建时间', format: 'YYYY-MM-DD' },
-            { name: '识别时间', format: 'YYYY-MM-DD' },
+            { name: '创建时间', format: 'YYYY-MM-DD HH:mm' },
+            { name: '识别时间', format: 'YYYY-MM-DD HH:mm' },
         ]);
-        const sampleDate = new Date(2026, 4, 7);
+        const sampleDate = new Date(2026, 4, 7, 14, 30);
         const quickFormatValue = ref('');
 
         const formatDate = (date, fmt) => {
             const y = date.getFullYear();
             const m = String(date.getMonth() + 1).padStart(2, '0');
             const d = String(date.getDate()).padStart(2, '0');
+            const H = String(date.getHours()).padStart(2, '0');
+            const min = String(date.getMinutes()).padStart(2, '0');
             const map = {
                 'YYYY-MM-DD': `${y}-${m}-${d}`,
                 'YYYY/MM/DD': `${y}/${m}/${d}`,
@@ -1129,6 +1138,9 @@ createApp({
                 'MM-DD-YYYY': `${m}-${d}-${y}`,
                 'DD/MM/YYYY': `${d}/${m}/${y}`,
                 'YYYYMMDD': `${y}${m}${d}`,
+                'YYYY-MM-DD HH:mm': `${y}-${m}-${d} ${H}:${min}`,
+                'YYYY/MM/DD HH:mm': `${y}/${m}/${d} ${H}:${min}`,
+                'YYYY年MM月DD日 HH:mm': `${y}年${m}月${d}日 ${H}:${min}`,
             };
             return map[fmt] || `${y}-${m}-${d}`;
         };

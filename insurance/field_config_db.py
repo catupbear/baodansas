@@ -97,26 +97,39 @@ def _scope_id_condition(scope_id):
 
 
 def _convert_fmt_to_strftime(fmt: str) -> str:
-    """将前端日期格式（如 YYYY-MM-DD）转为 Python strftime 格式（如 %Y-%m-%d）"""
+    """将前端日期格式（如 YYYY-MM-DD HH:mm）转为 Python strftime 格式（如 %Y-%m-%d %H:%M）"""
     return (fmt
             .replace("YYYY", "%Y")
             .replace("MM", "%m")
-            .replace("DD", "%d"))
+            .replace("DD", "%d")
+            .replace("HH", "%H")
+            .replace("mm", "%M"))
 
 
 def _format_date(raw: str, fmt: str) -> str:
     """
     日期格式转换（内部函数）。
-    支持解析：YYYY-MM-DD、YYYY/MM/DD、YYYY年MM月DD日、YYYYMMDD
-    fmt 支持前端格式（YYYY-MM-DD）或 strftime 格式（%Y-%m-%d），自动识别。
+    支持解析：YYYY-MM-DD[ HH:mm]、YYYY/MM/DD、YYYY年MM月DD日、YYYYMMDD、ISO 8601
+    fmt 支持前端格式（YYYY-MM-DD / YYYY-MM-DD HH:mm）或 strftime 格式，自动识别。
     解析失败则原样返回。
     """
     if not raw or not fmt:
         return raw
     # 自动转换前端格式为 strftime 格式
-    if "YYYY" in fmt or "MM" in fmt or "DD" in fmt:
+    if "YYYY" in fmt or ("MM" in fmt and "DD" in fmt):
         fmt = _convert_fmt_to_strftime(fmt)
-    # 尝试多种格式解析
+    # 尝试多种格式解析（含时间的优先匹配）
+    raw_str = str(raw).strip()
+    # ISO 8601 / datetime 格式（如 2026-05-26T14:30:00 或 2026-05-26 14:30:00）
+    m = re.match(r'(\d{4})-(\d{1,2})-(\d{1,2})[T ](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', raw_str)
+    if m:
+        try:
+            dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                          int(m.group(4)), int(m.group(5)), int(m.group(6) or 0))
+            return dt.strftime(fmt)
+        except (ValueError, OverflowError):
+            pass
+    # 纯日期格式
     patterns = [
         r'(\d{4})-(\d{1,2})-(\d{1,2})',
         r'(\d{4})/(\d{1,2})/(\d{1,2})',
@@ -124,11 +137,10 @@ def _format_date(raw: str, fmt: str) -> str:
         r'(\d{4})(\d{2})(\d{2})',
     ]
     for pat in patterns:
-        m = re.match(pat, str(raw).strip())
+        m = re.match(pat, raw_str)
         if m:
             try:
-                year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
-                dt = datetime(year, month, day)
+                dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
                 return dt.strftime(fmt)
             except (ValueError, OverflowError):
                 pass
@@ -895,10 +907,10 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
             raw_date = result[field_name]
             if raw_date:
                 result[field_name] = _format_date(str(raw_date), fmt)
-    # 创建时间/识别时间：如果没有用户配置格式，默认格式化为 YYYY-MM-DD
+    # 创建时间/识别时间：如果没有用户配置格式，默认保留时间部分
     for ts_field in ("创建时间", "识别时间"):
         if ts_field in result and ts_field not in date_fmt_map and result[ts_field]:
-            result[ts_field] = _format_date(str(result[ts_field]), "YYYY-MM-DD")
+            result[ts_field] = _format_date(str(result[ts_field]), "YYYY-MM-DD HH:mm")
 
     # 4. 公式计算（key格式："目标字段:公司简称:险种简称"）
     # 先用原始数值计算所有公式，最后再转百分比显示，避免"率"字段被提前转成"10%"影响后续公式
