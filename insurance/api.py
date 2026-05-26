@@ -2485,8 +2485,9 @@ def export_excel():
             export_columns = export_col_config.get("columns", [])
             # 按 order 排序，只取 visible 的列
             visible_cols = sorted([c for c in export_columns if c.get("visible", True)], key=lambda c: c.get("order", 0))
-            # 合并模式下排除被拆分的基础字段（保费→商业险保费/交强险保费/非车险保费等）
+            # 记录用户勾选的差异字段（用于生成对应的前缀列）
             merge_enabled = body.get("merge_by_plate", False)
+            selected_split_fields = [c["key"] for c in visible_cols if c["key"] in set(MERGE_SPLIT_FIELDS)]
             if merge_enabled:
                 merge_hidden = set(MERGE_SPLIT_FIELDS) | {"险种"}
                 visible_cols = [c for c in visible_cols if c["key"] not in merge_hidden]
@@ -2628,12 +2629,14 @@ def export_excel():
                 # 3. 排序（按车牌）
                 merged_rows.sort(key=lambda r: r.get("车牌", ""))
 
-                # 4. 在共享字段之后插入拆分列
+                # 4. 在共享字段之后插入拆分列（只生成用户勾选的基础字段对应的前缀列）
+                selected_extra = [c for c in MERGE_EXTRA_COLUMNS
+                                  if any(c.endswith(f) for f in selected_split_fields)]
                 insert_pos = len(field_names)
                 for i, f in enumerate(field_names):
                     if f in MERGE_SHARED_FIELDS:
                         insert_pos = i + 1
-                for extra_col in reversed(MERGE_EXTRA_COLUMNS):
+                for extra_col in reversed(selected_extra):
                     field_names.insert(insert_pos, extra_col)
 
                 # 5. 写入表头和数据
@@ -2650,15 +2653,18 @@ def export_excel():
                     ws.append(row)
             else:
                 # ---- 普通导出（沿用合并列模板，每条记录按险种拆分到前缀列） ----
-                # 列配置与合并模式一致：去掉基础差异字段，使用前缀列
+                # 列配置与合并模式一致：去掉基础差异字段，使用前缀列（只生成用户勾选的）
+                selected_split = [f for f in field_names if f in set(MERGE_SPLIT_FIELDS)]
                 non_merge_hidden = set(MERGE_SPLIT_FIELDS) | {"险种"}
                 nm_field_names = [f for f in field_names if f not in non_merge_hidden]
+                selected_extra = [c for c in MERGE_EXTRA_COLUMNS
+                                  if any(c.endswith(f) for f in selected_split)]
                 # 在共享字段之后插入拆分列
                 insert_pos = len(nm_field_names)
                 for i, f in enumerate(nm_field_names):
                     if f in MERGE_SHARED_FIELDS:
                         insert_pos = i + 1
-                for extra_col in reversed(MERGE_EXTRA_COLUMNS):
+                for extra_col in reversed(selected_extra):
                     nm_field_names.insert(insert_pos, extra_col)
                 # 车船税保持原位（已在 nm_field_names 中）
 
