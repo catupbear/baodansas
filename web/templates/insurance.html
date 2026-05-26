@@ -4527,11 +4527,20 @@ createApp({
                 a.href = url; a.download = `保单识别记录_${dateStr}.xlsx`;
                 document.body.appendChild(a); a.click(); document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                // 计算实际导出行数：合并模式按车牌去重计数
+                // 计算实际导出行数：合并模式按车牌去重计数（空/新车/*-*不合并，每条算独立行）
                 let exportCount = data.length;
                 if (mergeByPlate) {
-                    const plates = new Set(data.map(d => d.fields['车牌'] || d.fields['车牌号'] || ''));
-                    exportCount = plates.size;
+                    const mergeablePlates = new Set();
+                    let standaloneCount = 0;
+                    for (const d of data) {
+                        const p = (d.fields['车牌'] || d.fields['车牌号'] || '').trim();
+                        if (!p || p === '新车' || p === '*-*' || p === '*—*') {
+                            standaloneCount++;
+                        } else {
+                            mergeablePlates.add(p);
+                        }
+                    }
+                    exportCount = mergeablePlates.size + standaloneCount;
                 }
                 const msg = mergeByPlate ? `导出成功，按车牌合并后共 ${exportCount} 条数据` : `导出成功，共 ${exportCount} 条数据`;
                 showMessage(msg, true);
