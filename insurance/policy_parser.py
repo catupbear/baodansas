@@ -624,6 +624,7 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
         r"业务(?:人员|员[姓名称]*)[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
         r"销售人员[名称]*[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
         r"代理人[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
+        r"经办[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff]{1,5})",
     ]:
         m = re.search(p, text)
         if m:
