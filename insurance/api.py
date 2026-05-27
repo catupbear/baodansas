@@ -2641,38 +2641,22 @@ def export_excel():
                         row.append(row_data.get(col, ""))
                     ws.append(row)
             else:
-                # ---- 普通导出（沿用合并列模板，按用户勾选的列导出） ----
-                # 去掉基础差异字段和险种（由前缀列替代）
-                non_merge_hidden = set(MERGE_SPLIT_FIELDS) | {"险种"}
-                nm_field_names = [f for f in field_names if f not in non_merge_hidden]
-
+                # ---- 普通导出（不合并，直接按用户勾选的列导出） ----
                 if field_display_names:
-                    headers = [field_display_names.get(f, f) for f in nm_field_names]
+                    headers = [field_display_names.get(f, f) for f in field_names]
                 else:
-                    headers = list(nm_field_names)
+                    headers = list(field_names)
                 ws.append(headers)
 
-                extra_set = set(MERGE_EXTRA_COLUMNS)
                 invoices.sort(key=lambda inv: (inv.get("fields", {}) if isinstance(inv, dict) else {}).get("车牌号", "") or "")
                 for inv in invoices:
                     fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
                     if has_config:
                         fields = apply_user_config_to_fields(user_config, fields)
-                    # 将差异字段按险种放到前缀列
-                    policy_type = fields.get("险种", "") or fields.get("险种类型", "")
-                    type_code, _ = get_policy_type_code(policy_type)
-                    prefix = MERGE_PREFIXES.get(type_code, "非车险")
                     row = []
-                    for col in nm_field_names:
+                    for col in field_names:
                         if col == "文件名":
                             row.append(fields.get("文件名", "") or inv.get("file_name", inv.get("filename", "")))
-                        elif col in extra_set:
-                            # 前缀列：只有当前记录险种匹配时才填值
-                            base_field = col[len(prefix):] if col.startswith(prefix) else None
-                            if base_field and base_field in MERGE_SPLIT_FIELDS:
-                                row.append(fields.get(base_field, ""))
-                            else:
-                                row.append("")
                         else:
                             row.append(fields.get(col, ""))
                     ws.append(row)
