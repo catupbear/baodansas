@@ -662,11 +662,15 @@ def get_column_config(db, config_type: str, user_id: int, role: str, parent_id=N
         conn.close()
 
 
-def save_column_config(db, config_type: str, scope: str, scope_id, columns: list):
+def save_column_config(db, config_type: str, scope: str, scope_id, columns: list,
+                       template_name: str = None):
     """
     保存列配置。columns 为 [{"key":"xxx","visible":true,"order":0,"display_name":"xxx"}, ...]
     使用 config_key = 'columns'，整体存为一条 JSON 记录。
+    template_name 为 None 时使用默认模板名。
     """
+    tpl_name = template_name or DEFAULT_TEMPLATE_NAME
+    visible_val = 0 if template_name else 1
     conn = db.pool.connection()
     try:
         cursor = conn.cursor()
@@ -675,8 +679,9 @@ def save_column_config(db, config_type: str, scope: str, scope_id, columns: list
         # 先删旧记录
         cursor.execute(
             f"DELETE FROM user_field_config "
-            f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'columns'",
-            [scope] + sid_params + [config_type]
+            f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'columns' "
+            f"AND template_name = %s",
+            [scope] + sid_params + [config_type, tpl_name]
         )
 
         # 清理前端 UI 临时标记，不持久化
@@ -691,15 +696,15 @@ def save_column_config(db, config_type: str, scope: str, scope_id, columns: list
             cursor.execute(
                 "INSERT INTO user_field_config "
                 "(scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
-                "VALUES (%s, NULL, %s, %s, 'columns', %s, 1)",
-                [scope, DEFAULT_TEMPLATE_NAME, config_type, value]
+                "VALUES (%s, NULL, %s, %s, 'columns', %s, %s)",
+                [scope, tpl_name, config_type, value, visible_val]
             )
         else:
             cursor.execute(
                 "INSERT INTO user_field_config "
                 "(scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
-                "VALUES (%s, %s, %s, %s, 'columns', %s, 1)",
-                [scope, scope_id, DEFAULT_TEMPLATE_NAME, config_type, value]
+                "VALUES (%s, %s, %s, %s, 'columns', %s, %s)",
+                [scope, scope_id, tpl_name, config_type, value, visible_val]
             )
         conn.commit()
         logger.debug("列配置已保存: scope=%s config_type=%s", scope, config_type)
@@ -708,15 +713,16 @@ def save_column_config(db, config_type: str, scope: str, scope_id, columns: list
 
 
 def delete_column_config(db, config_type: str, scope: str, scope_id):
-    """删除列配置，回退到上一级默认。"""
+    """删除当前模板的列配置（不影响备份模板），回退到上一级默认。"""
     conn = db.pool.connection()
     try:
         cursor = conn.cursor()
         sid_cond, sid_params = _scope_id_condition(scope_id)
         cursor.execute(
             f"DELETE FROM user_field_config "
-            f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'columns'",
-            [scope] + sid_params + [config_type]
+            f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'columns' "
+            f"AND template_name = %s",
+            [scope] + sid_params + [config_type, DEFAULT_TEMPLATE_NAME]
         )
         conn.commit()
         logger.debug("列配置已删除: scope=%s config_type=%s", scope, config_type)

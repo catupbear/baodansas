@@ -2653,7 +2653,14 @@ def export_excel():
                     headers = list(field_names)
                 ws.append(headers)
 
-                invoices.sort(key=lambda inv: (inv.get("fields", {}) if isinstance(inv, dict) else {}).get("车牌号", "") or "")
+                # 排序：按车牌，相同车牌按险种（商业险→交强险→驾意险）
+                _type_order = {"商业险": 0, "交强险": 1, "驾意险": 2}
+                def _normal_sort_key(inv):
+                    fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
+                    plate = fields.get("车牌号", "") or fields.get("车牌", "") or ""
+                    policy_type = fields.get("险种", "") or fields.get("险种类型", "") or ""
+                    return (plate, _type_order.get(policy_type, 99))
+                invoices.sort(key=_normal_sort_key)
                 for inv in invoices:
                     fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
                     if has_config and not skip_config:
@@ -3370,31 +3377,16 @@ def delete_column_config_api():
         scope, scope_id = _get_user_scope()
         user = g.current_user
 
-        # 先备份当前配置
+        # 先备份当前配置（含列配置和别名配置，完整复制到备份模板）
         current = get_column_config(_db, config_type, user["user_id"], user["role"], user.get("parent_id"))
         if current.get("source") != "default" and current.get("columns"):
             from datetime import datetime
-            backup_name = f"备份_{datetime.now().strftime('%m%d_%H%M')}"
-            import json, pymysql
-            conn = _db.pool.connection()
-            try:
-                cursor = conn.cursor()
-                if scope_id is None:
-                    cursor.execute(
-                        "INSERT INTO user_field_config (scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
-                        "VALUES (%s, NULL, %s, %s, 'columns', %s, 0)",
-                        [scope, backup_name, config_type, json.dumps(current["columns"], ensure_ascii=False)]
-                    )
-                else:
-                    cursor.execute(
-                        "INSERT INTO user_field_config (scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
-                        "VALUES (%s, %s, %s, %s, 'columns', %s, 0)",
-                        [scope, scope_id, backup_name, config_type, json.dumps(current["columns"], ensure_ascii=False)]
-                    )
-                conn.commit()
-                logger.info("列配置已备份到模板「%s」", backup_name)
-            finally:
-                conn.close()
+            now = datetime.now()
+            backup_name = f"备份{now.month}-{now.day} {now.strftime('%H:%M')}"
+            # 将列配置备份到新模板
+            save_column_config(_db, config_type, scope, scope_id, current["columns"],
+                               template_name=backup_name)
+            logger.info("列配置已备份到模板「%s」", backup_name)
 
         # 删除当前配置
         delete_column_config(_db, config_type, scope, scope_id)
