@@ -879,9 +879,9 @@ def _extract_insured(text: str, text_merged: str, fields: dict, company_short: s
             fields["被保险人"] = fields["投保人"]
             return
 
-    # ===== 驾乘险通用：被保险人为"驾驶或乘坐...车辆的人员"，用投保人代替 =====
-    # 安诚/京东安联等驾乘险，被保险人为车上人员描述而非具体姓名
-    if re.search(r"被保险人为[^。]*?驾驶或乘坐[^。]*?车[辆俩]的人员", text):
+    # ===== 驾乘险通用：被保险人为"驾驶或乘坐...车辆的人员"或"驾驶人员及乘客"，用投保人代替 =====
+    # 安诚/京东安联/人保如意行等驾乘险，被保险人为车上人员描述而非具体姓名
+    if re.search(r"被保险人为[^。]*?(?:驾驶或乘坐[^。]*?车[辆俩]的人员|驾驶人员及乘客)", text):
         if "投保人" in fields:
             fields["被保险人"] = fields["投保人"]
             return
@@ -946,9 +946,11 @@ def _extract_insured(text: str, text_merged: str, fields: dict, company_short: s
         if "被保险人" in fields:
             return
 
-    # ===== 人保驾乘险："被保险人为以下车辆的驾驶人员及乘客"，无具体被保人 =====
+    # ===== 人保驾乘险："被保险人为以下车辆的驾驶人员及乘客"，用投保人代替 =====
     if company_short == "人民财产":
-        if re.search(r"被保险人为以下车辆的驾驶人员及乘客", text):
+        if re.search(r"被保险人为以下车辆的驾驶人员\s*及\s*乘\s*客", text):
+            if "投保人" in fields:
+                fields["被保险人"] = fields["投保人"]
             return
         # 人保商业险表格格式："被保险人  温扬敏\n车主  温扬敏"
         # OCR 可能输出为 "被保险人\n车主\n温扬敏" 或 "被保险人 温扬敏"
