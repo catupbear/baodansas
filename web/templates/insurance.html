@@ -4514,7 +4514,7 @@ createApp({
                     });
                 if (!data.length) { showMessage('没有可导出的数据', false); return; }
 
-                const postBody = { invoices: data, export_type: 'success', merge_by_plate: mergeByPlate };
+                const postBody = { invoices: data, export_type: 'success', merge_by_plate: mergeByPlate, config_applied: true };
                 // 自定义模式才传 field_names，默认模板模式让后端用导出列配置
                 if (selectedCols) postBody.field_names = selectedCols;
                 const resp = await authFetch('/api/insurance/export/excel', {

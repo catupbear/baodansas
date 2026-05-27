@@ -2531,6 +2531,10 @@ def export_excel():
             user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
             has_config = user_config and any(user_config.get(k) for k in user_config)
 
+            # 前端标记数据是否已经过 apply_user_config 处理（识别记录导出时为 True）
+            # 避免重复应用险种简称等别名导致值被二次转换
+            skip_config = body.get("config_applied", False)
+
             # 检查是否启用按车牌合并
             merge_enabled = body.get("merge_by_plate", False)
 
@@ -2552,7 +2556,7 @@ def export_excel():
                 standalone_rows = []
                 for inv in invoices:
                     fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
-                    if has_config:
+                    if has_config and not skip_config:
                         fields = apply_user_config_to_fields(user_config, fields)
                     plate = fields.get("车牌", "") or fields.get("车牌号", "") or ""
                     if not _plate_mergeable(plate):
@@ -2651,7 +2655,7 @@ def export_excel():
                 invoices.sort(key=lambda inv: (inv.get("fields", {}) if isinstance(inv, dict) else {}).get("车牌号", "") or "")
                 for inv in invoices:
                     fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
-                    if has_config:
+                    if has_config and not skip_config:
                         fields = apply_user_config_to_fields(user_config, fields)
                     row = []
                     for col in field_names:
