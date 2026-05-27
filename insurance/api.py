@@ -36,6 +36,7 @@ from .field_config_db import (
     get_column_config, save_column_config, delete_column_config,
     get_merge_by_plate, save_merge_by_plate,
     MERGE_SHARED_FIELDS, MERGE_SPLIT_FIELDS, MERGE_PREFIXES, MERGE_EXTRA_COLUMNS,
+    DEFAULT_COLUMNS,
 )
 from .monitor_config_db import (
     list_monitor_configs,
@@ -3357,11 +3358,51 @@ def save_column_config_api():
 @insurance_bp.route("/api/insurance/column-config", methods=["DELETE"])
 @login_required
 def delete_column_config_api():
-    """重置列配置（删除当前 scope 的配置，回退到上级默认）"""
+    """
+    重置列配置。
+    reset_to=enterprise: 删除当前 scope 配置，回退到上级（企业/默认）
+    reset_to=system: 删除当前 scope 配置，强制写入系统默认值
+    恢复前自动将现有配置备份到新模板。
+    """
     try:
         config_type = request.args.get("config_type", "list_columns")
+        reset_to = request.args.get("reset_to", "enterprise")
         scope, scope_id = _get_user_scope()
+        user = g.current_user
+
+        # 先备份当前配置
+        current = get_column_config(_db, config_type, user["user_id"], user["role"], user.get("parent_id"))
+        if current.get("source") != "default" and current.get("columns"):
+            from datetime import datetime
+            backup_name = f"备份_{datetime.now().strftime('%m%d_%H%M')}"
+            import json, pymysql
+            conn = _db.pool.connection()
+            try:
+                cursor = conn.cursor()
+                if scope_id is None:
+                    cursor.execute(
+                        "INSERT INTO user_field_config (scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
+                        "VALUES (%s, NULL, %s, %s, 'columns', %s, 0)",
+                        [scope, backup_name, config_type, json.dumps(current["columns"], ensure_ascii=False)]
+                    )
+                else:
+                    cursor.execute(
+                        "INSERT INTO user_field_config (scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
+                        "VALUES (%s, %s, %s, %s, 'columns', %s, 0)",
+                        [scope, scope_id, backup_name, config_type, json.dumps(current["columns"], ensure_ascii=False)]
+                    )
+                conn.commit()
+                logger.info("列配置已备份到模板「%s」", backup_name)
+            finally:
+                conn.close()
+
+        # 删除当前配置
         delete_column_config(_db, config_type, scope, scope_id)
+
+        # 恢复系统默认时，显式保存 DEFAULT_COLUMNS 覆盖上级回退
+        if reset_to == "system":
+            save_column_config(_db, config_type, scope, scope_id, list(DEFAULT_COLUMNS))
+
         return jsonify({"code": 0, "msg": "已恢复默认"})
     except Exception as e:
         logger.exception("重置列配置失败")

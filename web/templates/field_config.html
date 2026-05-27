@@ -734,6 +734,19 @@
         </div>
     </div>
 
+    <!-- 恢复默认选择弹窗 -->
+    <div v-if="resetPending" class="fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,0.3);" @click.self="resetPending=null">
+        <div style="background:#fff; border-radius:12px; padding:24px; width:340px; box-shadow:0 8px 30px rgba(0,0,0,0.15);">
+            <div style="font-size:15px; font-weight:600; margin-bottom:16px;">恢复列配置</div>
+            <div style="font-size:13px; color:#666; margin-bottom:20px;">当前配置将自动备份到新模板，可随时恢复。</div>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <button class="btn btn-outline" style="width:100%; padding:10px; font-size:13px;" @click="doResetColumn('enterprise')">恢复企业默认配置</button>
+                <button class="btn btn-outline" style="width:100%; padding:10px; font-size:13px;" @click="doResetColumn('system')">恢复系统默认配置</button>
+                <button style="width:100%; padding:8px; font-size:13px; color:#999; background:none; border:none; cursor:pointer;" @click="resetPending=null">取消</button>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -966,11 +979,17 @@ createApp({
             }
         };
 
-        const resetColumnConfig = async (configType) => {
-            if (!confirm('确认恢复默认列配置？')) return;
+        const resetPending = ref(null);
+        const resetColumnConfig = (configType) => { resetPending.value = configType; };
+        const doResetColumn = async (mode) => {
+            const configType = resetPending.value;
+            resetPending.value = null;
+            if (!configType) return;
             try {
-                await authFetch(`/api/insurance/column-config?config_type=${configType}`, { method: 'DELETE' });
+                const resetTo = mode === 'system' ? 'system' : 'enterprise';
+                await authFetch(`/api/insurance/column-config?config_type=${configType}&reset_to=${resetTo}`, { method: 'DELETE' });
                 await loadColumnConfig(configType);
+                showToast(mode === 'system' ? '已恢复系统默认（原配置已备份）' : '已恢复企业配置（原配置已备份）', 'success');
             } catch (e) {
                 console.error('重置列配置失败:', e);
             }
@@ -1695,7 +1714,7 @@ createApp({
             formulaError, previewExpression, previewResult,
             insertField, insertOp, openFormulaModal, saveFormula, deleteRule,
             listColConfig, exportColConfig, listColItems, exportColItems,
-            loadColumnConfig, saveColumnConfig, resetColumnConfig,
+            loadColumnConfig, saveColumnConfig, resetColumnConfig, resetPending, doResetColumn,
             dragState, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd,
             newColName, addCustomCol, removeCustomCol, syncListToExport,
             mergeByPlate, loadMergeConfig, saveMergeConfig, toggleMergeByPlate,
