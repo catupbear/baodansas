@@ -1305,11 +1305,12 @@ createApp({
         // 将 API 数据应用到表单
         const applyConfig = (data) => {
             // 公司简称 - 转为列表对象
+            // defaultValue 留空，后续由 autoLoadAliasFromDb 从系统默认值填充
             const companies = data.company_alias || [];
             companyAliasList.value = companies.map(c => ({
                 key: c.key,
                 value: c.value || '',
-                defaultValue: c.value || '',
+                defaultValue: '',
                 enabled: !!(c.value),
             }));
 
@@ -1318,7 +1319,7 @@ createApp({
             policyAliasList.value = policies.map(p => ({
                 key: p.key,
                 value: p.value || '',
-                defaultValue: p.value || '',
+                defaultValue: '',
                 enabled: !!(p.value),
             }));
 

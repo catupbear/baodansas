@@ -446,8 +446,11 @@ def save_full_template(db, scope: str, scope_id, template_name: str,
         "fee_formula": [...]
     }
     """
+    # 只保存前端传入的 config_type，不传的不动（避免误删 list_columns / export_columns）
     for config_type in CONFIG_TYPES:
-        items = config.get(config_type, [])
+        if config_type not in config:
+            continue
+        items = config[config_type]
         save_template_config(db, scope, scope_id, template_name, config_type, items, visible)
 
 
