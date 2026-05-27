@@ -359,8 +359,8 @@ def list_records():
             # 应用用户配置（简称映射、日期格式、公式计算）
             if has_config and record.get("display_fields"):
                 record["display_fields"] = apply_user_config_to_fields(user_config, record["display_fields"])
-            # 时间戳转字符串
-            for ts_field in ("created_at",):
+            # 时间戳转字符串（避免 Flask jsonify 将 datetime 序列化为 GMT 格式导致前端时区偏移）
+            for ts_field in ("created_at", "updated_at"):
                 if record.get(ts_field) and not isinstance(record[ts_field], str):
                     record[ts_field] = str(record[ts_field])
 
