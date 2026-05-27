@@ -1292,8 +1292,8 @@ def get_all_insurance_config(db, max_value_len: int = 0) -> dict:
 
 def upsert_insurance_record_by_policy(db, record: dict) -> tuple:
     """
-    按保单号去重保存记录。
-    如果已存在相同保单号的记录则更新，否则插入新记录。
+    按保单号+用户+企业去重保存记录。
+    同一用户同一企业下相同保单号的记录才更新，不同用户/企业始终创建新记录。
     返回: (record_id, is_update)
     """
     parsed_fields = record.get("parsed_fields", {})
@@ -1304,19 +1304,34 @@ def upsert_insurance_record_by_policy(db, record: dict) -> tuple:
             parsed_fields = {}
 
     policy_no = parsed_fields.get("保单号", "") or parsed_fields.get("保险单号", "")
+    record_user_id = record.get("user_id")
+    record_enterprise_id = record.get("enterprise_id")
 
-    # 有保单号时尝试查找已有记录
+    # 有保单号时尝试查找同一用户/企业下的已有记录
     if policy_no:
         conn = db.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
-            cursor.execute(
-                "SELECT id FROM insurance_records "
-                "WHERE JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.保单号')) = %s "
-                "OR JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.保险单号')) = %s "
-                "ORDER BY id DESC LIMIT 1",
-                (policy_no, policy_no)
-            )
+            conditions = [
+                "(JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.保单号')) = %s "
+                "OR JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.保险单号')) = %s)"
+            ]
+            params = [policy_no, policy_no]
+
+            if record_user_id is not None:
+                conditions.append("user_id = %s")
+                params.append(record_user_id)
+            else:
+                conditions.append("user_id IS NULL")
+
+            if record_enterprise_id is not None:
+                conditions.append("enterprise_id = %s")
+                params.append(record_enterprise_id)
+            else:
+                conditions.append("enterprise_id IS NULL")
+
+            sql = f"SELECT id FROM insurance_records WHERE {' AND '.join(conditions)} ORDER BY id DESC LIMIT 1"
+            cursor.execute(sql, params)
             existing = cursor.fetchone()
         finally:
             conn.close()
