@@ -636,14 +636,25 @@ def get_column_config(db, config_type: str, user_id: int, role: str, parent_id=N
         elif role == "super_admin":
             search_order.append(("global", None, "global"))
 
+        # 获取当前活跃模板名
+        active = get_active_template(db, user_id)
+        active_tpl = active.get("template_name", DEFAULT_TEMPLATE_NAME)
+
         for scope, scope_id, source_label in search_order:
             sid_cond, sid_params = _scope_id_condition(scope_id)
-            cursor.execute(
-                f"SELECT config_value FROM user_field_config "
-                f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'columns' "
-                f"LIMIT 1",
-                [scope] + sid_params + [config_type]
-            )
+            # 优先查活跃模板，找不到再查默认模板
+            for tpl in ([active_tpl, DEFAULT_TEMPLATE_NAME] if active_tpl != DEFAULT_TEMPLATE_NAME else [DEFAULT_TEMPLATE_NAME]):
+                cursor.execute(
+                    f"SELECT config_value FROM user_field_config "
+                    f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'columns' "
+                    f"AND template_name = %s LIMIT 1",
+                    [scope] + sid_params + [config_type, tpl]
+                )
+                row = cursor.fetchone()
+                if row:
+                    break
+            else:
+                row = None
             row = cursor.fetchone()
             if row:
                 try:

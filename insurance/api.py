@@ -3304,6 +3304,13 @@ def save_and_apply_field_config():
         save_full_template(_db, scope, scope_id, template_name, config, visible)
         set_active_template(_db, user["user_id"], "own", template_name)
 
+        # 同步列配置到该模板（保证模板是完整快照）
+        for col_type in ("list_columns", "export_columns"):
+            cur_cols = get_column_config(_db, col_type, user["user_id"], user["role"], user.get("parent_id"))
+            if cur_cols.get("source") != "default" and cur_cols.get("columns"):
+                save_column_config(_db, col_type, scope, scope_id, cur_cols["columns"],
+                                   template_name=template_name)
+
         return jsonify({"code": 0, "msg": "已保存并应用"})
     except Exception as e:
         logger.exception("保存配置失败")
@@ -3377,16 +3384,26 @@ def delete_column_config_api():
         scope, scope_id = _get_user_scope()
         user = g.current_user
 
-        # 先备份当前配置（含列配置和别名配置，完整复制到备份模板）
+        # 先备份当前全部配置到新模板（列配置 + 别名/日期/公式）
         current = get_column_config(_db, config_type, user["user_id"], user["role"], user.get("parent_id"))
         if current.get("source") != "default" and current.get("columns"):
             from datetime import datetime
             now = datetime.now()
             backup_name = f"备份{now.month}-{now.day} {now.strftime('%H:%M')}"
-            # 将列配置备份到新模板
+            # 备份列配置
             save_column_config(_db, config_type, scope, scope_id, current["columns"],
                                template_name=backup_name)
-            logger.info("列配置已备份到模板「%s」", backup_name)
+            # 备份另一种列配置
+            other_type = "list_columns" if config_type == "export_columns" else "export_columns"
+            other_cols = get_column_config(_db, other_type, user["user_id"], user["role"], user.get("parent_id"))
+            if other_cols.get("source") != "default" and other_cols.get("columns"):
+                save_column_config(_db, other_type, scope, scope_id, other_cols["columns"],
+                                   template_name=backup_name)
+            # 备份别名/日期/公式配置
+            cur_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
+            if cur_config and any(cur_config.get(k) for k in cur_config):
+                save_full_template(_db, scope, scope_id, backup_name, cur_config)
+            logger.info("全部配置已备份到模板「%s」", backup_name)
 
         # 删除当前配置
         delete_column_config(_db, config_type, scope, scope_id)
