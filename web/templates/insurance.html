@@ -4419,9 +4419,10 @@ createApp({
             exportPendingType.value = 'records';
             exportCustomMode.value = false; // 默认使用模板模式
             const dynamicCols = visibleListColumns.value.map(c => c.key);
-            const allCols = [...recordExtraColumns, ...dynamicCols];
+            const seen = new Set();
+            const allCols = [...recordExtraColumns, ...dynamicCols].filter(c => { if (seen.has(c)) return false; seen.add(c); return true; });
             exportAvailableFields.value = allCols;
-            exportSelectedFields.value = [...allCols]; // 自定义模式时默认全选
+            exportSelectedFields.value = [...allCols];
             // 加载合并默认值（按设置来）
             try {
                 const mergeResp = await authFetch('/api/insurance/merge-config');
@@ -4499,7 +4500,8 @@ createApp({
                 });
 
                 // 构建导出列：自定义模式按选中列过滤，默认模板模式传所有字段让后端决定
-                const colsToUse = selectedCols || [...recordExtraColumns, ...visibleListColumns.value.map(c => c.key)];
+                const _fallback = [...recordExtraColumns, ...visibleListColumns.value.map(c => c.key)];
+                const colsToUse = selectedCols || [...new Set(_fallback)];
 
                 const data = allRecords
                     .filter(r => r.status === 'done' || r.status === 'success')
