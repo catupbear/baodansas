@@ -418,6 +418,55 @@ def init_insurance_tables(db):
         except Exception:
             logger.exception("回填 is_abnormal 失败")
 
+        # 反向修正：已标记异常的记录按当前模板重新计算，不再异常的改回正常
+        try:
+            cursor.execute("""
+                SELECT id, parsed_fields, status, doc_category, user_id, abnormal_override_reason
+                FROM insurance_records
+                WHERE is_abnormal = 1
+                  AND status IN ('done', 'success')
+                  AND (abnormal_override_reason IS NULL OR abnormal_override_reason = '')
+                  AND parsed_fields IS NOT NULL
+            """)
+            abnormal_rows = cursor.fetchall()
+            _visible_cache_rev = {}
+            reverted = 0
+            for row in abnormal_rows:
+                pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
+                try:
+                    pf = json.loads(pf_str) if isinstance(pf_str, str) else (pf_str or {})
+                except (TypeError, json.JSONDecodeError):
+                    pf = {}
+                uid = row.get("user_id") if isinstance(row, dict) else row[4]
+                if uid not in _visible_cache_rev:
+                    _visible_cache_rev[uid] = _get_visible_export_keys(db, uid)
+                override = row.get("abnormal_override_reason") if isinstance(row, dict) else row[5]
+                abnormal, hint = _compute_abnormal(
+                    pf,
+                    row.get("status") if isinstance(row, dict) else row[2],
+                    row.get("doc_category") if isinstance(row, dict) else row[3],
+                    abnormal_override_reason=override,
+                    visible_export_keys=_visible_cache_rev[uid],
+                )
+                if not abnormal:
+                    rid = row.get("id") if isinstance(row, dict) else row[0]
+                    cursor.execute(
+                        "UPDATE insurance_records SET is_abnormal = 0, hint = %s WHERE id = %s",
+                        (hint, rid)
+                    )
+                    reverted += 1
+                elif hint != (row.get("hint", "") if isinstance(row, dict) else ""):
+                    # hint 内容可能因模板变化而更新
+                    rid = row.get("id") if isinstance(row, dict) else row[0]
+                    cursor.execute(
+                        "UPDATE insurance_records SET hint = %s WHERE id = %s",
+                        (hint, rid)
+                    )
+            if reverted:
+                logger.info("反向修正 is_abnormal 1→0 %d 条（模板不再要求该字段）", reverted)
+        except Exception:
+            logger.exception("反向修正 is_abnormal 失败")
+
         # 修正已标记正常但 is_abnormal 仍为 1 的历史数据
         try:
             cursor.execute("""
