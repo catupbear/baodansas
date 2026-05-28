@@ -711,6 +711,7 @@ class InsuranceHandler:
         """
         # 收集所有保单中已有的字段值
         # 人名类字段取最长值（短值可能是OCR误提取），其他字段取第一个非空值
+        from insurance.policy_parser import _is_valid_person
         PERSON_FIELDS = {"投保人", "被保险人", "车主"}
         merged = {}
         for policy in policies:
@@ -720,8 +721,8 @@ class InsuranceHandler:
                 if not val:
                     continue
                 if f in PERSON_FIELDS:
-                    # 人名字段：取最长的值（更可信）
-                    if f not in merged or len(val) > len(merged[f]):
+                    # 人名字段：取最长的值（更可信），但必须通过验证
+                    if _is_valid_person(val) and (f not in merged or len(val) > len(merged[f])):
                         merged[f] = val
                 elif f not in merged:
                     merged[f] = val
@@ -809,6 +810,7 @@ class InsuranceHandler:
             return
 
         # --- 正向互补：历史 → 当前 ---
+        from insurance.policy_parser import _is_valid_person
         missing = [f for f in self.CROSS_FILL_FIELDS if not parsed_fields.get(f)]
         filled = []
         for field in missing:
@@ -820,7 +822,7 @@ class InsuranceHandler:
                     except (TypeError, json.JSONDecodeError, ValueError):
                         hist_fields = {}
                 val = hist_fields.get(field, "")
-                if val:
+                if val and _is_valid_person(val):
                     parsed_fields[field] = val
                     filled.append(f"{field}={val}")
                     break
@@ -841,8 +843,8 @@ class InsuranceHandler:
                     cur_val = parsed_fields.get(field, "")
                     hist_val = hist_fields.get(field, "")
                     if cur_val and hist_val and cur_val != hist_val:
-                        # 取更长的值（更可信）
-                        if len(hist_val) > len(cur_val):
+                        # 取更长的值（更可信），但必须通过人名/公司名验证
+                        if len(hist_val) > len(cur_val) and _is_valid_person(hist_val):
                             parsed_fields[field] = hist_val
                             filled.append(f"{field}={hist_val}(校验替换:{cur_val})")
                 break  # 只对比一条同类车险
@@ -879,7 +881,7 @@ class InsuranceHandler:
                 if self._is_vehicle_policy(hist_fields):
                     for field in override_fields:
                         vehicle_val = hist_fields.get(field, "")
-                        if vehicle_val and vehicle_val != parsed_fields.get(field, ""):
+                        if vehicle_val and vehicle_val != parsed_fields.get(field, "") and _is_valid_person(vehicle_val):
                             old_val = parsed_fields.get(field, "")
                             parsed_fields[field] = vehicle_val
                             filled.append(f"{field}={vehicle_val}(覆盖:{old_val})")
@@ -905,7 +907,7 @@ class InsuranceHandler:
                 continue
             back_filled = []
             for field in self.CROSS_FILL_FIELDS:
-                if not hist_fields.get(field) and current_vals.get(field):
+                if not hist_fields.get(field) and current_vals.get(field) and _is_valid_person(current_vals[field]):
                     hist_fields[field] = current_vals[field]
                     back_filled.append(f"{field}={current_vals[field]}")
 
@@ -914,7 +916,7 @@ class InsuranceHandler:
                 for field in self.CROSS_FILL_FIELDS:
                     cur_val = current_vals.get(field, "")
                     hist_val = hist_fields.get(field, "")
-                    if cur_val and hist_val and cur_val != hist_val and len(cur_val) > len(hist_val):
+                    if cur_val and hist_val and cur_val != hist_val and len(cur_val) > len(hist_val) and _is_valid_person(cur_val):
                         old_val = hist_val
                         hist_fields[field] = cur_val
                         back_filled.append(f"{field}={cur_val}(校验替换:{old_val})")
@@ -924,7 +926,7 @@ class InsuranceHandler:
                 for field in self.CROSS_FILL_FIELDS:
                     cur_val = current_vals.get(field, "")
                     hist_val = hist_fields.get(field, "")
-                    if cur_val and hist_val != cur_val:
+                    if cur_val and hist_val != cur_val and _is_valid_person(cur_val):
                         old_val = hist_val
                         hist_fields[field] = cur_val
                         back_filled.append(f"{field}={cur_val}(覆盖:{old_val})")
