@@ -3375,6 +3375,7 @@ def get_column_config_api():
     try:
         config_type = request.args.get("config_type", "list_columns")
         user = g.current_user
+        source = request.args.get("source", "own")
 
         # 超管代管模式：模拟目标用户的角色查询
         target_scope = request.args.get("target_scope")
@@ -3389,6 +3390,10 @@ def get_column_config_api():
                 result = get_column_config(_db, config_type, sid, "employee", target_user.get("parent_id") if target_user else None)
             else:
                 result = get_column_config(_db, config_type, 0, "super_admin", None)
+        elif source == "system":
+            result = get_column_config(_db, config_type, 0, "super_admin", None)
+        elif source == "enterprise" and user.get("parent_id"):
+            result = get_column_config(_db, config_type, user["parent_id"], "enterprise", user["parent_id"])
         else:
             result = get_column_config(_db, config_type, user["user_id"], user["role"], user.get("parent_id"))
         return jsonify({"code": 0, "data": result})
@@ -3504,7 +3509,13 @@ def get_merge_config_api():
             else:
                 enabled = get_merge_by_plate(_db, 0, "super_admin", None)
         else:
-            enabled = get_merge_by_plate(_db, user["user_id"], user["role"], user.get("parent_id"))
+            source = request.args.get("source", "own")
+            if source == "system":
+                enabled = get_merge_by_plate(_db, 0, "super_admin", None)
+            elif source == "enterprise" and user.get("parent_id"):
+                enabled = get_merge_by_plate(_db, user["parent_id"], "enterprise", user["parent_id"])
+            else:
+                enabled = get_merge_by_plate(_db, user["user_id"], user["role"], user.get("parent_id"))
         return jsonify({"code": 0, "data": {"enabled": enabled}})
     except Exception as e:
         logger.exception("获取合并配置失败")

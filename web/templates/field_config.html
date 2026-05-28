@@ -889,7 +889,7 @@ createApp({
         // 加载合并开关
         async function loadMergeConfig() {
             try {
-                let url = '/api/insurance/merge-config';
+                let url = `/api/insurance/merge-config?source=${activeSource.value}`;
                 if (adminTarget.value) {
                     url += `?target_scope=${adminTarget.value.scope}`;
                     if (adminTarget.value.scope_id != null) url += `&target_scope_id=${adminTarget.value.scope_id}`;
@@ -1008,7 +1008,7 @@ createApp({
 
         const loadColumnConfig = async (configType) => {
             try {
-                let url = `/api/insurance/column-config?config_type=${configType}`;
+                let url = `/api/insurance/column-config?config_type=${configType}&source=${activeSource.value}`;
                 if (adminTarget.value) {
                     url += `&target_scope=${adminTarget.value.scope}`;
                     if (adminTarget.value.scope_id != null) url += `&target_scope_id=${adminTarget.value.scope_id}`;
@@ -1702,10 +1702,8 @@ createApp({
                 activeSource.value = source;
                 activeTemplateName.value = name;
                 await loadConfig(name, source);
-                // 从代管返回时重新加载自己的列配置
-                if (wasAdmin) {
-                    await Promise.all([loadColumnConfig('list_columns'), loadColumnConfig('export_columns'), loadMergeConfig()]);
-                }
+                // 切换模板时同步重载列配置和合并开关
+                await Promise.all([loadColumnConfig('list_columns'), loadColumnConfig('export_columns'), loadMergeConfig()]);
                 if (source === 'system') {
                     showToast('已切换到系统模板「' + name + '」（只读）', 'warning');
                 } else if (source === 'enterprise') {
