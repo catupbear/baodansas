@@ -46,6 +46,8 @@ DEFAULT_COLUMNS = [
     {"key": "识别时间", "visible": True, "order": 18, "display_name": "识别时间", "type": "record"},
     {"key": "群名",     "visible": True, "order": 19, "display_name": "群名",     "type": "record"},
     {"key": "发送人",   "visible": True, "order": 20, "display_name": "发送人",   "type": "record"},
+    {"key": "保司公司名称", "visible": True, "order": 21, "display_name": "保司公司名称"},
+    {"key": "保司地址",     "visible": True, "order": 22, "display_name": "保司地址"},
 ]
 
 # 记录级字段的 key 集合（用于前端区分渲染方式）

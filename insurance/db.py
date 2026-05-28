@@ -78,6 +78,8 @@ _OCR_TO_COLUMN = {
     "争议解决方式": "dispute_resolution",
     "制单人": "creator",
     "经办人": "handler",
+    "保司公司名称": "insurer_name",
+    "保司地址": "insurer_address",
 }
 # 反向映射：列名 → OCR 字段名
 _COLUMN_TO_OCR = {v: k for k, v in _OCR_TO_COLUMN.items()}
@@ -168,6 +170,8 @@ def init_insurance_tables(db):
                 dispute_resolution VARCHAR(500) DEFAULT '' COMMENT '争议解决方式',
                 creator            VARCHAR(500) DEFAULT '' COMMENT '制单人',
                 handler            VARCHAR(500) DEFAULT '' COMMENT '经办人',
+                insurer_name       VARCHAR(500) DEFAULT '' COMMENT '保司公司名称',
+                insurer_address    VARCHAR(500) DEFAULT '' COMMENT '保司地址',
                 sign_date_iso      DATE DEFAULT NULL COMMENT '签单日期(ISO格式，用于索引查询)',
                 start_date_iso     DATE DEFAULT NULL COMMENT '起保日期(ISO格式，用于索引查询)',
                 end_date_iso       DATE DEFAULT NULL COMMENT '止保日期(ISO格式，用于索引查询)',
@@ -284,6 +288,15 @@ def init_insurance_tables(db):
         import threading as _threading
         _threading.Thread(target=_backfill_iso_dates, args=(db,), daemon=True).start()
 
+        # 迁移：为已有表添加保司公司名称/保司地址列（幂等）
+        for new_col in ["insurer_name", "insurer_address"]:
+            try:
+                cursor.execute(
+                    f"ALTER TABLE insurance_policy_fields ADD COLUMN {new_col} VARCHAR(500) DEFAULT '' COMMENT '保司信息'"
+                )
+            except Exception:
+                pass
+
         # 关联表列宽统一修正为 VARCHAR(500)（已建表的情况下加宽，幂等）
         _pf_text_cols = [
             "policy_no", "company", "company_short", "policy_type",
@@ -294,6 +307,7 @@ def init_insurance_tables(db):
             "vehicle_tax", "insurance_period", "start_date", "end_date",
             "sign_date", "confirm_time", "sales_channel", "agency",
             "salesperson", "confirm_code", "dispute_resolution", "creator", "handler",
+            "insurer_name", "insurer_address",
         ]
         for col in _pf_text_cols:
             try:

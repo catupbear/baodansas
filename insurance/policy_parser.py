@@ -216,7 +216,9 @@ def _is_valid_person(val: str) -> bool:
         # 条款常见误提取
         r'|本人|雇佣|义务|权利'
         # 法律/条款常见虚词（易从条款正文中误提取）
-        r'|鉴于|甲方|乙方|丙方|若干|总则|细则|附则|前述|兹有|特此',
+        r'|鉴于|甲方|乙方|丙方|若干|总则|细则|附则|前述|兹有|特此'
+        # 社交媒体/营销标签（如保单PDF中的微信公众号标签"众诚官微"）
+        r'|官微|官网',
         val
     ):
         return False
@@ -690,7 +692,39 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
                     fields["业务员"] = val
                     break
 
+    # ===== 保司公司名称 / 保司地址（保险人信息区域） =====
+    _extract_insurer_info(text, text_merged, fields)
+
     return fields
+
+
+# ============================================================
+# 保司公司名称 / 保司地址提取
+# ============================================================
+
+def _extract_insurer_info(text: str, text_merged: str, fields: dict):
+    """提取保险人公司名称和地址（保单底部"保险人"信息区域）"""
+    lines = text.split('\n')
+
+    # 公司名称：众诚汽车保险股份有限公司深圳分公司
+    # OCR 可能将"保险人"区域的"公司名称"拆行，用 text_merged 兜底
+    for src in [text, text_merged]:
+        m = re.search(r'公司名称[：:]\s*(.+?)(?:\s{2,}|\n|$)', src)
+        if m:
+            val = m.group(1).strip()
+            # 过滤掉"中介机构名称"（已有字段）和被保险人区域的公司名
+            if val and len(val) >= 4 and re.search(r'公司|分公司', val):
+                fields["保司公司名称"] = val
+                break
+
+    # 公司地址：深圳市南山区南山街道东滨路南荔源商务大厦A栋1301-1306、1401
+    for src in [text, text_merged]:
+        m = re.search(r'公司地址[：:]\s*(.+?)(?:\s{2,}|\n|$)', src)
+        if m:
+            val = m.group(1).strip()
+            if val and len(val) >= 4:
+                fields["保司地址"] = val
+                break
 
 
 # ============================================================
