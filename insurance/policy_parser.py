@@ -269,12 +269,12 @@ def _identify_company(text: str) -> Dict[str, str]:
                           re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', text))
 
     # 方式1："公司名称："或"承保公司为："格式
-    m = re.search(r"(?:公司名称|承保公司为?)[：:\s]*\n?\s*(.+?)(?:\s+公司地址|$)", company_text)
+    m = re.search(r"(?:公司名称|承保公司为?)[：:\s]*\n?\s*(.+?)(?:\s+公司(?:地址|网址)|\s{2,}|$)", company_text)
     if m:
         val = m.group(1).strip()
         if len(val) > 6:
-            # 清理尾部多余内容
-            val = re.sub(r'(公司|营业部|服务部|业务部|支公司).*', r'\1', val)
+            # 清理尾部多余内容（保留完整的分公司/支公司/营业部层级名称）
+            val = re.sub(r'(支公司|分公司|营业部|服务部|业务部|公司)(?![一-鿿]).*', r'\1', val)
             result["保险公司"] = val
 
     # 方式2：遍历公司基础名称列表匹配
@@ -709,7 +709,7 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
     # 公司名称：众诚汽车保险股份有限公司深圳分公司
     # OCR 可能将"保险人"区域的"公司名称"拆行，用 text_merged 兜底
     for src in [text, text_merged]:
-        m = re.search(r'公司名称[：:]\s*(.+?)(?:\s{2,}|\n|$)', src)
+        m = re.search(r'公司名称[：:]\s*(.+?)(?:\s+公司(?:网址|地址)|公司网址|\s{2,}|\n|$)', src)
         if m:
             val = m.group(1).strip()
             # 过滤掉"中介机构名称"（已有字段）和被保险人区域的公司名
@@ -719,7 +719,7 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
 
     # 公司地址：深圳市南山区南山街道东滨路南荔源商务大厦A栋1301-1306、1401
     for src in [text, text_merged]:
-        m = re.search(r'公司地址[：:]\s*(.+?)(?:\s{2,}|\n|$)', src)
+        m = re.search(r'公司地址[：:]\s*(.+?)(?:\s+公司网址|\s{2,}|\n|$)', src)
         if m:
             val = m.group(1).strip()
             if val and len(val) >= 4:
