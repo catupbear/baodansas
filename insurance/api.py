@@ -3485,9 +3485,9 @@ def get_field_config_defaults():
         # ---- 公司 ----
         # 内部简称 → 更友好的显示简称
         _COMPANY_DISPLAY = {
-            "人保PICC": "人保", "中华联合": "中华", "前海联合": "前海",
-            "安盛天平": "安盛", "泰康在线": "泰康", "京东安联": "京东安联",
-            "国寿财产": "国寿", "大家财险": "大家",
+            "人保PICC": "人保", "人民财产": "人保", "中华联合": "中华",
+            "前海联合": "前海", "安盛天平": "安盛", "泰康在线": "泰康",
+            "京东安联": "京东安联", "国寿财产": "人寿", "大家财险": "大家",
         }
 
         # 1) 从数据库全局查去重的公司（不区分企业/账号）
@@ -3496,16 +3496,18 @@ def get_field_config_defaults():
         conn = _db.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
+            # 有简称的排前面，保证优先取到非空简称
             cursor.execute(
                 "SELECT DISTINCT company, company_short FROM insurance_policy_fields "
                 "WHERE company IS NOT NULL AND company != '' "
-                "ORDER BY company_short"
+                "ORDER BY (company_short IS NULL OR company_short = ''), company_short"
             )
             for r in cursor.fetchall():
-                if r["company"] and r["company"] not in seen_companies:
-                    short = _COMPANY_DISPLAY.get(r["company_short"], r["company_short"]) or ""
-                    company_defaults.append({"key": r["company"], "value": short})
-                    seen_companies.add(r["company"])
+                if not r["company"] or r["company"] in seen_companies:
+                    continue
+                short = _COMPANY_DISPLAY.get(r["company_short"], r["company_short"]) or ""
+                company_defaults.append({"key": r["company"], "value": short})
+                seen_companies.add(r["company"])
         finally:
             conn.close()
 
