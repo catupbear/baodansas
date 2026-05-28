@@ -655,7 +655,6 @@ def get_column_config(db, config_type: str, user_id: int, role: str, parent_id=N
                     break
             else:
                 row = None
-            row = cursor.fetchone()
             if row:
                 try:
                     columns = json.loads(row["config_value"])
