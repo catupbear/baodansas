@@ -29,7 +29,8 @@ from .db import (
     upsert_insurance_record_by_policy,
 )
 from .field_config_db import (
-    list_templates as list_field_config_templates, rename_template, update_template_visibility, delete_template as delete_template_db,
+    list_templates as list_field_config_templates, list_all_templates,
+    rename_template, update_template_visibility, delete_template as delete_template_db,
     get_template_config, save_full_template,
     get_active_template, set_active_template,
     get_effective_config, apply_user_config_to_fields,
@@ -3232,13 +3233,19 @@ def field_config_page():
 
 @insurance_bp.route("/api/insurance/field-config/templates", methods=["GET"])
 def get_field_config_templates():
-    """获取模板列表（我的 + 企业可见）"""
+    """获取模板列表（我的 + 企业可见；超管可查看所有）"""
     try:
         from flask import g
         user = g.current_user
         data = list_field_config_templates(_db, user["user_id"], user["role"], user.get("parent_id"))
         active = get_active_template(_db, user["user_id"])
-        return jsonify({"code": 0, "data": {**data, "active": active}})
+        result = {**data, "active": active}
+
+        # 超管额外返回系统所有模板
+        if user["role"] == ROLE_SUPER_ADMIN:
+            result["all"] = list_all_templates(_db)
+
+        return jsonify({"code": 0, "data": result})
     except Exception as e:
         logger.exception("获取模板列表失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
@@ -3248,9 +3255,19 @@ def get_field_config_templates():
 def manage_field_config_templates():
     """批量管理模板"""
     try:
+        from flask import g
         body = request.get_json(force=True) or {}
         actions = body.get("actions", [])
-        scope, scope_id = _get_user_scope()
+        user = g.current_user
+
+        # 超管代管模式
+        target_scope = body.get("target_scope")
+        target_scope_id = body.get("target_scope_id")
+        if user["role"] == ROLE_SUPER_ADMIN and target_scope:
+            scope = target_scope
+            scope_id = int(target_scope_id) if target_scope_id else None
+        else:
+            scope, scope_id = _get_user_scope()
 
         for action in actions:
             act_type = action.get("type")
@@ -3276,7 +3293,13 @@ def get_field_config():
         source = request.args.get("source", "own")
         user = g.current_user
 
-        if source == "enterprise" and user.get("parent_id"):
+        # 超管代管模式：通过 target_scope + target_scope_id 读取任意模板
+        target_scope = request.args.get("target_scope")
+        target_scope_id = request.args.get("target_scope_id")
+        if user["role"] == ROLE_SUPER_ADMIN and target_scope:
+            sid = int(target_scope_id) if target_scope_id else None
+            config = get_template_config(_db, target_scope, sid, template_name)
+        elif source == "enterprise" and user.get("parent_id"):
             config = get_template_config(_db, "enterprise", user["parent_id"], template_name)
         else:
             scope, scope_id = _get_user_scope()
@@ -3298,18 +3321,28 @@ def save_and_apply_field_config():
         config = body.get("config", {})
         visible = body.get("visible", False)
 
-        scope, scope_id = _get_user_scope()
         user = g.current_user
 
-        save_full_template(_db, scope, scope_id, template_name, config, visible)
-        set_active_template(_db, user["user_id"], "own", template_name)
+        # 超管代管模式：保存到指定 scope
+        target_scope = body.get("target_scope")
+        target_scope_id = body.get("target_scope_id")
+        if user["role"] == ROLE_SUPER_ADMIN and target_scope:
+            scope = target_scope
+            scope_id = int(target_scope_id) if target_scope_id else None
+        else:
+            scope, scope_id = _get_user_scope()
 
-        # 同步列配置到该模板（保证模板是完整快照）
-        for col_type in ("list_columns", "export_columns"):
-            cur_cols = get_column_config(_db, col_type, user["user_id"], user["role"], user.get("parent_id"))
-            if cur_cols.get("source") != "default" and cur_cols.get("columns"):
-                save_column_config(_db, col_type, scope, scope_id, cur_cols["columns"],
-                                   template_name=template_name)
+        save_full_template(_db, scope, scope_id, template_name, config, visible)
+
+        # 非代管模式才设为自己的启用模板
+        if not target_scope:
+            set_active_template(_db, user["user_id"], "own", template_name)
+            # 同步列配置到该模板
+            for col_type in ("list_columns", "export_columns"):
+                cur_cols = get_column_config(_db, col_type, user["user_id"], user["role"], user.get("parent_id"))
+                if cur_cols.get("source") != "default" and cur_cols.get("columns"):
+                    save_column_config(_db, col_type, scope, scope_id, cur_cols["columns"],
+                                       template_name=template_name)
 
         return jsonify({"code": 0, "msg": "已保存并应用"})
     except Exception as e:
@@ -3340,7 +3373,22 @@ def get_column_config_api():
     try:
         config_type = request.args.get("config_type", "list_columns")
         user = g.current_user
-        result = get_column_config(_db, config_type, user["user_id"], user["role"], user.get("parent_id"))
+
+        # 超管代管模式：模拟目标用户的角色查询
+        target_scope = request.args.get("target_scope")
+        target_scope_id = request.args.get("target_scope_id")
+        if user["role"] == ROLE_SUPER_ADMIN and target_scope:
+            sid = int(target_scope_id) if target_scope_id else None
+            if target_scope == "enterprise":
+                result = get_column_config(_db, config_type, sid, "enterprise", sid)
+            elif target_scope == "user":
+                from auth.db import get_user_by_id
+                target_user = get_user_by_id(_db, sid)
+                result = get_column_config(_db, config_type, sid, "employee", target_user.get("parent_id") if target_user else None)
+            else:
+                result = get_column_config(_db, config_type, 0, "super_admin", None)
+        else:
+            result = get_column_config(_db, config_type, user["user_id"], user["role"], user.get("parent_id"))
         return jsonify({"code": 0, "data": result})
     except Exception as e:
         logger.exception("获取列配置失败")
@@ -3361,7 +3409,16 @@ def save_column_config_api():
         if not columns:
             return jsonify({"code": 400, "msg": "columns 不能为空"}), 400
 
-        scope, scope_id = _get_user_scope()
+        # 超管代管模式
+        user = g.current_user
+        target_scope = body.get("target_scope")
+        target_scope_id = body.get("target_scope_id")
+        if user["role"] == ROLE_SUPER_ADMIN and target_scope:
+            scope = target_scope
+            scope_id = int(target_scope_id) if target_scope_id else None
+        else:
+            scope, scope_id = _get_user_scope()
+
         save_column_config(_db, config_type, scope, scope_id, columns)
         return jsonify({"code": 0, "msg": "列配置已保存"})
     except Exception as e:
@@ -3381,8 +3438,16 @@ def delete_column_config_api():
     try:
         config_type = request.args.get("config_type", "list_columns")
         reset_to = request.args.get("reset_to", "enterprise")
-        scope, scope_id = _get_user_scope()
         user = g.current_user
+
+        # 超管代管模式
+        target_scope = request.args.get("target_scope")
+        target_scope_id = request.args.get("target_scope_id")
+        if user["role"] == ROLE_SUPER_ADMIN and target_scope:
+            scope = target_scope
+            scope_id = int(target_scope_id) if target_scope_id else None
+        else:
+            scope, scope_id = _get_user_scope()
 
         # 先备份当前全部配置到新模板（列配置 + 别名/日期/公式）
         current = get_column_config(_db, config_type, user["user_id"], user["role"], user.get("parent_id"))
@@ -3423,7 +3488,21 @@ def get_merge_config_api():
     """获取合并导出开关"""
     try:
         user = g.current_user
-        enabled = get_merge_by_plate(_db, user["user_id"], user["role"], user.get("parent_id"))
+        # 超管代管模式
+        target_scope = request.args.get("target_scope")
+        target_scope_id = request.args.get("target_scope_id")
+        if user["role"] == ROLE_SUPER_ADMIN and target_scope:
+            sid = int(target_scope_id) if target_scope_id else None
+            if target_scope == "enterprise":
+                enabled = get_merge_by_plate(_db, sid, "enterprise", sid)
+            elif target_scope == "user":
+                from auth.db import get_user_by_id
+                target_user = get_user_by_id(_db, sid)
+                enabled = get_merge_by_plate(_db, sid, "employee", target_user.get("parent_id") if target_user else None)
+            else:
+                enabled = get_merge_by_plate(_db, 0, "super_admin", None)
+        else:
+            enabled = get_merge_by_plate(_db, user["user_id"], user["role"], user.get("parent_id"))
         return jsonify({"code": 0, "data": {"enabled": enabled}})
     except Exception as e:
         logger.exception("获取合并配置失败")
@@ -3436,7 +3515,17 @@ def save_merge_config_api():
     try:
         body = request.get_json(force=True) or {}
         enabled = body.get("enabled", False)
-        scope, scope_id = _get_user_scope()
+
+        # 超管代管模式
+        user = g.current_user
+        target_scope = body.get("target_scope")
+        target_scope_id = body.get("target_scope_id")
+        if user["role"] == ROLE_SUPER_ADMIN and target_scope:
+            scope = target_scope
+            scope_id = int(target_scope_id) if target_scope_id else None
+        else:
+            scope, scope_id = _get_user_scope()
+
         save_merge_by_plate(_db, scope, scope_id, enabled)
         return jsonify({"code": 0, "msg": "已保存"})
     except Exception as e:

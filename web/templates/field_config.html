@@ -327,25 +327,28 @@
                     <div ref="templateDropdownRef" style="position:relative;">
                         <button class="btn-sync" @click="showTemplateDropdown = !showTemplateDropdown" style="min-width:160px; justify-content:space-between;">
                             <span style="display:flex; align-items:center; gap:6px;">
-                                <span v-if="activeSource === 'enterprise'" style="font-size:10px; background:rgba(255,255,255,0.2); padding:1px 6px; border-radius:3px;">企业</span>
+                                <span v-if="adminTarget" style="font-size:10px; background:rgba(255,200,0,0.3); padding:1px 6px; border-radius:3px;">代管</span>
+                                <span v-else-if="activeSource === 'enterprise'" style="font-size:10px; background:rgba(255,255,255,0.2); padding:1px 6px; border-radius:3px;">企业</span>
                                 {{ activeTemplateName }}
                             </span>
                             <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M3 4.5L6 7.5L9 4.5"/></svg>
                         </button>
                         <!-- 下拉面板 -->
-                        <div v-if="showTemplateDropdown" style="position:absolute; right:0; top:calc(100% + 6px); width:260px; background:var(--surface); border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,0.15); border:1px solid var(--border-light); z-index:50; overflow:hidden;">
-                            <!-- 我的模板 -->
-                            <div style="padding:8px 12px 4px; font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">我的模板</div>
+                        <div v-if="showTemplateDropdown" style="position:absolute; right:0; top:calc(100% + 6px); background:var(--surface); border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,0.15); border:1px solid var(--border-light); z-index:50; overflow:hidden;" :style="{width: currentRole === 'super_admin' && allTemplatesData ? '340px' : '260px', maxHeight: '70vh', overflowY: 'auto'}">
+                            <!-- 我的模板（全局） -->
+                            <div style="padding:8px 12px 4px; font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">
+                                {{ currentRole === 'super_admin' ? '全局模板（我的）' : '我的模板' }}
+                            </div>
                             <div v-for="t in myTemplates" :key="t.name"
                                  @click="selectTemplate('own', t.name)"
                                  style="padding:8px 12px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; transition:background 0.15s;"
-                                 :style="{background: activeSource==='own' && activeTemplateName===t.name ? 'var(--primary-bg)' : '', color: activeSource==='own' && activeTemplateName===t.name ? 'var(--primary)' : 'var(--text-primary)'}"
+                                 :style="{background: !adminTarget && activeSource==='own' && activeTemplateName===t.name ? 'var(--primary-bg)' : '', color: !adminTarget && activeSource==='own' && activeTemplateName===t.name ? 'var(--primary)' : 'var(--text-primary)'}"
                                  onmouseover="if(!this.dataset.active)this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-                                <span v-if="activeSource==='own' && activeTemplateName===t.name" style="color:var(--primary); flex-shrink:0;">✓</span>
+                                <span v-if="!adminTarget && activeSource==='own' && activeTemplateName===t.name" style="color:var(--primary); flex-shrink:0;">✓</span>
                                 <span style="flex:1;">{{ t.name }}</span>
                                 <span v-if="t.visible" style="font-size:10px; padding:1px 6px; background:#ecfdf5; color:#059669; border-radius:3px; flex-shrink:0;">员工可见</span>
                             </div>
-                            <!-- 企业模板（员工可见） -->
+                            <!-- 企业模板（员工视角） -->
                             <template v-if="currentRole === 'employee' && enterpriseTemplates.length">
                                 <div style="border-top:1px solid var(--border-light); padding:8px 12px 4px; font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">企业模板</div>
                                 <div v-for="t in enterpriseTemplates" :key="'e-'+t.name"
@@ -357,6 +360,37 @@
                                     <span style="flex:1;">{{ t.name }}</span>
                                     <span style="font-size:10px; padding:1px 6px; background:#f3f4f6; color:var(--text-muted); border-radius:3px; flex-shrink:0;">只读</span>
                                 </div>
+                            </template>
+                            <!-- 超管：所有企业模板 -->
+                            <template v-if="currentRole === 'super_admin' && allTemplatesData && allTemplatesData.enterprises.length">
+                                <div style="border-top:1px solid var(--border-light); padding:8px 12px 4px; font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">企业模板</div>
+                                <template v-for="ent in allTemplatesData.enterprises" :key="'ent-'+ent.enterprise_id">
+                                    <div style="padding:4px 12px 2px; font-size:11px; color:var(--text-muted);">{{ ent.enterprise_name }}</div>
+                                    <div v-for="t in ent.templates" :key="'ent-'+ent.enterprise_id+'-'+t.name"
+                                         @click="selectAdminTemplate('enterprise', ent.enterprise_id, t.name, ent.enterprise_name)"
+                                         style="padding:6px 12px 6px 24px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; transition:background 0.15s;"
+                                         :style="{background: adminTarget && adminTarget.scope==='enterprise' && adminTarget.scope_id===ent.enterprise_id && activeTemplateName===t.name ? '#fef3c7' : '', color: adminTarget && adminTarget.scope==='enterprise' && adminTarget.scope_id===ent.enterprise_id && activeTemplateName===t.name ? '#92400e' : 'var(--text-primary)'}"
+                                         onmouseover="this.style.background=this.style.background||'#f9fafb'" onmouseout="this.style.background=''">
+                                        <span v-if="adminTarget && adminTarget.scope==='enterprise' && adminTarget.scope_id===ent.enterprise_id && activeTemplateName===t.name" style="color:#92400e; flex-shrink:0;">✓</span>
+                                        <span style="flex:1;">{{ t.name }}</span>
+                                        <span v-if="t.visible" style="font-size:10px; padding:1px 6px; background:#ecfdf5; color:#059669; border-radius:3px; flex-shrink:0;">员工可见</span>
+                                    </div>
+                                </template>
+                            </template>
+                            <!-- 超管：所有员工模板 -->
+                            <template v-if="currentRole === 'super_admin' && allTemplatesData && allTemplatesData.users.length">
+                                <div style="border-top:1px solid var(--border-light); padding:8px 12px 4px; font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">员工模板</div>
+                                <template v-for="u in allTemplatesData.users" :key="'user-'+u.user_id">
+                                    <div style="padding:4px 12px 2px; font-size:11px; color:var(--text-muted);">{{ u.user_name }}<span v-if="u.enterprise_name" style="margin-left:4px; font-size:10px; color:#9ca3af;">（{{ u.enterprise_name }}）</span></div>
+                                    <div v-for="t in u.templates" :key="'user-'+u.user_id+'-'+t.name"
+                                         @click="selectAdminTemplate('user', u.user_id, t.name, u.user_name)"
+                                         style="padding:6px 12px 6px 24px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; transition:background 0.15s;"
+                                         :style="{background: adminTarget && adminTarget.scope==='user' && adminTarget.scope_id===u.user_id && activeTemplateName===t.name ? '#fef3c7' : '', color: adminTarget && adminTarget.scope==='user' && adminTarget.scope_id===u.user_id && activeTemplateName===t.name ? '#92400e' : 'var(--text-primary)'}"
+                                         onmouseover="this.style.background=this.style.background||'#f9fafb'" onmouseout="this.style.background=''">
+                                        <span v-if="adminTarget && adminTarget.scope==='user' && adminTarget.scope_id===u.user_id && activeTemplateName===t.name" style="color:#92400e; flex-shrink:0;">✓</span>
+                                        <span style="flex:1;">{{ t.name }}</span>
+                                    </div>
+                                </template>
                             </template>
                             <!-- 底部操作 -->
                             <div style="border-top:1px solid var(--border-light); padding:6px;">
@@ -378,6 +412,12 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- 代管提示条 -->
+    <div v-if="adminTarget" style="background:#fef3c7; border-bottom:1px solid #fcd34d; padding:8px 24px; display:flex; align-items:center; justify-content:center; gap:12px;">
+        <span style="font-size:13px; color:#92400e;">正在代管编辑：<b>{{ adminTarget.label }}</b> 的「{{ activeTemplateName }}」模板（{{ adminTarget.scope === 'enterprise' ? '企业级' : '员工级' }}），修改将直接保存到对方配置</span>
+        <button @click="adminTarget = null; loadTemplates(); loadConfig(); loadColumnConfig('list_columns'); loadColumnConfig('export_columns'); loadMergeConfig();" style="font-size:12px; padding:3px 12px; background:#fff; border:1px solid #fcd34d; border-radius:4px; cursor:pointer; color:#92400e;">退出代管</button>
     </div>
 
     <!-- 主内容区 -->
@@ -798,6 +838,11 @@ createApp({
         const myTemplates = ref([]);
         const enterpriseTemplates = ref([]);
 
+        // 超管代管：当前编辑的目标 scope 信息
+        const adminTarget = ref(null);  // null=操作自己 | {scope, scope_id, label}
+        // 超管查看所有模板（按 scope 分组）
+        const allTemplatesData = ref(null);  // {global, enterprises, users}
+
         // 模板管理弹窗用的临时数据（含编辑名、删除标记）
         const managerTemplates = ref([]);
 
@@ -829,7 +874,12 @@ createApp({
         // 加载合并开关
         async function loadMergeConfig() {
             try {
-                const resp = await authFetch('/api/insurance/merge-config');
+                let url = '/api/insurance/merge-config';
+                if (adminTarget.value) {
+                    url += `?target_scope=${adminTarget.value.scope}`;
+                    if (adminTarget.value.scope_id != null) url += `&target_scope_id=${adminTarget.value.scope_id}`;
+                }
+                const resp = await authFetch(url);
                 const data = await resp.json();
                 if (data.code === 0) {
                     mergeByPlate.value = data.data.enabled;
@@ -842,10 +892,15 @@ createApp({
         // 保存合并开关
         async function saveMergeConfig() {
             try {
+                const mergeBody = { enabled: mergeByPlate.value };
+                if (adminTarget.value) {
+                    mergeBody.target_scope = adminTarget.value.scope;
+                    if (adminTarget.value.scope_id != null) mergeBody.target_scope_id = adminTarget.value.scope_id;
+                }
                 await authFetch('/api/insurance/merge-config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enabled: mergeByPlate.value }),
+                    body: JSON.stringify(mergeBody),
                 });
             } catch (e) {
                 console.error('保存合并配置失败:', e);
@@ -938,7 +993,12 @@ createApp({
 
         const loadColumnConfig = async (configType) => {
             try {
-                const resp = await authFetch(`/api/insurance/column-config?config_type=${configType}`);
+                let url = `/api/insurance/column-config?config_type=${configType}`;
+                if (adminTarget.value) {
+                    url += `&target_scope=${adminTarget.value.scope}`;
+                    if (adminTarget.value.scope_id != null) url += `&target_scope_id=${adminTarget.value.scope_id}`;
+                }
+                const resp = await authFetch(url);
                 const data = await resp.json();
                 if (data.code === 0) {
                     const config = data.data;
@@ -957,17 +1017,57 @@ createApp({
             }
         };
 
+        // 同步自定义字段到另一侧（保存时调用）
+        const syncCustomFields = (configType) => {
+            const sourceItems = configType === 'list_columns' ? listColItems.value : exportColItems.value;
+            const targetItems = configType === 'list_columns' ? exportColItems.value : listColItems.value;
+            const sourceCustomKeys = new Set(sourceItems.filter(c => c.custom).map(c => c.key));
+            const targetCustomKeys = new Set(targetItems.filter(c => c.custom).map(c => c.key));
+            // 添加源有目标无的自定义字段
+            for (const col of sourceItems) {
+                if (col.custom && !targetCustomKeys.has(col.key)) {
+                    targetItems.push({ key: col.key, visible: col.visible, order: targetItems.length, display_name: col.display_name, custom: true });
+                }
+            }
+            // 删除目标有但源已删除的自定义字段（合并字段不删）
+            for (let i = targetItems.length - 1; i >= 0; i--) {
+                if (targetItems[i].custom && !targetItems[i].merge && !sourceCustomKeys.has(targetItems[i].key)) {
+                    targetItems.splice(i, 1);
+                }
+            }
+        };
+
         const saveColumnConfig = async (configType) => {
             const items = configType === 'list_columns' ? listColItems.value : exportColItems.value;
             const columns = items.map((col, idx) => ({ ...col, order: idx }));
             try {
+                const colBody = { config_type: configType, columns };
+                if (adminTarget.value) {
+                    colBody.target_scope = adminTarget.value.scope;
+                    if (adminTarget.value.scope_id != null) colBody.target_scope_id = adminTarget.value.scope_id;
+                }
                 const resp = await authFetch('/api/insurance/column-config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ config_type: configType, columns }),
+                    body: JSON.stringify(colBody),
                 });
                 const data = await resp.json();
                 if (data.code === 0) {
+                    // 同步自定义字段到另一侧并保存
+                    syncCustomFields(configType);
+                    const otherType = configType === 'list_columns' ? 'export_columns' : 'list_columns';
+                    const otherItems = otherType === 'list_columns' ? listColItems.value : exportColItems.value;
+                    const otherColumns = otherItems.map((col, idx) => ({ ...col, order: idx }));
+                    const otherBody = { config_type: otherType, columns: otherColumns };
+                    if (adminTarget.value) {
+                        otherBody.target_scope = adminTarget.value.scope;
+                        if (adminTarget.value.scope_id != null) otherBody.target_scope_id = adminTarget.value.scope_id;
+                    }
+                    await authFetch('/api/insurance/column-config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(otherBody),
+                    });
                     showToast('列配置已保存');
                     // 导出列配置保存时同时保存合并开关
                     if (configType === 'export_columns') {
@@ -987,7 +1087,12 @@ createApp({
             if (!configType) return;
             try {
                 const resetTo = mode === 'system' ? 'system' : 'enterprise';
-                await authFetch(`/api/insurance/column-config?config_type=${configType}&reset_to=${resetTo}`, { method: 'DELETE' });
+                let resetUrl = `/api/insurance/column-config?config_type=${configType}&reset_to=${resetTo}`;
+                if (adminTarget.value) {
+                    resetUrl += `&target_scope=${adminTarget.value.scope}`;
+                    if (adminTarget.value.scope_id != null) resetUrl += `&target_scope_id=${adminTarget.value.scope_id}`;
+                }
+                await authFetch(resetUrl, { method: 'DELETE' });
                 await loadColumnConfig(configType);
                 showToast(mode === 'system' ? '已恢复系统默认（原配置已备份）' : '已恢复企业配置（原配置已备份）', 'success');
             } catch (e) {
@@ -1033,26 +1138,36 @@ createApp({
             const name = (target === 'list' ? newColName.list : newColName.export || '').trim();
             if (!name) return;
             const items = target === 'list' ? listColItems.value : exportColItems.value;
-            // 检查重复
             if (items.some(c => c.key === name)) {
                 showToast('字段已存在', 'error');
                 return;
             }
-            items.push({ key: name, visible: true, order: items.length, display_name: name, custom: true });
-            // 页面列添加时同步到导出列
+            const newCol = { key: name, visible: true, order: items.length, display_name: name, custom: true };
+            items.push(newCol);
+            // 双向同步：添加到另一侧
             if (target === 'list') {
                 newColName.list = '';
                 if (!exportColItems.value.some(c => c.key === name)) {
-                    exportColItems.value.push({ key: name, visible: true, order: exportColItems.value.length, display_name: name, custom: true });
+                    exportColItems.value.push({ ...newCol, order: exportColItems.value.length });
                 }
             } else {
                 newColName.export = '';
+                if (!listColItems.value.some(c => c.key === name)) {
+                    listColItems.value.push({ ...newCol, order: listColItems.value.length });
+                }
             }
         };
 
         const removeCustomCol = (items, idx) => {
-            if (!confirm(`确认删除自定义字段「${items[idx].key}」？`)) return;
+            const col = items[idx];
+            if (!confirm(`确认删除自定义字段「${col.key}」？`)) return;
             items.splice(idx, 1);
+            // 双向同步：从另一侧也删除同名自定义字段
+            const otherItems = items === listColItems.value ? exportColItems.value : listColItems.value;
+            const otherIdx = otherItems.findIndex(c => c.key === col.key && c.custom);
+            if (otherIdx !== -1) {
+                otherItems.splice(otherIdx, 1);
+            }
         };
 
         // 同步页面列配置到导出列配置（补充导出列中缺少的字段）
@@ -1300,6 +1415,10 @@ createApp({
                     activeSource.value = data.active.source || 'own';
                     activeTemplateName.value = data.active.template_name || (myTemplates.value[0]?.name || '默认模板');
                 }
+                // 超管额外数据
+                if (data.all) {
+                    allTemplatesData.value = data.all;
+                }
             } catch (e) {
                 if (e.message !== '未登录') showToast('加载模板列表失败: ' + e.message, 'error');
             }
@@ -1310,6 +1429,11 @@ createApp({
             loading.value = true;
             try {
                 const params = new URLSearchParams({ template: templateName || activeTemplateName.value, source: source || activeSource.value });
+                // 超管代管模式：附加 target_scope
+                if (adminTarget.value) {
+                    params.set('target_scope', adminTarget.value.scope);
+                    if (adminTarget.value.scope_id != null) params.set('target_scope_id', adminTarget.value.scope_id);
+                }
                 const resp = await authFetch('/api/insurance/field-config?' + params.toString());
                 const json = await resp.json();
                 if (json.code !== 0) { showToast(json.message || '加载配置失败', 'error'); return; }
@@ -1494,7 +1618,7 @@ createApp({
 
         // 保存并应用配置
         const saveConfig = async () => {
-            if (activeSource.value === 'enterprise') return;
+            if (!adminTarget.value && activeSource.value === 'enterprise') return;
             if (saving.value) return;
 
             saving.value = true;
@@ -1506,6 +1630,11 @@ createApp({
                     config: config,
                     visible: currentTpl ? !!currentTpl.visible : false,
                 };
+                // 超管代管模式
+                if (adminTarget.value) {
+                    body.target_scope = adminTarget.value.scope;
+                    if (adminTarget.value.scope_id != null) body.target_scope_id = adminTarget.value.scope_id;
+                }
                 const resp = await authFetch('/api/insurance/field-config/save-and-apply', {
                     method: 'POST',
                     body: JSON.stringify(body),
@@ -1538,7 +1667,11 @@ createApp({
         // 切换模板
         const selectTemplate = async (source, name) => {
             showTemplateDropdown.value = false;
-            if (source === activeSource.value && name === activeTemplateName.value) return;
+            const wasAdmin = !!adminTarget.value;
+            if (!wasAdmin && source === activeSource.value && name === activeTemplateName.value) return;
+
+            // 退出代管模式
+            adminTarget.value = null;
 
             try {
                 const resp = await authFetch('/api/insurance/field-config/apply', {
@@ -1553,6 +1686,10 @@ createApp({
                 activeSource.value = source;
                 activeTemplateName.value = name;
                 await loadConfig(name, source);
+                // 从代管返回时重新加载自己的列配置
+                if (wasAdmin) {
+                    await Promise.all([loadColumnConfig('list_columns'), loadColumnConfig('export_columns'), loadMergeConfig()]);
+                }
                 if (source === 'enterprise') {
                     showToast('已切换到企业模板「' + name + '」（只读）', 'warning');
                 } else {
@@ -1561,6 +1698,24 @@ createApp({
             } catch (e) {
                 if (e.message !== '未登录') showToast('切换模板失败: ' + e.message, 'error');
             }
+        };
+
+        // 超管选择其他用户/企业的模板进行代管编辑
+        const selectAdminTemplate = async (scope, scopeId, name, label) => {
+            showTemplateDropdown.value = false;
+            adminTarget.value = { scope, scope_id: scopeId, label };
+            activeTemplateName.value = name;
+            activeSource.value = 'own';
+            configLoaded = false;
+            await loadConfig(name, 'own');
+            // 加载目标的列配置和合并开关
+            await Promise.all([
+                loadColumnConfig('list_columns'),
+                loadColumnConfig('export_columns'),
+                loadMergeConfig(),
+            ]);
+            configLoaded = true;
+            showToast('正在代管编辑：' + label + ' 的「' + name + '」模板', 'warning');
         };
 
         // 新建模板
@@ -1664,9 +1819,14 @@ createApp({
 
             savingManager.value = true;
             try {
+                const manageBody = { actions };
+                if (adminTarget.value) {
+                    manageBody.target_scope = adminTarget.value.scope;
+                    if (adminTarget.value.scope_id != null) manageBody.target_scope_id = adminTarget.value.scope_id;
+                }
                 const resp = await authFetch('/api/insurance/field-config/templates/manage', {
                     method: 'PUT',
-                    body: JSON.stringify({ actions }),
+                    body: JSON.stringify(manageBody),
                 });
                 const json = await resp.json();
                 if (json.code !== 0) {
@@ -1715,9 +1875,10 @@ createApp({
             currentRole,
             templateDropdownRef, showTemplateDropdown, activeTemplateName, activeSource,
             myTemplates, enterpriseTemplates,
+            allTemplatesData, adminTarget,
             showTemplateManager, managerTemplates,
             markDeleteTemplate, saveTemplateManager,
-            selectTemplate, createTemplate,
+            selectTemplate, selectAdminTemplate, createTemplate,
             activeTab,
             aliasType, currentAliasList, aliasEnabledCount, aliasAllChecked, aliasListLoading,
             aliasToggleAll, aliasBatchEnable, aliasBatchDisable,

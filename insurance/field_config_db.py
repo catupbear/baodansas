@@ -228,6 +228,113 @@ def list_templates(db, user_id: int, role: str, parent_id=None) -> dict:
         conn.close()
 
 
+def list_all_templates(db) -> dict:
+    """
+    超管专用：列出系统所有模板，按 scope 分组返回。
+    返回格式：
+    {
+        "global": [{"name": "xxx", "visible": bool}],
+        "enterprises": [
+            {"enterprise_id": 1, "enterprise_name": "A公司", "templates": [{"name": "xxx", "visible": bool}]}
+        ],
+        "users": [
+            {"user_id": 1, "user_name": "张三", "enterprise_name": "A公司", "templates": [{"name": "xxx", "visible": bool}]}
+        ]
+    }
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        # 1. 查询所有模板（按 scope 分组）
+        cursor.execute(
+            "SELECT DISTINCT scope, scope_id, template_name, MAX(visible_to_employees) as visible "
+            "FROM user_field_config "
+            "GROUP BY scope, scope_id, template_name "
+            "ORDER BY scope, scope_id, template_name"
+        )
+        rows = cursor.fetchall()
+
+        # 2. 收集需要查询名称的 enterprise 和 user ID
+        ent_ids = set()
+        user_ids = set()
+        for row in rows:
+            if row["scope"] == "enterprise" and row["scope_id"]:
+                ent_ids.add(row["scope_id"])
+            elif row["scope"] == "user" and row["scope_id"]:
+                user_ids.add(row["scope_id"])
+
+        # 3. 批量查询企业名称
+        ent_names = {}
+        if ent_ids:
+            placeholders = ",".join(["%s"] * len(ent_ids))
+            cursor.execute(f"SELECT id, name FROM enterprises WHERE id IN ({placeholders})", list(ent_ids))
+            for r in cursor.fetchall():
+                ent_names[r["id"]] = r["name"]
+
+        # 4. 批量查询用户名称和所属企业
+        user_info = {}
+        if user_ids:
+            placeholders = ",".join(["%s"] * len(user_ids))
+            cursor.execute(
+                f"SELECT u.id, u.name, u.phone, u.parent_id, e.name as enterprise_name "
+                f"FROM users u LEFT JOIN enterprises e ON u.parent_id = e.id "
+                f"WHERE u.id IN ({placeholders})",
+                list(user_ids)
+            )
+            for r in cursor.fetchall():
+                user_info[r["id"]] = {
+                    "name": r["name"] or r["phone"] or str(r["id"]),
+                    "enterprise_name": r["enterprise_name"] or "",
+                    "parent_id": r["parent_id"],
+                }
+
+        # 5. 组装结果
+        global_templates = []
+        ent_map = {}  # enterprise_id -> [templates]
+        user_map = {}  # user_id -> [templates]
+
+        for row in rows:
+            tpl = {"name": row["template_name"], "visible": bool(row["visible"])}
+            if row["scope"] == "global":
+                global_templates.append(tpl)
+            elif row["scope"] == "enterprise":
+                eid = row["scope_id"]
+                ent_map.setdefault(eid, []).append(tpl)
+            elif row["scope"] == "user":
+                uid = row["scope_id"]
+                user_map.setdefault(uid, []).append(tpl)
+
+        if not global_templates:
+            global_templates = [{"name": DEFAULT_TEMPLATE_NAME, "visible": False}]
+
+        enterprises = []
+        for eid, templates in ent_map.items():
+            enterprises.append({
+                "enterprise_id": eid,
+                "enterprise_name": ent_names.get(eid, f"企业#{eid}"),
+                "templates": templates,
+            })
+
+        users = []
+        for uid, templates in user_map.items():
+            info = user_info.get(uid, {"name": f"用户#{uid}", "enterprise_name": "", "parent_id": None})
+            users.append({
+                "user_id": uid,
+                "user_name": info["name"],
+                "enterprise_name": info["enterprise_name"],
+                "templates": templates,
+            })
+
+        return {
+            "global": global_templates,
+            "enterprises": enterprises,
+            "users": users,
+        }
+    finally:
+        conn.close()
+
+
 def rename_template(db, scope: str, scope_id, old_name: str, new_name: str):
     """
     重命名模板（更新 user_field_config 中的 template_name）。
