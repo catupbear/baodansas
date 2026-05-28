@@ -358,6 +358,16 @@ def list_records():
                         record["display_fields"]["跟单人"] = upload_user["name"]
                 except Exception:
                     pass
+            # 兼容历史记录：实时计算"保司（带地区）"
+            df = record["display_fields"]
+            if not df.get("保司（带地区）"):
+                _addr = df.get("保司地址", "")
+                _comp = df.get("承保公司", "")
+                if _addr and _comp:
+                    import re as _re
+                    _m = _re.search(r'(?:省|自治区)?\s*(.+?)市', _addr)
+                    if _m:
+                        df["保司（带地区）"] = _m.group(1) + _comp
             # 应用用户配置（简称映射、日期格式、公式计算）
             if has_config and record.get("display_fields"):
                 record["display_fields"] = apply_user_config_to_fields(user_config, record["display_fields"])
