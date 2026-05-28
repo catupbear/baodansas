@@ -1423,22 +1423,37 @@ createApp({
             }
         };
 
-        // 合并逻辑：DB 数据提供 key+defaultValue，已保存配置优先
+        // 合并逻辑：以 defaults（全称列表）为基础，将用户已保存的别名合并上去
+        // 支持包含匹配：旧配置 key 是简称（如"安诚财产"），defaults key 是全称（如"安诚财产保险股份有限公司"）
         const mergeAliasList = (listRef, dbItems) => {
             const existingMap = new Map(listRef.value.map(i => [i.key, i]));
             for (const item of dbItems) {
                 if (!item.key) continue;
                 if (existingMap.has(item.key)) {
-                    // 已有配置，只更新 defaultValue
                     existingMap.get(item.key).defaultValue = item.value || '';
                 } else {
-                    // 新数据，添加到列表（默认未启用，简称为空）
-                    listRef.value.push({
-                        key: item.key,
-                        value: '',
-                        defaultValue: item.value || '',
-                        enabled: false,
-                    });
+                    // 包含匹配：检查是否有旧简称 key 是当前全称的子串
+                    let matched = null;
+                    for (const [oldKey, oldItem] of existingMap) {
+                        if (oldKey !== item.key && item.key.includes(oldKey)) {
+                            matched = oldItem;
+                            break;
+                        }
+                    }
+                    if (matched) {
+                        // 升级为全称 key，保留用户已设的别名
+                        existingMap.delete(matched.key);
+                        matched.key = item.key;
+                        matched.defaultValue = item.value || '';
+                        existingMap.set(item.key, matched);
+                    } else {
+                        listRef.value.push({
+                            key: item.key,
+                            value: '',
+                            defaultValue: item.value || '',
+                            enabled: false,
+                        });
+                    }
                 }
             }
         };
