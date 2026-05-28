@@ -328,6 +328,7 @@
                         <button class="btn-sync" @click="showTemplateDropdown = !showTemplateDropdown" style="min-width:160px; justify-content:space-between;">
                             <span style="display:flex; align-items:center; gap:6px;">
                                 <span v-if="adminTarget" style="font-size:10px; background:rgba(255,200,0,0.3); padding:1px 6px; border-radius:3px;">代管</span>
+                                <span v-else-if="activeSource === 'system'" style="font-size:10px; background:rgba(255,255,255,0.2); padding:1px 6px; border-radius:3px;">系统</span>
                                 <span v-else-if="activeSource === 'enterprise'" style="font-size:10px; background:rgba(255,255,255,0.2); padding:1px 6px; border-radius:3px;">企业</span>
                                 {{ activeTemplateName }}
                             </span>
@@ -357,6 +358,19 @@
                                      :style="{background: activeSource==='enterprise' && activeTemplateName===t.name ? 'var(--primary-bg)' : '', color: activeSource==='enterprise' && activeTemplateName===t.name ? 'var(--primary)' : 'var(--text-primary)'}"
                                      onmouseover="if(!this.dataset.active)this.style.background='#f9fafb'" onmouseout="this.style.background=''">
                                     <span v-if="activeSource==='enterprise' && activeTemplateName===t.name" style="color:var(--primary); flex-shrink:0;">✓</span>
+                                    <span style="flex:1;">{{ t.name }}</span>
+                                    <span style="font-size:10px; padding:1px 6px; background:#f3f4f6; color:var(--text-muted); border-radius:3px; flex-shrink:0;">只读</span>
+                                </div>
+                            </template>
+                            <!-- 系统模板（企业/员工只读） -->
+                            <template v-if="currentRole !== 'super_admin' && systemTemplates.length">
+                                <div style="border-top:1px solid var(--border-light); padding:8px 12px 4px; font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">系统模板</div>
+                                <div v-for="t in systemTemplates" :key="'s-'+t.name"
+                                     @click="selectTemplate('system', t.name)"
+                                     style="padding:8px 12px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; transition:background 0.15s;"
+                                     :style="{background: activeSource==='system' && activeTemplateName===t.name ? 'var(--primary-bg)' : '', color: activeSource==='system' && activeTemplateName===t.name ? 'var(--primary)' : 'var(--text-primary)'}"
+                                     onmouseover="if(!this.dataset.active)this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+                                    <span v-if="activeSource==='system' && activeTemplateName===t.name" style="color:var(--primary); flex-shrink:0;">✓</span>
                                     <span style="flex:1;">{{ t.name }}</span>
                                     <span style="font-size:10px; padding:1px 6px; background:#f3f4f6; color:var(--text-muted); border-radius:3px; flex-shrink:0;">只读</span>
                                 </div>
@@ -837,6 +851,7 @@ createApp({
         const activeSource = ref('own');
         const myTemplates = ref([]);
         const enterpriseTemplates = ref([]);
+        const systemTemplates = ref([]);
 
         // 超管代管：当前编辑的目标 scope 信息
         const adminTarget = ref(null);  // null=操作自己 | {scope, scope_id, label}
@@ -1411,6 +1426,7 @@ createApp({
                 const data = json.data;
                 myTemplates.value = (data.my || []).map(t => ({ name: t.name, visible: !!t.visible }));
                 enterpriseTemplates.value = data.enterprise || [];
+                systemTemplates.value = data.system || [];
                 if (data.active) {
                     activeSource.value = data.active.source || 'own';
                     activeTemplateName.value = data.active.template_name || (myTemplates.value[0]?.name || '默认模板');
@@ -1618,7 +1634,7 @@ createApp({
 
         // 保存并应用配置
         const saveConfig = async () => {
-            if (!adminTarget.value && activeSource.value === 'enterprise') return;
+            if (!adminTarget.value && (activeSource.value === 'enterprise' || activeSource.value === 'system')) return;
             if (saving.value) return;
 
             saving.value = true;
@@ -1654,7 +1670,7 @@ createApp({
         let autoSaveTimer = null;
         let configLoaded = false;  // 防止初始加载时触发
         const triggerAutoSave = () => {
-            if (!configLoaded || activeSource.value === 'enterprise') return;
+            if (!configLoaded || (activeSource.value === 'enterprise' || activeSource.value === 'system')) return;
             if (autoSaveTimer) clearTimeout(autoSaveTimer);
             autoSaveTimer = setTimeout(() => saveConfig(), 800);
         };
@@ -1690,7 +1706,9 @@ createApp({
                 if (wasAdmin) {
                     await Promise.all([loadColumnConfig('list_columns'), loadColumnConfig('export_columns'), loadMergeConfig()]);
                 }
-                if (source === 'enterprise') {
+                if (source === 'system') {
+                    showToast('已切换到系统模板「' + name + '」（只读）', 'warning');
+                } else if (source === 'enterprise') {
                     showToast('已切换到企业模板「' + name + '」（只读）', 'warning');
                 } else {
                     showToast('已切换到模板「' + name + '」', 'success');
@@ -1874,7 +1892,7 @@ createApp({
             loading, saving, savingManager,
             currentRole,
             templateDropdownRef, showTemplateDropdown, activeTemplateName, activeSource,
-            myTemplates, enterpriseTemplates,
+            myTemplates, enterpriseTemplates, systemTemplates,
             allTemplatesData, adminTarget,
             showTemplateManager, managerTemplates,
             markDeleteTemplate, saveTemplateManager,

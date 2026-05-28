@@ -3299,6 +3299,8 @@ def get_field_config():
         if user["role"] == ROLE_SUPER_ADMIN and target_scope:
             sid = int(target_scope_id) if target_scope_id else None
             config = get_template_config(_db, target_scope, sid, template_name)
+        elif source == "system":
+            config = get_template_config(_db, "global", None, template_name)
         elif source == "enterprise" and user.get("parent_id"):
             config = get_template_config(_db, "enterprise", user["parent_id"], template_name)
         else:

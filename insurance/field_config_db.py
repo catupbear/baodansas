@@ -223,6 +223,20 @@ def list_templates(db, user_id: int, role: str, parent_id=None) -> dict:
             ent_rows = cursor.fetchall()
             result["enterprise"] = [{"name": row["template_name"]} for row in ent_rows]
 
+        # 非超管角色查询系统模板（global scope，只读）
+        if role != "super_admin":
+            cursor.execute(
+                "SELECT DISTINCT template_name "
+                "FROM user_field_config "
+                "WHERE scope = 'global' AND scope_id IS NULL "
+                "ORDER BY template_name"
+            )
+            sys_rows = cursor.fetchall()
+            if sys_rows:
+                result["system"] = [{"name": row["template_name"]} for row in sys_rows]
+            else:
+                result["system"] = [{"name": DEFAULT_TEMPLATE_NAME}]
+
         return result
     finally:
         conn.close()
