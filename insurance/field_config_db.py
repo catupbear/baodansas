@@ -48,6 +48,7 @@ DEFAULT_COLUMNS = [
     {"key": "发送人",   "visible": True, "order": 20, "display_name": "发送人",   "type": "record"},
     {"key": "保司公司名称", "visible": True, "order": 21, "display_name": "保司公司名称"},
     {"key": "保司地址",     "visible": True, "order": 22, "display_name": "保司地址"},
+    {"key": "保司（带地区）", "visible": True, "order": 23, "display_name": "保司（带地区）"},
 ]
 
 # 记录级字段的 key 集合（用于前端区分渲染方式）
