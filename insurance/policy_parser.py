@@ -1916,16 +1916,24 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
             fields["证件号码"] = m.group(1)
 
     # 车主
-    for p in [
-        r"(?:行驶证)?车主(?:\s*名称)?[：:\s]+(\S+?)(?:\s|$|投保人)",
-        r"车主\s+(\S+?)(?:\s|$)",
-    ]:
-        m = re.search(p, text)
-        if m:
-            val = m.group(1)
-            if _is_valid_person(val):
-                fields["车主"] = val
-                break
+    # 优先：特别约定中"本保险车辆车主：XXX公司"格式，公司名可能跨行
+    m = re.search(r"车辆车主[：:\s]+([\s\S]+?(?:公司|商行|车行|车队|经营部|服务部|合作社))", text)
+    if m:
+        val = re.sub(r'\s+', '', m.group(1))  # 合并跨行空白
+        val = _clean_person_name(val)
+        if _is_valid_person(val):
+            fields["车主"] = val
+    if "车主" not in fields:
+        for p in [
+            r"(?:行驶证)?车主(?:\s*名称)?[：:\s]+(\S+?)(?:\s|$|投保人)",
+            r"车主\s+(\S+?)(?:\s|$)",
+        ]:
+            m = re.search(p, text)
+            if m:
+                val = m.group(1)
+                if _is_valid_person(val):
+                    fields["车主"] = val
+                    break
 
 
 # ============================================================
