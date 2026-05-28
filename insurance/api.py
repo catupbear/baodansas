@@ -3533,13 +3533,21 @@ def get_field_config_defaults():
                 conn.close()
         else:
             # 从代码内置映射获取
-            from insurance.policy_parser import COMPANY_SHORT_MAP
+            from insurance.policy_parser import COMPANY_BASES, COMPANY_SHORT_MAP
+
+            # 建立简称关键词 → 全称的反向映射
+            keyword_to_full = {}
+            for full_name in COMPANY_BASES:
+                for keyword in COMPANY_SHORT_MAP:
+                    if keyword in full_name and keyword not in keyword_to_full:
+                        keyword_to_full[keyword] = full_name
 
             company_defaults = []
             seen_shorts = set()
             for keyword, short in COMPANY_SHORT_MAP.items():
                 if short not in seen_shorts:
-                    company_defaults.append({"key": keyword, "value": short})
+                    full_name = keyword_to_full.get(keyword, keyword)
+                    company_defaults.append({"key": full_name, "value": short})
                     seen_shorts.add(short)
 
             policy_type_defaults = [
