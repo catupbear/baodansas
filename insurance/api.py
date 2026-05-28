@@ -3475,87 +3475,86 @@ def validate_formula():
 @insurance_bp.route("/api/insurance/field-config/defaults", methods=["GET"])
 def get_field_config_defaults():
     """
-    获取系统默认的公司/险种映射。
-    source=code 返回代码内置的默认映射（COMPANY_SHORT_MAP）
-    source=db   返回已有保单中去重后的承保公司/险种（从 insurance_policy_fields 表查询）
+    获取系统全局的公司/险种默认映射（全称→简称）。
+    数据来源：数据库全局去重 + 代码内置补充（合并去重）。
     """
     try:
-        source = request.args.get("source", "code")
+        import pymysql
+        from insurance.policy_parser import COMPANY_BASES, COMPANY_SHORT_MAP, _get_policy_type_code
 
-        if source == "db":
-            # 从已有保单数据中获取去重的公司和险种
-            import pymysql
-            conn = _db.pool.connection()
-            try:
-                cursor = conn.cursor(pymysql.cursors.DictCursor)
+        # ---- 公司 ----
+        # 内部简称 → 更友好的显示简称
+        _COMPANY_DISPLAY = {
+            "人保PICC": "人保", "中华联合": "中华", "前海联合": "前海",
+            "安盛天平": "安盛", "泰康在线": "泰康", "京东安联": "京东安联",
+            "国寿财产": "国寿", "大家财险": "大家",
+        }
 
-                # 查询去重的承保公司（company 全称 + company_short 简称）
-                cursor.execute(
-                    "SELECT DISTINCT company, company_short FROM insurance_policy_fields "
-                    "WHERE company IS NOT NULL AND company != '' "
-                    "ORDER BY company_short"
-                )
-                company_rows = cursor.fetchall()
-                # 导入时的显示简称映射（内部简称 → 更短的显示名）
-                _COMPANY_DISPLAY = {
-                    "人保PICC": "人保",
-                    "中华联合": "中华",
-                    "前海联合": "前海",
-                    "安盛天平": "安盛",
-                    "泰康在线": "泰康",
-                    "京东安联": "京东安联",
-                    "国寿财产": "国寿",
-                    "大家财险": "大家",
-                }
-                company_defaults = [
-                    {"key": r["company"], "value": _COMPANY_DISPLAY.get(r["company_short"], r["company_short"]) or ""}
-                    for r in company_rows if r["company"]
-                ]
+        # 1) 从数据库全局查去重的公司（不区分企业/账号）
+        company_defaults = []
+        seen_companies = set()
+        conn = _db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor.execute(
+                "SELECT DISTINCT company, company_short FROM insurance_policy_fields "
+                "WHERE company IS NOT NULL AND company != '' "
+                "ORDER BY company_short"
+            )
+            for r in cursor.fetchall():
+                if r["company"] and r["company"] not in seen_companies:
+                    short = _COMPANY_DISPLAY.get(r["company_short"], r["company_short"]) or ""
+                    company_defaults.append({"key": r["company"], "value": short})
+                    seen_companies.add(r["company"])
+        finally:
+            conn.close()
 
-                # 查询去重的险种（policy_type）
-                cursor.execute(
-                    "SELECT DISTINCT policy_type FROM insurance_policy_fields "
-                    "WHERE policy_type IS NOT NULL AND policy_type != '' "
-                    "ORDER BY policy_type"
-                )
-                policy_rows = cursor.fetchall()
-                # 自动生成简称
-                from insurance.policy_parser import _get_policy_type_code
-                # 简称显示映射（覆盖 policy_parser 的默认值）
-                _SHORT_NAME_DISPLAY = {"驾乘/意外险": "驾意险"}
-                policy_type_defaults = []
-                for r in policy_rows:
-                    full_name = r["policy_type"]
+        # 2) 补充代码内置的公司（数据库里还没出现过的）
+        keyword_to_full = {}
+        for full_name in COMPANY_BASES:
+            for keyword in COMPANY_SHORT_MAP:
+                if keyword in full_name and keyword not in keyword_to_full:
+                    keyword_to_full[keyword] = full_name
+        seen_shorts = {c["value"] for c in company_defaults}
+        for keyword, short in COMPANY_SHORT_MAP.items():
+            full_name = keyword_to_full.get(keyword, keyword)
+            if full_name not in seen_companies and short not in seen_shorts:
+                company_defaults.append({"key": full_name, "value": short})
+                seen_companies.add(full_name)
+                seen_shorts.add(short)
+
+        # ---- 险种 ----
+        _SHORT_NAME_DISPLAY = {"驾乘/意外险": "驾意险"}
+        policy_type_defaults = []
+        seen_policy_types = set()
+        # 1) 从数据库全局查
+        conn = _db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor.execute(
+                "SELECT DISTINCT policy_type FROM insurance_policy_fields "
+                "WHERE policy_type IS NOT NULL AND policy_type != '' "
+                "ORDER BY policy_type"
+            )
+            for r in cursor.fetchall():
+                full_name = r["policy_type"]
+                if full_name not in seen_policy_types:
                     _, short_name = _get_policy_type_code(full_name)
                     short_name = _SHORT_NAME_DISPLAY.get(short_name, short_name)
                     policy_type_defaults.append({"key": full_name, "value": short_name})
-            finally:
-                conn.close()
-        else:
-            # 从代码内置映射获取
-            from insurance.policy_parser import COMPANY_BASES, COMPANY_SHORT_MAP
-
-            # 建立简称关键词 → 全称的反向映射
-            keyword_to_full = {}
-            for full_name in COMPANY_BASES:
-                for keyword in COMPANY_SHORT_MAP:
-                    if keyword in full_name and keyword not in keyword_to_full:
-                        keyword_to_full[keyword] = full_name
-
-            company_defaults = []
-            seen_shorts = set()
-            for keyword, short in COMPANY_SHORT_MAP.items():
-                if short not in seen_shorts:
-                    full_name = keyword_to_full.get(keyword, keyword)
-                    company_defaults.append({"key": full_name, "value": short})
-                    seen_shorts.add(short)
-
-            policy_type_defaults = [
-                {"key": "机动车交通事故责任强制保险", "value": "交强险"},
-                {"key": "机动车商业保险", "value": "商业险"},
-                {"key": "驾乘人员意外伤害保险", "value": "驾乘险"},
-                {"key": "新能源汽车商业保险", "value": "新能源商业险"},
-            ]
+                    seen_policy_types.add(full_name)
+        finally:
+            conn.close()
+        # 2) 补充常见险种（数据库里还没出现过的）
+        for full_name, short_name in [
+            ("机动车交通事故责任强制保险", "交强险"),
+            ("机动车商业保险", "商业险"),
+            ("驾乘人员意外伤害保险", "驾乘险"),
+            ("新能源汽车商业保险", "新能源商业险"),
+        ]:
+            if full_name not in seen_policy_types:
+                policy_type_defaults.append({"key": full_name, "value": short_name})
+                seen_policy_types.add(full_name)
 
         return jsonify({"code": 0, "data": {
             "company_alias": company_defaults,

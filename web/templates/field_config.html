@@ -1406,7 +1406,7 @@ createApp({
             aliasAutoLoaded = true;
             aliasListLoading.value = true;
             try {
-                const resp = await authFetch('/api/insurance/field-config/defaults?source=db');
+                const resp = await authFetch('/api/insurance/field-config/defaults');
                 const res = await resp.json();
                 if (res && res.code === 0) {
                     const data = res.data;
@@ -1446,7 +1446,7 @@ createApp({
         const importFromDb = async () => {
             importingDefaults.value = true;
             try {
-                const resp = await authFetch('/api/insurance/field-config/defaults?source=db');
+                const resp = await authFetch('/api/insurance/field-config/defaults');
                 const res = await resp.json();
                 if (res && res.code === 0) {
                     const data = res.data;
