@@ -234,6 +234,22 @@ def init_insurance_tables(db):
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户当前启用的配置模板'
         """)
 
+        # 迁移：删除 company_alias 中 key 为简称的旧数据（全称记录已由 defaults 合并生成）
+        try:
+            from insurance.policy_parser import COMPANY_SHORT_MAP
+            short_keys = list(COMPANY_SHORT_MAP.keys())
+            if short_keys:
+                placeholders = ','.join(['%s'] * len(short_keys))
+                cursor.execute(
+                    f"DELETE FROM user_field_config "
+                    f"WHERE config_type = 'company_alias' AND config_key IN ({placeholders})",
+                    short_keys
+                )
+                if cursor.rowcount:
+                    logger.info("迁移：删除 company_alias 简称记录 %d 条", cursor.rowcount)
+        except Exception:
+            pass
+
         # 回填已有数据的 ISO 日期列（后台线程，Python端逐行转换，跳过异常格式）
         conn.commit()  # 先提交前面的 DDL
 
