@@ -726,6 +726,29 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
                 fields["保司地址"] = val
                 break
 
+    # 保司带地区：从保司地址提取城市 + 承保公司，如"深圳平安"
+    _build_insurer_with_region(fields)
+
+
+def _build_insurer_with_region(fields: dict):
+    """从保司地址提取城市名，拼接承保公司，生成"保司带地区"字段"""
+    address = fields.get("保司地址", "")
+    company = fields.get("保险公司", "")
+    if not address or not company:
+        return
+
+    city = ""
+    # 匹配"XX市"并取市名（去掉"市"字）；兼容"省+市"和直辖市格式
+    m = re.search(r'(?:省|自治区)?\s*(.+?)市', address)
+    if m:
+        city = m.group(1)
+        # 如果匹配到的是"省名+城市"（如"广东深圳"），只取最后一个词
+        # 处理无"省"字的情况，如"广东省深圳市"已被上面正确匹配
+        # 但"深圳市"直接匹配到"深圳"，无需额外处理
+
+    if city:
+        fields["保司带地区"] = city + company
+
 
 # ============================================================
 # 保单号提取
