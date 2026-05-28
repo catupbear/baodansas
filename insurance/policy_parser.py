@@ -712,8 +712,10 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
         m = re.search(r'公司名称[：:]\s*(.+?)(?:\s+公司(?:网址|地址)|公司网址|\s{2,}|\n|$)', src)
         if m:
             val = m.group(1).strip()
-            # 过滤掉"中介机构名称"（已有字段）和被保险人区域的公司名
-            if val and len(val) >= 4 and re.search(r'公司|分公司', val):
+            # 必须像公司名（含"公司/分公司"），且不能是地址（含"市+路/街"等）
+            if (val and len(val) >= 4
+                    and re.search(r'公司|分公司', val)
+                    and not re.search(r'[市区].*[街路号]', val)):
                 fields["保司公司名称"] = val
                 break
 
@@ -748,7 +750,8 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
         m = re.search(r'公司地址[：:]\s*(.+?)(?:\s+公司网址|\s{2,}|\n|$)', src)
         if m:
             val = m.group(1).strip()
-            if val and len(val) >= 4:
+            # 排除误匹配（如"联系电话："被当作地址）
+            if val and len(val) >= 4 and not re.search(r'^联系电话|^公司名称', val):
                 fields["保司地址"] = val
                 break
 
@@ -767,13 +770,16 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
                     prev_clean = re.sub(r'^[一-鿿]\s+', '', prev_clean).strip()
                     if prev_clean and re.search(r'市|区|街|路|号|大厦|广场', prev_clean):
                         addr_parts.append(prev_clean)
-                # 下方行可能有地址结尾
-                if i + 1 < len(lines):
-                    next_line = lines[i + 1].strip()
-                    # 去掉开头的干扰字符（如"隆大厦" 应保留）
+                # 下方行可能有地址结尾（跳过"联系电话"等标签行）
+                for k in range(i + 1, min(i + 3, len(lines))):
+                    next_line = lines[k].strip()
+                    # 跳过标签行（如"联系电话："、"人"等）
+                    if re.search(r'联系电话|^[保险人]{1,2}$', next_line):
+                        continue
                     next_clean = re.sub(r'^[保险人\s]+', '', next_line).strip()
                     if next_clean and re.search(r'市|区|街|路|号|大厦|广场|座', next_clean):
                         addr_parts.append(next_clean)
+                        break
                 if addr_parts:
                     fields["保司地址"] = ''.join(addr_parts)
                 break
@@ -787,13 +793,15 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
                 if m_phone:
                     fields["保司联系电话"] = m_phone.group(1)
                     break
-                # 紫金等格式：号码在上方行末尾
-                if i > 0:
-                    prev = lines[i - 1].strip()
+                # 紫金等格式：号码在上方附近行末尾（可能隔几行）
+                for k in range(i - 1, max(i - 4, -1), -1):
+                    prev = lines[k].strip()
                     m_phone = re.search(r'(\d{5,20})\s*$', prev)
                     if m_phone:
                         fields["保司联系电话"] = m_phone.group(1)
                         break
+                if "保司联系电话" in fields:
+                    break
                 # 号码在下方行
                 if i + 1 < len(lines):
                     m_phone = re.search(r'(\d{5,20})', lines[i + 1].strip())
