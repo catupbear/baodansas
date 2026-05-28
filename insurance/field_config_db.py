@@ -553,6 +553,19 @@ def _fix_missing_defaults(db, config_type, columns, scope, scope_id):
             c["display_name"] = c.get("display_name", "").replace("时间", "创建时间") or "创建时间"
             changed = True
 
+    # 去重：保留每个 key 第一次出现的条目
+    seen_keys = set()
+    deduped = []
+    for c in columns:
+        if c["key"] not in seen_keys:
+            seen_keys.add(c["key"])
+            deduped.append(c)
+    if len(deduped) < len(columns):
+        removed = len(columns) - len(deduped)
+        columns = deduped
+        changed = True
+        logger.debug("自动去重 %s 重复字段 %d 个", config_type, removed)
+
     existing_keys = {c["key"] for c in columns}
     max_order = len(columns)
     added = 0
