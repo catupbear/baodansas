@@ -376,204 +376,218 @@ def init_insurance_tables(db):
         except Exception:
             pass
 
-        # 回填 company_short（仅对已有数据且 company_short 为空的记录）
-        try:
-            cursor.execute("""
-                UPDATE insurance_records
-                SET company_short = JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.保险公司简称'))
-                WHERE company_short = ''
-                  AND parsed_fields IS NOT NULL
-                  AND JSON_EXTRACT(parsed_fields, '$.保险公司简称') IS NOT NULL
-                  AND JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.保险公司简称')) != ''
-            """)
-            if cursor.rowcount:
-                logger.info("回填 company_short %d 条", cursor.rowcount)
-        except Exception:
-            pass
-
-        # 回填 is_abnormal（仅对已完成且未计算过的记录）
-        try:
-            cursor.execute("""
-                SELECT id, parsed_fields, status, doc_category, user_id
-                FROM insurance_records
-                WHERE is_abnormal = 0
-                  AND status IN ('done', 'success')
-                  AND (doc_category IS NULL OR doc_category = '' OR doc_category = '保单')
-                  AND parsed_fields IS NOT NULL
-            """)
-            rows = cursor.fetchall()
-            # 按 user_id 缓存导出模板可见列，避免重复查询
-            _visible_cache = {}
-            updated = 0
-            for row in rows:
-                pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
-                try:
-                    pf = json.loads(pf_str) if isinstance(pf_str, str) else (pf_str or {})
-                except (TypeError, json.JSONDecodeError):
-                    pf = {}
-                uid = row.get("user_id") if isinstance(row, dict) else row[4]
-                if uid not in _visible_cache:
-                    _visible_cache[uid] = _get_visible_export_keys(db, uid)
-                abnormal, hint = _compute_abnormal(
-                    pf,
-                    row.get("status") if isinstance(row, dict) else row[2],
-                    row.get("doc_category") if isinstance(row, dict) else row[3],
-                    visible_export_keys=_visible_cache[uid],
-                )
-                if abnormal:
-                    rid = row.get("id") if isinstance(row, dict) else row[0]
-                    cursor.execute(
-                        "UPDATE insurance_records SET is_abnormal = 1, hint = %s WHERE id = %s",
-                        (hint, rid)
-                    )
-                    updated += 1
-            if updated:
-                logger.info("回填 is_abnormal %d 条", updated)
-        except Exception:
-            logger.exception("回填 is_abnormal 失败")
-
-        # 反向修正：已标记异常的记录按当前模板重新计算，不再异常的改回正常
-        try:
-            cursor.execute("""
-                SELECT id, parsed_fields, status, doc_category, user_id, abnormal_override_reason
-                FROM insurance_records
-                WHERE is_abnormal = 1
-                  AND status IN ('done', 'success')
-                  AND (abnormal_override_reason IS NULL OR abnormal_override_reason = '')
-                  AND parsed_fields IS NOT NULL
-            """)
-            abnormal_rows = cursor.fetchall()
-            _visible_cache_rev = {}
-            reverted = 0
-            for row in abnormal_rows:
-                pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
-                try:
-                    pf = json.loads(pf_str) if isinstance(pf_str, str) else (pf_str or {})
-                except (TypeError, json.JSONDecodeError):
-                    pf = {}
-                uid = row.get("user_id") if isinstance(row, dict) else row[4]
-                if uid not in _visible_cache_rev:
-                    _visible_cache_rev[uid] = _get_visible_export_keys(db, uid)
-                override = row.get("abnormal_override_reason") if isinstance(row, dict) else row[5]
-                abnormal, hint = _compute_abnormal(
-                    pf,
-                    row.get("status") if isinstance(row, dict) else row[2],
-                    row.get("doc_category") if isinstance(row, dict) else row[3],
-                    abnormal_override_reason=override,
-                    visible_export_keys=_visible_cache_rev[uid],
-                )
-                if not abnormal:
-                    rid = row.get("id") if isinstance(row, dict) else row[0]
-                    cursor.execute(
-                        "UPDATE insurance_records SET is_abnormal = 0, hint = %s WHERE id = %s",
-                        (hint, rid)
-                    )
-                    reverted += 1
-                elif hint != (row.get("hint", "") if isinstance(row, dict) else ""):
-                    # hint 内容可能因模板变化而更新
-                    rid = row.get("id") if isinstance(row, dict) else row[0]
-                    cursor.execute(
-                        "UPDATE insurance_records SET hint = %s WHERE id = %s",
-                        (hint, rid)
-                    )
-            if reverted:
-                logger.info("反向修正 is_abnormal 1→0 %d 条（模板不再要求该字段）", reverted)
-        except Exception:
-            logger.exception("反向修正 is_abnormal 失败")
-
-        # 修正已标记正常但 is_abnormal 仍为 1 的历史数据
-        try:
-            cursor.execute("""
-                UPDATE insurance_records
-                SET is_abnormal = 0, hint = ''
-                WHERE is_abnormal = 1
-                  AND abnormal_override_reason IS NOT NULL
-                  AND abnormal_override_reason != ''
-            """)
-            fixed = cursor.rowcount
-            if fixed:
-                logger.info("修正已标记正常但 is_abnormal=1 的记录 %d 条", fixed)
-        except Exception:
-            logger.exception("修正 abnormal_override 失败")
-
-        # 回填 display_fields（仅对有 parsed_fields 但无 display_fields 的记录）
-        try:
-            cursor.execute("""
-                SELECT id, parsed_fields, company_short
-                FROM insurance_records
-                WHERE parsed_fields IS NOT NULL
-                  AND (display_fields IS NULL OR display_fields = '')
-            """)
-            rows = cursor.fetchall()
-            backfilled = 0
-            for row in rows:
-                pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
-                cs = row.get("company_short") if isinstance(row, dict) else row[2]
-                try:
-                    pf = json.loads(pf_str) if isinstance(pf_str, str) else (pf_str or {})
-                except (TypeError, json.JSONDecodeError):
-                    continue
-                df = apply_mapping(pf, cs or "")
-                rid = row.get("id") if isinstance(row, dict) else row[0]
-                cursor.execute(
-                    "UPDATE insurance_records SET display_fields = %s WHERE id = %s",
-                    (json.dumps(df, ensure_ascii=False), rid)
-                )
-                backfilled += 1
-            if backfilled:
-                logger.info("回填 display_fields %d 条", backfilled)
-        except Exception:
-            logger.exception("回填 display_fields 失败")
-
-        # 回填 display_fields 中缺少的车主字段（从 insurance_policy_fields.owner 补充）
-        try:
-            cursor.execute("""
-                UPDATE insurance_records r
-                JOIN insurance_policy_fields pf ON pf.record_id = r.id
-                SET r.display_fields = JSON_SET(r.display_fields, '$."车主"', pf.owner)
-                WHERE pf.owner IS NOT NULL AND pf.owner != ''
-                  AND r.display_fields IS NOT NULL AND r.display_fields != ''
-                  AND (JSON_EXTRACT(r.display_fields, '$."车主"') IS NULL
-                       OR JSON_EXTRACT(r.display_fields, '$."车主"') = '')
-            """)
-            if cursor.rowcount:
-                logger.info("回填 display_fields 车主字段 %d 条", cursor.rowcount)
-        except Exception:
-            logger.exception("回填 display_fields 车主字段失败")
-
-        # 回填 insurance_policy_fields（仅对有 parsed_fields 但无关联记录的）
-        try:
-            cursor.execute("""
-                SELECT r.id, r.parsed_fields
-                FROM insurance_records r
-                LEFT JOIN insurance_policy_fields pf ON pf.record_id = r.id
-                WHERE r.parsed_fields IS NOT NULL
-                  AND r.parsed_fields != ''
-                  AND pf.id IS NULL
-            """)
-            rows = cursor.fetchall()
-            backfilled_pf = 0
-            for row in rows:
-                pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
-                try:
-                    pf = json.loads(pf_str) if isinstance(pf_str, str) else (pf_str or {})
-                except (TypeError, json.JSONDecodeError):
-                    continue
-                rid = row.get("id") if isinstance(row, dict) else row[0]
-                try:
-                    _insert_policy_fields(cursor, rid, pf)
-                    backfilled_pf += 1
-                except Exception as e:
-                    logger.warning("回填 policy_fields 失败, record_id=%s: %s", rid, e)
-            if backfilled_pf:
-                logger.info("回填 insurance_policy_fields %d 条", backfilled_pf)
-        except Exception:
-            logger.exception("回填 insurance_policy_fields 失败")
-
         conn.commit()
-        logger.info("保单识别数据库表初始化完成")
+        logger.info("保单识别数据库表初始化完成（DDL）")
     finally:
         conn.close()
+
+    # 数据回填放到后台线程，避免阻塞服务启动
+    def _backfill_insurance_data(db_ref):
+        backfill_conn = db_ref.pool.connection()
+        try:
+            bc = backfill_conn.cursor(pymysql.cursors.DictCursor)
+
+            # 回填 company_short
+            try:
+                bc.execute("""
+                    UPDATE insurance_records
+                    SET company_short = JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.保险公司简称'))
+                    WHERE company_short = ''
+                      AND parsed_fields IS NOT NULL
+                      AND JSON_EXTRACT(parsed_fields, '$.保险公司简称') IS NOT NULL
+                      AND JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.保险公司简称')) != ''
+                """)
+                if bc.rowcount:
+                    logger.info("回填 company_short %d 条", bc.rowcount)
+            except Exception:
+                pass
+
+            # 回填 is_abnormal
+            try:
+                bc.execute("""
+                    SELECT id, parsed_fields, status, doc_category, user_id
+                    FROM insurance_records
+                    WHERE is_abnormal = 0
+                      AND status IN ('done', 'success')
+                      AND (doc_category IS NULL OR doc_category = '' OR doc_category = '保单')
+                      AND parsed_fields IS NOT NULL
+                """)
+                rows = bc.fetchall()
+                _visible_cache = {}
+                updated = 0
+                for row in rows:
+                    pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
+                    try:
+                        pf = json.loads(pf_str) if isinstance(pf_str, str) else (pf_str or {})
+                    except (TypeError, json.JSONDecodeError):
+                        pf = {}
+                    uid = row.get("user_id") if isinstance(row, dict) else row[4]
+                    if uid not in _visible_cache:
+                        _visible_cache[uid] = _get_visible_export_keys(db_ref, uid)
+                    abnormal, hint = _compute_abnormal(
+                        pf,
+                        row.get("status") if isinstance(row, dict) else row[2],
+                        row.get("doc_category") if isinstance(row, dict) else row[3],
+                        visible_export_keys=_visible_cache[uid],
+                    )
+                    if abnormal:
+                        rid = row.get("id") if isinstance(row, dict) else row[0]
+                        bc.execute(
+                            "UPDATE insurance_records SET is_abnormal = 1, hint = %s WHERE id = %s",
+                            (hint, rid)
+                        )
+                        updated += 1
+                if updated:
+                    logger.info("回填 is_abnormal %d 条", updated)
+            except Exception:
+                logger.exception("回填 is_abnormal 失败")
+
+            # 反向修正：已标记异常的记录按当前模板重新计算
+            try:
+                bc.execute("""
+                    SELECT id, parsed_fields, status, doc_category, user_id, abnormal_override_reason
+                    FROM insurance_records
+                    WHERE is_abnormal = 1
+                      AND status IN ('done', 'success')
+                      AND (abnormal_override_reason IS NULL OR abnormal_override_reason = '')
+                      AND parsed_fields IS NOT NULL
+                """)
+                abnormal_rows = bc.fetchall()
+                _visible_cache_rev = {}
+                reverted = 0
+                for row in abnormal_rows:
+                    pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
+                    try:
+                        pf = json.loads(pf_str) if isinstance(pf_str, str) else (pf_str or {})
+                    except (TypeError, json.JSONDecodeError):
+                        pf = {}
+                    uid = row.get("user_id") if isinstance(row, dict) else row[4]
+                    if uid not in _visible_cache_rev:
+                        _visible_cache_rev[uid] = _get_visible_export_keys(db_ref, uid)
+                    override = row.get("abnormal_override_reason") if isinstance(row, dict) else row[5]
+                    abnormal, hint = _compute_abnormal(
+                        pf,
+                        row.get("status") if isinstance(row, dict) else row[2],
+                        row.get("doc_category") if isinstance(row, dict) else row[3],
+                        abnormal_override_reason=override,
+                        visible_export_keys=_visible_cache_rev[uid],
+                    )
+                    if not abnormal:
+                        rid = row.get("id") if isinstance(row, dict) else row[0]
+                        bc.execute(
+                            "UPDATE insurance_records SET is_abnormal = 0, hint = %s WHERE id = %s",
+                            (hint, rid)
+                        )
+                        reverted += 1
+                    elif hint != (row.get("hint", "") if isinstance(row, dict) else ""):
+                        rid = row.get("id") if isinstance(row, dict) else row[0]
+                        bc.execute(
+                            "UPDATE insurance_records SET hint = %s WHERE id = %s",
+                            (hint, rid)
+                        )
+                if reverted:
+                    logger.info("反向修正 is_abnormal 1→0 %d 条（模板不再要求该字段）", reverted)
+            except Exception:
+                logger.exception("反向修正 is_abnormal 失败")
+
+            # 修正已标记正常但 is_abnormal 仍为 1 的历史数据
+            try:
+                bc.execute("""
+                    UPDATE insurance_records
+                    SET is_abnormal = 0, hint = ''
+                    WHERE is_abnormal = 1
+                      AND abnormal_override_reason IS NOT NULL
+                      AND abnormal_override_reason != ''
+                """)
+                fixed = bc.rowcount
+                if fixed:
+                    logger.info("修正已标记正常但 is_abnormal=1 的记录 %d 条", fixed)
+            except Exception:
+                logger.exception("修正 abnormal_override 失败")
+
+            # 回填 display_fields
+            try:
+                bc.execute("""
+                    SELECT id, parsed_fields, company_short
+                    FROM insurance_records
+                    WHERE parsed_fields IS NOT NULL
+                      AND (display_fields IS NULL OR display_fields = '')
+                """)
+                rows = bc.fetchall()
+                backfilled = 0
+                for row in rows:
+                    pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
+                    cs = row.get("company_short") if isinstance(row, dict) else row[2]
+                    try:
+                        pf = json.loads(pf_str) if isinstance(pf_str, str) else (pf_str or {})
+                    except (TypeError, json.JSONDecodeError):
+                        continue
+                    df = apply_mapping(pf, cs or "")
+                    rid = row.get("id") if isinstance(row, dict) else row[0]
+                    bc.execute(
+                        "UPDATE insurance_records SET display_fields = %s WHERE id = %s",
+                        (json.dumps(df, ensure_ascii=False), rid)
+                    )
+                    backfilled += 1
+                if backfilled:
+                    logger.info("回填 display_fields %d 条", backfilled)
+            except Exception:
+                logger.exception("回填 display_fields 失败")
+
+            # 回填 display_fields 中缺少的车主字段
+            try:
+                bc.execute("""
+                    UPDATE insurance_records r
+                    JOIN insurance_policy_fields pf ON pf.record_id = r.id
+                    SET r.display_fields = JSON_SET(r.display_fields, '$."车主"', pf.owner)
+                    WHERE pf.owner IS NOT NULL AND pf.owner != ''
+                      AND r.display_fields IS NOT NULL AND r.display_fields != ''
+                      AND (JSON_EXTRACT(r.display_fields, '$."车主"') IS NULL
+                           OR JSON_EXTRACT(r.display_fields, '$."车主"') = '')
+                """)
+                if bc.rowcount:
+                    logger.info("回填 display_fields 车主字段 %d 条", bc.rowcount)
+            except Exception:
+                logger.exception("回填 display_fields 车主字段失败")
+
+            # 回填 insurance_policy_fields
+            try:
+                bc.execute("""
+                    SELECT r.id, r.parsed_fields
+                    FROM insurance_records r
+                    LEFT JOIN insurance_policy_fields pf ON pf.record_id = r.id
+                    WHERE r.parsed_fields IS NOT NULL
+                      AND r.parsed_fields != ''
+                      AND pf.id IS NULL
+                """)
+                rows = bc.fetchall()
+                backfilled_pf = 0
+                for row in rows:
+                    pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
+                    try:
+                        pf = json.loads(pf_str) if isinstance(pf_str, str) else (pf_str or {})
+                    except (TypeError, json.JSONDecodeError):
+                        continue
+                    rid = row.get("id") if isinstance(row, dict) else row[0]
+                    try:
+                        _insert_policy_fields(bc, rid, pf)
+                        backfilled_pf += 1
+                    except Exception as e:
+                        logger.warning("回填 policy_fields 失败, record_id=%s: %s", rid, e)
+                if backfilled_pf:
+                    logger.info("回填 insurance_policy_fields %d 条", backfilled_pf)
+            except Exception:
+                logger.exception("回填 insurance_policy_fields 失败")
+
+            backfill_conn.commit()
+            logger.info("保单数据回填完成")
+        except Exception:
+            logger.exception("保单数据回填异常")
+        finally:
+            backfill_conn.close()
+
+    import threading as _threading
+    _threading.Thread(target=_backfill_insurance_data, args=(db,), daemon=True).start()
 
 
 # ------------------------------------------------------------------ #
