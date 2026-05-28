@@ -153,6 +153,16 @@ def apply_mapping(fields: Dict[str, str], company_short: str = "") -> Dict[str, 
         if key not in known_ocr_fields and key not in result:
             result[key] = val
 
+    # 兼容历史记录：如果"保司（带地区）"为空但有地址和承保公司，实时计算
+    if not result.get("保司（带地区）"):
+        address = fields.get("保司地址", "")
+        company = fields.get("保险公司", "")
+        if address and company:
+            import re
+            m = re.search(r'(?:省|自治区)?\s*(.+?)市', address)
+            if m:
+                result["保司（带地区）"] = m.group(1) + company
+
     return result
 
 
