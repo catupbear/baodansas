@@ -337,7 +337,7 @@
                         <div v-if="showTemplateDropdown" style="position:absolute; right:0; top:calc(100% + 6px); background:var(--surface); border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,0.15); border:1px solid var(--border-light); z-index:50; overflow:hidden;" :style="{width: currentRole === 'super_admin' && allTemplatesData ? '340px' : '260px', maxHeight: '70vh', overflowY: 'auto'}">
                             <!-- 我的模板（全局） -->
                             <div style="padding:8px 12px 4px; font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">
-                                {{ currentRole === 'super_admin' ? '全局模板（我的）' : '我的模板' }}
+                                {{ currentRole === 'super_admin' ? '系统模板' : '我的模板' }}
                             </div>
                             <div v-for="t in myTemplates" :key="t.name"
                                  @click="selectTemplate('own', t.name)"
