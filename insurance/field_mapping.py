@@ -131,6 +131,8 @@ def apply_mapping(fields: Dict[str, str], company_short: str = "") -> Dict[str, 
 
     # 按导出列顺序生成结果
     result = {}
+    # 收集所有已知 OCR 字段名（映射表中的 key）
+    known_ocr_fields = set(mapping.keys())
     for col in output_columns:
         value = ""
         if col in reverse_map:
@@ -141,6 +143,11 @@ def apply_mapping(fields: Dict[str, str], company_short: str = "") -> Dict[str, 
                     value = v
                     break
         result[col] = value
+
+    # 透传自定义字段：不在已知 OCR 字段中、也不在 output_columns 中的字段直接保留
+    for key, val in fields.items():
+        if key not in known_ocr_fields and key not in result:
+            result[key] = val
 
     return result
 
