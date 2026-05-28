@@ -58,6 +58,7 @@ from .policy_parser import get_extraction_rules, parse_policy_text, parse_policy
 from .ocr_service import extract_text_from_pdf
 from auth.decorators import login_required
 from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, get_sender_user_name_map
+from core.notify import notify_error
 
 logger = logging.getLogger(__name__)
 
@@ -243,6 +244,16 @@ def _get_user_scope():
         return "enterprise", user.get("parent_id") or user["user_id"]
     else:
         return "user", user["user_id"]
+
+
+# ============================================================
+# 全局异常处理：捕获未处理的 500 错误并通知
+# ============================================================
+
+@insurance_bp.app_errorhandler(500)
+def _handle_500(error):
+    notify_error("Web服务", request.path, f"500 内部错误: {error}", f"method={request.method}")
+    return jsonify({"error": "服务器内部错误"}), 500
 
 
 # ============================================================

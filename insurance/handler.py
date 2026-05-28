@@ -29,6 +29,7 @@ from insurance.monitor_config_db import get_enabled_monitor_configs
 from insurance.field_mapping import apply_mapping
 from insurance.ocr_service import extract_text_from_pdf_bytes
 from insurance.policy_parser import parse_policy_text, parse_policy_text_multi, _find_policy_boundaries
+from core.notify import notify_error
 
 logger = logging.getLogger(__name__)
 
@@ -335,6 +336,7 @@ class InsuranceHandler:
                     e,
                     exc_info=True,
                 )
+                notify_error("保单识别", "_consume", str(e), f"seq={msg.get('seq')}, filename={msg.get('filename')}")
             finally:
                 self._queue.task_done()
 
@@ -611,9 +613,11 @@ class InsuranceHandler:
                             )
                     except Exception as e:
                         logger.error("自动同步钉钉失败, record_id=%d: %s", cur_record_id, e)
+                        notify_error("钉钉同步", "_sync_to_dingtalk_v2", str(e), f"record_id={cur_record_id}")
 
         except Exception as e:
             logger.error("保单处理失败, record_id=%d filename=%s: %s", record_id, filename, e, exc_info=True)
+            notify_error("保单识别", "_process", str(e), f"record_id={record_id}, filename={filename}")
             try:
                 update_insurance_record(self.db, record_id, {
                     "status": "failed",
@@ -687,11 +691,13 @@ class InsuranceHandler:
                 )
                 if ret != 0:
                     logger.error("下载媒体文件失败, ret=%d", ret)
+                    notify_error("保单识别", "_download_media", f"下载媒体文件失败, ret={ret}", f"sdkfileid={sdkfileid[:30]}...")
                     return b""
                 return data if data else b""
 
         except Exception as e:
             logger.error("下载媒体文件异常, sdkfileid=%s: %s", sdkfileid, e, exc_info=True)
+            notify_error("保单识别", "_download_media", str(e), f"sdkfileid={sdkfileid[:30]}...")
             return b""
 
     # ------------------------------------------------------------------ #
@@ -1243,6 +1249,7 @@ class InsuranceHandler:
             if self._volc_fail_count >= self._volc_fail_threshold:
                 self._volc_circuit_open_until = time.time() + 600
                 logger.warning("火山引擎 OCR 连续失败 %d 次，熔断 10 分钟", self._volc_fail_count)
+                notify_error("OCR引擎", "_run_ocr_engines", f"火山引擎OCR连续失败{self._volc_fail_count}次，已熔断10分钟")
         elif volc_circuit_open:
             logger.info("火山引擎 OCR 熔断中，跳过直接使用百度 OCR")
         if self._baidu_ocr:
@@ -1565,6 +1572,7 @@ class InsuranceHandler:
                     if self._volc_fail_count >= self._volc_fail_threshold:
                         self._volc_circuit_open_until = time.time() + 600
                         logger.warning("火山引擎 OCR 连续失败 %d 次，熔断 10 分钟", self._volc_fail_count)
+                        notify_error("OCR引擎", "手动上传OCR", f"火山引擎OCR连续失败{self._volc_fail_count}次，已熔断10分钟")
 
                 # 降级百度 OCR
                 if not text and self._baidu_ocr:

@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 from flask import Blueprint, request
 
 from callback.crypto import WXBizMsgCrypt
+from core.notify import notify_error
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,7 @@ def receive_callback():
     ret, xml_content = _crypto.decrypt_msg(post_data, msg_signature, timestamp, nonce)
     if ret != 0:
         logger.error("回调消息解密失败, 错误码: %d", ret)
+        notify_error("回调服务", "receive_callback", f"回调消息解密失败, 错误码: {ret}")
         return "解密失败", 403
 
     # 解析XML
@@ -84,6 +86,7 @@ def receive_callback():
                 _on_message_callback()
     except Exception as e:
         logger.error("解析回调XML失败: %s", e)
+        notify_error("回调服务", "receive_callback", f"解析回调XML失败: {e}")
         return "解析失败", 500
 
     # 必须返回 "success" 或空字符串，否则企业微信会重试

@@ -209,6 +209,8 @@ class Database:
             conn.commit()
         except Exception as e:
             logger.error("保存消息失败, seq=%d: %s", seq, e)
+            from core.notify import notify_error
+            notify_error("数据库", "save_message", str(e), f"seq={seq}")
         finally:
             conn.close()
 

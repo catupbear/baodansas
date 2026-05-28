@@ -28,6 +28,7 @@ from auth.db import init_users_table, init_enterprises_table, init_sender_bindin
 from auth.jwt_utils import init_jwt
 from auth.decorators import init_auth_decorators
 from auth.api import auth_bp, init_auth_api
+from core.notify import init_notifier
 
 # 日志配置
 logging.basicConfig(
@@ -48,6 +49,13 @@ def create_app(config: dict) -> Flask:
     """创建并配置 Flask 应用"""
     app = Flask(__name__, template_folder="web/templates")
     app.secret_key = config.get("secret_key", "wxbot-monitor-secret-key")
+
+    # 初始化钉钉错误通知
+    notify_cfg = config.get("notify", {})
+    init_notifier(
+        webhook_url=notify_cfg.get("webhook_url", ""),
+        secret=notify_cfg.get("secret", ""),
+    )
 
     # 初始化数据库（MySQL 连接池，传入主企业 corpid 用于回填历史消息）
     db = Database(config["mysql"], main_corpid=config["wecom"]["corpid"])

@@ -8,6 +8,7 @@ import logging
 import threading
 
 from core.decryptor import MessageDecryptor
+from core.notify import notify_error
 from core.parser import MessageParser
 from sdk.finance_sdk import FinanceSDK
 from storage.db import Database
@@ -57,6 +58,7 @@ class MessageFetcher:
             )
             if ret != 0:
                 logger.error("%s拉取消息失败, 错误码: %d", self._log_prefix, ret)
+                notify_error("消息拉取", "_do_fetch", f"SDK拉取消息失败, 错误码: {ret}", f"企业: {self.enterprise_name}, seq={seq}")
                 break
 
             chat_list = data.get("chatdata", [])
@@ -349,6 +351,7 @@ class MessageFetcher:
         ret, decrypted_json = self.decryptor.decrypt_message(encrypt_random_key, encrypt_chat_msg)
         if ret != 0:
             logger.error("%s解密消息失败, seq=%d", self._log_prefix, msg_seq)
+            notify_error("消息解密", "_process_item", f"解密消息失败, seq={msg_seq}", f"企业: {self.enterprise_name}")
             return
 
         # 解析消息
@@ -367,6 +370,7 @@ class MessageFetcher:
             self._check_quote_trigger(msg_seq, msg_data, parsed)
         except json.JSONDecodeError as e:
             logger.error("%s消息JSON解析失败, seq=%d: %s", self._log_prefix, msg_seq, e)
+            notify_error("消息解析", "_process_item", f"JSON解析失败, seq={msg_seq}", str(e))
 
     def _check_insurance_trigger(self, seq: int, msg_data: dict, parsed: dict):
         """检查是否需要触发保单识别（支持群聊 + 私聊）"""
