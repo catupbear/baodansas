@@ -10,6 +10,7 @@ import pymysql
 import pymysql.cursors
 
 from .field_mapping import apply_mapping
+from .field_config_db import get_column_config
 
 import re as _re
 
@@ -379,7 +380,7 @@ def init_insurance_tables(db):
         # 回填 is_abnormal（仅对已完成且未计算过的记录）
         try:
             cursor.execute("""
-                SELECT id, parsed_fields, status, doc_category
+                SELECT id, parsed_fields, status, doc_category, user_id
                 FROM insurance_records
                 WHERE is_abnormal = 0
                   AND status IN ('done', 'success')
@@ -387,6 +388,8 @@ def init_insurance_tables(db):
                   AND parsed_fields IS NOT NULL
             """)
             rows = cursor.fetchall()
+            # 按 user_id 缓存导出模板可见列，避免重复查询
+            _visible_cache = {}
             updated = 0
             for row in rows:
                 pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
@@ -394,8 +397,15 @@ def init_insurance_tables(db):
                     pf = json.loads(pf_str) if isinstance(pf_str, str) else (pf_str or {})
                 except (TypeError, json.JSONDecodeError):
                     pf = {}
-                abnormal, hint = _compute_abnormal(pf, row.get("status") if isinstance(row, dict) else row[2],
-                                                    row.get("doc_category") if isinstance(row, dict) else row[3])
+                uid = row.get("user_id") if isinstance(row, dict) else row[4]
+                if uid not in _visible_cache:
+                    _visible_cache[uid] = _get_visible_export_keys(db, uid)
+                abnormal, hint = _compute_abnormal(
+                    pf,
+                    row.get("status") if isinstance(row, dict) else row[2],
+                    row.get("doc_category") if isinstance(row, dict) else row[3],
+                    visible_export_keys=_visible_cache[uid],
+                )
                 if abnormal:
                     rid = row.get("id") if isinstance(row, dict) else row[0]
                     cursor.execute(
@@ -589,12 +599,38 @@ _EXPORT_TO_OCR = {
 }
 
 
+def _get_visible_export_keys(db, user_id) -> set:
+    """根据 user_id 查其导出模板中 visible=true 的列 key 集合。
+    无用户上下文时返回 None，调用方回退到硬编码全量检查。
+    """
+    if not user_id:
+        return None
+    try:
+        from auth.db import get_user_by_id
+        user = get_user_by_id(db, user_id)
+        if not user:
+            return None
+        config = get_column_config(
+            db, "export_columns",
+            user["id"], user["role"], user.get("parent_id"),
+        )
+        return {c["key"] for c in config.get("columns", []) if c.get("visible")}
+    except Exception:
+        logger.debug("获取用户 %s 导出模板失败，回退全量检查", user_id, exc_info=True)
+        return None
+
+
 def _compute_abnormal(parsed_fields: dict, status: str, doc_category: str,
-                      abnormal_override_reason: str = None) -> tuple:
+                      abnormal_override_reason: str = None,
+                      visible_export_keys: set = None) -> tuple:
     """
     计算记录是否异常，返回 (is_abnormal: bool, hint: str)。
     逻辑与前端 isRecordAbnormal / getRecordHint 保持一致。
     如果 abnormal_override_reason 不为空，强制返回正常。
+
+    visible_export_keys: 用户导出模板中 visible=true 的列 key 集合。
+        传入时只检查 _REQUIRED_FIELDS 与该集合的交集；
+        为 None 时检查全部 _REQUIRED_FIELDS（兼容无用户上下文的场景）。
     """
     # 手动标记正常的记录，直接返回正常
     if abnormal_override_reason:
@@ -606,8 +642,13 @@ def _compute_abnormal(parsed_fields: dict, status: str, doc_category: str,
         return False, ''
     fields = parsed_fields or {}
 
+    # 根据导出模板筛选实际需要检查的必填字段
+    check_fields = _REQUIRED_FIELDS
+    if visible_export_keys is not None:
+        check_fields = [f for f in _REQUIRED_FIELDS if f in visible_export_keys]
+
     missing = []
-    for col in _REQUIRED_FIELDS:
+    for col in check_fields:
         if fields.get(col):
             continue
         ocr_keys = _EXPORT_TO_OCR.get(col, [])
@@ -619,6 +660,9 @@ def _compute_abnormal(parsed_fields: dict, status: str, doc_category: str,
     _DATE_FIELDS = {'保险起期': '起保日期', '保险止期': '终保日期', '签单日期': '签单日期'}
     incomplete_dates = []
     for ocr_key, label in _DATE_FIELDS.items():
+        # 模板中不显示该日期列则跳过检查
+        if visible_export_keys is not None and label not in visible_export_keys:
+            continue
         val = fields.get(ocr_key, '')
         if val and not _re.search(r'\d{1,2}[日号]|\d{4}[-/]\d{1,2}[-/]\d{1,2}', val):
             incomplete_dates.append(label)
@@ -725,17 +769,19 @@ def save_insurance_record(db, record: dict) -> int:
         if cs:
             data["company_short"] = cs
 
-    # 自动计算 is_abnormal 和 hint
+    # 自动计算 is_abnormal 和 hint（基于用户导出模板）
     pf = data.get("parsed_fields")
     if isinstance(pf, str):
         try:
             pf = json.loads(pf)
         except (TypeError, json.JSONDecodeError):
             pf = {}
+    visible_keys = _get_visible_export_keys(db, data.get("user_id"))
     abnormal, hint = _compute_abnormal(
         pf if isinstance(pf, dict) else {},
         data.get("status", "pending"),
         data.get("doc_category", ""),
+        visible_export_keys=visible_keys,
     )
     data["is_abnormal"] = 1 if abnormal else 0
     data["hint"] = hint
@@ -824,7 +870,7 @@ def update_insurance_record(db, record_id: int, updates: dict):
         # 如果更新了影响异常判断的字段，需先读取现有值补全上下文
         if any(k in updates for k in ("parsed_fields", "status", "doc_category", "abnormal_override_reason")):
             cursor.execute(
-                "SELECT parsed_fields, status, doc_category, abnormal_override_reason FROM insurance_records WHERE id = %s",
+                "SELECT parsed_fields, status, doc_category, abnormal_override_reason, user_id FROM insurance_records WHERE id = %s",
                 (record_id,)
             )
             existing = cursor.fetchone() or {}
@@ -837,11 +883,13 @@ def update_insurance_record(db, record_id: int, updates: dict):
             # 获取 override reason：优先取本次更新值，否则取现有值
             override_reason = updates.get("abnormal_override_reason",
                                           existing.get("abnormal_override_reason"))
+            visible_keys = _get_visible_export_keys(db, existing.get("user_id"))
             abnormal, hint = _compute_abnormal(
                 pf_raw if isinstance(pf_raw, dict) else {},
                 updates.get("status") or existing.get("status", ""),
                 updates.get("doc_category") or existing.get("doc_category", ""),
                 abnormal_override_reason=override_reason,
+                visible_export_keys=visible_keys,
             )
             data["is_abnormal"] = 1 if abnormal else 0
             data["hint"] = hint
