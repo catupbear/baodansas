@@ -80,6 +80,7 @@ _OCR_TO_COLUMN = {
     "经办人": "handler",
     "保司公司名称": "insurer_name",
     "保司地址": "insurer_address",
+    "保司联系电话": "insurer_phone",
 }
 # 反向映射：列名 → OCR 字段名
 _COLUMN_TO_OCR = {v: k for k, v in _OCR_TO_COLUMN.items()}
@@ -172,6 +173,7 @@ def init_insurance_tables(db):
                 handler            TEXT COMMENT '经办人',
                 insurer_name       TEXT COMMENT '保司公司名称',
                 insurer_address    TEXT COMMENT '保司地址',
+                insurer_phone      VARCHAR(32) DEFAULT '' COMMENT '保司联系电话',
                 sign_date_iso      DATE DEFAULT NULL COMMENT '签单日期(ISO格式，用于索引查询)',
                 start_date_iso     DATE DEFAULT NULL COMMENT '起保日期(ISO格式，用于索引查询)',
                 end_date_iso       DATE DEFAULT NULL COMMENT '止保日期(ISO格式，用于索引查询)',
@@ -210,6 +212,14 @@ def init_insurance_tables(db):
                 )
             except Exception:
                 pass
+
+        # 迁移：为已有表添加保司联系电话列（幂等）
+        try:
+            cursor.execute(
+                "ALTER TABLE insurance_policy_fields ADD COLUMN insurer_phone VARCHAR(32) DEFAULT '' COMMENT '保司联系电话'"
+            )
+        except Exception:
+            pass
 
         # 用户字段配置表（支持全局/企业/个人三级作用域）
         cursor.execute("""

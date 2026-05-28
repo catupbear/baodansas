@@ -717,6 +717,32 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
                 fields["保司公司名称"] = val
                 break
 
+    # 紫金等格式：公司名称跨行，标签在中间
+    # "紫金财产保险股份有限公司深圳分公司龙岗支\n公司名称：\n公司"
+    # 实际公司名 = 上方行 + 下方残余（如"公司"），需拼接
+    if "保司公司名称" not in fields:
+        for i, line in enumerate(lines):
+            if re.search(r'公司名称[：:]', line):
+                # 查找标签上方包含保险公司名的行
+                above_name = ""
+                for j in range(i - 1, max(i - 3, -1), -1):
+                    prev = lines[j].strip()
+                    if re.search(r'保险.*公司|财产.*公司', prev):
+                        above_name = prev
+                        break
+                # 查找标签下方的残余部分（如"公司"）
+                below_part = ""
+                if i + 1 < len(lines):
+                    next_line = lines[i + 1].strip()
+                    # 残余部分通常很短（如"公司"），且不含其他标签
+                    if next_line and len(next_line) <= 6 and not re.search(r'[：:]', next_line):
+                        below_part = next_line
+                if above_name:
+                    full_name = above_name + below_part
+                    if len(full_name) >= 4:
+                        fields["保司公司名称"] = full_name
+                break
+
     # 公司地址：深圳市南山区南山街道东滨路南荔源商务大厦A栋1301-1306、1401
     for src in [text, text_merged]:
         m = re.search(r'公司地址[：:]\s*(.+?)(?:\s+公司网址|\s{2,}|\n|$)', src)
@@ -724,6 +750,55 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
             val = m.group(1).strip()
             if val and len(val) >= 4:
                 fields["保司地址"] = val
+                break
+
+    # 紫金等格式：地址和联系电话在"公司地址："标签的上方/周围
+    # "深圳市龙岗区龙城街道尚景社区龙福路荣超英 95312\n险 公司地址： 联系电话：\n隆大厦A座A2108"
+    if "保司地址" not in fields:
+        for i, line in enumerate(lines):
+            if re.search(r'公司地址[：:]', line):
+                addr_parts = []
+                # 上方行可能有地址开头
+                if i > 0:
+                    prev = lines[i - 1].strip()
+                    # 去掉末尾的电话号码（如"95312"）
+                    prev_clean = re.sub(r'\s+\d{5,11}$', '', prev)
+                    # 去掉开头的干扰字符（如"保"、"险"等单字）
+                    prev_clean = re.sub(r'^[一-鿿]\s+', '', prev_clean).strip()
+                    if prev_clean and re.search(r'市|区|街|路|号|大厦|广场', prev_clean):
+                        addr_parts.append(prev_clean)
+                # 下方行可能有地址结尾
+                if i + 1 < len(lines):
+                    next_line = lines[i + 1].strip()
+                    # 去掉开头的干扰字符（如"隆大厦" 应保留）
+                    next_clean = re.sub(r'^[保险人\s]+', '', next_line).strip()
+                    if next_clean and re.search(r'市|区|街|路|号|大厦|广场|座', next_clean):
+                        addr_parts.append(next_clean)
+                if addr_parts:
+                    fields["保司地址"] = ''.join(addr_parts)
+                break
+
+    # 联系电话：从"联系电话："标签附近提取（如95312）
+    if "保司联系电话" not in fields:
+        for i, line in enumerate(lines):
+            if re.search(r'联系电话[：:]', line):
+                # 先看同行"联系电话："后面是否有号码
+                m_phone = re.search(r'联系电话[：:]\s*(\d{5,20})', line)
+                if m_phone:
+                    fields["保司联系电话"] = m_phone.group(1)
+                    break
+                # 紫金等格式：号码在上方行末尾
+                if i > 0:
+                    prev = lines[i - 1].strip()
+                    m_phone = re.search(r'(\d{5,20})\s*$', prev)
+                    if m_phone:
+                        fields["保司联系电话"] = m_phone.group(1)
+                        break
+                # 号码在下方行
+                if i + 1 < len(lines):
+                    m_phone = re.search(r'(\d{5,20})', lines[i + 1].strip())
+                    if m_phone:
+                        fields["保司联系电话"] = m_phone.group(1)
                 break
 
     # 保司带地区：从保司地址提取城市 + 承保公司，如"深圳平安"
