@@ -137,41 +137,41 @@ def init_insurance_tables(db):
             CREATE TABLE IF NOT EXISTS insurance_policy_fields (
                 id                 INT PRIMARY KEY AUTO_INCREMENT,
                 record_id          INT NOT NULL UNIQUE COMMENT '关联 insurance_records.id',
-                policy_no          VARCHAR(500) DEFAULT '' COMMENT '保单号',
-                company            VARCHAR(500) DEFAULT '' COMMENT '保险公司',
-                company_short      VARCHAR(500) DEFAULT '' COMMENT '保险公司简称',
-                policy_type        VARCHAR(500) DEFAULT '' COMMENT '险种类型',
-                insured            VARCHAR(500) DEFAULT '' COMMENT '被保险人',
-                applicant          VARCHAR(500) DEFAULT '' COMMENT '投保人',
-                owner              VARCHAR(500) DEFAULT '' COMMENT '车主',
-                id_number          VARCHAR(500) DEFAULT '' COMMENT '证件号码',
-                plate_no           VARCHAR(500) DEFAULT '' COMMENT '车牌号',
-                vin                VARCHAR(500) DEFAULT '' COMMENT '车架号VIN',
-                engine_no          VARCHAR(500) DEFAULT '' COMMENT '发动机号',
-                vehicle_model      VARCHAR(500) DEFAULT '' COMMENT '厂牌型号',
-                passenger_cap      VARCHAR(500) DEFAULT '' COMMENT '核定载客',
-                load_cap           VARCHAR(500) DEFAULT '' COMMENT '核定载质量',
-                usage_type         VARCHAR(500) DEFAULT '' COMMENT '使用性质',
-                vehicle_type       VARCHAR(500) DEFAULT '' COMMENT '机动车种类',
-                first_reg_date     VARCHAR(500) DEFAULT '' COMMENT '初次登记日期',
-                total_premium      VARCHAR(500) DEFAULT '' COMMENT '保费合计',
-                premium_no_tax     VARCHAR(500) DEFAULT '' COMMENT '不含税保费',
-                tax_amount         VARCHAR(500) DEFAULT '' COMMENT '增值税额',
-                vehicle_tax        VARCHAR(500) DEFAULT '' COMMENT '车船税',
-                insurance_period   VARCHAR(500) DEFAULT '' COMMENT '保险期间',
-                start_date         VARCHAR(500) DEFAULT '' COMMENT '保险起期',
-                end_date           VARCHAR(500) DEFAULT '' COMMENT '保险止期',
-                sign_date          VARCHAR(500) DEFAULT '' COMMENT '签单日期',
-                confirm_time       VARCHAR(500) DEFAULT '' COMMENT '收费确认时间',
-                sales_channel      VARCHAR(500) DEFAULT '' COMMENT '销售渠道',
-                agency             VARCHAR(500) DEFAULT '' COMMENT '中介机构',
-                salesperson        VARCHAR(500) DEFAULT '' COMMENT '业务员',
-                confirm_code       VARCHAR(500) DEFAULT '' COMMENT '投保确认码',
-                dispute_resolution VARCHAR(500) DEFAULT '' COMMENT '争议解决方式',
-                creator            VARCHAR(500) DEFAULT '' COMMENT '制单人',
-                handler            VARCHAR(500) DEFAULT '' COMMENT '经办人',
-                insurer_name       VARCHAR(500) DEFAULT '' COMMENT '保司公司名称',
-                insurer_address    VARCHAR(500) DEFAULT '' COMMENT '保司地址',
+                policy_no          VARCHAR(128) DEFAULT '' COMMENT '保单号',
+                company            VARCHAR(128) DEFAULT '' COMMENT '保险公司',
+                company_short      VARCHAR(64)  DEFAULT '' COMMENT '保险公司简称',
+                policy_type        VARCHAR(128) DEFAULT '' COMMENT '险种类型',
+                insured            TEXT COMMENT '被保险人',
+                applicant          TEXT COMMENT '投保人',
+                owner              TEXT COMMENT '车主',
+                id_number          VARCHAR(64)  DEFAULT '' COMMENT '证件号码',
+                plate_no           VARCHAR(32)  DEFAULT '' COMMENT '车牌号',
+                vin                VARCHAR(64)  DEFAULT '' COMMENT '车架号VIN',
+                engine_no          VARCHAR(64)  DEFAULT '' COMMENT '发动机号',
+                vehicle_model      TEXT COMMENT '厂牌型号',
+                passenger_cap      VARCHAR(32)  DEFAULT '' COMMENT '核定载客',
+                load_cap           VARCHAR(32)  DEFAULT '' COMMENT '核定载质量',
+                usage_type         VARCHAR(64)  DEFAULT '' COMMENT '使用性质',
+                vehicle_type       VARCHAR(64)  DEFAULT '' COMMENT '机动车种类',
+                first_reg_date     VARCHAR(32)  DEFAULT '' COMMENT '初次登记日期',
+                total_premium      VARCHAR(64)  DEFAULT '' COMMENT '保费合计',
+                premium_no_tax     VARCHAR(64)  DEFAULT '' COMMENT '不含税保费',
+                tax_amount         VARCHAR(64)  DEFAULT '' COMMENT '增值税额',
+                vehicle_tax        VARCHAR(64)  DEFAULT '' COMMENT '车船税',
+                insurance_period   TEXT COMMENT '保险期间',
+                start_date         VARCHAR(32)  DEFAULT '' COMMENT '保险起期',
+                end_date           VARCHAR(32)  DEFAULT '' COMMENT '保险止期',
+                sign_date          VARCHAR(32)  DEFAULT '' COMMENT '签单日期',
+                confirm_time       VARCHAR(64)  DEFAULT '' COMMENT '收费确认时间',
+                sales_channel      TEXT COMMENT '销售渠道',
+                agency             TEXT COMMENT '中介机构',
+                salesperson        TEXT COMMENT '业务员',
+                confirm_code       VARCHAR(128) DEFAULT '' COMMENT '投保确认码',
+                dispute_resolution TEXT COMMENT '争议解决方式',
+                creator            TEXT COMMENT '制单人',
+                handler            TEXT COMMENT '经办人',
+                insurer_name       TEXT COMMENT '保司公司名称',
+                insurer_address    TEXT COMMENT '保司地址',
                 sign_date_iso      DATE DEFAULT NULL COMMENT '签单日期(ISO格式，用于索引查询)',
                 start_date_iso     DATE DEFAULT NULL COMMENT '起保日期(ISO格式，用于索引查询)',
                 end_date_iso       DATE DEFAULT NULL COMMENT '止保日期(ISO格式，用于索引查询)',
@@ -292,27 +292,22 @@ def init_insurance_tables(db):
         for new_col in ["insurer_name", "insurer_address"]:
             try:
                 cursor.execute(
-                    f"ALTER TABLE insurance_policy_fields ADD COLUMN {new_col} VARCHAR(500) DEFAULT '' COMMENT '保司信息'"
+                    f"ALTER TABLE insurance_policy_fields ADD COLUMN {new_col} TEXT COMMENT '保司信息'"
                 )
             except Exception:
                 pass
 
-        # 关联表列宽统一修正为 VARCHAR(500)（已建表的情况下加宽，幂等）
-        _pf_text_cols = [
-            "policy_no", "company", "company_short", "policy_type",
-            "insured", "applicant", "owner", "id_number",
-            "plate_no", "vin", "engine_no", "vehicle_model",
-            "passenger_cap", "load_cap", "usage_type", "vehicle_type",
-            "first_reg_date", "total_premium", "premium_no_tax", "tax_amount",
-            "vehicle_tax", "insurance_period", "start_date", "end_date",
-            "sign_date", "confirm_time", "sales_channel", "agency",
-            "salesperson", "confirm_code", "dispute_resolution", "creator", "handler",
+        # 迁移：将已有 VARCHAR(500) 列改为 TEXT，避免行大小超限
+        _pf_to_text = [
+            "insured", "applicant", "owner", "vehicle_model",
+            "insurance_period", "sales_channel", "agency",
+            "salesperson", "dispute_resolution", "creator", "handler",
             "insurer_name", "insurer_address",
         ]
-        for col in _pf_text_cols:
+        for col in _pf_to_text:
             try:
                 cursor.execute(
-                    f"ALTER TABLE insurance_policy_fields MODIFY {col} VARCHAR(500) DEFAULT ''"
+                    f"ALTER TABLE insurance_policy_fields MODIFY {col} TEXT"
                 )
             except Exception:
                 pass
