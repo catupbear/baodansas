@@ -638,7 +638,10 @@ def get_effective_config(db, user_id: int, role: str, parent_id=None) -> dict:
     source = active.get("source", "own")
     template_name = active.get("template_name", DEFAULT_TEMPLATE_NAME)
 
-    if source == "enterprise":
+    if source == "system":
+        scope = "global"
+        scope_id = None
+    elif source == "enterprise":
         scope = "enterprise"
         scope_id = parent_id
     else:
@@ -751,6 +754,8 @@ def get_column_config(db, config_type: str, user_id: int, role: str, parent_id=N
     获取列配置（list_columns 或 export_columns），按优先级查找：
     user → enterprise → global → 代码默认值。
 
+    当用户启用了企业/系统模板时，优先从对应 scope 查询。
+
     返回：{"source": "enterprise", "columns": [...]}
     """
     if config_type not in ("list_columns", "export_columns"):
@@ -760,19 +765,28 @@ def get_column_config(db, config_type: str, user_id: int, role: str, parent_id=N
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        # 按优先级依次查找
-        search_order = []
-        if role == "employee" and parent_id is not None:
-            search_order.append(("user", user_id, "user"))
-            search_order.append(("enterprise", parent_id, "enterprise"))
-        elif role == "enterprise":
-            search_order.append(("enterprise", parent_id or user_id, "enterprise"))
-        elif role == "super_admin":
-            search_order.append(("global", None, "global"))
-
-        # 获取当前活跃模板名
+        # 获取当前活跃模板
         active = get_active_template(db, user_id)
         active_tpl = active.get("template_name", DEFAULT_TEMPLATE_NAME)
+        active_source = active.get("source", "own")
+
+        # 根据 active_source 决定搜索顺序
+        search_order = []
+        if active_source == "system":
+            # 用户选了系统模板，直接查全局
+            search_order.append(("global", None, "global"))
+        elif active_source == "enterprise" and parent_id is not None:
+            # 用户选了企业模板，直接查企业级
+            search_order.append(("enterprise", parent_id, "enterprise"))
+        else:
+            # 用户选了自己的模板，按角色优先级查
+            if role == "employee" and parent_id is not None:
+                search_order.append(("user", user_id, "user"))
+                search_order.append(("enterprise", parent_id, "enterprise"))
+            elif role == "enterprise":
+                search_order.append(("enterprise", parent_id or user_id, "enterprise"))
+            elif role == "super_admin":
+                search_order.append(("global", None, "global"))
 
         for scope, scope_id, source_label in search_order:
             sid_cond, sid_params = _scope_id_condition(scope_id)
@@ -875,18 +889,28 @@ def delete_column_config(db, config_type: str, scope: str, scope_id):
 
 
 def get_merge_by_plate(db, user_id: int, role: str, parent_id=None) -> bool:
-    """获取合并导出开关状态，按优先级查找，默认关闭。"""
+    """获取合并导出开关状态，按优先级查找，默认关闭。当用户启用企业/系统模板时直接查对应 scope。"""
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        # 根据 active_source 决定搜索顺序
+        active = get_active_template(db, user_id)
+        active_source = active.get("source", "own")
+
         search_order = []
-        if role == "employee" and parent_id is not None:
-            search_order.append(("user", user_id))
-            search_order.append(("enterprise", parent_id))
-        elif role == "enterprise":
-            search_order.append(("enterprise", parent_id or user_id))
-        elif role == "super_admin":
+        if active_source == "system":
             search_order.append(("global", None))
+        elif active_source == "enterprise" and parent_id is not None:
+            search_order.append(("enterprise", parent_id))
+        else:
+            if role == "employee" and parent_id is not None:
+                search_order.append(("user", user_id))
+                search_order.append(("enterprise", parent_id))
+            elif role == "enterprise":
+                search_order.append(("enterprise", parent_id or user_id))
+            elif role == "super_admin":
+                search_order.append(("global", None))
 
         for scope, scope_id in search_order:
             sid_cond, sid_params = _scope_id_condition(scope_id)
