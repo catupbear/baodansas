@@ -707,18 +707,39 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
     """提取保险人公司名称和地址（保单底部"保险人"信息区域）"""
     lines = text.split('\n')
 
-    # 公司名称：众诚汽车保险股份有限公司深圳分公司
-    # OCR 可能将"保险人"区域的"公司名称"拆行，用 text_merged 兜底
+    # 太平洋非车险格式："签单公司信息 中国太平洋财产保险股份有限公司深圳分公司"
+    # 优先提取，避免被"总公司地址"等干扰
     for src in [text, text_merged]:
-        m = re.search(r'公司名称[：:]\s*(.+?)(?:\s+公司(?:网址|地址)|公司网址|\s{2,}|\n|$)', src)
+        m = re.search(r'签单公司信息\s+([一-鿿（()）\w]+公司)', src)
         if m:
             val = m.group(1).strip()
-            # 必须像公司名（含"公司/分公司"），且不能是地址（含"市+路/街"等）
-            if (val and len(val) >= 4
-                    and re.search(r'公司|分公司', val)
-                    and not re.search(r'[市区].*[街路号]', val)):
+            if val and len(val) >= 4:
                 fields["保司公司名称"] = val
+                # 提取"签单公司信息"下方的"地址："行
+                m_addr = re.search(r'签单公司信息.*?\n\s*地址[：:]\s*(.+?)(?:\s{2,}|\n|$)', src)
+                if m_addr:
+                    addr_val = m_addr.group(1).strip()
+                    if addr_val and len(addr_val) >= 4:
+                        fields["保司地址"] = addr_val
+                # 提取电话
+                m_phone = re.search(r'签单公司信息.*?\n.*?\n.*?\n\s*电话[：:]\s*([\d\-]+)', src)
+                if m_phone and "保司联系电话" not in fields:
+                    fields["保司联系电话"] = m_phone.group(1)
                 break
+
+    # 公司名称：众诚汽车保险股份有限公司深圳分公司
+    # OCR 可能将"保险人"区域的"公司名称"拆行，用 text_merged 兜底
+    if "保司公司名称" not in fields:
+        for src in [text, text_merged]:
+            m = re.search(r'公司名称[：:]\s*(.+?)(?:\s+公司(?:网址|地址)|公司网址|\s{2,}|\n|$)', src)
+            if m:
+                val = m.group(1).strip()
+                # 必须像公司名（含"公司/分公司"），且不能是地址（含"市+路/街"等）
+                if (val and len(val) >= 4
+                        and re.search(r'公司|分公司', val)
+                        and not re.search(r'[市区].*[街路号]', val)):
+                    fields["保司公司名称"] = val
+                    break
 
     # 紫金等格式：公司名称跨行，标签在中间
     # "紫金财产保险股份有限公司深圳分公司龙岗支\n公司名称：\n公司"
@@ -747,14 +768,15 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
                 break
 
     # 公司地址：深圳市南山区南山街道东滨路南荔源商务大厦A栋1301-1306、1401
-    for src in [text, text_merged]:
-        m = re.search(r'公司地址[：:]\s*(.+?)(?:\s+公司网址|\s{2,}|\n|$)', src)
-        if m:
-            val = m.group(1).strip()
-            # 排除误匹配（如"联系电话："被当作地址）
-            if val and len(val) >= 4 and not re.search(r'^联系电话|^公司名称', val):
-                fields["保司地址"] = val
-                break
+    # 排除"总公司地址"（太平洋等保单底部总部地址，非签单分公司地址）
+    if "保司地址" not in fields:
+        for src in [text, text_merged]:
+            m = re.search(r'(?<!总)公司地址[：:]\s*(.+?)(?:\s+公司网址|\s{2,}|\n|$)', src)
+            if m:
+                val = m.group(1).strip()
+                if val and len(val) >= 4 and not re.search(r'^联系电话|^公司名称', val):
+                    fields["保司地址"] = val
+                    break
 
     # 紫金等格式：地址和联系电话在"公司地址："标签的上方/周围
     # "深圳市龙岗区龙城街道尚景社区龙福路荣超英 95312\n险 公司地址： 联系电话：\n隆大厦A座A2108"
