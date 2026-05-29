@@ -321,6 +321,7 @@ def _identify_company(text: str) -> Dict[str, str]:
                 (r'^6627', "中国人寿财产保险股份有限公司"),            # 国寿
                 (r'^P8100', "京东安联财产保险有限公司"),               # 京东安联驾乘
                 (r'^ASHZ', "中国太平洋财产保险股份有限公司"),          # 太平洋
+                (r'^AGUZ', "中国太平洋财产保险股份有限公司"),          # 太平洋驾乘险
                 (r'^BSHZ', "中国太平洋财产保险股份有限公司"),          # 太平洋批单
                 (r'^P432', "太平财产保险有限公司"),                   # 太平
                 (r'^6203', "申能财产保险股份有限公司"),                # 申能
@@ -869,6 +870,31 @@ def _extract_policy_no(text: str, fields: dict, company_short: str, policy_type:
                 # 顺便存投保确认时间
                 fields["收费确认时间"] = m.group(2)
                 return
+
+    # 太平洋格式：pdfplumber 提取时保单号出现在"保险单号："标签的上一行，
+    # 标签下方是 DZCC 条码号，通用正则会误取 DZCC
+    if company_short == "太平洋":
+        _lines = text.split('\n')
+        for _i, _line in enumerate(_lines):
+            if '保险单号' in _line:
+                # 检查上一行：真正的保单号在标签上方（pdfplumber 列布局导致）
+                if _i > 0:
+                    _prev = _lines[_i - 1].strip()
+                    if re.match(r'^[A-Z][A-Z0-9]{14,30}$', _prev) and not _prev.startswith('DZCC'):
+                        fields["保单号"] = _prev
+                        return
+                # 检查同行内（标签和保单号在同一行的情况）
+                _m = re.search(r'保险单号[码]?[：:\s]+([A-Z][A-Z0-9]{14,})', _line)
+                if _m and not _m.group(1).startswith('DZCC'):
+                    fields["保单号"] = _m.group(1)
+                    return
+                # 检查下一行但排除 DZCC 条码号
+                if _i + 1 < len(_lines):
+                    _next = _lines[_i + 1].strip()
+                    if re.match(r'^[A-Z][A-Z0-9]{14,30}$', _next) and not _next.startswith('DZCC'):
+                        fields["保单号"] = _next
+                        return
+                break
 
     # 渤海格式：保单号与其他字段拼接或独立一行
     # 格式1（pdfplumber）："保险单号： 收费确认时间： No.\n24301038020260149112026-05-1012:40:26..."
