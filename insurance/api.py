@@ -35,6 +35,7 @@ from .field_config_db import (
     get_active_template, set_active_template,
     get_effective_config, apply_user_config_to_fields,
     get_column_config, save_column_config, delete_column_config,
+    extract_fixed_values,
     get_merge_by_plate, save_merge_by_plate,
     MERGE_SHARED_FIELDS, MERGE_SPLIT_FIELDS, MERGE_PREFIXES, MERGE_EXTRA_COLUMNS,
     DEFAULT_COLUMNS,
@@ -334,6 +335,13 @@ def list_records():
         # 获取用户字段配置，应用简称/日期格式/公式计算
         user = g.current_user
         user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
+        # 注入列配置中自定义字段的固定值
+        list_col_cfg = get_column_config(_db, "list_columns", user["user_id"], user["role"], user.get("parent_id"))
+        fixed_vals = extract_fixed_values(list_col_cfg)
+        if fixed_vals:
+            if user_config is None:
+                user_config = {}
+            user_config["fixed_values"] = fixed_vals
         has_config = user_config and any(user_config.get(k) for k in user_config)
 
         # 构建 sender → 用户姓名映射，用于实时关联"跟单人"
@@ -387,9 +395,8 @@ def list_records():
                 if record.get(ts_field) and not isinstance(record[ts_field], str):
                     record[ts_field] = str(record[ts_field])
 
-        # 获取页面列配置
-        list_col_config = get_column_config(_db, "list_columns", user["user_id"], user["role"], user.get("parent_id"))
-        result["column_config"] = list_col_config
+        # 复用已加载的页面列配置
+        result["column_config"] = list_col_cfg
 
         return jsonify({"code": 0, "data": result})
     except Exception as e:
@@ -2552,6 +2559,12 @@ def export_excel():
             # 获取用户字段配置，导出时应用简称/日期格式/公式
             user = g.current_user
             user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
+            # 注入导出列配置中自定义字段的固定值
+            export_fixed_vals = extract_fixed_values(export_col_config)
+            if export_fixed_vals:
+                if user_config is None:
+                    user_config = {}
+                user_config["fixed_values"] = export_fixed_vals
             has_config = user_config and any(user_config.get(k) for k in user_config)
 
             # 前端标记数据是否已经过 apply_user_config 处理（识别记录导出时为 True）
