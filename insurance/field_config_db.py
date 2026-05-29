@@ -961,23 +961,6 @@ def save_merge_by_plate(db, scope: str, scope_id, enabled: bool):
 
 
 # ------------------------------------------------------------------ #
-# 固定值提取
-# ------------------------------------------------------------------ #
-
-def extract_fixed_values(column_config: dict) -> dict:
-    """
-    从列配置中提取自定义字段的固定值映射。
-    返回 {字段名: 固定值} 的字典，仅包含设置了 fixed_value 的自定义字段。
-    """
-    result = {}
-    for col in column_config.get("columns", []):
-        fv = col.get("fixed_value", "")
-        if col.get("custom") and fv:
-            result[col["key"]] = fv
-    return result
-
-
-# ------------------------------------------------------------------ #
 # 公式引擎
 # ------------------------------------------------------------------ #
 
@@ -1156,11 +1139,5 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
                 result[field] = f"{val:g}%"
         except (ValueError, TypeError):
             pass
-
-    # 5. 固定值填充（来自列配置中自定义字段的 fixed_value）
-    fixed_values = config.get("fixed_values", {})
-    for field_name, fixed_val in fixed_values.items():
-        if fixed_val and not result.get(field_name):
-            result[field_name] = fixed_val
 
     return result
