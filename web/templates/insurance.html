@@ -1852,8 +1852,8 @@
 
     <!-- ========== 分批导出弹窗（超过500条时提示） ========== -->
     <transition name="fade">
-        <div v-if="batchExportVisible" class="fixed inset-0 z-[60] modal-mask flex items-center justify-center"
-             @click.self="batchExportVisible = false">
+        <div v-if="batchExportVisible" class="fixed inset-0 modal-mask flex items-center justify-center"
+             style="z-index:60;" @click.self="batchExportVisible = false">
             <div class="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4">
                 <div class="px-5 py-4 border-b flex items-center justify-between">
                     <div class="flex items-center gap-2">
@@ -1890,8 +1890,8 @@
 
     <!-- ========== 分批下载保单弹窗（超过500条时提示） ========== -->
     <transition name="fade">
-        <div v-if="batchDlVisible" class="fixed inset-0 z-[60] modal-mask flex items-center justify-center"
-             @click.self="batchDlVisible = false">
+        <div v-if="batchDlVisible" class="fixed inset-0 modal-mask flex items-center justify-center"
+             style="z-index:60;" @click.self="batchDlVisible = false">
             <div class="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4">
                 <div class="px-5 py-4 border-b flex items-center justify-between">
                     <div class="flex items-center gap-2">
