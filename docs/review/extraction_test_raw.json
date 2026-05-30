@@ -1,0 +1,3602 @@
+[
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "谢伟国交强.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/谢伟国交强.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "广东省广州市天河区体育东路160号1301B、1302B、1303房",
+      "车架号VIN": "LNNBBDEG2RG012645",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "朱江斌 粤B136RT  交强险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/朱江斌 粤B136RT  交强险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "安诚财产保险股份有限公司",
+      "保险公司简称": "安诚",
+      "保司地址": "深圳市福田区华富街道北环大道和彩田路东南角新浩壹都A座1201-9号",
+      "车架号VIN": "",
+      "证件号码": ""
+    },
+    "company": "安诚",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "粤B06Y10(交强险、商业险、其他险种).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/粤B06Y10(交强险、商业险、其他险种).pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人寿财产保险股份有限公司",
+      "保险公司简称": "国寿财产",
+      "保司地址": "深圳市罗湖区桂园街道松园社区宝安南路3029号国速世纪大厦B座",
+      "车架号VIN": "LS4ASL2EXKG865692",
+      "证件号码": "421123197606030070"
+    },
+    "company": "国寿财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "保单_谢亦龙_交强险_粤B-5U3F3_10578003903380995577(1).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/保单_谢亦龙_交强险_粤B-5U3F3_10578003903380995577(1).pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区",
+      "车架号VIN": "LBV3M2101DMC08852",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "91dd923e81ec0fcaaa8712fda1cc1b96.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/91dd923e81ec0fcaaa8712fda1cc1b96.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "",
+      "车架号VIN": "LC0C74C48S5198451",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "平安车主尊享保障",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "保单_黄光斌_商业险_粤B-1V4A8_10578003903353331810.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/保单_黄光斌_商业险_粤B-1V4A8_10578003903353331810.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区 邮政编码: 518040",
+      "车架号VIN": "LGXCG4CF5K0197589",
+      "证件号码": "440301197211203614"
+    },
+    "company": "平安",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "保单_谢亦龙_商业险_粤B-5U3F3_10578003903380995576(1).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/保单_谢亦龙_商业险_粤B-5U3F3_10578003903380995576(1).pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区 邮政编码: 518040",
+      "车架号VIN": "LBV3M2101DMC08852",
+      "证件号码": "441422198410050051"
+    },
+    "company": "平安",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "保单_杨茂兴_商业险_粤B-5T128_10578003903354783209_1.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/保单_杨茂兴_商业险_粤B-5T128_10578003903354783209_1.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区 邮政编码: 518040",
+      "车架号VIN": "LWLDMALG0ML043862",
+      "证件号码": "441581198305013457"
+    },
+    "company": "平安",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "商业险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/商业险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "太平财产保险有限公司",
+      "保险公司简称": "太平",
+      "保司地址": "广东省深圳市罗湖区笋岗街道田心社区红岭北路2088号招商开元中心A座25层（2512）",
+      "车架号VIN": "LFMKV32F4B0087124",
+      "证件号码": "43052219791013636X"
+    },
+    "company": "太平",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "粤B3T830-深圳市雅峰汽车有限公司-交强险保单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/粤B3T830-深圳市雅峰汽车有限公司-交强险保单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市罗湖区黄贝街道罗芳路122号一冶南方大厦A-7层",
+      "车架号VIN": "LBVKY3109JSG97305",
+      "证件号码": ""
+    },
+    "company": "人民财产",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "陈玲华-粤B2RD67(交强险,商业险,驾乘险)_2.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/陈玲华-粤B2RD67(交强险,商业险,驾乘险)_2.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市龙岗区龙城街道创投大厦1号楼3002、3003、3004、3005",
+      "车架号VIN": "WBAYE2105DDZ48131",
+      "证件号码": "91440300687566018Y"
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "黄思敏粤B3L701机动车交通事故责任强制保险单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/黄思敏粤B3L701机动车交通事故责任强制保险单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "新疆前海联合财产保险股份有限公司",
+      "保险公司简称": "前海联合",
+      "保司地址": "深圳市罗湖区笋岗街道宝安北路与梨园路交汇外东南侧深业物流中心（南区）E栋150(保3B险、人15签04章、)1505",
+      "车架号VIN": "WDC0J4GB4KF532342",
+      "证件号码": "441427198702100024"
+    },
+    "company": "前海联合",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "詹明粤B03R28机动车交通事故责任强制保险单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/詹明粤B03R28机动车交通事故责任强制保险单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "新疆前海联合财产保险股份有限公司",
+      "保险公司简称": "前海联合",
+      "保司地址": "深圳市罗湖区笋岗街道宝安北路与梨园路交汇外东南侧深业物流中心（南区）E栋150(保3B险、人15签04章、)1505",
+      "车架号VIN": "LHGGD865882503754",
+      "证件号码": "44030119691018151X"
+    },
+    "company": "前海联合",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "粤B0U75P-赖伟潮-驾意险保单号135500066Z3383246417.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/粤B0U75P-赖伟潮-驾意险保单号135500066Z3383246417.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "",
+      "车架号VIN": "W1K6G5FB8NA096270",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "平安车主尊享保障",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "保单_林明_交强险_粤B-59GM2_10578003903383223337.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/保单_林明_交强险_粤B-59GM2_10578003903383223337.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区",
+      "车架号VIN": "LSCAB32E1LE812087",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "梁嘉健-粤B3M6D8(交强险,商业险,驾乘险)_2.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/梁嘉健-粤B3M6D8(交强险,商业险,驾乘险)_2.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市盐田区海山街道深盐路南保发大厦（配套服务楼）第二十四A、B、C、D、E、F、G、H",
+      "车架号VIN": "LHGCR265XF8002341",
+      "证件号码": "440301199312186410"
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "车驾意_粤B09MJ6_肖曙彬_ASHZF1339R26FN0002AS.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/车驾意_粤B09MJ6_肖曙彬_ASHZF1339R26FN0002AS.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市福田区华富街道皇岗路5001号深业上城（南区）二期60层、59层5901",
+      "车架号VIN": "LJ11KBBD4H1904204",
+      "证件号码": "440582199512310438"
+    },
+    "company": "太平洋",
+    "type": "非家庭自用车驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "林晓霞-粤B353BP(交强险,商业险,驾乘险)_3.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/林晓霞-粤B353BP(交强险,商业险,驾乘险)_3.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市光明区凤凰街道东坑社区科能路中集低轨卫星物联网产业园A座1403-1至1404-2",
+      "车架号VIN": "JTJYERBZXM2094433",
+      "证件号码": "440307198409190065"
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "粤B3P89G_许*飞_交强险保单_1095305072026000825.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/粤B3P89G_许*飞_交强险保单_1095305072026000825.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "阳光财产保险股份有限公司",
+      "保险公司简称": "阳光",
+      "保司地址": "深圳市南山区粤海街道海珠社区兰芷二路66号阳光保险大厦7层3单元 电子保单签章",
+      "车架号VIN": "LSVCD73E4G2010432",
+      "证件号码": ""
+    },
+    "company": "阳光",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "保单_粤B609AA_向*_阳光意健险组合产品保险_10953270020260002202.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/保单_粤B609AA_向*_阳光意健险组合产品保险_10953270020260002202.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "阳光财产保险股份有限公司",
+      "保险公司简称": "阳光",
+      "保司地址": "",
+      "车架号VIN": "",
+      "证件号码": "440301198402038011"
+    },
+    "company": "阳光",
+    "type": "阳光药诊保A款",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "詹慧森 粤B46R09  商业险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/詹慧森 粤B46R09  商业险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "安诚财产保险股份有限公司",
+      "保险公司简称": "安诚",
+      "保司地址": "深圳市福田区华富街道北环大道和彩田路东南角新浩壹都A座1201-9 网址：http://www.e-acic.com",
+      "车架号VIN": "LGBK22E758Y036776",
+      "证件号码": "440307198402063514"
+    },
+    "company": "安诚",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "电子保单_东莞市昆保达纸塑包装制品有限公司_小微_10579006800260007443_22y.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/电子保单_东莞市昆保达纸塑包装制品有限公司_小微_10579006800260007443_22y.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道竹园社区农林路69号印",
+      "车架号VIN": "LJ11KBBD4J8014234",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "雇主责任保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "保单_东莞市顺心捷达快运有限公司_商业险_粤B-28ZP3_10578003903359020394.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/保单_东莞市顺心捷达快运有限公司_商业险_粤B-28ZP3_10578003903359020394.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区 邮政编码: 518040",
+      "车架号VIN": "LBV31FH04P1A24386",
+      "证件号码": "511323198609211085"
+    },
+    "company": "平安",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "贺委奇 粤B08A6F  驾意险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/贺委奇 粤B08A6F  驾意险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "安诚财产保险股份有限公司",
+      "保险公司简称": "安诚",
+      "保司地址": "",
+      "车架号VIN": "",
+      "证件号码": ""
+    },
+    "company": "安诚",
+    "type": "驾乘人员意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "粤B2L1P6_朱俊武_商业险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/粤B2L1P6_朱俊武_商业险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "浙商财产保险股份有限公司",
+      "保险公司简称": "浙商",
+      "保司地址": "中国广东省深圳市龙华区民治街道北站社区鸿荣源北站中心B塔3208、3209、3210邮政编码:518040",
+      "车架号VIN": "LSVFB6187F2614713",
+      "证件号码": "441611197206011618"
+    },
+    "company": "浙商",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "宋梅-粤B18W23(交强险,商业险,驾乘险).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/宋梅-粤B18W23(交强险,商业险,驾乘险).pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市罗湖区黄贝街道罗芳路一冶南方大厦A-23层、A-24层",
+      "车架号VIN": "LE4ZG4JB6KL330764",
+      "证件号码": "371324198210075624"
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "吴敏粤B22P72机动车交通事故责任强制保险单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/吴敏粤B22P72机动车交通事故责任强制保险单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "新疆前海联合财产保险股份有限公司",
+      "保险公司简称": "前海联合",
+      "保司地址": "深圳市罗湖区笋岗街道宝安北路与梨园路交汇外东南侧深业物流中心（南区）E栋150(保3B险、人15签04章、)1505",
+      "车架号VIN": "LHGRC3821G8005621",
+      "证件号码": "440301197206158011"
+    },
+    "company": "前海联合",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "粤B-26HV7熊代彬驾意.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/粤B-26HV7熊代彬驾意.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "",
+      "车架号VIN": "LFMA754K6L0028475",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "平安车主尊享保障",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "粤B130GA 商 (1)(1).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/粤B130GA 商 (1)(1).pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "太平财产保险有限公司",
+      "保险公司简称": "太平",
+      "保司地址": "广东省深圳市坪山区坪山街道城投芯时代大厦14层09号",
+      "车架号VIN": "LE43X8HB5KL022245",
+      "证件号码": ""
+    },
+    "company": "太平",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "深圳广侨建设股份有限公司京Q6GF57机动车交通事故责任强制保险单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/深圳广侨建设股份有限公司京Q6GF57机动车交通事故责任强制保险单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "新疆前海联合财产保险股份有限公司",
+      "保险公司简称": "前海联合",
+      "保司地址": "深圳市罗湖区笋岗街道宝安北路与梨园路交汇外东南侧深业物流中心（南区）E栋150(保3B险、人15签04章、)1505",
+      "车架号VIN": "LHGRC3841F8033984",
+      "证件号码": "914403007979697588"
+    },
+    "company": "前海联合",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "保单_黄光斌_交强险_粤B-1V4A8_10578003903353331811.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/保单_黄光斌_交强险_粤B-1V4A8_10578003903353331811.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区",
+      "车架号VIN": "LGXCG4CF5K0197589",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "大家-粤B2R91H-沈心诚-商业险-0286.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/大家-粤B2R91H-沈心诚-商业险-0286.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "大家财产保险有限责任公司",
+      "保险公司简称": "大家财险",
+      "保司地址": "深 圳市宝安区新安街道办宝民路东侧广场大厦一栋1201",
+      "车架号VIN": "LNVF1CA30FV401857",
+      "证件号码": "341126199406083213"
+    },
+    "company": "大家财险",
+    "type": "机动车辆商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "刘守艺-粤B4M850(交强险,商业险,驾乘险).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/刘守艺-粤B4M850(交强险,商业险,驾乘险).pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市宝安区新安街道宝民一路63号宝安公路管理中心15楼1501、1502、1504-1507、1509-1513",
+      "车架号VIN": "LE4GF4HB9EL330004",
+      "证件号码": "422722197107080011"
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "欧阳俊德-粤B3CM00(交强险,商业险,驾乘险).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/欧阳俊德-粤B3CM00(交强险,商业险,驾乘险).pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市宝安区新安街道宝民一路63号宝安公路管理中心15楼1501、1502、1504-1507、1509-1513",
+      "车架号VIN": "WBA21EM02R9W58003",
+      "证件号码": "431126198707087610"
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "商平粤B4036S驾乘人员人身意外伤害保险（随车）单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/商平粤B4036S驾乘人员人身意外伤害保险（随车）单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "新疆前海联合财产保险股份有限公司",
+      "保险公司简称": "前海联合",
+      "保司地址": "",
+      "车架号VIN": "LSVUC65N4B2611931",
+      "证件号码": "420204197303056527"
+    },
+    "company": "前海联合",
+    "type": "驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "粤AGL1355_李*艳_驾乘无忧-10万方案（通用）--药诊保款（个人）_保单_10910301420260002231.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/粤AGL1355_李*艳_驾乘无忧-10万方案（通用）--药诊保款（个人）_保单_10910301420260002231.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "阳光财产保险股份有限公司",
+      "保险公司简称": "阳光",
+      "保司地址": "",
+      "车架号VIN": "LC0C76C41R4877473",
+      "证件号码": "43102219871112038X"
+    },
+    "company": "阳光",
+    "type": "驾乘无忧-10万方案（通用）--药诊保款（个人）电子保险单",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "陈文宽-粤B4V99K-商业险保单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/陈文宽-粤B4V99K-商业险保单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人寿财产保险股份有限公司",
+      "保险公司简称": "国寿财产",
+      "保司地址": "深圳市罗湖区桂园街道松园社区宝安南路3029号国速世纪大厦B座7楼",
+      "车架号VIN": "LVSHFCACXHH285169",
+      "证件号码": "441423196702102316"
+    },
+    "company": "国寿财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "广东合力叉车销售有限公司-粤A9U1G6(交强险,商业险)_1.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/广东合力叉车销售有限公司-粤A9U1G6(交强险,商业险)_1.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "广东省广州市越秀区广州大道中303，305号101房、201房、301房、601房、701房、801I房ND、IG1O401房、2201房",
+      "车架号VIN": "LJXCLDDB3JTV08150",
+      "证件号码": ""
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "保单_邓建_商业险_粤B-2KS58_10578003903381777437.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/保单_邓建_商业险_粤B-2KS58_10578003903381777437.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区 邮政编码: 518040",
+      "车架号VIN": "LGXC14DG0D1012290",
+      "证件号码": "510283198107256638"
+    },
+    "company": "平安",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "8529358_出行无忧4.0（通用）优享版.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/8529358_出行无忧4.0（通用）优享版.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "太平财产保险有限公司",
+      "保险公司简称": "太平",
+      "保司地址": "",
+      "车架号VIN": "LFMKV32F4B0087124",
+      "证件号码": "43052219791013636X"
+    },
+    "company": "太平",
+    "type": "出行无忧4.0（通用）",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "保单_李振岳_商业险_粤B-069YC_10578003903371172888.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/保单_李振岳_商业险_粤B-069YC_10578003903371172888.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区 邮政编码: 518040",
+      "车架号VIN": "LVGBE42K97G101813",
+      "证件号码": "441522199210282392"
+    },
+    "company": "平安",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "叶文燕粤B12GL3交强险_1.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/叶文燕粤B12GL3交强险_1.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "新疆前海联合财产保险股份有限公司",
+      "保险公司简称": "前海联合",
+      "保司地址": "深圳市罗湖区笋岗街道宝安北路与梨园路交汇外东南侧深业物流中心（南区）E栋150(保3B险、人15签04章、)1505",
+      "车架号VIN": "WP1AA29Y8MDA02176",
+      "证件号码": "441228198105150029"
+    },
+    "company": "前海联合",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "保单_凌庆富_个意险_105780066Z3383227288.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/保单_凌庆富_个意险_105780066Z3383227288.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "",
+      "车架号VIN": "LVRHDAML9FN376830",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "平安车主尊享保障",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "保单_杨茂兴_商业险_粤B-5T128_10578003903354783209_2.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/保单_杨茂兴_商业险_粤B-5T128_10578003903354783209_2.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区 邮政编码: 518040",
+      "车架号VIN": "LWLDMALG0ML043862",
+      "证件号码": "441581198305013457"
+    },
+    "company": "平安",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "粤B02NQ0非车_1.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/粤B02NQ0非车_1.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "紫金财产保险股份有限公司",
+      "保险公司简称": "紫金",
+      "保司地址": "深圳市龙岗区龙城街道尚景社区龙福路荣超英隆大厦A座A2108",
+      "车架号VIN": "",
+      "证件号码": "441424198210066318"
+    },
+    "company": "紫金",
+    "type": "交通工具意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "黄艳兰 驾意.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/黄艳兰 驾意.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "",
+      "车架号VIN": "JF1SK73C6MG120051",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "平安车主尊享保障",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "粤B0X11X+机动车交通事故责任强制保险（保单）.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/粤B0X11X+机动车交通事故责任强制保险（保单）.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "鼎和财产保险股份有限公司",
+      "保险公司简称": "鼎和",
+      "保司地址": "深 圳市福田区福田街道福山社区滨河大道5020号同心大厦15层1501",
+      "车架号VIN": "",
+      "证件号码": ""
+    },
+    "company": "鼎和",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "罗雪丹-粤B2NN69-驾乘2025年B版（深圳-399）-FC.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/罗雪丹-粤B2NN69-驾乘2025年B版（深圳-399）-FC.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人寿财产保险股份有限公司",
+      "保险公司简称": "国寿财产",
+      "保司地址": "",
+      "车架号VIN": "ZAMXS57E3K1335429",
+      "证件号码": ""
+    },
+    "company": "国寿财产",
+    "type": "驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "余芳_粤B2J80N_商业险_606EA12512026007477.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/余芳_粤B2J80N_商业险_606EA12512026007477.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "华泰财产保险有限公司",
+      "保险公司简称": "华泰",
+      "保司地址": "深圳市罗湖区桂园街道深南东路5016号京基一百大厦A座4801-01单元",
+      "车架号VIN": "LE4HG4HB8EL149011",
+      "证件号码": "42010619761117"
+    },
+    "company": "华泰",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30",
+    "filename": "深圳市科瑞达科技有限公司 (车牌号：新车，意外险保单号：P2601006440391340000000996).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30/深圳市科瑞达科技有限公司 (车牌号：新车，意外险保单号：P2601006440391340000000996).pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中华联合财产保险股份有限公司",
+      "保险公司简称": "中华联合",
+      "保司地址": "",
+      "车架号VIN": "LRWYGCEKXTC640436",
+      "证件号码": "914403007663930557"
+    },
+    "company": "中华联合",
+    "type": "驾乘人员意外险",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "张榕杰-粤BA71250(交强险,商业险,驾乘险).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/张榕杰-粤BA71250(交强险,商业险,驾乘险).pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市盐田区海山街道深盐路南保发大厦（配套服务楼）第二十四A、B、C、D、E、F、G、H",
+      "车架号VIN": "LDP41B965RD058137",
+      "证件号码": "431103200112188418"
+    },
+    "company": "人民财产",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "粤B99VK0  商业险保单(1).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/粤B99VK0  商业险保单(1).pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "安盛天平财产保险有限公司",
+      "保险公司简称": "安盛天平",
+      "保司地址": "深圳市福田区福田街道福南社区深南中路3031号汉国城市商业中心4007-4011单元",
+      "车架号VIN": "WBA7T0108MCF45176",
+      "证件号码": ""
+    },
+    "company": "安盛天平",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "车驾意_粤BAL9397_陈头元_ASHZF1339R26FN0002OP.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/车驾意_粤BAL9397_陈头元_ASHZF1339R26FN0002OP.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市福田区华富街道皇岗路5001号深业上城（南区）二期60层、59层5901",
+      "车架号VIN": "LPEHNN288MC000624",
+      "证件号码": "431124198701188135"
+    },
+    "company": "太平洋",
+    "type": "非家庭自用车驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "黄泽凯-粤BAE719(交强险,商业险,驾乘险)_2.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/黄泽凯-粤BAE719(交强险,商业险,驾乘险)_2.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市光明区凤凰街道东坑社区科能路中集低轨卫星物联网产业园A座1403-1至1404-2",
+      "车架号VIN": "WAUAGC4M6ND015209",
+      "证件号码": "445221198208256597"
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "王哲_粤B7U0Q1_商业险_606EA12512026007844.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/王哲_粤B7U0Q1_商业险_606EA12512026007844.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "华泰财产保险有限公司",
+      "保险公司简称": "华泰",
+      "保司地址": "深圳市罗湖区桂园街道深南东路5016号京基一百大厦A座4801-01单元",
+      "车架号VIN": "WBAWX3108F0L31162",
+      "证件号码": "41132119820714"
+    },
+    "company": "华泰",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "包海锋粤B9K3U0机动车交通事故责任强制保险单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/包海锋粤B9K3U0机动车交通事故责任强制保险单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "新疆前海联合财产保险股份有限公司",
+      "保险公司简称": "前海联合",
+      "保司地址": "深圳市罗湖区笋岗街道宝安北路与梨园路交汇外东南侧深业物流中心（南区）E栋150(保3B险、人15签04章、)1505",
+      "车架号VIN": "LSGAR5AL5FH176931",
+      "证件号码": "220822199103111613"
+    },
+    "company": "前海联合",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "粤B88RC6商业险保单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/粤B88RC6商业险保单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "京东安联财产保险有限公司",
+      "保险公司简称": "京东安联",
+      "保司地址": "保 2）、1902室（部位：自编1）",
+      "车架号VIN": "LVAV2JVB2LE435522",
+      "证件号码": "91440300689426"
+    },
+    "company": "京东安联",
+    "type": "特种车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "王忠武06020100381108062026001583.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/王忠武06020100381108062026001583.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "亚太财产保险有限公司",
+      "保险公司简称": "亚太",
+      "保司地址": "深圳市宝安区新安街道宝民路中粮地产集团中心1栋16楼04-06室",
+      "车架号VIN": "LSJA16U33FG087948",
+      "证件号码": ""
+    },
+    "company": "亚太",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "张琰_粤B67QF5_ASHZ551CTP26B018209K(1)(1)_2.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/张琰_粤B67QF5_ASHZ551CTP26B018209K(1)(1)_2.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市宝安区新安街道甲岸路及海秀路交汇处熙龙湾花园（N23区）商业办公楼19楼1905-1907",
+      "车架号VIN": "LZWCBAGAXRE357663",
+      "证件号码": ""
+    },
+    "company": "太平洋",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "深圳市富瑞姆机器视觉技术有限公司_粤BA3021_ASHZ801CTP26B030272S.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/深圳市富瑞姆机器视觉技术有限公司_粤BA3021_ASHZ801CTP26B030272S.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市福田区华富街道皇岗路5001号深业上城（南区）二期57层5708",
+      "车架号VIN": "W1NFF6HB2MA408770",
+      "证件号码": ""
+    },
+    "company": "太平洋",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "覃乙山_粤BA701Q_商业险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/覃乙山_粤BA701Q_商业险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "申能财产保险股份有限公司",
+      "保险公司简称": "申能",
+      "保司地址": "广东省深圳市光明区马田街道薯田埔社区科杰二路375号龙邦高科技产业园3栋808",
+      "车架号VIN": "LVSHFCAC6HH277991",
+      "证件号码": "452225197803042913"
+    },
+    "company": "申能",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "杨学林-粤B8L86Q(交强险,商业险,驾乘险)_3.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/杨学林-粤B8L86Q(交强险,商业险,驾乘险)_3.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市龙岗区龙城街道创投大厦1号楼3002、3003、3004、3005",
+      "车架号VIN": "LE40B8BBXML706205",
+      "证件号码": "431228198405033017"
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "电子保单_吴维文_商业险_粤B-9YW03_10579003903381929837_bmd.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/电子保单_吴维文_商业险_粤B-9YW03_10579003903381929837_bmd.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道竹园社区农林路69号印力中心11层T1-11-01 D区 邮政编码: 518000",
+      "车架号VIN": "LVHRS3837R7086230",
+      "证件号码": "44082319730226491X"
+    },
+    "company": "平安",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "陈朝富_粤B78CY0_ASHZ663CTP26B029163K.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/陈朝富_粤B78CY0_ASHZ663CTP26B029163K.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市坪山区坪山街道坪山大道2009号中天美景大厦8层801、815室",
+      "车架号VIN": "LJ11KBBD0L1304269",
+      "证件号码": ""
+    },
+    "company": "太平洋",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "粤B6T19H_蔡志杭（交强险，商业险，非车险） (1)_2.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/粤B6T19H_蔡志杭（交强险，商业险，非车险） (1)_2.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "国任财产保险股份有限公司",
+      "保险公司简称": "国任",
+      "保司地址": "深圳市盐田区海山街道鹏湾社区海景二路1025号壹海国际中心1504",
+      "车架号VIN": "LFMAY86C1H0539491",
+      "证件号码": "440582199206286396"
+    },
+    "company": "国任",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "李亚仔-粤B89SU5-交强险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/李亚仔-粤B89SU5-交强险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "申能财产保险股份有限公司",
+      "保险公司简称": "申能",
+      "保司地址": "广东省深圳市福田区沙头街道新洲十一街祥祺投资大厦2101-A",
+      "车架号VIN": "LS4ASL2E7LG774302",
+      "证件号码": ""
+    },
+    "company": "申能",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "连福华粤B7LF26驾乘人员人身意外伤害保险（随车）单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/连福华粤B7LF26驾乘人员人身意外伤害保险（随车）单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "新疆前海联合财产保险股份有限公司",
+      "保险公司简称": "前海联合",
+      "保司地址": "",
+      "车架号VIN": "LGBH52E02DY065554",
+      "证件号码": "441900198204056347"
+    },
+    "company": "前海联合",
+    "type": "驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "粤BA69126_邹薇_交强_ASHZ552CTP26B008873G.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/粤BA69126_邹薇_交强_ASHZ552CTP26B008873G.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市龙华区民治街道星河WORLD二期E栋10层1005、1006",
+      "车架号VIN": "LRW3E7EA2LC036149",
+      "证件号码": ""
+    },
+    "company": "太平洋",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "粤B-AU8593商业.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/粤B-AU8593商业.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区 邮政编码: 518040",
+      "车架号VIN": "LSVFA6E99M2015511",
+      "证件号码": "440582199211265610"
+    },
+    "company": "平安",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "陈贤杰_粤B7QU28_商业险_606EA12512026008218.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/陈贤杰_粤B7QU28_商业险_606EA12512026008218.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "华泰财产保险有限公司",
+      "保险公司简称": "华泰",
+      "保司地址": "深圳市罗湖区桂园街道深南东路5016号京基一百大厦A座4801-01单元",
+      "车架号VIN": "LVHTG5836N7011340",
+      "证件号码": "44052619740716"
+    },
+    "company": "华泰",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "粤B88YU2_杜*会_商业险保单_1091005282026003429.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/粤B88YU2_杜*会_商业险保单_1091005282026003429.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "阳光财产保险股份有限公司",
+      "保险公司简称": "阳光",
+      "保司地址": "深圳市南山区粤海街道海珠社区兰芷二路66号阳光保险大厦7层8单",
+      "车架号VIN": "W1NKJ4HB3RF127203",
+      "证件号码": "H60062546"
+    },
+    "company": "阳光",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "深圳市大成泵送服务有限公司-粤BAX5816(商业险).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/深圳市大成泵送服务有限公司-粤BAX5816(商业险).pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市盐田区海山街道深盐路南保发大厦（配套服务楼）",
+      "车架号VIN": "LNADJAB20N5097785",
+      "证件号码": ""
+    },
+    "company": "人民财产",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "张琰_粤B67QF5_ASHZ551Y2026B009995Y(1)(1)_2.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/张琰_粤B67QF5_ASHZ551Y2026B009995Y(1)(1)_2.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市宝安区新安街道甲岸路及海秀路交汇处熙龙湾花园（N23区）商业办公楼19楼1905-1907",
+      "车架号VIN": "LZWCBAGAXRE357663",
+      "证件号码": "411327198203124936"
+    },
+    "company": "太平洋",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "粤B6C02F_广东绿鑫源农产品有限公司_商业_ASHZ663S2026B001085B.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/粤B6C02F_广东绿鑫源农产品有限公司_商业_ASHZ663S2026B001085B.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市坪山区坪山街道坪山大道2009号中天美景大厦8层801、815室",
+      "车架号VIN": "LJ11KBBC0F6003144",
+      "证件号码": "9144030079259941X2"
+    },
+    "company": "太平洋",
+    "type": "特种车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "周小莲粤B8T96D驾乘人员人身意外伤害保险（随车）单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/周小莲粤B8T96D驾乘人员人身意外伤害保险（随车）单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "新疆前海联合财产保险股份有限公司",
+      "保险公司简称": "前海联合",
+      "保司地址": "",
+      "车架号VIN": "WAUAGD4L1ED033453",
+      "证件号码": "360521198501082428"
+    },
+    "company": "前海联合",
+    "type": "驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "粤B-99A33商业.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/粤B-99A33商业.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道竹园社区农林路69号印力中心11层T1-11-01 D区 邮政编码: 518000",
+      "车架号VIN": "LVGDD4A42PG107659",
+      "证件号码": "220221199011297116"
+    },
+    "company": "平安",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "黄平华-粤B75UF8(交强险,商业险,驾乘险)_2.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/黄平华-粤B75UF8(交强险,商业险,驾乘险)_2.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市盐田区海山街道深盐路南保发大厦（配套服务楼）第二十四A、B、C、D、E、F、G、H",
+      "车架号VIN": "LVSHFFAL7HS242185",
+      "证件号码": "430721198003076411"
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "粤B-68A0P交强.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/粤B-68A0P交强.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道竹园社区农林路69号印力中心11层T1-11-01 D区",
+      "车架号VIN": "LZWCDAGA5KE034931",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "10452003903382863045policy.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/10452003903382863045policy.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "广东省广州市天河区体育东路160号1301B、1302B、1303房",
+      "车架号VIN": "WBA11CM08S8F11442",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "保单_深圳市华义贸易有限公司_交强险_粤B-8S2Q8_10578003903377454571_2.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/保单_深圳市华义贸易有限公司_交强险_粤B-8S2Q8_10578003903377454571_2.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区",
+      "车架号VIN": "LE40B8EB5ML700663",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "林全超粤B8D03E机动车综合商业保险（2020版）单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/林全超粤B8D03E机动车综合商业保险（2020版）单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "新疆前海联合财产保险股份有限公司",
+      "保险公司简称": "前海联合",
+      "保司地址": "汇外东南侧深业物流中心（南区）E栋1503B",
+      "车架号VIN": "LFMAP86C8G0229310",
+      "证件号码": "440301196304020812"
+    },
+    "company": "前海联合",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "张雨龙 粤B963H7  交强险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/张雨龙 粤B963H7  交强险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "安诚财产保险股份有限公司",
+      "保险公司简称": "安诚",
+      "保司地址": "深圳市福田区华富街道北环大道和彩田路东南角新浩壹都A座1201-9号",
+      "车架号VIN": "",
+      "证件号码": ""
+    },
+    "company": "安诚",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "粤B6Y67T-聂琴-驾意险保单号104520066Z3383254230.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/粤B6Y67T-聂琴-驾意险保单号104520066Z3383254230.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "",
+      "车架号VIN": "LE4ZG4CB7HL093336",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "平安车主尊享保障",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "梁书敏-粤B716ER-驾乘2025年A版（深圳-299）-非车(1).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/梁书敏-粤B716ER-驾乘2025年A版（深圳-299）-非车(1).pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人寿财产保险股份有限公司",
+      "保险公司简称": "国寿财产",
+      "保司地址": "",
+      "车架号VIN": "JTHBJ1GG0E2050678",
+      "证件号码": ""
+    },
+    "company": "国寿财产",
+    "type": "驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "车驾意_粤B965JQ_广东和润新材料股份有限公司_ASHZF1339R26FN0002EH.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/车驾意_粤B965JQ_广东和润新材料股份有限公司_ASHZF1339R26FN0002EH.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市福田区华富街道皇岗路5001号深业上城（南区）二期60层、59层5901",
+      "车架号VIN": "LEFYECG20JHN14030",
+      "证件号码": "91441900784878494K"
+    },
+    "company": "太平洋",
+    "type": "非家庭自用车驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "黄文-粤B62H3W(交强险,商业险,驾乘险).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/黄文-粤B62H3W(交强险,商业险,驾乘险).pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市宝安区新安街道宝民一路63号宝安公路管理中心15楼1501、1502、1504-1507、1509-1513",
+      "车架号VIN": "LVRHDFML4HN061174",
+      "证件号码": "441481198810153375"
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "深圳市堃霖酒投贸易有限公司-粤BAG1652(商业险,交强险)_1.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/深圳市堃霖酒投贸易有限公司-粤BAG1652(商业险,交强险)_1.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市龙华区民治街道工业路与油松路交汇处西南侧锦绣",
+      "车架号VIN": "LRWYGCFJXRC510493",
+      "证件号码": ""
+    },
+    "company": "人民财产",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "张婷婷-粤B8X360(交强险,商业险,驾乘险).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/张婷婷-粤B8X360(交强险,商业险,驾乘险).pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市龙华区民治街道工业路与油松路交汇处西南侧锦绣时代广场1栋一单元13层",
+      "车架号VIN": "LE4WG7GB3ML785540",
+      "证件号码": "320921198602220089"
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "保单_张磊磊_个意险_105780066Z3376659443.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/保单_张磊磊_个意险_105780066Z3376659443.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "",
+      "车架号VIN": "SALGA3KF0GA259146",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "平安车主尊享保障",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "保单_李思文_交强险_粤B-A68Y6_10578003903342276570.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/保单_李思文_交强险_粤B-A68Y6_10578003903342276570.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区",
+      "车架号VIN": "LVGDL25R8EG054766",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "粤B628F6非车.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/粤B628F6非车.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "紫金财产保险股份有限公司",
+      "保险公司简称": "紫金",
+      "保司地址": "深圳市龙岗区龙城街道尚景社区龙福路荣超英隆大厦A座A2108",
+      "车架号VIN": "",
+      "证件号码": "422227197107093415"
+    },
+    "company": "紫金",
+    "type": "驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "深圳市华运莲土石方工程有限公司 粤B68KY3   交强险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/深圳市华运莲土石方工程有限公司 粤B68KY3   交强险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "安诚财产保险股份有限公司",
+      "保险公司简称": "安诚",
+      "保司地址": "深圳市福田区华富街道北环大道和彩田路东南角新浩壹都A座1201-9号",
+      "车架号VIN": "",
+      "证件号码": ""
+    },
+    "company": "安诚",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "保单_林召才_交强险_粤B-983LR_10578003903382949719.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/保单_林召才_交强险_粤B-983LR_10578003903382949719.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区",
+      "车架号VIN": "WVWC657N8HV239465",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "保单_深圳市华义贸易有限公司_商业险_粤B-8S2Q8_10578003903377454570.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/保单_深圳市华义贸易有限公司_商业险_粤B-8S2Q8_10578003903377454570.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区 邮政编码: 518040",
+      "车架号VIN": "LE40B8EB5ML700663",
+      "证件号码": "91440300584082766D"
+    },
+    "company": "平安",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "陈丽娜_粤B6S79B_ASHZ551CTP26B017876U(1).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/陈丽娜_粤B6S79B_ASHZ551CTP26B017876U(1).pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市宝安区新安街道甲岸路及海秀路交汇处熙龙湾花园（N23区）商业办公楼19楼1905-1907",
+      "车架号VIN": "LFV3B2F36L7711629",
+      "证件号码": ""
+    },
+    "company": "太平洋",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "张纳宁-粤B8C782(交强险,商业险,驾乘险)_2.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/张纳宁-粤B8C782(交强险,商业险,驾乘险)_2.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市宝安区新安街道宝民一路63号宝安公路管理中心15楼1501、1502、1504-1507、1509-1513",
+      "车架号VIN": "WBA2V110XM9G01478",
+      "证件号码": "620524198207263327"
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "粤BAL8200_深圳市明球实业有限公司_交强险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/粤BAL8200_深圳市明球实业有限公司_交强险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "浙商财产保险股份有限公司",
+      "保险公司简称": "浙商",
+      "保司地址": "中国广东省深圳市龙华区民治街道北站社区鸿荣源北站中心B塔3208、3209、3210",
+      "车架号VIN": "HGXB13A07L1003908",
+      "证件号码": "91440300357891512B"
+    },
+    "company": "浙商",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "车驾意_粤B6U60T_廖雪英_ASHZF1339R26FN0002E7.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/车驾意_粤B6U60T_廖雪英_ASHZF1339R26FN0002E7.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市福田区华富街道皇岗路5001号深业上城（南区）二期60层、59层5901",
+      "车架号VIN": "LVBV3PBB9GY002042",
+      "证件号码": "511121197902158385"
+    },
+    "company": "太平洋",
+    "type": "非家庭自用车驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "林巧玉粤B825ER机动车交通事故责任强制保险单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/林巧玉粤B825ER机动车交通事故责任强制保险单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "新疆前海联合财产保险股份有限公司",
+      "保险公司简称": "前海联合",
+      "保司地址": "深圳市罗湖区笋岗街道宝安北路与梨园路交汇外东南侧深业物流中心（南区）E栋150(保3B险、人15签04章、)1505",
+      "车架号VIN": "LHGCV166XP8151350",
+      "证件号码": "441522197203153024"
+    },
+    "company": "前海联合",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30 (1)",
+    "filename": "宋倩-粤B9R86N(交强险,商业险,驾乘险).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30 (1)/宋倩-粤B9R86N(交强险,商业险,驾乘险).pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市宝安区新安街道宝民一路63号宝安公路管理中心15楼1501、1502、1504-1507、1509-1513",
+      "车架号VIN": "WMWYS5109K3F25939",
+      "证件号码": "430111199109271329"
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BEV465_深圳市承运通物流有限公司_交强_ASHZ663CTP26B023239R.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BEV465_深圳市承运通物流有限公司_交强_ASHZ663CTP26B023239R.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市坪山区坪山街道坪山大道2009号中天美景大厦8层801、815室",
+      "车架号VIN": "LNXBEG06XMR212569",
+      "证件号码": ""
+    },
+    "company": "太平洋",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BDX686交商保单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BDX686交商保单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市南山区南海大道1029号万融大厦A座一层103、104号房 邮政编码: 518067",
+      "车架号VIN": "LJ11R2DF9L3521611",
+      "证件号码": "91440300MA5F04QH5D"
+    },
+    "company": "平安",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BF23857+新能源汽车商业保险（保单）.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BF23857+新能源汽车商业保险（保单）.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "鼎和财产保险股份有限公司",
+      "保险公司简称": "鼎和",
+      "保司地址": "深 圳市福田区福田街道福山社区滨河大道5020号同心大厦15层1501 （保险人签章）",
+      "车架号VIN": "LGXCD4D47L0047099",
+      "证件号码": ""
+    },
+    "company": "鼎和",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BE50933_深圳鲜配供应链有限公司_商业_ASHZ663S2026B001235V.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BE50933_深圳鲜配供应链有限公司_商业_ASHZ663S2026B001235V.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市坪山区坪山街道坪山大道2009号中天美景大厦8层801、815室",
+      "车架号VIN": "LYTDAA546SZ001823",
+      "证件号码": "91440300MA5HJ3BA5M"
+    },
+    "company": "太平洋",
+    "type": "特种车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BDK8443_赵*鸿_E车无忧守护版_保单_10910301420260001708.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BDK8443_赵*鸿_E车无忧守护版_保单_10910301420260001708.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "阳光财产保险股份有限公司",
+      "保险公司简称": "阳光",
+      "保司地址": "",
+      "车架号VIN": "LRW3E7FA0MC439448",
+      "证件号码": "420621199209049213"
+    },
+    "company": "阳光",
+    "type": "E车无忧守护版保险",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "车驾意_粤BCX3813_深圳市宝安区和熙装饰材料商行（个体工商户）_ASHZF1339R26FN000264.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/车驾意_粤BCX3813_深圳市宝安区和熙装饰材料商行（个体工商户）_ASHZF1339R26FN000264.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市福田区华富街道皇岗路5001号深业上城（南区）二期60层、59层5901",
+      "车架号VIN": "LXWAERG12ST042039",
+      "证件号码": "92440300MAE8G04K6J"
+    },
+    "company": "太平洋",
+    "type": "非家庭自用车驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BBQ0945+驾乘人员意外伤害保险（保单）_1.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BBQ0945+驾乘人员意外伤害保险（保单）_1.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "鼎和财产保险股份有限公司",
+      "保险公司简称": "鼎和",
+      "保司地址": "深圳市福田区福田街道福山社区滨河大道5020号同心大厦15层1501",
+      "车架号VIN": "",
+      "证件号码": "91440300335410562G"
+    },
+    "company": "鼎和",
+    "type": "驾乘人员意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤B-D511T交强保单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤B-D511T交强保单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区",
+      "车架号VIN": "LVTDD24B2PD234137",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BF919L 商业险保单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BF919L 商业险保单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "安盛天平财产保险有限公司",
+      "保险公司简称": "安盛天平",
+      "保司地址": "深圳市福田区福田街道福南社区深南中路3031号汉国城市商业中心4007-4011单元",
+      "车架号VIN": "LBV5S3105ESJ55796",
+      "证件号码": ""
+    },
+    "company": "安盛天平",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BCS7717-廖土庆-商业险保单号10452003903375923419.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BCS7717-廖土庆-商业险保单号10452003903375923419.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "广东省广州市天河区体育东路160号1301B、1302B、1303房 邮政编码: 510620",
+      "车架号VIN": "HACAAAB1XS1B24327",
+      "证件号码": "440921199605173814"
+    },
+    "company": "平安",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BCB1572商业险保单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BCB1572商业险保单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "京东安联财产保险有限公司",
+      "保险公司简称": "京东安联",
+      "保司地址": "保 2）、1902室（部位：自编1）",
+      "车架号VIN": "LK6CDBE37RF806632",
+      "证件号码": "45060319790926"
+    },
+    "company": "京东安联",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BCK0580 商.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BCK0580 商.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "太平财产保险有限公司",
+      "保险公司简称": "太平",
+      "保司地址": "广东省深圳市深汕特别合作区鹅埠镇片区东部新时代大厦11层08号",
+      "车架号VIN": "LRWYGCFJ6RC602569",
+      "证件号码": "440782198601121643"
+    },
+    "company": "太平",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤B-D511T非车.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤B-D511T非车.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "",
+      "车架号VIN": "LVTDD24B2PD234137",
+      "证件号码": "411325198810057066"
+    },
+    "company": "平安",
+    "type": "平安车主尊享保障",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BCV0021+新能源汽车商业保险（保单）.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BCV0021+新能源汽车商业保险（保单）.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "鼎和财产保险股份有限公司",
+      "保险公司简称": "鼎和",
+      "保司地址": "深 圳市福田区福田街道福山社区滨河大道5020号同心大厦15层1501 （保险人签章）",
+      "车架号VIN": "LGXCE4CC8P0409193",
+      "证件号码": ""
+    },
+    "company": "鼎和",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BD199T商业险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BD199T商业险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "太平财产保险有限公司",
+      "保险公司简称": "太平",
+      "保司地址": "广东省深圳市罗湖区笋岗街道田心社区宝安北路3008号宝能中心E栋15层01B、02、03A",
+      "车架号VIN": "LSCAB33R2JE252143",
+      "证件号码": "360123198111192729"
+    },
+    "company": "太平",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BDK8443_赵*鸿_商业险保单_1091005282026003763.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BDK8443_赵*鸿_商业险保单_1091005282026003763.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "阳光财产保险股份有限公司",
+      "保险公司简称": "阳光",
+      "保司地址": "深圳市南山区粤海街道海珠社区兰芷二路66号阳光保险大厦7层8单",
+      "车架号VIN": "LRW3E7FA0MC439448",
+      "证件号码": "420621199209049213"
+    },
+    "company": "阳光",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BCJ2203_李*兰_商业险保单_1091005282026005021.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BCJ2203_李*兰_商业险保单_1091005282026005021.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "阳光财产保险股份有限公司",
+      "保险公司简称": "阳光",
+      "保司地址": "深圳市南山区粤海街道海珠社区兰芷二路66号阳光保险大厦7层8单",
+      "车架号VIN": "LK6ADCE16NE491303",
+      "证件号码": "440301196103247164"
+    },
+    "company": "阳光",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BC24391_深圳市德源农产品配送有限公司_交强_ASHZ663CTP26B025973W.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BC24391_深圳市德源农产品配送有限公司_交强_ASHZ663CTP26B025973W.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市坪山区坪山街道坪山大道2009号中天美景大厦8层801、815室",
+      "车架号VIN": "LR82STHT2PB063686",
+      "证件号码": ""
+    },
+    "company": "太平洋",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "保单_刘念雄_个意险_105780066Z3356332611.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/保单_刘念雄_个意险_105780066Z3356332611.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "",
+      "车架号VIN": "JTJZA11A0E2471494",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "平安车主尊享保障",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "刘军可粤BB48568商业险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/刘军可粤BB48568商业险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "太平财产保险有限公司",
+      "保险公司简称": "太平",
+      "保司地址": "广东省深圳市龙岗区龙城街道黄阁坑社区腾飞路9号创投大厦1003-05单元",
+      "车架号VIN": "LB378U4W2NA122539",
+      "证件号码": "430923198509075735"
+    },
+    "company": "太平",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BF52856-张翠梅-交强险保单号10452003903355752382.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BF52856-张翠梅-交强险保单号10452003903355752382.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "广东省广州市天河区体育东路160号1301B、1302B、1303房",
+      "车架号VIN": "LGXC76C3XG0117177",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "深圳市博雅文化艺术传媒有限公司_粤BC16420_ASHZ551CTP26B014273E.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/深圳市博雅文化艺术传媒有限公司_粤BC16420_ASHZ551CTP26B014273E.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市宝安区新安街道甲岸路及海秀路交汇处熙龙湾花园（N23区）商业办公楼19楼1905-1907",
+      "车架号VIN": "LNNACDEB4RDA01891",
+      "证件号码": ""
+    },
+    "company": "太平洋",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "李建媚驾意险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/李建媚驾意险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "太平财产保险有限公司",
+      "保险公司简称": "太平",
+      "保司地址": "",
+      "车架号VIN": "LVPA5B4B1LA001909",
+      "证件号码": "44160219860228224X"
+    },
+    "company": "太平",
+    "type": "交通出行意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BBA2156_深圳市怡乐鎕食品有限公司_交强_ASHZ663CTP26B022468Z.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BBA2156_深圳市怡乐鎕食品有限公司_交强_ASHZ663CTP26B022468Z.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市坪山区坪山街道坪山大道2009号中天美景大厦8层801、815室",
+      "车架号VIN": "LSH14J4C6RD079456",
+      "证件号码": ""
+    },
+    "company": "太平洋",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BCX3813_深圳市宝安区和熙装饰材料商行（个体工商户）_商业_ASHZ663E2126B003325J.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BCX3813_深圳市宝安区和熙装饰材料商行（个体工商户）_商业_ASHZ663E2126B003325J.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市坪山区坪山街道坪山大道2009号中天美景大厦8层801、815室",
+      "车架号VIN": "LXWAERG12ST042039",
+      "证件号码": "92440300MAE8G04K6J"
+    },
+    "company": "太平洋",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "保单_刘念雄_商业险_粤B-B07S1_10578003903355633612.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/保单_刘念雄_商业险_粤B-B07S1_10578003903355633612.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区 邮政编码: 518040",
+      "车架号VIN": "JTJZA11A0E2471494",
+      "证件号码": "440221197208269815"
+    },
+    "company": "平安",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BBQ0945+机动车交通事故责任强制保险（保单）_1.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BBQ0945+机动车交通事故责任强制保险（保单）_1.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "鼎和财产保险股份有限公司",
+      "保险公司简称": "鼎和",
+      "保司地址": "深 圳市福田区福田街道福山社区滨河大道5020号同心大厦15层1501",
+      "车架号VIN": "",
+      "证件号码": ""
+    },
+    "company": "鼎和",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "万德超-粤BFS3028(交强险,商业险)_3.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/万德超-粤BFS3028(交强险,商业险)_3.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市福田区沙头街道深南路与广深高速公路交汇处东南侧大庆大厦7B、7C、7D、11层",
+      "车架号VIN": "LGXC74C46N0232966",
+      "证件号码": ""
+    },
+    "company": "人民财产",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "电子保单_丁洁_个意险_105780066Z3369680685_dm2.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/电子保单_丁洁_个意险_105780066Z3369680685_dm2.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "",
+      "车架号VIN": "LFVVB9E71N5155718",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "平安车主尊享保障",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "邓春燕驾意险_4.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/邓春燕驾意险_4.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "太平财产保险有限公司",
+      "保险公司简称": "太平",
+      "保司地址": "",
+      "车架号VIN": "LSCAB33R2JE252143",
+      "证件号码": "360123198111192729"
+    },
+    "company": "太平",
+    "type": "交通出行意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BFE6113（个单）.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BFE6113（个单）.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "太平财产保险有限公司",
+      "保险公司简称": "太平",
+      "保司地址": "流水号：BC05200326000000037",
+      "车架号VIN": "LC0C76C48S4079512",
+      "证件号码": "91440400MA5728WX9R"
+    },
+    "company": "太平",
+    "type": "交通出行意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BDT5797_深圳市宜辉文具有限公司_商业险(1).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BDT5797_深圳市宜辉文具有限公司_商业险(1).pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "浙商财产保险股份有限公司",
+      "保险公司简称": "浙商",
+      "保司地址": "中国广东省深圳市龙华区龙华区民治街道北站社区鸿荣源北站中心B塔邮32政08编、3码20:95、183024100",
+      "车架号VIN": "LR83STGTXKB020535",
+      "证件号码": "914403006718824113"
+    },
+    "company": "浙商",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BC50681_深圳市自豪运通物流有限公司_商业险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BC50681_深圳市自豪运通物流有限公司_商业险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "浙商财产保险股份有限公司",
+      "保险公司简称": "浙商",
+      "保司地址": "中国广东省深圳市龙华区民治街道北站社区鸿荣源北站中心B塔3208、邮32政09编、3码21:0518040",
+      "车架号VIN": "LVM6A1G16JB304204",
+      "证件号码": "91440300MA5GULPW21"
+    },
+    "company": "浙商",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "甘旭 商业_粤BFE9997.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/甘旭 商业_粤BFE9997.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市坪山区坪山街道坪山大道2009号中天美景大厦8层801、815室",
+      "车架号VIN": "LW433B104L1014221",
+      "证件号码": "420117199201065911"
+    },
+    "company": "太平洋",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BG340D----商业险保单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BG340D----商业险保单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市龙岗区龙城街道创投大厦1号楼",
+      "车架号VIN": "LS5A3DDE6EA104144",
+      "证件号码": ""
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BG357F(交强险、商业险)_1.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BG357F(交强险、商业险)_1.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人寿财产保险股份有限公司",
+      "保险公司简称": "国寿财产",
+      "保司地址": "深圳市罗湖区桂园街道松园社区宝安南路3029号国速世纪大厦B座",
+      "车架号VIN": "LSVFH4555B2701149",
+      "证件号码": "440127197009280037"
+    },
+    "company": "国寿财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BDW866_深圳市龙岗区乘龙百货店_货车驾乘无忧深圳版（2-10吨营业）_保单_10951270020260003797.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BDW866_深圳市龙岗区乘龙百货店_货车驾乘无忧深圳版（2-10吨营业）_保单_10951270020260003797.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "阳光财产保险股份有限公司",
+      "保险公司简称": "阳光",
+      "保司地址": "",
+      "车架号VIN": "LGGR3AG45HL472558",
+      "证件号码": "92440300MA5H9WD51B"
+    },
+    "company": "阳光",
+    "type": "驾乘无忧深圳版（2-10吨营业）电子保险单",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BD4938_交强_20590A44030226000DFD.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BD4938_交强_20590A44030226000DFD.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "紫金财产保险股份有限公司",
+      "保险公司简称": "紫金",
+      "保司地址": "深圳市龙岗区龙城街道尚景社区龙福路荣超英隆大厦A座A2108",
+      "车架号VIN": "",
+      "证件号码": ""
+    },
+    "company": "紫金",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "潘婳 粤BE0R82 交强险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/潘婳 粤BE0R82 交强险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "安诚财产保险股份有限公司",
+      "保险公司简称": "安诚",
+      "保司地址": "深圳市福田区华富街道北环大道和彩田路东南角新浩壹都A座1201-9号",
+      "车架号VIN": "",
+      "证件号码": ""
+    },
+    "company": "安诚",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "P00374C0422026001832500 粤BC50681   驾意险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/P00374C0422026001832500 粤BC50681   驾意险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "浙商财产保险股份有限公司深圳分公司公司地址: 中国广东省深圳市龙华区民治街道北站社区鸿荣源北站中心B塔3208、3209、3210",
+      "保险公司简称": "浙商",
+      "保司地址": "中国广东省深圳市龙华区民治街道北站社区鸿荣源北站中心B塔3208、3209、3210",
+      "车架号VIN": "",
+      "证件号码": "91440300MA5GULPW21"
+    },
+    "company": "浙商",
+    "type": "驾乘人员意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "潘婳 粤BE0R82 商业险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/潘婳 粤BE0R82 商业险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "安诚财产保险股份有限公司",
+      "保险公司简称": "安诚",
+      "保司地址": "深圳市福田区华富街道北环大道和彩田路东南角新浩壹都A座1201-9 网址：http://www.e-acic.com",
+      "车架号VIN": "LFMK440F1J3376132",
+      "证件号码": "440803198308012448"
+    },
+    "company": "安诚",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BCW8339交强险保单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BCW8339交强险保单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "京东安联财产保险有限公司",
+      "保险公司简称": "京东安联",
+      "保司地址": "广东省广州市海珠区琶洲大道83号1901室（部位：自编2）、1902室（部位：自编1）",
+      "车架号VIN": "HGACBHDG0NA000546",
+      "证件号码": "91440300052759"
+    },
+    "company": "京东安联",
+    "type": "新能源汽车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "保单_徐学艺_个意险_105780066Z3375175360.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/保单_徐学艺_个意险_105780066Z3375175360.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "",
+      "车架号VIN": "LVHRM1818E5001253",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "平安车主尊享保障",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BBQ8947-李秀美-交强险保单号13550003903381871997.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BBQ8947-李秀美-交强险保单号13550003903381871997.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "广东省东莞市南城街道三元路2号803室",
+      "车架号VIN": "LC0DE4CD5P0276375",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "PDAA202644030000370824.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/PDAA202644030000370824.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市南山区粤海街道南油大道新能源大厦B座7楼",
+      "车架号VIN": "LJ2KP7FG9NA052768",
+      "证件号码": ""
+    },
+    "company": "人民财产",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BDR7101交强险保单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BDR7101交强险保单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "京东安联财产保险有限公司",
+      "保险公司简称": "京东安联",
+      "保司地址": "广东省广州市海珠区琶洲大道83号1901室（部位：自编2）、1902室（部位：自编1）",
+      "车架号VIN": "LR83STGT4NB001886",
+      "证件号码": "36220119710723"
+    },
+    "company": "京东安联",
+    "type": "新能源汽车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BDR7056商业险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BDR7056商业险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "太平财产保险有限公司",
+      "保险公司简称": "太平",
+      "保司地址": "广东省深圳市龙岗区龙城街道黄阁坑社区腾飞路9号创投大厦1003-05单元",
+      "车架号VIN": "LNADJAB14N1003860",
+      "证件号码": "914403003594819987"
+    },
+    "company": "太平",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "王友裕-粤BF42136(交强险,商业险,驾乘险)_2.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/王友裕-粤BF42136(交强险,商业险,驾乘险)_2.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市龙岗区龙城街道创投大厦1号楼3002、3003、3004、3005",
+      "车架号VIN": "LBVKY9105JSP03584",
+      "证件号码": "440583198906031636"
+    },
+    "company": "人民财产",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BF066F交强险保单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BF066F交强险保单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市宝安区新安街道宝民一路63号宝安公路管理中心15楼1501、1502、1504-1507、1509-1513",
+      "车架号VIN": "LFMCD1CX5N0011998",
+      "证件号码": ""
+    },
+    "company": "人民财产",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第3批",
+    "filename": "粤BFU646_深圳市鑫金叶物流有限公司_交强_ASHZ663CTP26B034842C.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第3批/粤BFU646_深圳市鑫金叶物流有限公司_交强_ASHZ663CTP26B034842C.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市坪山区坪山街道坪山大道2009号中天美景大厦8层801、815室",
+      "车架号VIN": "LGAG4DY38J8019680",
+      "证件号码": ""
+    },
+    "company": "太平洋",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "深圳市新南润电力科技有限公司-驾意险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/深圳市新南润电力科技有限公司-驾意险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市福田区华富街道皇岗路5001号深业上城（南区）二期60层、59层5901",
+      "车架号VIN": "LGWFGVA74PH253159",
+      "证件号码": "91440300326303036W"
+    },
+    "company": "太平洋",
+    "type": "驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BYX169_吴*峰_商业险保单_1091005282026004498.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BYX169_吴*峰_商业险保单_1091005282026004498.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "阳光财产保险股份有限公司",
+      "保险公司简称": "阳光",
+      "保司地址": "深圳市南山区粤海街道海珠社区兰芷二路66号阳光保险大厦7层8单",
+      "车架号VIN": "JTJBGMCA5G2003715",
+      "证件号码": "410302197311151015"
+    },
+    "company": "阳光",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "车驾意_粤BLR227_深圳市永鑫泰物流有限公司_ASHZF1339R26FN0002IA.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/车驾意_粤BLR227_深圳市永鑫泰物流有限公司_ASHZF1339R26FN0002IA.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市福田区华富街道皇岗路5001号深业上城（南区）二期60层、59层5901",
+      "车架号VIN": "LGAX3CG58MT018739",
+      "证件号码": "91440300MA5G1H0W4M"
+    },
+    "company": "太平洋",
+    "type": "非家庭自用车驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BHD461交强_保单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BHD461交强_保单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "阳光财产保险股份有限公司",
+      "保险公司简称": "阳光",
+      "保司地址": "深圳市南山区粤海街道海珠社区兰芷二路66号阳光保险大厦7层1单元 电子保单签章",
+      "车架号VIN": "LGAX4C341R9010528",
+      "证件号码": ""
+    },
+    "company": "阳光",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BK822D商.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BK822D商.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "太平财产保险有限公司",
+      "保险公司简称": "太平",
+      "保司地址": "广东省深圳市罗湖区笋岗街道田心社区红岭北路2088号招商开元中心A座25层（2512）",
+      "车架号VIN": "LFMARE2C190184647",
+      "证件号码": "440582197801251519"
+    },
+    "company": "太平",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "保单_东莞捷荣技术股份有限公司_商业险_粤B-U0U53_10578003903364924878.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/保单_东莞捷荣技术股份有限公司_商业险_粤B-U0U53_10578003903364924878.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区 邮政编码: 518040",
+      "车架号VIN": "LJ166A356J2260748",
+      "证件号码": "914419006665116754"
+    },
+    "company": "平安",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BKE234_深圳市富临通物流有限公司_商业_ASHZ663Y2026B010840C.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BKE234_深圳市富临通物流有限公司_商业_ASHZ663Y2026B010840C.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市坪山区坪山街道坪山大道2009号中天美景大厦8层801、815室",
+      "车架号VIN": "LNXBEG084MR213279",
+      "证件号码": "91440300MA5HED8JXG"
+    },
+    "company": "太平洋",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "保单_深圳市鑫旺河实业发展有限公司_小微_10578006800252201621.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/保单_深圳市鑫旺河实业发展有限公司_小微_10578006800252201621.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区农林路69号印力中心1号写字楼6楼 （本保单加盖保单专用章生效）",
+      "车架号VIN": "LGXEK1C41R0032721",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "交通出行意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "保单_王志勇_交强险_粤B-GG8911_10578003903381923041.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/保单_王志勇_交强险_粤B-GG8911_10578003903381923041.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区",
+      "车架号VIN": "LFMA18095K0007539",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BG40179-吴国明-交强险保单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BG40179-吴国明-交强险保单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市盐田区海山街道深盐路南保发大厦（配套服务楼）第二十四A、B、C、D、E、F、G、H",
+      "车架号VIN": "LB3784EZ1NH027910",
+      "证件号码": ""
+    },
+    "company": "人民财产",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "车驾意_粤BMZ788_深圳市顺威物流有限公司_ASHZF1339R26FN0002SI.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/车驾意_粤BMZ788_深圳市顺威物流有限公司_ASHZF1339R26FN0002SI.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市福田区华富街道皇岗路5001号深业上城（南区）二期60层、59层5901",
+      "车架号VIN": "LNXDBG0F4LL707790",
+      "证件号码": "91440300689420151J"
+    },
+    "company": "太平洋",
+    "type": "非家庭自用车驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "深圳市国鑫数智科技股份有限公司-驾意险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/深圳市国鑫数智科技股份有限公司-驾意险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市福田区华富街道皇岗路5001号深业上城（南区）二期60层、59层5901",
+      "车架号VIN": "LW433B125P1070594",
+      "证件号码": "91440300319789090L"
+    },
+    "company": "太平洋",
+    "type": "驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "保单_黄晓红_个意险_105780066Z3351453969(1).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/保单_黄晓红_个意险_105780066Z3351453969(1).pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "",
+      "车架号VIN": "LMGMU1G80R1232624",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "平安车主尊享保障",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BKW706_深圳市鼎盛旺建筑工程有限公司（交强险，商业险）_1.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BKW706_深圳市鼎盛旺建筑工程有限公司（交强险，商业险）_1.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "国任财产保险股份有限公司",
+      "保险公司简称": "国任",
+      "保司地址": "深圳市罗湖区笋岗街道梨园路333-1号招商中环1栋2402-06A、415",
+      "车架号VIN": "LXGCPA324MA016281",
+      "证件号码": "91440300071134161Q"
+    },
+    "company": "国任",
+    "type": "特种车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "江志宏 粤BM4E53 交强险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/江志宏 粤BM4E53 交强险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "安诚财产保险股份有限公司",
+      "保险公司简称": "安诚",
+      "保司地址": "深圳市福田区华富街道北环大道和彩田路东南角新浩壹都A座1201-9号",
+      "车架号VIN": "",
+      "证件号码": ""
+    },
+    "company": "安诚",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BU66C8_李元洋_驾意险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BU66C8_李元洋_驾意险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "浙商财产保险股份有限公司",
+      "保险公司简称": "浙商",
+      "保司地址": "中国广东省深圳市龙华区龙华区民治街道北站社区鸿荣源北站中心B塔3208、3209、",
+      "车架号VIN": "",
+      "证件号码": "420116199312122716"
+    },
+    "company": "浙商",
+    "type": "驾乘人员意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤B-GX0992_平安交强险保单_陈炫毓.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤B-GX0992_平安交强险保单_陈炫毓.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道竹园社区农林路69号印力中心11层T1-11-01 D区",
+      "车架号VIN": "LM8F7E7B2R1286649",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BLB269_深圳远方冷链物流有限公司_交强_ASHZ663CTP26B027653W.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BLB269_深圳远方冷链物流有限公司_交强_ASHZ663CTP26B027653W.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市坪山区坪山街道坪山大道2009号中天美景大厦8层801、815室",
+      "车架号VIN": "LGAG4DY30J8018622",
+      "证件号码": ""
+    },
+    "company": "太平洋",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "深圳市恒耀达运输有限公司_粤BLC143_ASHZ663CTP26B030168P.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/深圳市恒耀达运输有限公司_粤BLC143_ASHZ663CTP26B030168P.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市坪山区坪山街道坪山大道2009号中天美景大厦8层801、815室",
+      "车架号VIN": "LZZ1BCKL8ND970413",
+      "证件号码": ""
+    },
+    "company": "太平洋",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "保单_钟楚华_商业险_粤B-HN3316_10578003903380039225.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/保单_钟楚华_商业险_粤B-HN3316_10578003903380039225.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区 邮政编码: 518040",
+      "车架号VIN": "HLX32B147S1071076",
+      "证件号码": "440524197602152928"
+    },
+    "company": "平安",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BW611P-邓旭-商业险保单(1).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BW611P-邓旭-商业险保单(1).pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市龙华区民治街道工业路与油松路交汇处西南侧",
+      "车架号VIN": "WDDUX6HB2HA308482",
+      "证件号码": ""
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "向志-粤BY4355-交强险、商业险保单-20260527-CX.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/向志-粤BY4355-交强险、商业险保单-20260527-CX.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人寿财产保险股份有限公司",
+      "保险公司简称": "国寿财产",
+      "保司地址": "深圳市罗湖区桂园街道松园社区宝安南路3029号国速世纪大厦B座",
+      "车架号VIN": "LGAX2A133E1003075",
+      "证件号码": "43312619811018003X"
+    },
+    "company": "国寿财产",
+    "type": "特种车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "邱庆-粤BQ951Y-2026年-交强险电子保单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/邱庆-粤BQ951Y-2026年-交强险电子保单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "永诚财产保险股份有限公司",
+      "保险公司简称": "永诚",
+      "保司地址": "深 圳市宝安区新湖路华美居商务中心A区四层411号",
+      "车架号VIN": "",
+      "证件号码": ""
+    },
+    "company": "永诚",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "彭清富-粤BL0H98(交强险,商业险,驾乘险)_2.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/彭清富-粤BL0H98(交强险,商业险,驾乘险)_2.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市光明区凤凰街道东坑社区科能路中集低轨卫星物联网产业园A座1403-1至1404-2",
+      "车架号VIN": "LGWFF7A58RJ059324",
+      "证件号码": "510502198101200412"
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "谭东权-粤BHM3016(交强险,商业险,驾乘险)_2.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/谭东权-粤BHM3016(交强险,商业险,驾乘险)_2.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市盐田区海山街道深盐路南保发大厦（配套服务楼）第二十四A、B、C、D、E、F、G、H",
+      "车架号VIN": "LM8F7J3B5SC086373",
+      "证件号码": "432503198604112770"
+    },
+    "company": "人民财产",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "保单_朱国_个意险_105780066Z3370110600.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/保单_朱国_个意险_105780066Z3370110600.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "",
+      "车架号VIN": "LVGBC74K3PG641419",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "平安车主尊享保障",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "深圳市新南润电力科技有限公司_粤BGH3661_ASHZ663E2126B003977T.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/深圳市新南润电力科技有限公司_粤BGH3661_ASHZ663E2126B003977T.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市坪山区坪山街道坪山大道2009号中天美景大厦8层801、815室",
+      "车架号VIN": "LGWFGVA74PH253159",
+      "证件号码": "91440300326303036W"
+    },
+    "company": "太平洋",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "车驾意_粤BKJ090_深圳市优科包装制品有限公司_ASHZF1339R26FN0002UJ.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/车驾意_粤BKJ090_深圳市优科包装制品有限公司_ASHZF1339R26FN0002UJ.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市福田区华富街道皇岗路5001号深业上城（南区）二期60层、59层5901",
+      "车架号VIN": "LGAX3CG53P9N15392",
+      "证件号码": "914403000638713643"
+    },
+    "company": "太平洋",
+    "type": "非家庭自用车驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "车驾意_粤BQA709_深圳市联远供应链管理有限公司_ASHZF1339R26FN0001X6.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/车驾意_粤BQA709_深圳市联远供应链管理有限公司_ASHZF1339R26FN0001X6.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市福田区华富街道皇岗路5001号深业上城（南区）二期60层、59层5901",
+      "车架号VIN": "LZZ8BCML1RC643424",
+      "证件号码": "91440300326548340L"
+    },
+    "company": "太平洋",
+    "type": "非家庭自用车驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 0.8
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "谭东权-粤BHM3016(交强险,商业险,驾乘险)_1.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/谭东权-粤BHM3016(交强险,商业险,驾乘险)_1.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市盐田区海山街道深盐路南保发大厦（配套服务楼）第二十四A、B、C、D、E、F、G、H",
+      "车架号VIN": "LM8F7J3B5SC086373",
+      "证件号码": "432503198604112770"
+    },
+    "company": "人民财产",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "宫殿伟-粤BHQ9961-交强险、商业险保单-20260522-CX_1.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/宫殿伟-粤BHQ9961-交强险、商业险保单-20260522-CX_1.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人寿财产保险股份有限公司",
+      "保险公司简称": "国寿财产",
+      "保司地址": "深圳市罗湖区桂园街道松园社区宝安南路3029号国速世纪大厦B座",
+      "车架号VIN": "LC0C76C40S6075717",
+      "证件号码": "230811198711034015"
+    },
+    "company": "国寿财产",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "ebe203804d976b970e080cd3237ab805_2.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/ebe203804d976b970e080cd3237ab805_2.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市龙华区民治街道工业路与油松路交汇处西南侧锦绣时代广场1栋一单元13层",
+      "车架号VIN": "WMWSV3107CT451114",
+      "证件号码": "752504965"
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BW3731-钟晓婷-交强险保单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BW3731-钟晓婷-交强险保单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市龙岗区龙城街道创投大厦1号楼3002、3003、3004、3005",
+      "车架号VIN": "LS5A3DKE6PA715622",
+      "证件号码": ""
+    },
+    "company": "人民财产",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "保单_叶志雄_商业险_粤B-V352S_10578003903382678049.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/保单_叶志雄_商业险_粤B-V352S_10578003903382678049.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区 邮政编码: 518040",
+      "车架号VIN": "LJXEDEF16RTP36204",
+      "证件号码": "440306196112203130"
+    },
+    "company": "平安",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "保单_王志勇_商业险_粤B-GG8911_10578003903381923040.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/保单_王志勇_商业险_粤B-GG8911_10578003903381923040.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区 邮政编码: 518040",
+      "车架号VIN": "LFMA18095K0007539",
+      "证件号码": "450521198411075613"
+    },
+    "company": "平安",
+    "type": "新能源汽车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BHX348_何*_交强险保单_1095105072026003660.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BHX348_何*_交强险保单_1095105072026003660.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "阳光财产保险股份有限公司",
+      "保险公司简称": "阳光",
+      "保司地址": "深圳市南山区粤海街道海珠社区兰芷二路66号阳光保险大厦7层1单元 电子保单签章",
+      "车架号VIN": "LZZ1BAGF6RE528544",
+      "证件号码": ""
+    },
+    "company": "阳光",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "深圳市嘉昌国际物流有限公司_粤BJM070_商.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/深圳市嘉昌国际物流有限公司_粤BJM070_商.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市坪山区坪山街道坪山大道2009号中天美景大厦8层801、815室",
+      "车架号VIN": "LFWSRXRJ9H1F24344",
+      "证件号码": "91440300MAD5KN2MXU"
+    },
+    "company": "太平洋",
+    "type": "特种车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "陈红名-粤BT122U(交强险,商业险,驾乘险)_2.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/陈红名-粤BT122U(交强险,商业险,驾乘险)_2.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人民财产保险股份有限公司",
+      "保险公司简称": "人民财产",
+      "保司地址": "深圳市光明区凤凰街道东坑社区科能路中集低轨卫星物联网产业园A座1403-1至1404-2",
+      "车架号VIN": "JTJBAMCA3K2083218",
+      "证件号码": "440306200001220914"
+    },
+    "company": "人民财产",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BP056W-庄鹏-驾意险保单号135500066Z3383510851.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BP056W-庄鹏-驾意险保单号135500066Z3383510851.pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "",
+      "车架号VIN": "JTHBYLFF9L5014810",
+      "证件号码": ""
+    },
+    "company": "平安",
+    "type": "平安车主尊享保障",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "郑廷钦 (车牌号：粤BW73L9，交强险保单号：P2603001440397350000000882)_1.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/郑廷钦 (车牌号：粤BW73L9，交强险保单号：P2603001440397350000000882)_1.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中华联合财产保险股份有限公司",
+      "保险公司简称": "中华联合",
+      "保司地址": "深圳市罗湖区桂园街道深南东路5016号京基100大厦B座9楼902房",
+      "车架号VIN": "LHGRC4840M8024776",
+      "证件号码": ""
+    },
+    "company": "中华联合",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "黄周富粤BJ66M8机动车交通事故责任强制保险单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/黄周富粤BJ66M8机动车交通事故责任强制保险单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "新疆前海联合财产保险股份有限公司",
+      "保险公司简称": "前海联合",
+      "保司地址": "深圳市罗湖区笋岗街道宝安北路与梨园路交汇外东南侧深业物流中心（南区）E栋150(保3B险、人15签04章、)1505",
+      "车架号VIN": "LNBMDBAF0EU044023",
+      "证件号码": "441422197812143715"
+    },
+    "company": "前海联合",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BH116Z  交强险保单.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BH116Z  交强险保单.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "安盛天平财产保险有限公司",
+      "保险公司简称": "安盛天平",
+      "保司地址": "深圳市福田区福田街道福南社区深南中路3031号汉国城市商业中心4007-4011单元",
+      "车架号VIN": "LVGBE40K88G288143",
+      "证件号码": ""
+    },
+    "company": "安盛天平",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BU66C8_李元洋_商业险(3).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BU66C8_李元洋_商业险(3).pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "浙商财产保险股份有限公司",
+      "保险公司简称": "浙商",
+      "保司地址": "中国广东省深圳市龙华区龙华区民治街道北站社区鸿荣源北站中心B塔3208、3209、邮3政21编0 码:518040",
+      "车架号VIN": "LMXA12AG2LZ385757",
+      "证件号码": "420116199312122716"
+    },
+    "company": "浙商",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BP056W-庄鹏-商业险保单号13550003903383518100.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BP056W-庄鹏-商业险保单号13550003903383518100.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "广东省东莞市南城街道三元路2号803室 邮政编码: 523070",
+      "车架号VIN": "JTHBYLFF9L5014810",
+      "证件号码": "440307199003253518"
+    },
+    "company": "平安",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "保单_林庆伟_商业险_粤B-PM770_10578003903361929901.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/保单_林庆伟_商业险_粤B-PM770_10578003903361929901.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国平安财产保险股份有限公司",
+      "保险公司简称": "平安",
+      "保司地址": "深圳市福田区香蜜湖街道农林路69号印力中心1栋6楼B区 邮政编码: 518040",
+      "车架号VIN": "1FA6P8TH1G5220465",
+      "证件号码": "440301198204260930"
+    },
+    "company": "平安",
+    "type": "机动车商业保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BHY629_深圳市闽晟兴物流有限公司_交强_ASHZ663CTP26B026876G_1.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BHY629_深圳市闽晟兴物流有限公司_交强_ASHZ663CTP26B026876G_1.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "中国太平洋财产保险股份有限公司",
+      "保险公司简称": "太平洋",
+      "保司地址": "深圳市坪山区坪山街道坪山大道2009号中天美景大厦8层801、815室",
+      "车架号VIN": "LJ18R4CL2K3303655",
+      "证件号码": ""
+    },
+    "company": "太平洋",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BN6K78(驾乘2025年A版（深圳-299）).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BN6K78(驾乘2025年A版（深圳-299）).pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "中国人寿财产保险股份有限公司",
+      "保险公司简称": "国寿财产",
+      "保司地址": "",
+      "车架号VIN": "WDCDA5GB7HA905340",
+      "证件号码": ""
+    },
+    "company": "国寿财产",
+    "type": "驾乘人员人身意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "安享驾-粤BU8751-段圣旭.ezObqd_H.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/安享驾-粤BU8751-段圣旭.ezObqd_H.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "华农财产保险股份有限公司",
+      "保险公司简称": "华农",
+      "保司地址": "",
+      "车架号VIN": "LSGVA54R7BY137941",
+      "证件号码": "430224198410117518"
+    },
+    "company": "华农",
+    "type": "驾乘人员意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BKH308交强险.pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BKH308交强险.pdf",
+    "text_extracted": true,
+    "is_jiayixian": false,
+    "fields": {
+      "保险公司": "太平财产保险有限公司",
+      "保险公司简称": "太平",
+      "保司地址": "广东省深圳市龙岗区龙城街道黄阁坑社区腾飞路9号创投大厦1003-05单元",
+      "车架号VIN": "LNXBEG060PR706119",
+      "证件号码": ""
+    },
+    "company": "太平",
+    "type": "机动车交通事故责任强制保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  },
+  {
+    "batch": "批量导出保单_2026-05-30_第4批",
+    "filename": "粤BU66C8_李元洋_驾意险(3).pdf",
+    "filepath": "/Users/take/Downloads/训练保单/批量导出保单_2026-05-30_第4批/粤BU66C8_李元洋_驾意险(3).pdf",
+    "text_extracted": true,
+    "is_jiayixian": true,
+    "fields": {
+      "保险公司": "浙商财产保险股份有限公司",
+      "保险公司简称": "浙商",
+      "保司地址": "中国广东省深圳市龙华区龙华区民治街道北站社区鸿荣源北站中心B塔3208、3209、",
+      "车架号VIN": "",
+      "证件号码": "420116199312122716"
+    },
+    "company": "浙商",
+    "type": "驾乘人员意外伤害保险",
+    "doc_category": "保单",
+    "confidence": 1.0
+  }
+]

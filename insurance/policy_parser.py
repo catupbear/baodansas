@@ -508,6 +508,9 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
     _extract_proposer(text, text_merged, fields, company_short)
     _extract_insured(text, text_merged, fields, company_short)
 
+    # ===== 身份证号码（投保人/被保险人） =====
+    _extract_id_numbers(text, text_merged, fields)
+
     # ===== 车辆信息 =====
     _extract_vehicle_info(text, fields, company_short)
 
@@ -700,6 +703,166 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
 
 
 # ============================================================
+# 身份证号码提取（投保人/被保险人）
+# ============================================================
+
+# 身份证号码正则：18位，首位非0，中间含合法出生日期，末位可为X
+_ID_PATTERN = r'([1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx])'
+
+
+def _extract_id_numbers(text: str, text_merged: str, fields: dict):
+    """提取投保人和被保险人的身份证号码"""
+
+    # === 被保险人身份证号码 ===
+
+    # 交强险：被保险人身份[证]?号[码]?(组织机构代码/统一社会信用代码)
+    m = re.search(
+        r'被保险人身份[证]?号[码]?[（(](?:组织机构代码|统一社会信用代码)[)）]\s*(?:身份证[：:]?)?\s*' + _ID_PATTERN,
+        text
+    )
+    if m:
+        fields["被保险人身份证号码"] = m.group(1)
+
+    # 众诚/申能/国寿：被保险人证件号码
+    if "被保险人身份证号码" not in fields:
+        m = re.search(r'被保险人证件号码[：:\s]*' + _ID_PATTERN, text)
+        if m:
+            fields["被保险人身份证号码"] = m.group(1)
+
+    # 申能格式：被保险人证件类型：身份证 被保险人证件号码：
+    if "被保险人身份证号码" not in fields:
+        m = re.search(
+            r'被保险人证件[类型]*[：:\s]*(?:居民)?身份证\s*被保险人证件号码[：:\s]*' + _ID_PATTERN,
+            text
+        )
+        if m:
+            fields["被保险人身份证号码"] = m.group(1)
+
+    # 商业险同行：被保险人 XXX 证件号码 XXX
+    if "被保险人身份证号码" not in fields:
+        m = re.search(
+            r'被保险人[名称\s]*[：:]*\s*[一-鿿][一-鿿\w]*[\s\S]{0,50}?证件号码[：:\s]*' + _ID_PATTERN,
+            text
+        )
+        if m:
+            fields["被保险人身份证号码"] = m.group(1)
+
+    # 平安商业险表格：被保 姓 名: XXX 证件类型: 身份证 证件号码:
+    if "被保险人身份证号码" not in fields:
+        m = re.search(
+            r'被保[险\s]*[人]?\s*姓\s*名[：:]\s*\S+\s*证件类型[：:]\s*身份证\s*证件号码[：:]\s*' + _ID_PATTERN,
+            text
+        )
+        if m:
+            fields["被保险人身份证号码"] = m.group(1)
+
+    # 大家/国寿商业险：名称 XXX 证件号码 XXX\n被保险人（证件号码在上方）
+    if "被保险人身份证号码" not in fields:
+        for src in [text, text_merged]:
+            m = re.search(
+                r'(?:名称|姓名/?名称|名称/?姓名)\s+\S+\s+(?:证件号码\s+)?' + _ID_PATTERN + r'[\s\S]{0,30}?被保险人',
+                src
+            )
+            if m:
+                fields["被保险人身份证号码"] = m.group(1)
+                break
+
+    # 平安个意险被保险人表格：被保险人姓名 证件类型 证件号码\nXXX 身份证 XXX
+    if "被保险人身份证号码" not in fields:
+        m = re.search(
+            r'被保险人姓名\s+证件类型\s+证件号码[\s\S]{0,80}?(?:身份证|居民身份证)\s+' + _ID_PATTERN,
+            text
+        )
+        if m:
+            fields["被保险人身份证号码"] = m.group(1)
+
+    # 被保险人信息块中的证件号码（阳光/亚太/华农等驾意险）
+    if "被保险人身份证号码" not in fields:
+        m = re.search(
+            r'被保险人信息[\s\S]{0,200}?证件号码[：:\s]*' + _ID_PATTERN,
+            text
+        )
+        if m:
+            fields["被保险人身份证号码"] = m.group(1)
+
+    # 永诚/安诚等格式：证件类型：居民身份证 证件号码：XXX（上下文中有被保险人或被保人）
+    if "被保险人身份证号码" not in fields:
+        m = re.search(
+            r'(?:被保险人|被保人)[\s\S]{0,100}?证件类型[：:\s]*(?:居民)?身份证[\s\S]{0,30}?证件号码[：:\s]*' + _ID_PATTERN,
+            text
+        )
+        if m:
+            fields["被保险人身份证号码"] = m.group(1)
+
+    # 安诚驾意险水印干扰：证件月号码 XXX（"月"是水印字符）
+    if "被保险人身份证号码" not in fields:
+        m = re.search(r'证件[月日时]?号码\s+' + _ID_PATTERN, text)
+        if m:
+            fields["被保险人身份证号码"] = m.group(1)
+
+    # 兜底：被保险人后200字内第一个身份证号
+    if "被保险人身份证号码" not in fields:
+        m = re.search(r'被保险人[\s\S]{0,200}?' + _ID_PATTERN, text)
+        if m:
+            fields["被保险人身份证号码"] = m.group(1)
+
+    # === 投保人身份证号码 ===
+
+    # 太平洋格式：投保人证件类型：身份证 投保人证件号码：
+    m = re.search(
+        r'投保人证件类型[：:\s]*(?:居民)?身份证\s*投保人证件号码[：:\s]*' + _ID_PATTERN,
+        text
+    )
+    if m:
+        fields["投保人身份证号码"] = m.group(1)
+
+    # 京东安联格式：投保人证件号码 Holder ID: XXX
+    if "投保人身份证号码" not in fields:
+        m = re.search(
+            r'投保人证件号码\s*(?:Holder\s*ID)?[：:\s]*' + _ID_PATTERN,
+            text
+        )
+        if m:
+            fields["投保人身份证号码"] = m.group(1)
+
+    # 投保人信息块（太平/阳光/亚太/大家/国任/人保驾乘等）
+    if "投保人身份证号码" not in fields:
+        m = re.search(
+            r'投保人(?:信息|姓名)[：:\s]*[\s\S]{0,200}?证件号码[：:\s]*' + _ID_PATTERN,
+            text
+        )
+        if m:
+            fields["投保人身份证号码"] = m.group(1)
+
+    # 平安驾意险表格：投保人姓名 证件类型 证件号码\nXXX 身份证 XXXXXX
+    if "投保人身份证号码" not in fields:
+        m = re.search(
+            r'投保人姓名\s+证件类型\s+证件号码[\s\S]{0,50}?(?:身份证|居民身份证)\s+' + _ID_PATTERN,
+            text
+        )
+        if m:
+            fields["投保人身份证号码"] = m.group(1)
+
+    # 众安/安诚/华农格式：投保人 XXX 证件类型 身份证\n证件号码 XXX
+    if "投保人身份证号码" not in fields:
+        m = re.search(
+            r'投保人[^\n]*证件类型\s*(?:居民)?身份证[\s\S]{0,30}?证件号码[：:\s]*' + _ID_PATTERN,
+            text
+        )
+        if m:
+            fields["投保人身份证号码"] = m.group(1)
+
+    # 国寿投保人：名称/姓名 XXX 证件号码 XXX\n投保人（或 名称/姓名 XXX XXX\n码/证件号\n投保人）
+    if "投保人身份证号码" not in fields:
+        m = re.search(
+            r'(?:名称/姓名|姓名/名称)\s+\S+\s+' + _ID_PATTERN + r'[\s\S]{0,50}?投保人',
+            text
+        )
+        if m:
+            fields["投保人身份证号码"] = m.group(1)
+
+
+# ============================================================
 # 保司公司名称 / 保司地址提取
 # ============================================================
 
@@ -831,6 +994,70 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
                     if m_phone:
                         fields["保司联系电话"] = m_phone.group(1)
                 break
+
+    # 补充模式A：签单公司标签（申能驾意险、平安小微等）
+    if "保司公司名称" not in fields:
+        for src in [text, text_merged]:
+            m = re.search(r'签\s*单\s*公\s*司[：:]\s*([一-鿿（()）\w]+公司)', src)
+            if m:
+                val = m.group(1).strip()
+                if val and len(val) >= 4 and re.search(r'保险', val):
+                    fields["保司公司名称"] = val
+                    break
+
+    # 补充模式B：授权签单机构 / 承保机构（前海联合驾乘、安诚驾意等）
+    if "保司公司名称" not in fields:
+        for src in [text, text_merged]:
+            m = re.search(r'(?:授权签单机构|承保机构)[：:]\s*([一-鿿（()）\w\s]+?公司)', src)
+            if m:
+                val = re.sub(r'\s+', '', m.group(1).strip())
+                if val and len(val) >= 4 and re.search(r'保险', val):
+                    fields["保司公司名称"] = val
+                    break
+
+    # 补充模式C：鉴于投保人向XXX公司（平安小微等）
+    if "保司公司名称" not in fields:
+        m = re.search(r'鉴于投保人向\s*([\S]+保险[\S]*公司)\s*(\S+?)\s*分公司', text_merged)
+        if m:
+            fields["保司公司名称"] = m.group(1) + m.group(2) + '分公司'
+
+    # 补充模式D：业务归属机构（太平意外/出行无忧）
+    if "保司公司名称" not in fields:
+        for src in [text, text_merged]:
+            m = re.search(r'业务归属机构[：:]\s*\S+?\s+([一-鿿]+保险(?:股份|集团)?(?:有限)?公司[一-鿿]*(?:分公司|支公司)?)', src)
+            if m:
+                val = m.group(1).strip()
+                if val and len(val) >= 4:
+                    fields["保司公司名称"] = val
+                    break
+
+    # 补充模式E：条款释义兜底（华泰驾意等）
+    if "保司公司名称" not in fields:
+        m = re.search(r'保险人[：:]\s*指.*?签订.*?的\s*([一-鿿]+保险(?:股份|集团)?(?:有限)?公司)', text)
+        if m:
+            val = m.group(1).strip()
+            if val and len(val) >= 4:
+                fields["保司公司名称"] = val
+
+    # 补充地址模式A：签单公司地址（申能驾意险、平安小微等）
+    if "保司地址" not in fields:
+        for src in [text, text_merged]:
+            m = re.search(r'签单公司地址[：:]\s*(.+?)(?:\s{2,}|\n|$)', src)
+            if m:
+                val = m.group(1).strip()
+                if val and len(val) >= 4:
+                    fields["保司地址"] = val
+                    break
+
+    # 补充地址模式B：保险人地址（华农、前海联合驾乘等）
+    if "保司地址" not in fields:
+        for src in [text, text_merged]:
+            m = re.search(r'保险人地址[：:]\s*(.+?)(?:\s+[（(]保险人|\s{2,}|\n|$)', src)
+            if m:
+                val = m.group(1).strip()
+                if val and len(val) >= 4:
+                    fields["保司地址"] = val
+                    break
 
     # 保司带地区：从保司地址提取城市 + 承保公司，如"深圳平安"
     _build_insurer_with_region(fields)
@@ -2035,11 +2262,87 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
         r"车辆识别代[号码][：:\s]*([A-Z0-9]{17})",
         r"识别代码\s*(?:\(车架号\)|（车架号）)\s*([A-Z0-9]{17})",
         r"识别代码[：:\s]*([A-Z0-9]{17})",
+        # 浙商驾意险：车架号/VIN号
+        r"车架号/VIN号[码]?\s*([A-Z0-9]{17})",
+        # 鼎和/大地：车架号/VIN码（含或不含冒号）
+        r"车架号/VIN码[：:\s]*([A-Z0-9]{17})",
+        # 中银保险等：车架号码
+        r"车架号码[：:\s]*([A-Z0-9]{17})",
+        # 人保部分交强险：标签文字有空格
+        r"识\s*别\s*代码\s*[（\(]车架号[）\)]\s*([A-Z0-9]{17})",
+        # 非车险表格：车架号或发动机号
+        r"车架号或发动机号[：:\s]*([A-Z0-9]{17})",
+        # 众安保单正文段落：车架号：VIN
+        r"车架号[：:]\s*([A-Z0-9]{17})",
     ]:
         m = re.search(p, text)
         if m:
             fields["车架号VIN"] = m.group(1)
             break
+
+    # 车架号兜底：处理水印干扰、空格断开、跨行等特殊格式
+    # 兜底1：识别代码(车架号) + 水印数字粘连（人保交强险）
+    if "车架号VIN" not in fields:
+        m = re.search(
+            r"识别代码[（\(]车架号[）\s\w]*[）\)]\s*\d?\s*([A-HJ-NPR-Z][A-Z0-9]{16})",
+            text
+        )
+        if m:
+            fields["车架号VIN"] = m.group(1)
+
+    # 兜底2：识别代码(车架号) + VIN首字母与后续被空格分开（太平洋交强险）
+    if "车架号VIN" not in fields:
+        m = re.search(
+            r"识别代码[（\(]车架号[）\)]([A-Z])\s+([A-Z0-9]{16})",
+            text
+        )
+        if m:
+            fields["车架号VIN"] = m.group(1) + m.group(2)
+
+    # 兜底3：VIN在"识别代码(车架号)"标签的上一行（太平洋交强险表格布局）
+    if "车架号VIN" not in fields:
+        m = re.search(
+            r"([A-HJ-NPR-Z][A-Z0-9]{16})\n发动机号码\s+识别代码[（\(]车架号[）\)]",
+            text
+        )
+        if m:
+            fields["车架号VIN"] = m.group(1)
+
+    # 兜底4：VIN码/车架号但标签被截断（太平洋商业险）
+    if "车架号VIN" not in fields:
+        m = re.search(
+            r"VIN码?/?车架\s+([A-Z0-9]{17})",
+            text
+        )
+        if m:
+            fields["车架号VIN"] = m.group(1)
+
+    # 兜底5：车架号或发动机号 + 表格下一行数据
+    if "车架号VIN" not in fields:
+        m = re.search(
+            r"车架号或发动机号.*?\n.*?([A-HJ-NPR-Z][A-Z0-9]{16})",
+            text
+        )
+        if m:
+            fields["车架号VIN"] = m.group(1)
+
+    # 兜底6：驾意险表格 - 车架号列标题 + 数据行中VIN前有水印数字
+    if "车架号VIN" not in fields:
+        m = re.search(
+            r"车架号\s+发动机号.*?\n(?:.*?\n){0,3}.*?\d([A-HJ-NPR-Z][A-Z0-9]{16})",
+            text
+        )
+        if m:
+            fields["车架号VIN"] = m.group(1)
+
+    # 兜底7：众安驾意险表格 - 中英双标题 + 数据行
+    if "车架号VIN" not in fields:
+        m = re.search(
+            r"车架号.*?VIN.*?\n.*?\n.*?([A-HJ-NPR-Z][A-Z0-9]{16})",
+            text
+        )
+        if m:
+            fields["车架号VIN"] = m.group(1)
 
     # 发动机号
     for p in [
@@ -3340,6 +3643,7 @@ def parse_policy_text_multi(text: str) -> List[Dict[str, Any]]:
 FIELD_ORDER = [
     "文档类型", "保单号", "投保确认码", "保险公司", "保险公司简称", "险种类型",
     "被保险人", "投保人", "车主", "证件号码",
+    "被保险人身份证号码", "投保人身份证号码",
     "车牌号", "车架号VIN", "发动机号", "厂牌型号",
     "核定载客", "核定载质量", "使用性质", "机动车种类", "初次登记日期",
     "保费合计", "不含税保费", "增值税额", "车船税",
