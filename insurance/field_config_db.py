@@ -961,20 +961,66 @@ def save_merge_by_plate(db, scope: str, scope_id, enabled: bool):
 
 
 # ------------------------------------------------------------------ #
-# 固定值提取
+# 自定义字段固定值（独立于模板，始终按用户个人存储）
 # ------------------------------------------------------------------ #
 
-def extract_fixed_values(column_config: dict) -> dict:
+def get_user_fixed_values(db, user_id: int) -> dict:
     """
-    从列配置中提取自定义字段的固定值映射。
-    返回 {字段名: 固定值} 的字典，仅包含设置了 fixed_value 的自定义字段。
+    获取用户个人的自定义字段固定值。
+    始终从 scope=user 读取，不受模板切换影响。
+    返回 {字段名: 固定值}。
     """
-    result = {}
-    for col in column_config.get("columns", []):
-        fv = col.get("fixed_value", "")
-        if col.get("custom") and fv:
-            result[col["key"]] = fv
-    return result
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT config_value FROM user_field_config "
+            "WHERE scope = 'user' AND scope_id = %s AND config_type = 'custom_fixed_values' "
+            "AND config_key = 'values' LIMIT 1",
+            [user_id]
+        )
+        row = cursor.fetchone()
+        if row:
+            try:
+                return json.loads(row["config_value"])
+            except (TypeError, json.JSONDecodeError):
+                pass
+        return {}
+    finally:
+        conn.close()
+
+
+def save_user_fixed_values(db, user_id: int, values: dict):
+    """
+    保存用户个人的自定义字段固定值。
+    始终写入 scope=user，不受模板切换影响。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        json_val = json.dumps(values, ensure_ascii=False)
+        cursor.execute(
+            "SELECT id FROM user_field_config "
+            "WHERE scope = 'user' AND scope_id = %s AND config_type = 'custom_fixed_values' "
+            "AND config_key = 'values' LIMIT 1",
+            [user_id]
+        )
+        if cursor.fetchone():
+            cursor.execute(
+                "UPDATE user_field_config SET config_value = %s, updated_at = NOW() "
+                "WHERE scope = 'user' AND scope_id = %s AND config_type = 'custom_fixed_values' "
+                "AND config_key = 'values'",
+                [json_val, user_id]
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO user_field_config (scope, scope_id, config_type, config_key, config_value, template_name) "
+                "VALUES ('user', %s, 'custom_fixed_values', 'values', %s, %s)",
+                [user_id, json_val, DEFAULT_TEMPLATE_NAME]
+            )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # ------------------------------------------------------------------ #

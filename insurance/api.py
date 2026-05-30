@@ -35,7 +35,7 @@ from .field_config_db import (
     get_active_template, set_active_template,
     get_effective_config, apply_user_config_to_fields,
     get_column_config, save_column_config, delete_column_config,
-    extract_fixed_values,
+    get_user_fixed_values, save_user_fixed_values,
     get_merge_by_plate, save_merge_by_plate,
     MERGE_SHARED_FIELDS, MERGE_SPLIT_FIELDS, MERGE_PREFIXES, MERGE_EXTRA_COLUMNS,
     DEFAULT_COLUMNS,
@@ -335,9 +335,9 @@ def list_records():
         # 获取用户字段配置，应用简称/日期格式/公式计算
         user = g.current_user
         user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
-        # 注入列配置中自定义字段的固定值
+        # 注入用户个人的自定义字段固定值（独立于模板）
         list_col_cfg = get_column_config(_db, "list_columns", user["user_id"], user["role"], user.get("parent_id"))
-        fixed_vals = extract_fixed_values(list_col_cfg)
+        fixed_vals = get_user_fixed_values(_db, user["user_id"])
         if fixed_vals:
             if user_config is None:
                 user_config = {}
@@ -2559,8 +2559,8 @@ def export_excel():
             # 获取用户字段配置，导出时应用简称/日期格式/公式
             user = g.current_user
             user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
-            # 注入导出列配置中自定义字段的固定值
-            export_fixed_vals = extract_fixed_values(export_col_config)
+            # 注入用户个人的自定义字段固定值（独立于模板）
+            export_fixed_vals = get_user_fixed_values(_db, user["user_id"])
             if export_fixed_vals:
                 if user_config is None:
                     user_config = {}
@@ -3577,6 +3577,34 @@ def save_merge_config_api():
         return jsonify({"code": 0, "msg": "已保存"})
     except Exception as e:
         logger.exception("保存合并配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/fixed-values", methods=["GET"])
+@login_required
+def get_fixed_values_api():
+    """获取当前用户的自定义字段固定值（独立于模板）"""
+    try:
+        user = g.current_user
+        values = get_user_fixed_values(_db, user["user_id"])
+        return jsonify({"code": 0, "data": values})
+    except Exception as e:
+        logger.exception("获取固定值失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/fixed-values", methods=["POST"])
+@login_required
+def save_fixed_values_api():
+    """保存当前用户的自定义字段固定值（独立于模板）"""
+    try:
+        user = g.current_user
+        body = request.get_json(force=True) or {}
+        values = body.get("values", {})
+        save_user_fixed_values(_db, user["user_id"], values)
+        return jsonify({"code": 0, "msg": "固定值已保存"})
+    except Exception as e:
+        logger.exception("保存固定值失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 

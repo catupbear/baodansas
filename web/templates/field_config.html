@@ -605,7 +605,7 @@
                                 <td><input type="checkbox" v-model="col.visible" :disabled="activeSource === 'enterprise'"></td>
                                 <td style="color:var(--text-muted);">{{ col.key }}<span v-if="col.custom" style="margin-left:6px;font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:3px;">自定义</span></td>
                                 <td><input type="text" v-model="col.display_name" :disabled="activeSource === 'enterprise'" :placeholder="col.key" /></td>
-                                <td><input v-if="col.custom" type="text" v-model="col.fixed_value" :disabled="activeSource === 'enterprise'" placeholder="无数据时自动填充" style="font-size:12px;" /></td>
+                                <td><input v-if="col.custom" type="text" v-model="fixedValues[col.key]" placeholder="无数据时自动填充" style="font-size:12px;" @change="saveFixedValues" /></td>
                                 <td><button v-if="col.custom" @click="removeCustomCol(listColItems, idx)" :disabled="activeSource === 'enterprise'" style="color:var(--danger);cursor:pointer;background:none;border:none;font-size:14px;" title="删除">✕</button></td>
                             </tr>
                         </tbody>
@@ -616,7 +616,7 @@
                     <button class="btn btn-outline btn-sm" @click="addCustomCol('list')" :disabled="!newColName.list?.trim()">添加字段</button>
                 </div>
                 <div style="margin-top:8px; font-size:11px; color:var(--text-muted);">
-                    自定义字段可设置固定值（无数据时自动填充），也可在「自动计算公式」tab 中配置公式来计算值
+                    固定值为个人设置，不受模板影响。也可在「自动计算公式」tab 中配置公式来计算值
                 </div>
             </div>
 
@@ -670,7 +670,7 @@
                                 <td><input type="checkbox" v-model="col.visible" :disabled="activeSource === 'enterprise'"></td>
                                 <td style="color:var(--text-muted);">{{ col.key }}<span v-if="col.merge" style="margin-left:6px;font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;">合并</span><span v-else-if="col.custom" style="margin-left:6px;font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:3px;">自定义</span></td>
                                 <td><input type="text" v-model="col.display_name" :disabled="activeSource === 'enterprise'" :placeholder="col.key" /></td>
-                                <td><input v-if="col.custom && !col.merge" type="text" v-model="col.fixed_value" :disabled="activeSource === 'enterprise'" placeholder="无数据时自动填充" style="font-size:12px;" /></td>
+                                <td><input v-if="col.custom && !col.merge" type="text" v-model="fixedValues[col.key]" placeholder="无数据时自动填充" style="font-size:12px;" @change="saveFixedValues" /></td>
                                 <td><button v-if="col.custom && !col.merge" @click="removeCustomCol(exportColItems, idx)" :disabled="activeSource === 'enterprise'" style="color:var(--danger);cursor:pointer;background:none;border:none;font-size:14px;" title="删除">✕</button></td>
                             </tr>
                         </tbody>
@@ -681,7 +681,7 @@
                     <button class="btn btn-outline btn-sm" @click="addCustomCol('export')" :disabled="!newColName.export?.trim()">添加字段</button>
                 </div>
                 <div style="margin-top:8px; font-size:11px; color:var(--text-muted);">
-                    自定义字段可设置固定值（无数据时自动填充），也可在「自动计算公式」tab 中配置公式来计算值
+                    固定值为个人设置，不受模板影响。也可在「自动计算公式」tab 中配置公式来计算值
                 </div>
             </div>
 
@@ -1045,7 +1045,7 @@ createApp({
             // 添加源有目标无的自定义字段
             for (const col of sourceItems) {
                 if (col.custom && !targetCustomKeys.has(col.key)) {
-                    targetItems.push({ key: col.key, visible: col.visible, order: targetItems.length, display_name: col.display_name, custom: true, fixed_value: col.fixed_value || '' });
+                    targetItems.push({ key: col.key, visible: col.visible, order: targetItems.length, display_name: col.display_name, custom: true });
                 }
             }
             // 删除目标有但源已删除的自定义字段（合并字段不删）
@@ -1150,6 +1150,35 @@ createApp({
             dragState.target = null;
         };
 
+        // 自定义字段固定值（独立于模板，个人设置）
+        const fixedValues = reactive({});
+
+        async function loadFixedValues() {
+            try {
+                const resp = await authFetch('/api/insurance/fixed-values');
+                const data = await resp.json();
+                if (data.code === 0 && data.data) {
+                    Object.keys(fixedValues).forEach(k => delete fixedValues[k]);
+                    Object.assign(fixedValues, data.data);
+                }
+            } catch (e) {
+                console.error('加载固定值失败:', e);
+            }
+        }
+
+        async function saveFixedValues() {
+            try {
+                await authFetch('/api/insurance/fixed-values', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ values: { ...fixedValues } }),
+                });
+                showToast('固定值已保存');
+            } catch (e) {
+                console.error('保存固定值失败:', e);
+            }
+        }
+
         // 添加/删除自定义字段
         const newColName = reactive({ list: '', export: '' });
 
@@ -1161,7 +1190,7 @@ createApp({
                 showToast('字段已存在', 'error');
                 return;
             }
-            const newCol = { key: name, visible: true, order: items.length, display_name: name, custom: true, fixed_value: '' };
+            const newCol = { key: name, visible: true, order: items.length, display_name: name, custom: true };
             items.push(newCol);
             // 双向同步：添加到另一侧
             if (target === 'list') {
@@ -1879,8 +1908,9 @@ createApp({
             await loadConfig();
             // 自动加载数据库中已有保单数据，合并到简称列表
             await autoLoadAliasFromDb();
-            // 加载列配置
+            // 加载列配置和固定值
             loadColumnConfig('list_columns');
+            loadFixedValues();
             // 导出列配置和合并开关都加载完后，同步合并字段状态
             Promise.all([loadColumnConfig('export_columns'), loadMergeConfig()]).then(() => {
                 applyMergeHidden();
@@ -1913,6 +1943,7 @@ createApp({
             loadColumnConfig, saveColumnConfig, resetColumnConfig, resetPending, doResetColumn,
             dragState, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd,
             newColName, addCustomCol, removeCustomCol, syncListToExport,
+            fixedValues, saveFixedValues,
             mergeByPlate, loadMergeConfig, saveMergeConfig, toggleMergeByPlate,
         };
     }
