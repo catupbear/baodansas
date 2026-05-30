@@ -1503,7 +1503,21 @@
     </div>
 
     <!-- ========== 批量下载进度浮窗 ========== -->
-    <div v-if="downloadTask.visible" class="fixed bottom-6 right-6 z-50"
+    <!-- 收起状态：小按钮 -->
+    <div v-if="downloadTask.visible && downloadTask.collapsed" class="fixed bottom-6 right-6 z-50"
+         @click="expandDownloadTask"
+         style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:white;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,0.12);border:1px solid #e5e7eb;cursor:pointer;transition:box-shadow 0.2s;"
+         onmouseover="this.style.boxShadow='0 6px 24px rgba(0,0,0,0.18)'" onmouseout="this.style.boxShadow='0 4px 16px rgba(0,0,0,0.12)'">
+        <svg style="width:16px;height:16px;color:#f97316;flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+        </svg>
+        <span style="font-size:12px;font-weight:600;color:#1f2937;">批量导出</span>
+        <span v-if="downloadTask.status === 'processing'" style="font-size:11px;color:#f97316;">{{ downloadTask.current }}/{{ downloadTask.total }}</span>
+        <span v-else-if="downloadTask.status === 'done'" style="font-size:11px;color:#16a34a;">已完成</span>
+        <span v-else-if="downloadTask.status === 'error'" style="font-size:11px;color:#dc2626;">失败</span>
+    </div>
+    <!-- 展开状态：完整浮窗 -->
+    <div v-if="downloadTask.visible && !downloadTask.collapsed" class="fixed bottom-6 right-6 z-50"
          style="width:320px;background:white;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.15);border:1px solid #e5e7eb;overflow:hidden;">
         <!-- 标题栏 -->
         <div style="padding:10px 14px 8px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #f3f4f6;">
@@ -1513,7 +1527,17 @@
                 </svg>
                 <span style="font-size:13px;font-weight:600;color:#1f2937;">批量导出保单</span>
             </div>
-            <button @click="closeDownloadTask" style="color:#9ca3af;cursor:pointer;font-size:16px;line-height:1;border:none;background:none;" title="关闭">&times;</button>
+            <div style="display:flex;align-items:center;gap:4px;">
+                <!-- 收起按钮 -->
+                <button @click="collapseDownloadTask" style="color:#9ca3af;cursor:pointer;font-size:14px;line-height:1;border:none;background:none;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:4px;" title="收起"
+                        onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='none'">
+                    <svg style="width:14px;height:14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                <!-- 关闭按钮（完成或出错时可用） -->
+                <button v-if="downloadTask.status === 'done' || downloadTask.status === 'error'" @click="closeDownloadTask"
+                        style="color:#9ca3af;cursor:pointer;font-size:16px;line-height:1;border:none;background:none;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:4px;" title="关闭"
+                        onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='none'">&times;</button>
+            </div>
         </div>
         <!-- 进度内容 -->
         <div style="padding:10px 14px 12px;">
@@ -1538,12 +1562,22 @@
                      }"></div>
             </div>
             <!-- 统计 -->
-            <div style="display:flex;justify-content:space-between;font-size:11px;color:#9ca3af;">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#9ca3af;">
                 <span>{{ downloadTask.current }} / {{ downloadTask.total }}</span>
-                <span>
+                <span style="display:flex;align-items:center;gap:6px;">
                     <span style="color:#16a34a;">成功 {{ downloadTask.success }}</span>
-                    <span v-if="downloadTask.failed" style="color:#ef4444;margin-left:6px;">失败 {{ downloadTask.failed }}</span>
+                    <span v-if="downloadTask.failed" style="color:#ef4444;">失败 {{ downloadTask.failed }}</span>
                 </span>
+            </div>
+            <!-- 重试按钮（失败或有失败文件时显示） -->
+            <div v-if="downloadTask.status === 'error' || (downloadTask.status === 'done' && downloadTask.failed > 0)"
+                 style="margin-top:8px;display:flex;justify-content:flex-end;">
+                <button @click="retryDownloadTask"
+                        style="padding:4px 12px;font-size:12px;border-radius:6px;background:#fff7ed;border:1px solid #fdba74;color:#ea580c;cursor:pointer;display:flex;align-items:center;gap:4px;"
+                        onmouseover="this.style.background='#ffedd5'" onmouseout="this.style.background='#fff7ed'">
+                    <svg style="width:12px;height:12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    重试
+                </button>
             </div>
         </div>
     </div>
@@ -4463,6 +4497,7 @@ createApp({
         // 批量下载状态
         const downloadTask = reactive({
             visible: false,
+            collapsed: false, // 收起状态
             status: '',      // processing / done / error
             total: 0,
             current: 0,
@@ -4471,6 +4506,7 @@ createApp({
             currentFile: '',
             taskId: '',
             error: '',
+            lastIds: [],     // 记录本次下载的ID列表，用于重试
         });
         let _downloadPollTimer = null;
 
@@ -4531,9 +4567,10 @@ createApp({
         async function startBatchDownloadTask(ids) {
             // 立即显示进度弹窗
             Object.assign(downloadTask, {
-                visible: true, status: 'processing',
+                visible: true, collapsed: false, status: 'processing',
                 total: ids.length, current: 0, success: 0, failed: 0,
                 currentFile: '正在启动...', taskId: '', error: '',
+                lastIds: [...ids],
             });
 
             const resp = await authFetch('/api/insurance/batch-download/start', {
@@ -4623,10 +4660,26 @@ createApp({
             }
         }
 
-        // 关闭下载进度浮窗
+        // 收起下载进度浮窗
+        function collapseDownloadTask() {
+            downloadTask.collapsed = true;
+        }
+        // 展开下载进度浮窗
+        function expandDownloadTask() {
+            downloadTask.collapsed = false;
+        }
+        // 彻底关闭（仅在完成或出错时可用）
         function closeDownloadTask() {
             downloadTask.visible = false;
+            downloadTask.collapsed = false;
             if (_downloadPollTimer) { clearInterval(_downloadPollTimer); _downloadPollTimer = null; }
+        }
+        // 重试下载
+        async function retryDownloadTask() {
+            if (!downloadTask.lastIds.length) return;
+            if (_downloadPollTimer) { clearInterval(_downloadPollTimer); _downloadPollTimer = null; }
+            downloadTask.visible = false;
+            await startBatchDownloadTask(downloadTask.lastIds);
         }
 
         // 识别记录导出的额外列（与列表展示一致）
@@ -5369,7 +5422,7 @@ createApp({
             duplicateVisible, duplicateList, confirmSyncSkipDuplicates, confirmSyncUpdateDuplicates, cancelSync,
             // 识别记录
             records, filteredRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
-            isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask, batchFailModal, batchFailRetry, batchFailUpload,
+            isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask, collapseDownloadTask, expandDownloadTask, retryDownloadTask, batchFailModal, batchFailRetry, batchFailUpload,
             roomList, monitorRooms, monitorUsers,
             recordFilter, statusLabel, onSourceTypeChange, clearAllFilters, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
             recordPagination, visiblePages, recordStats,
