@@ -528,6 +528,19 @@ class ContactsManager:
         finally:
             conn.close()
 
+    def _clear_cache(self, contact_id: str):
+        """清除单个缓存条目，使下次 get_name/get_room_name 重新从 API 获取"""
+        conn = self.db.pool.connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM contacts_cache WHERE id = %s",
+                (self._cache_key(contact_id),)
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
     def _set_cache(self, contact_id: str, contact_type: str, name: str):
         """写入数据库永久缓存"""
         conn = self.db.pool.connection()

@@ -1198,10 +1198,64 @@ function renderMembers(members) {
         panel.innerHTML = '<div class="members-loading">暂无成员信息</div>';
         return;
     }
-    panel.innerHTML = '<div class="members-list">' + members.map(m => {
+    panel.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+        + '<button class="chat-members-btn" onclick="refreshMemberNames()" id="refreshNamesBtn" style="font-size:11px;padding:2px 8px;">刷新名称</button>'
+        + '</div>'
+        + '<div class="members-list">' + members.map(m => {
         const color = getSenderColor(m.userid);
         return `<span class="member-tag" onclick="openContactModal('${m.userid}', '${escapeHtml(m.name)}', 'user')" title="点击编辑名称"><span class="member-dot" style="background:${color}"></span>${escapeHtml(m.name)}</span>`;
     }).join("") + '</div>';
+}
+
+// 批量刷新当前群的群名和所有成员名称
+async function refreshMemberNames() {
+    const roomid = currentRoomId || currentConv;
+    if (!roomid || roomid.startsWith("private_")) return;
+
+    const btn = document.getElementById("refreshNamesBtn");
+    btn.disabled = true;
+    btn.textContent = "刷新中...";
+
+    const members = membersCache[roomid] || [];
+    const userIds = members.map(m => m.userid).filter(Boolean);
+
+    try {
+        const res = await authFetch("/api/contacts/refresh", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ roomid, user_ids: userIds }),
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            // 用返回的新名称更新缓存
+            if (data.results) {
+                if (data.results.room) {
+                    document.getElementById("chatTitle").textContent = data.results.room.name;
+                }
+                if (data.results.users && members.length) {
+                    members.forEach(m => {
+                        if (data.results.users[m.userid]) {
+                            m.name = data.results.users[m.userid];
+                        }
+                    });
+                    membersCache[roomid] = members;
+                }
+            }
+            renderMembers(members);
+            // 刷新会话列表和消息以显示新名称
+            loadConversations();
+            if (currentConv) loadChatMessages(true);
+            btn.textContent = "已刷新";
+        } else {
+            btn.textContent = data.error || "刷新失败";
+        }
+    } catch(e) {
+        btn.textContent = "刷新失败";
+    }
+    setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = "刷新名称";
+    }, 2000);
 }
 
 // 加载聊天消息

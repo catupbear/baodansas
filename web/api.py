@@ -499,6 +499,45 @@ def update_contact():
         return jsonify({"error": str(e)}), 500
 
 
+@api_bp.route("/contacts/refresh", methods=["POST"])
+def refresh_contacts():
+    """批量刷新指定群/成员名称：清除缓存后重新从企微 API 获取"""
+    if _contacts is None:
+        return jsonify({"error": "通讯录模块未初始化"}), 503
+
+    data = request.get_json() or {}
+    room_id = data.get("roomid", "").strip()
+    user_ids = data.get("user_ids", [])
+
+    results = {"room": None, "users": {}}
+
+    # 刷新群名称
+    if room_id:
+        _contacts._clear_cache(room_id)
+        for extra_contacts in _contacts_map.values():
+            extra_contacts._clear_cache(room_id)
+        new_name = _contacts.get_room_name(room_id)
+        results["room"] = {"id": room_id, "name": new_name}
+
+    # 刷新用户名称
+    for uid in user_ids:
+        uid = uid.strip()
+        if not uid:
+            continue
+        _contacts._clear_cache(uid)
+        for extra_contacts in _contacts_map.values():
+            extra_contacts._clear_cache(uid)
+        new_name = _contacts.get_name(uid)
+        results["users"][uid] = new_name
+
+    refreshed = len(user_ids) + (1 if room_id else 0)
+    return jsonify({
+        "success": True,
+        "message": f"已刷新 {refreshed} 项名称",
+        "results": results,
+    })
+
+
 # ============================================================
 # 报价补扫
 # ============================================================
