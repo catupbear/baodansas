@@ -4507,6 +4507,7 @@ createApp({
             taskId: '',
             error: '',
             lastIds: [],     // 记录本次下载的ID列表，用于重试
+            batchLabel: '',  // 批次标签，如"第1批"
         });
         let _downloadPollTimer = null;
 
@@ -4564,13 +4565,13 @@ createApp({
         }
 
         // 启动下载任务（传入ID列表）
-        async function startBatchDownloadTask(ids) {
+        async function startBatchDownloadTask(ids, batchLabel = '') {
             // 立即显示进度弹窗
             Object.assign(downloadTask, {
                 visible: true, collapsed: false, status: 'processing',
                 total: ids.length, current: 0, success: 0, failed: 0,
                 currentFile: '正在启动...', taskId: '', error: '',
-                lastIds: [...ids],
+                lastIds: [...ids], batchLabel,
             });
 
             const resp = await authFetch('/api/insurance/batch-download/start', {
@@ -4612,7 +4613,7 @@ createApp({
             const range = batchDlRanges.value[batchIdx];
             const slicedIds = batchDlAllIds.value.slice(range.start - 1, range.end);
             batchDlVisible.value = false;
-            await startBatchDownloadTask(slicedIds);
+            await startBatchDownloadTask(slicedIds, `第${batchIdx + 1}批`);
         }
 
         async function batchDownload() {
@@ -4650,7 +4651,8 @@ createApp({
                 const a = document.createElement('a');
                 a.href = url;
                 const dlDate = new Date().toISOString().slice(0, 10);
-                a.download = `批量导出保单_${dlDate}.zip`;
+                const batchSuffix = downloadTask.batchLabel ? `_${downloadTask.batchLabel}` : '';
+                a.download = `批量导出保单_${dlDate}${batchSuffix}.zip`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
