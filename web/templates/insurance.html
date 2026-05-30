@@ -1850,6 +1850,82 @@
         </div>
     </transition>
 
+    <!-- ========== 分批导出弹窗（超过500条时提示） ========== -->
+    <transition name="fade">
+        <div v-if="batchExportVisible" class="fixed inset-0 z-[60] modal-mask flex items-center justify-center"
+             @click.self="batchExportVisible = false">
+            <div class="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4">
+                <div class="px-5 py-4 border-b flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
+                            <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-base font-semibold text-gray-800">数据量超出限制</h3>
+                    </div>
+                    <button @click="batchExportVisible = false" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">&times;</button>
+                </div>
+                <div class="px-5 py-4 space-y-3">
+                    <p class="text-sm text-gray-600">
+                        当前共 <strong class="text-amber-600">{{ batchExportTotal }}</strong> 条数据，每次导出不能超过 500 条，请选择分批导出：
+                    </p>
+                    <div class="space-y-2 max-h-64 overflow-y-auto">
+                        <button v-for="(batch, idx) in batchExportRanges" :key="idx"
+                                @click="executeBatchExport(idx)"
+                                class="w-full text-left px-4 py-2.5 rounded-lg border border-gray-200 hover:border-green-400 hover:bg-green-50 transition-colors cursor-pointer flex items-center justify-between group">
+                            <span class="text-sm font-medium text-gray-700 group-hover:text-green-700">
+                                第 {{ idx + 1 }} 批：第 {{ batch.start }} ~ {{ batch.end }} 条
+                            </span>
+                            <span class="text-xs text-gray-400 group-hover:text-green-600">{{ batch.end - batch.start + 1 }} 条</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="px-5 py-3 border-t bg-gray-50 rounded-b-xl flex justify-end">
+                    <button @click="batchExportVisible = false" class="btn btn-outline" style="font-size:13px;">取消</button>
+                </div>
+            </div>
+        </div>
+    </transition>
+
+    <!-- ========== 分批下载保单弹窗（超过500条时提示） ========== -->
+    <transition name="fade">
+        <div v-if="batchDlVisible" class="fixed inset-0 z-[60] modal-mask flex items-center justify-center"
+             @click.self="batchDlVisible = false">
+            <div class="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4">
+                <div class="px-5 py-4 border-b flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
+                            <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-base font-semibold text-gray-800">数据量超出限制</h3>
+                    </div>
+                    <button @click="batchDlVisible = false" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">&times;</button>
+                </div>
+                <div class="px-5 py-4 space-y-3">
+                    <p class="text-sm text-gray-600">
+                        当前共 <strong class="text-amber-600">{{ batchDlTotal }}</strong> 个保单文件，每次下载不能超过 500 个，请选择分批下载：
+                    </p>
+                    <div class="space-y-2 max-h-64 overflow-y-auto">
+                        <button v-for="(batch, idx) in batchDlRanges" :key="idx"
+                                @click="executeBatchDownload(idx)"
+                                class="w-full text-left px-4 py-2.5 rounded-lg border border-gray-200 hover:border-green-400 hover:bg-green-50 transition-colors cursor-pointer flex items-center justify-between group">
+                            <span class="text-sm font-medium text-gray-700 group-hover:text-green-700">
+                                第 {{ idx + 1 }} 批：第 {{ batch.start }} ~ {{ batch.end }} 个
+                            </span>
+                            <span class="text-xs text-gray-400 group-hover:text-green-600">{{ batch.end - batch.start + 1 }} 个</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="px-5 py-3 border-t bg-gray-50 rounded-b-xl flex justify-end">
+                    <button @click="batchDlVisible = false" class="btn btn-outline" style="font-size:13px;">取消</button>
+                </div>
+            </div>
+        </div>
+    </transition>
+
     <!-- ========== 重复保单确认弹窗 ========== -->
     <transition name="fade">
         <div v-if="duplicateVisible" class="fixed inset-0 z-50 modal-mask flex items-center justify-center"
@@ -3690,6 +3766,20 @@ createApp({
             });
         }
 
+        // 构建手动上传导出数据（不发请求，仅组装数据）
+        function buildManualExportData(type) {
+            if (type === 'success') return enrichUploadData(buildMappedInvoices(), successResults.value);
+            if (type === 'abnormal') return enrichUploadData(buildAbnormalInvoices(), abnormalResults.value);
+            if (type === 'nonpolicy') return nonPolicyResults.value.map(r => ({
+                file_name: r.file_name,
+                fields: { '文件名': r.file_name, '文档类型': r.invoices?.[0]?.doc_category || r.error || '非保单' },
+            }));
+            return failedResults.value.map(r => ({
+                file_name: r.file_name || r.filename || '',
+                fields: { '文件名': r.file_name || r.filename || '', '失败原因': r.error || r.error_message || '' },
+            }));
+        }
+
         // 实际执行导出（手动上传结果）
         async function doExportExcel(type, selectedCols, mergeByPlate = false) {
             let data, fileName;
@@ -3802,6 +3892,13 @@ createApp({
         const exportPendingType = ref('');       // 'success'|'abnormal'|'nonpolicy'|'failed'|'records'
         const exportPendingData = ref(null);     // 暂存导出数据
         const exportPendingFileName = ref('');
+        const EXPORT_BATCH_LIMIT = 500;          // 单次导出上限
+        const batchExportVisible = ref(false);   // 分批导出弹窗
+        const batchExportTotal = ref(0);         // 总条数
+        const batchExportRanges = ref([]);       // 分批范围列表
+        const batchExportAllData = ref(null);    // 暂存全量数据供分批切片
+        const batchExportCols = ref(null);       // 暂存导出列
+        const batchExportMerge = ref(false);     // 暂存合并开关
 
         const isAllExportFieldsSelected = computed(() =>
             exportAvailableFields.value.length > 0 && exportSelectedFields.value.length === exportAvailableFields.value.length
@@ -3811,20 +3908,103 @@ createApp({
             exportSelectedFields.value = e.target.checked ? [...exportAvailableFields.value] : [];
         }
 
+        // 计算手动上传导出的数据条数
+        function getManualExportCount(type) {
+            if (type === 'success') return successResults.value.length;
+            if (type === 'abnormal') return abnormalResults.value.length;
+            if (type === 'nonpolicy') return nonPolicyResults.value.length;
+            if (type === 'failed') return failedResults.value.length;
+            return 0;
+        }
+
+        // 生成分批范围
+        function buildBatchRanges(total) {
+            const ranges = [];
+            for (let i = 0; i < total; i += EXPORT_BATCH_LIMIT) {
+                ranges.push({ start: i + 1, end: Math.min(i + EXPORT_BATCH_LIMIT, total) });
+            }
+            return ranges;
+        }
+
         // 实际执行导出
         async function confirmExport() {
             exportModalVisible.value = false;
             const type = exportPendingType.value;
-            // 默认模板模式传 null，让后端使用导出列配置；自定义模式传选中的列
             const selectedCols = exportCustomMode.value ? exportSelectedFields.value : null;
+            const merge = exportMergeByPlate.value;
 
             if (type === 'records') {
-                // 识别记录导出
-                await doExportRecordsExcel(selectedCols, exportMergeByPlate.value);
+                // 识别记录：先收集全部数据，检查条数
+                const allData = await collectRecordsExportData(selectedCols);
+                if (!allData || !allData.length) { showMessage('没有可导出的数据', false); return; }
+                if (allData.length > EXPORT_BATCH_LIMIT) {
+                    batchExportTotal.value = allData.length;
+                    batchExportRanges.value = buildBatchRanges(allData.length);
+                    batchExportAllData.value = allData;
+                    batchExportCols.value = selectedCols;
+                    batchExportMerge.value = merge;
+                    batchExportVisible.value = true;
+                    return;
+                }
+                await sendExportRequest(allData, selectedCols, merge, '保单识别记录');
             } else {
                 // 手动上传结果导出
-                await doExportExcel(type, selectedCols || exportSelectedFields.value, exportMergeByPlate.value);
+                const count = getManualExportCount(type);
+                if (count > EXPORT_BATCH_LIMIT) {
+                    const allData = buildManualExportData(type);
+                    batchExportTotal.value = allData.length;
+                    batchExportRanges.value = buildBatchRanges(allData.length);
+                    batchExportAllData.value = allData;
+                    batchExportCols.value = selectedCols || exportSelectedFields.value;
+                    batchExportMerge.value = merge;
+                    batchExportVisible.value = true;
+                    return;
+                }
+                await doExportExcel(type, selectedCols || exportSelectedFields.value, merge);
             }
+        }
+
+        // 执行分批导出（用户选择某一批后触发）
+        async function executeBatchExport(batchIdx) {
+            const range = batchExportRanges.value[batchIdx];
+            const sliced = batchExportAllData.value.slice(range.start - 1, range.end);
+            batchExportVisible.value = false;
+            const batchLabel = `第${batchIdx + 1}批`;
+            await sendExportRequest(sliced, batchExportCols.value, batchExportMerge.value, batchLabel);
+        }
+
+        // 通用导出请求（发送数据到后端生成Excel）
+        async function sendExportRequest(data, selectedCols, mergeByPlate, labelPrefix) {
+            try {
+                showMessage('正在导出，请稍候...', true);
+                const postBody = { invoices: data, export_type: 'success', merge_by_plate: mergeByPlate, config_applied: true };
+                if (selectedCols) postBody.field_names = selectedCols;
+                const resp = await authFetch('/api/insurance/export/excel', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(postBody),
+                });
+                if (!resp.ok) { showMessage('导出失败', false); return; }
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                const dateStr = new Date().toISOString().slice(0, 10);
+                a.href = url; a.download = `${labelPrefix}_${dateStr}.xlsx`;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                let exportCount = data.length;
+                if (mergeByPlate) {
+                    const mergeablePlates = new Set();
+                    let standaloneCount = 0;
+                    for (const d of data) {
+                        const p = (d.fields['车牌'] || d.fields['车牌号'] || '').trim();
+                        if (!p || p === '新车' || p === '*-*' || p === '*—*') standaloneCount++;
+                        else mergeablePlates.add(p);
+                    }
+                    exportCount = mergeablePlates.size + standaloneCount;
+                }
+                const msg = mergeByPlate ? `导出成功，按车牌合并后共 ${exportCount} 条数据` : `导出成功，共 ${exportCount} 条数据`;
+                showMessage(msg, true);
+            } catch (e) { showMessage(`导出失败: ${e.message}`, false); }
         }
 
         async function confirmSync() {
@@ -4295,92 +4475,116 @@ createApp({
         let _downloadPollTimer = null;
 
         // 批量下载保单文件（异步打包 ZIP）：有勾选按勾选，否则按当前筛选条件全部下载
+        // 分批下载保单状态
+        const batchDlVisible = ref(false);      // 分批下载弹窗
+        const batchDlTotal = ref(0);            // 总条数
+        const batchDlRanges = ref([]);          // 分批范围
+        const batchDlAllIds = ref([]);          // 全部ID
+
+        // 收集批量下载的ID列表
+        async function collectBatchDownloadIds() {
+            let ids = [...selectedRecordIds.value];
+            if (!ids.length) {
+                showMessage('正在查询符合条件的记录...', true);
+                const params = new URLSearchParams({ page: 1, page_size: 10000 });
+                if (recordFilter.source_type === 'user') {
+                    params.set('source_type', 'user');
+                    if (recordFilter.userid) params.set('sender', recordFilter.userid);
+                } else if (recordFilter.source_type === 'room') {
+                    params.set('source_type', 'room');
+                    if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
+                } else {
+                    if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
+                }
+                const tab = recordActiveTab.value;
+                if (tab === 'done') {
+                    params.set('status', 'done');
+                    params.set('is_abnormal', '0');
+                    params.set('doc_category', recordDocTypeFilter.value || '保单');
+                } else if (tab === 'abnormal') {
+                    params.set('status', 'done');
+                    params.set('is_abnormal', '1');
+                } else if (tab === 'nonpolicy') {
+                    params.set('status', 'done');
+                    params.set('doc_category', '!保单');
+                } else if (tab === 'failed') {
+                    params.set('status', 'failed');
+                } else if (recordFilter.status) {
+                    params.set('status', recordFilter.status);
+                }
+                if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
+                if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
+                if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
+                if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
+                _appendDateParams(params);
+                _appendAdvancedParams(params);
+
+                const listResp = await authFetch(`/api/insurance/records?${params.toString()}`);
+                const listJson = await listResp.json();
+                const allRecords = (listJson.data || listJson).records || [];
+                ids = allRecords.filter(r => r.cos_url).map(r => r.id);
+            }
+            return ids;
+        }
+
+        // 启动下载任务（传入ID列表）
+        async function startBatchDownloadTask(ids) {
+            const resp = await authFetch('/api/insurance/batch-download/start', {
+                method: 'POST',
+                body: JSON.stringify({ record_ids: ids }),
+            });
+            const json = await resp.json();
+            if (json.code !== 0) { showMessage(json.msg || '启动下载失败', false); return; }
+
+            Object.assign(downloadTask, {
+                visible: true, status: 'processing',
+                total: json.data.total, current: 0, success: 0, failed: 0,
+                currentFile: '', taskId: json.data.task_id, error: '',
+            });
+
+            _downloadPollTimer = setInterval(async () => {
+                try {
+                    const sr = await authFetch(`/api/insurance/batch-download/status/${downloadTask.taskId}`);
+                    const sj = await sr.json();
+                    if (sj.code !== 0) return;
+                    const d = sj.data;
+                    Object.assign(downloadTask, {
+                        status: d.status, current: d.current, success: d.success,
+                        failed: d.failed, currentFile: d.current_file, error: d.error,
+                    });
+                    if (d.status === 'done' || d.status === 'error') {
+                        clearInterval(_downloadPollTimer);
+                        _downloadPollTimer = null;
+                        if (d.status === 'done') _triggerDownloadFile(downloadTask.taskId);
+                    }
+                } catch (e) { /* 忽略轮询异常 */ }
+            }, 800);
+        }
+
+        // 用户选择某一批下载
+        async function executeBatchDownload(batchIdx) {
+            const range = batchDlRanges.value[batchIdx];
+            const slicedIds = batchDlAllIds.value.slice(range.start - 1, range.end);
+            batchDlVisible.value = false;
+            await startBatchDownloadTask(slicedIds);
+        }
+
         async function batchDownload() {
             if (downloadTask.visible) { showMessage('已有下载任务进行中', false); return; }
             try {
-                let ids = [...selectedRecordIds.value];
+                const ids = await collectBatchDownloadIds();
+                if (!ids.length) { showMessage('没有可下载的文件', false); return; }
 
-                // 没有勾选时，按当前筛选条件查询全部记录的 ID
-                if (!ids.length) {
-                    showMessage('正在查询符合条件的记录...', true);
-                    const params = new URLSearchParams({ page: 1, page_size: 10000 });
-                    if (recordFilter.source_type === 'user') {
-                        params.set('source_type', 'user');
-                        if (recordFilter.userid) params.set('sender', recordFilter.userid);
-                    } else if (recordFilter.source_type === 'room') {
-                        params.set('source_type', 'room');
-                        if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
-                    } else {
-                        if (recordFilter.roomid) params.set('roomid', recordFilter.roomid);
-                    }
-                    const tab = recordActiveTab.value;
-                    if (tab === 'done') {
-                        params.set('status', 'done');
-                        params.set('is_abnormal', '0');
-                        params.set('doc_category', recordDocTypeFilter.value || '保单');
-                    } else if (tab === 'abnormal') {
-                        params.set('status', 'done');
-                        params.set('is_abnormal', '1');
-                    } else if (tab === 'nonpolicy') {
-                        params.set('status', 'done');
-                        params.set('doc_category', '!保单');
-                    } else if (tab === 'failed') {
-                        params.set('status', 'failed');
-                    } else if (recordFilter.status) {
-                        params.set('status', recordFilter.status);
-                    }
-                    if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
-                    if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
-                    if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
-                    if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
-                    _appendDateParams(params);
-                    _appendAdvancedParams(params);
-
-                    const listResp = await authFetch(`/api/insurance/records?${params.toString()}`);
-                    const listJson = await listResp.json();
-                    const allRecords = (listJson.data || listJson).records || [];
-                    ids = allRecords.filter(r => r.cos_url).map(r => r.id);
-                    if (!ids.length) { showMessage('没有可下载的文件', false); return; }
+                // 超过500条，弹分批选择
+                if (ids.length > EXPORT_BATCH_LIMIT) {
+                    batchDlTotal.value = ids.length;
+                    batchDlRanges.value = buildBatchRanges(ids.length);
+                    batchDlAllIds.value = ids;
+                    batchDlVisible.value = true;
+                    return;
                 }
 
-                // 启动异步下载任务
-                const resp = await authFetch('/api/insurance/batch-download/start', {
-                    method: 'POST',
-                    body: JSON.stringify({ record_ids: ids }),
-                });
-                const json = await resp.json();
-                if (json.code !== 0) { showMessage(json.msg || '启动下载失败', false); return; }
-
-                // 显示进度浮窗
-                Object.assign(downloadTask, {
-                    visible: true, status: 'processing',
-                    total: json.data.total, current: 0, success: 0, failed: 0,
-                    currentFile: '', taskId: json.data.task_id, error: '',
-                });
-
-                // 轮询进度
-                _downloadPollTimer = setInterval(async () => {
-                    try {
-                        const sr = await authFetch(`/api/insurance/batch-download/status/${downloadTask.taskId}`);
-                        const sj = await sr.json();
-                        if (sj.code !== 0) return;
-                        const d = sj.data;
-                        Object.assign(downloadTask, {
-                            status: d.status, current: d.current, success: d.success,
-                            failed: d.failed, currentFile: d.current_file, error: d.error,
-                        });
-                        if (d.status === 'done' || d.status === 'error') {
-                            clearInterval(_downloadPollTimer);
-                            _downloadPollTimer = null;
-                            if (d.status === 'done') {
-                                // 自动触发下载
-                                _triggerDownloadFile(downloadTask.taskId);
-                            }
-                        }
-                    } catch (e) {
-                        // 忽略轮询异常
-                    }
-                }, 800);
+                await startBatchDownloadTask(ids);
             } catch (e) {
                 showMessage('下载失败: ' + e.message, false);
             }
@@ -4437,18 +4641,16 @@ createApp({
             exportModalVisible.value = true;
         }
 
-        // 实际执行导出（识别记录）：有勾选按勾选，否则按当前筛选条件全部导出
-        async function doExportRecordsExcel(selectedCols, mergeByPlate = false) {
+        // 收集识别记录导出数据（不发请求）
+        async function collectRecordsExportData(selectedCols) {
             try {
-                showMessage('正在导出，请稍候...', true);
+                showMessage('正在查询数据...', true);
 
                 let allRecords;
                 if (selectedRecordIds.value.length) {
-                    // 有勾选：从当前已加载的记录中筛选
                     const idSet = new Set(selectedRecordIds.value);
                     allRecords = records.value.filter(r => idSet.has(r.id));
                 } else {
-                    // 没有勾选：按当前筛选条件查询全部
                     const params = new URLSearchParams({ page: 1, page_size: 10000 });
                     if (recordFilter.source_type === 'user') {
                         params.set('source_type', 'user');
@@ -4492,8 +4694,6 @@ createApp({
                     allRecords = (listJson.data || listJson).records || [];
                 }
 
-                // 额外列映射（基础元数据字段）
-                // 创建时间/识别时间发送原始值，由后端按日期格式配置统一处理
                 const extraMap = (r) => ({
                     '文件名': r.filename || '',
                     '文档类型': r.doc_category || '',
@@ -4504,11 +4704,10 @@ createApp({
                     '发送人': r.sender_name || r.sender || '',
                 });
 
-                // 构建导出列：自定义模式按选中列过滤，默认模板模式传所有字段让后端决定
                 const _fallback = [...recordExtraColumns, ...visibleListColumns.value.map(c => c.key)];
                 const colsToUse = selectedCols || [...new Set(_fallback)];
 
-                const data = allRecords
+                return allRecords
                     .filter(r => r.status === 'done' || r.status === 'success')
                     .map(r => {
                         const df = r.display_fields || {};
@@ -4519,41 +4718,10 @@ createApp({
                         }
                         return { fields: row, filename: r.filename || '' };
                     });
-                if (!data.length) { showMessage('没有可导出的数据', false); return; }
-
-                const postBody = { invoices: data, export_type: 'success', merge_by_plate: mergeByPlate, config_applied: true };
-                // 自定义模式才传 field_names，默认模板模式让后端用导出列配置
-                if (selectedCols) postBody.field_names = selectedCols;
-                const resp = await authFetch('/api/insurance/export/excel', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(postBody),
-                });
-                if (!resp.ok) { showMessage('导出失败', false); return; }
-                const blob = await resp.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                const dateStr = new Date().toISOString().slice(0, 10);
-                a.href = url; a.download = `保单识别记录_${dateStr}.xlsx`;
-                document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                // 计算实际导出行数：合并模式按车牌去重计数（空/新车/*-*不合并，每条算独立行）
-                let exportCount = data.length;
-                if (mergeByPlate) {
-                    const mergeablePlates = new Set();
-                    let standaloneCount = 0;
-                    for (const d of data) {
-                        const p = (d.fields['车牌'] || d.fields['车牌号'] || '').trim();
-                        if (!p || p === '新车' || p === '*-*' || p === '*—*') {
-                            standaloneCount++;
-                        } else {
-                            mergeablePlates.add(p);
-                        }
-                    }
-                    exportCount = mergeablePlates.size + standaloneCount;
-                }
-                const msg = mergeByPlate ? `导出成功，按车牌合并后共 ${exportCount} 条数据` : `导出成功，共 ${exportCount} 条数据`;
-                showMessage(msg, true);
-            } catch (e) { showMessage(`导出失败: ${e.message}`, false); }
+            } catch (e) {
+                showMessage(`查询数据失败: ${e.message}`, false);
+                return [];
+            }
         }
 
         const roomList = ref([]);  // 群列表（用于筛选下拉）
@@ -5181,6 +5349,8 @@ createApp({
             // 导出列选择
             exportModalVisible, exportSelectedFields, exportAvailableFields, exportMergeByPlate, exportPendingType, exportCustomMode,
             isAllExportFieldsSelected, toggleAllExportFields, confirmExport,
+            batchExportVisible, batchExportTotal, batchExportRanges, executeBatchExport,
+            batchDlVisible, batchDlTotal, batchDlRanges, executeBatchDownload,
             // 钉钉
             targets, selectedTargetId, targetModalVisible,
             newTargetUrl, newTargetName, targetError, addingTarget,
