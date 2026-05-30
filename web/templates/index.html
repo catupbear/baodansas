@@ -371,7 +371,9 @@
             border-radius: 12px;
             font-size: 12px;
             color: #333;
+            cursor: pointer;
         }
+        .members-panel .member-tag:hover { background: #e4e6e9; }
         .members-panel .member-dot {
             width: 6px;
             height: 6px;
@@ -465,7 +467,9 @@
         .msg-sender-name {
             font-size: 13px;
             font-weight: 600;
+            cursor: pointer;
         }
+        .msg-sender-name:hover { opacity: 0.7; }
 
         .msg-timestamp {
             font-size: 11px;
@@ -1196,7 +1200,7 @@ function renderMembers(members) {
     }
     panel.innerHTML = '<div class="members-list">' + members.map(m => {
         const color = getSenderColor(m.userid);
-        return `<span class="member-tag"><span class="member-dot" style="background:${color}"></span>${escapeHtml(m.name)}</span>`;
+        return `<span class="member-tag" onclick="openContactModal('${m.userid}', '${escapeHtml(m.name)}', 'user')" title="点击编辑名称"><span class="member-dot" style="background:${color}"></span>${escapeHtml(m.name)}</span>`;
     }).join("") + '</div>';
 }
 
@@ -1313,7 +1317,7 @@ function renderChat(scrollToBottom) {
                 <div class="msg-avatar" style="background:${color}" onclick="openContactModal('${msg.sender}', '${escapeHtml(senderName)}', 'user')" title="点击编辑名称">${getInitial(senderName)}</div>
                 <div class="msg-body">
                     <div class="msg-header">
-                        <span class="msg-sender-name" style="color:${color}">${escapeHtml(senderName)}</span>${toTag}
+                        <span class="msg-sender-name" style="color:${color}" onclick="openContactModal('${msg.sender}', '${escapeHtml(senderName)}', 'user')" title="点击编辑名称">${escapeHtml(senderName)}</span>${toTag}
                         <span class="msg-timestamp">${formatTime(ts)}</span>
                         ${typeTag}
                     </div>
