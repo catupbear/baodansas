@@ -4529,17 +4529,26 @@ createApp({
 
         // 启动下载任务（传入ID列表）
         async function startBatchDownloadTask(ids) {
+            // 立即显示进度弹窗
+            Object.assign(downloadTask, {
+                visible: true, status: 'processing',
+                total: ids.length, current: 0, success: 0, failed: 0,
+                currentFile: '正在启动...', taskId: '', error: '',
+            });
+
             const resp = await authFetch('/api/insurance/batch-download/start', {
                 method: 'POST',
                 body: JSON.stringify({ record_ids: ids }),
             });
             const json = await resp.json();
-            if (json.code !== 0) { showMessage(json.msg || '启动下载失败', false); return; }
+            if (json.code !== 0) {
+                downloadTask.visible = false;
+                showMessage(json.msg || '启动下载失败', false);
+                return;
+            }
 
             Object.assign(downloadTask, {
-                visible: true, status: 'processing',
-                total: json.data.total, current: 0, success: 0, failed: 0,
-                currentFile: '', taskId: json.data.task_id, error: '',
+                total: json.data.total, taskId: json.data.task_id, currentFile: '',
             });
 
             _downloadPollTimer = setInterval(async () => {
