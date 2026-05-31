@@ -1038,6 +1038,39 @@ def find_records_by_plate(db, plate: str, exclude_id: int = None) -> list:
         conn.close()
 
 
+def find_compulsory_end_dates(db, plates: list) -> dict:
+    """
+    批量查询车牌对应的交强险终保日期。
+    返回 {车牌: 终保日期} 映射，取最新一条交强险记录的 end_date。
+    """
+    if not plates:
+        return {}
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        placeholders = ",".join(["%s"] * len(plates))
+        cursor.execute(
+            f"SELECT pf.plate_no, pf.end_date "
+            f"FROM insurance_policy_fields pf "
+            f"JOIN insurance_records r ON r.id = pf.record_id "
+            f"WHERE pf.plate_no IN ({placeholders}) "
+            f"AND (pf.policy_type LIKE '%%交强%%' OR pf.policy_type LIKE '%%交通事故责任强制%%') "
+            f"AND r.status = 'done' AND pf.end_date != '' "
+            f"ORDER BY r.id DESC",
+            plates,
+        )
+        result = {}
+        for row in cursor.fetchall():
+            plate = row["plate_no"]
+            if plate not in result:
+                result[plate] = row["end_date"]
+        return result
+    except Exception:
+        return {}
+    finally:
+        conn.close()
+
+
 def find_records_by_person(db, applicant: str = "", insured: str = "", owner: str = "",
                            exclude_id: int = None) -> list:
     """

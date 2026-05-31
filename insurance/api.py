@@ -395,6 +395,38 @@ def list_records():
                 if record.get(ts_field) and not isinstance(record[ts_field], str):
                     record[ts_field] = str(record[ts_field])
 
+        # 注入交强到期时间：从当前页记录中找同车牌的交强险终保日期
+        list_visible_keys = {c["key"] for c in list_col_cfg.get("columns", []) if c.get("visible")}
+        if "交强到期时间" in list_visible_keys:
+            _plate_compulsory_end = {}
+            for record in result.get("records", []):
+                df = record.get("display_fields", {})
+                plate = df.get("车牌", "") or df.get("车牌号", "")
+                policy_type = df.get("险种", "") or df.get("险种类型", "")
+                if plate and ("交强" in policy_type or "交通事故责任强制" in policy_type):
+                    end_date = df.get("终保日期", "")
+                    if end_date:
+                        _plate_compulsory_end[plate] = end_date
+            # 如果当前页没有交强险记录，从数据库查同车牌的交强险终保日期
+            _plates_need_lookup = set()
+            for record in result.get("records", []):
+                df = record.get("display_fields", {})
+                plate = df.get("车牌", "") or df.get("车牌号", "")
+                if plate and plate not in _plate_compulsory_end:
+                    _plates_need_lookup.add(plate)
+            if _plates_need_lookup:
+                try:
+                    from insurance.db import find_compulsory_end_dates
+                    _db_end_dates = find_compulsory_end_dates(_db, list(_plates_need_lookup))
+                    _plate_compulsory_end.update(_db_end_dates)
+                except Exception:
+                    logger.debug("查询交强到期时间失败")
+            for record in result.get("records", []):
+                df = record.get("display_fields", {})
+                plate = df.get("车牌", "") or df.get("车牌号", "")
+                if plate:
+                    df["交强到期时间"] = _plate_compulsory_end.get(plate, "")
+
         # 复用已加载的页面列配置
         result["column_config"] = list_col_cfg
 
@@ -2688,6 +2720,19 @@ def export_excel():
                     headers = list(field_names)
                 ws.append(headers)
 
+                # 构建车牌 → 交强到期时间映射（从同车牌的交强险记录取终保日期）
+                need_compulsory_end = "交强到期时间" in field_names
+                plate_compulsory_end = {}
+                if need_compulsory_end:
+                    for inv in invoices:
+                        f = inv.get("fields", {}) if isinstance(inv, dict) else {}
+                        plate = f.get("车牌", "") or f.get("车牌号", "") or ""
+                        policy_type = f.get("险种", "") or f.get("险种类型", "") or ""
+                        if plate and ("交强" in policy_type or "交通事故责任强制" in policy_type):
+                            end_date = f.get("终保日期", "")
+                            if end_date:
+                                plate_compulsory_end[plate] = end_date
+
                 # 排序：按车牌，相同车牌按险种（商业险→交强险→驾意险）
                 _type_order = {"商业险": 0, "交强险": 1, "驾意险": 2}
                 def _normal_sort_key(inv):
@@ -2700,6 +2745,10 @@ def export_excel():
                     fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
                     if has_config and not skip_config:
                         fields = apply_user_config_to_fields(user_config, fields)
+                    # 注入交强到期时间
+                    if need_compulsory_end:
+                        plate = fields.get("车牌", "") or fields.get("车牌号", "") or ""
+                        fields["交强到期时间"] = plate_compulsory_end.get(plate, "")
                     row = []
                     for col in field_names:
                         if col == "文件名":

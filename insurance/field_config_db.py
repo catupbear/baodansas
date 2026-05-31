@@ -52,6 +52,7 @@ DEFAULT_COLUMNS = [
     {"key": "保司公司名称", "visible": True, "order": 24, "display_name": "保司公司名称"},
     {"key": "保司地址",     "visible": True, "order": 25, "display_name": "保司地址"},
     {"key": "保司（带地区）", "visible": True, "order": 26, "display_name": "保司（带地区）"},
+    {"key": "交强到期时间", "visible": False, "order": 27, "display_name": "交强到期时间"},
 ]
 
 # 记录级字段的 key 集合（用于前端区分渲染方式）
