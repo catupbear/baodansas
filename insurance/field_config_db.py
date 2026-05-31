@@ -107,6 +107,16 @@ def _convert_fmt_to_strftime(fmt: str) -> str:
             .replace("mm", "%M"))
 
 
+def _format_plate_with_hyphen(plate: str) -> str:
+    """车牌格式化：在省份简称+字母后插入连字符（粤BB446T → 粤B-B446T）"""
+    if not plate or len(plate) < 3 or "-" in plate:
+        return plate
+    PROVINCE_CHARS = "京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁"
+    if plate[0] in PROVINCE_CHARS and plate[1].isalpha() and plate[1].isupper():
+        return plate[0] + plate[1] + "-" + plate[2:]
+    return plate
+
+
 def _format_date(raw: str, fmt: str) -> str:
     """
     日期格式转换（内部函数）。
@@ -657,7 +667,15 @@ def get_effective_config(db, user_id: int, role: str, parent_id=None) -> dict:
             scope = "user"
             scope_id = user_id
 
-    return get_template_config(db, scope, scope_id, template_name)
+    config = get_template_config(db, scope, scope_id, template_name)
+
+    # 注入模板级开关：平安车牌格式化
+    if get_plate_format_pingan(db, user_id, role, parent_id):
+        if config is None:
+            config = {}
+        config["plate_format_pingan"] = True
+
+    return config
 
 
 # ------------------------------------------------------------------ #
@@ -982,6 +1000,84 @@ def save_merge_by_plate(db, scope: str, scope_id, enabled: bool):
 
 
 # ------------------------------------------------------------------ #
+# 平安车牌格式化开关（模板级配置）
+# ------------------------------------------------------------------ #
+
+def get_plate_format_pingan(db, user_id: int, role: str, parent_id=None) -> bool:
+    """获取平安车牌格式化开关状态，按优先级查找，默认关闭。"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        active = get_active_template(db, user_id)
+        active_source = active.get("source", "own")
+
+        search_order = []
+        if active_source == "system":
+            search_order.append(("global", None))
+        elif active_source == "enterprise" and parent_id is not None:
+            search_order.append(("enterprise", parent_id))
+        else:
+            if role == "employee" and parent_id is not None:
+                search_order.append(("user", user_id))
+                search_order.append(("enterprise", parent_id))
+            elif role == "enterprise":
+                search_order.append(("enterprise", parent_id or user_id))
+            elif role == "super_admin":
+                search_order.append(("global", None))
+
+        for scope, scope_id in search_order:
+            sid_cond, sid_params = _scope_id_condition(scope_id)
+            cursor.execute(
+                f"SELECT config_value FROM user_field_config "
+                f"WHERE scope = %s AND {sid_cond} AND config_type = 'export_columns' "
+                f"AND config_key = 'plate_format_pingan' LIMIT 1",
+                [scope] + sid_params
+            )
+            row = cursor.fetchone()
+            if row:
+                return row["config_value"] == "1"
+        return False
+    finally:
+        conn.close()
+
+
+def save_plate_format_pingan(db, scope: str, scope_id, enabled: bool):
+    """保存平安车牌格式化开关。"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        sid_cond, sid_params = _scope_id_condition(scope_id)
+
+        cursor.execute(
+            f"DELETE FROM user_field_config "
+            f"WHERE scope = %s AND {sid_cond} AND config_type = 'export_columns' "
+            f"AND config_key = 'plate_format_pingan'",
+            [scope] + sid_params
+        )
+
+        value = "1" if enabled else "0"
+        if scope_id is None:
+            cursor.execute(
+                "INSERT INTO user_field_config "
+                "(scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
+                "VALUES (%s, NULL, %s, 'export_columns', 'plate_format_pingan', %s, 1)",
+                [scope, DEFAULT_TEMPLATE_NAME, value]
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO user_field_config "
+                "(scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
+                "VALUES (%s, %s, %s, 'export_columns', 'plate_format_pingan', %s, 1)",
+                [scope, scope_id, DEFAULT_TEMPLATE_NAME, value]
+            )
+        conn.commit()
+        logger.debug("平安车牌格式化开关已保存: scope=%s enabled=%s", scope, enabled)
+    finally:
+        conn.close()
+
+
+# ------------------------------------------------------------------ #
 # 自定义字段固定值（独立于模板，始终按用户个人存储）
 # ------------------------------------------------------------------ #
 
@@ -1239,5 +1335,17 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
     for field_name, fixed_val in fixed_values.items():
         if fixed_val and not result.get(field_name):
             result[field_name] = fixed_val
+
+    # 6. 平安车牌格式化（粤BB446T → 粤B-B446T）
+    if config.get("plate_format_pingan"):
+        company = result.get("保险公司简称") or result.get("承保公司") or result.get("保险公司") or ""
+        if "平安" in company:
+            plate = result.get("车牌号") or result.get("车牌") or ""
+            formatted = _format_plate_with_hyphen(plate)
+            if formatted != plate:
+                if "车牌号" in result:
+                    result["车牌号"] = formatted
+                if "车牌" in result:
+                    result["车牌"] = formatted
 
     return result

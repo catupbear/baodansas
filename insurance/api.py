@@ -37,6 +37,7 @@ from .field_config_db import (
     get_column_config, save_column_config, delete_column_config,
     get_user_fixed_values, save_user_fixed_values,
     get_merge_by_plate, save_merge_by_plate,
+    get_plate_format_pingan, save_plate_format_pingan,
     MERGE_SHARED_FIELDS, MERGE_SPLIT_FIELDS, MERGE_PREFIXES, MERGE_EXTRA_COLUMNS,
     DEFAULT_COLUMNS,
 )
@@ -2778,14 +2779,26 @@ def export_excel():
                 need_compulsory_end = "交强到期时间" in field_names
                 plate_compulsory_end = {}
                 if need_compulsory_end:
+                    all_plates = set()
                     for inv in invoices:
                         f = inv.get("fields", {}) if isinstance(inv, dict) else {}
                         plate = f.get("车牌", "") or f.get("车牌号", "") or ""
                         policy_type = f.get("险种", "") or f.get("险种类型", "") or ""
-                        if plate and ("交强" in policy_type or "交通事故责任强制" in policy_type):
-                            end_date = f.get("终保日期", "")
-                            if end_date:
-                                plate_compulsory_end[plate] = end_date
+                        if plate:
+                            all_plates.add(plate)
+                            if "交强" in policy_type or "交通事故责任强制" in policy_type:
+                                end_date = f.get("终保日期", "")
+                                if end_date:
+                                    plate_compulsory_end[plate] = end_date
+                    # 兜底：当前导出记录中没有交强险的车牌，从数据库查询
+                    plates_need_lookup = [p for p in all_plates if p not in plate_compulsory_end]
+                    if plates_need_lookup and _db:
+                        try:
+                            from insurance.db import find_compulsory_end_dates
+                            db_end_dates = find_compulsory_end_dates(_db, plates_need_lookup)
+                            plate_compulsory_end.update(db_end_dates)
+                        except Exception:
+                            logger.debug("导出时查询交强到期时间失败")
 
                 # 排序：按车牌，相同车牌按险种（商业险→交强险→驾意险）
                 _type_order = {"商业险": 0, "交强险": 1, "驾意险": 2}
@@ -3680,6 +3693,62 @@ def save_merge_config_api():
         return jsonify({"code": 0, "msg": "已保存"})
     except Exception as e:
         logger.exception("保存合并配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/plate-format-config", methods=["GET"])
+@login_required
+def get_plate_format_config_api():
+    """获取平安车牌格式化开关"""
+    try:
+        user = g.current_user
+        target_scope = request.args.get("target_scope")
+        target_scope_id = request.args.get("target_scope_id")
+        if user["role"] == ROLE_SUPER_ADMIN and target_scope:
+            sid = int(target_scope_id) if target_scope_id else None
+            if target_scope == "enterprise":
+                enabled = get_plate_format_pingan(_db, sid, "enterprise", sid)
+            elif target_scope == "user":
+                from auth.db import get_user_by_id
+                target_user = get_user_by_id(_db, sid)
+                enabled = get_plate_format_pingan(_db, sid, "employee", target_user.get("parent_id") if target_user else None)
+            else:
+                enabled = get_plate_format_pingan(_db, 0, "super_admin", None)
+        else:
+            source = request.args.get("source", "own")
+            if source == "system":
+                enabled = get_plate_format_pingan(_db, 0, "super_admin", None)
+            elif source == "enterprise" and user.get("parent_id"):
+                enabled = get_plate_format_pingan(_db, user["parent_id"], "enterprise", user["parent_id"])
+            else:
+                enabled = get_plate_format_pingan(_db, user["user_id"], user["role"], user.get("parent_id"))
+        return jsonify({"code": 0, "data": {"enabled": enabled}})
+    except Exception as e:
+        logger.exception("获取平安车牌格式化配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/plate-format-config", methods=["POST"])
+@login_required
+def save_plate_format_config_api():
+    """保存平安车牌格式化开关"""
+    try:
+        body = request.get_json(force=True) or {}
+        enabled = body.get("enabled", False)
+
+        user = g.current_user
+        target_scope = body.get("target_scope")
+        target_scope_id = body.get("target_scope_id")
+        if user["role"] == ROLE_SUPER_ADMIN and target_scope:
+            scope = target_scope
+            scope_id = int(target_scope_id) if target_scope_id else None
+        else:
+            scope, scope_id = _get_user_scope()
+
+        save_plate_format_pingan(_db, scope, scope_id, enabled)
+        return jsonify({"code": 0, "msg": "已保存"})
+    except Exception as e:
+        logger.exception("保存平安车牌格式化配置失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 

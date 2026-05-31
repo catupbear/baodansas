@@ -431,7 +431,7 @@
     <!-- 代管提示条 -->
     <div v-if="adminTarget" style="background:#fef3c7; border-bottom:1px solid #fcd34d; padding:8px 24px; display:flex; align-items:center; justify-content:center; gap:12px;">
         <span style="font-size:13px; color:#92400e;">正在代管编辑：<b>{{ adminTarget.label }}</b> 的「{{ activeTemplateName }}」模板（{{ adminTarget.scope === 'enterprise' ? '企业级' : '员工级' }}），修改将直接保存到对方配置</span>
-        <button @click="adminTarget = null; loadTemplates(); loadConfig(); loadColumnConfig('list_columns'); loadColumnConfig('export_columns'); loadMergeConfig();" style="font-size:12px; padding:3px 12px; background:#fff; border:1px solid #fcd34d; border-radius:4px; cursor:pointer; color:#92400e;">退出代管</button>
+        <button @click="adminTarget = null; loadTemplates(); loadConfig(); loadColumnConfig('list_columns'); loadColumnConfig('export_columns'); loadMergeConfig(); loadPlateFormatConfig();" style="font-size:12px; padding:3px 12px; background:#fff; border:1px solid #fcd34d; border-radius:4px; cursor:pointer; color:#92400e;">退出代管</button>
     </div>
 
     <!-- 主内容区 -->
@@ -683,6 +683,15 @@
                         按车牌合并导出
                     </label>
                     <span style="font-size:11px; color:var(--text-muted);">开启后，同车牌的多条保单合并为一行，保费/保单号等按险种拆分为独立列</span>
+                    <div style="width:1px; height:20px; background:var(--border-light); margin:0 4px;"></div>
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:500;" @click="togglePlateFormatPingan">
+                        <div style="position:relative; width:36px; height:20px; flex-shrink:0;">
+                            <div style="position:absolute; inset:0; border-radius:10px; transition:background 0.2s;" :style="{ background: plateFormatPingan ? 'var(--primary)' : '#d1d5db' }"></div>
+                            <div style="position:absolute; width:16px; height:16px; top:2px; border-radius:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); transition:left 0.2s;" :style="{ left: plateFormatPingan ? '18px' : '2px' }"></div>
+                        </div>
+                        平安车牌格式化
+                    </label>
+                    <span style="font-size:11px; color:var(--text-muted);">开启后，平安保单车牌自动添加连字符（如 粤BB446T → 粤B-B446T）</span>
                 </div>
                 <div class="alias-table-wrap">
                     <table class="alias-table">
@@ -918,6 +927,7 @@ createApp({
 
         // 合并开关
         const mergeByPlate = ref(false);
+        const plateFormatPingan = ref(false);
 
         // 合并差异字段列表
         const MERGE_SPLIT_FIELDS = ['保单号', '保费',
@@ -964,6 +974,48 @@ createApp({
             } catch (e) {
                 console.error('保存合并配置失败:', e);
             }
+        }
+
+        // 加载平安车牌格式化开关
+        async function loadPlateFormatConfig() {
+            try {
+                let url = `/api/insurance/plate-format-config?source=${activeSource.value}`;
+                if (adminTarget.value) {
+                    url += `?target_scope=${adminTarget.value.scope}`;
+                    if (adminTarget.value.scope_id != null) url += `&target_scope_id=${adminTarget.value.scope_id}`;
+                }
+                const resp = await authFetch(url);
+                const data = await resp.json();
+                if (data.code === 0) {
+                    plateFormatPingan.value = data.data.enabled;
+                }
+            } catch (e) {
+                console.error('加载平安车牌格式化配置失败:', e);
+            }
+        }
+
+        // 保存平安车牌格式化开关
+        async function savePlateFormatConfig() {
+            try {
+                const body = { enabled: plateFormatPingan.value };
+                if (adminTarget.value) {
+                    body.target_scope = adminTarget.value.scope;
+                    if (adminTarget.value.scope_id != null) body.target_scope_id = adminTarget.value.scope_id;
+                }
+                await authFetch('/api/insurance/plate-format-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+            } catch (e) {
+                console.error('保存平安车牌格式化配置失败:', e);
+            }
+        }
+
+        // 切换平安车牌格式化开关
+        function togglePlateFormatPingan() {
+            plateFormatPingan.value = !plateFormatPingan.value;
+            savePlateFormatConfig();
         }
 
         // 被拆分的原始字段（开启合并时应隐藏）
@@ -1128,9 +1180,10 @@ createApp({
                         body: JSON.stringify(otherBody),
                     });
                     showToast('列配置已保存');
-                    // 导出列配置保存时同时保存合并开关
+                    // 导出列配置保存时同时保存合并开关和车牌格式化开关
                     if (configType === 'export_columns') {
                         await saveMergeConfig();
+                        await savePlateFormatConfig();
                     }
                 }
             } catch (e) {
@@ -1782,7 +1835,7 @@ createApp({
                 activeTemplateName.value = name;
                 await loadConfig(name, source);
                 // 切换模板时同步重载列配置和合并开关
-                await Promise.all([loadColumnConfig('list_columns'), loadColumnConfig('export_columns'), loadMergeConfig()]);
+                await Promise.all([loadColumnConfig('list_columns'), loadColumnConfig('export_columns'), loadMergeConfig(), loadPlateFormatConfig()]);
                 if (source === 'system') {
                     showToast('已切换到系统模板「' + name + '」（只读）', 'warning');
                 } else if (source === 'enterprise') {
@@ -1807,7 +1860,7 @@ createApp({
             await Promise.all([
                 loadColumnConfig('list_columns'),
                 loadColumnConfig('export_columns'),
-                loadMergeConfig(),
+                loadMergeConfig(), loadPlateFormatConfig(),
             ]);
             configLoaded = true;
             showToast('正在代管编辑：' + label + ' 的「' + name + '」模板', 'warning');
@@ -1958,7 +2011,7 @@ createApp({
             loadColumnConfig('list_columns');
             loadFixedValues();
             // 导出列配置和合并开关都加载完后，同步合并字段状态
-            Promise.all([loadColumnConfig('export_columns'), loadMergeConfig()]).then(() => {
+            Promise.all([loadColumnConfig('export_columns'), loadMergeConfig(), loadPlateFormatConfig()]).then(() => {
                 applyMergeHidden();
             });
             // 初始加载完成后才启用自动保存
@@ -1991,6 +2044,7 @@ createApp({
             newColName, addCustomCol, removeCustomCol, syncListToExport,
             fixedValues, saveFixedValues,
             mergeByPlate, loadMergeConfig, saveMergeConfig, toggleMergeByPlate,
+            plateFormatPingan, loadPlateFormatConfig, savePlateFormatConfig, togglePlateFormatPingan,
         };
     }
 }).mount('#app');
