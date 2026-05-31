@@ -2851,7 +2851,8 @@ def export_excel():
 
         from datetime import datetime
         time_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        download_name = f"保单导出_{sheet_name}_{time_str}.xlsx"
+        user_name = g.current_user.get("name", "") or g.current_user.get("username", "")
+        download_name = f"{user_name}_保单导出_{sheet_name}_{time_str}.xlsx" if user_name else f"保单导出_{sheet_name}_{time_str}.xlsx"
         return send_file(
             output,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
