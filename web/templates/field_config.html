@@ -674,6 +674,9 @@
                         <div v-if="!exportColItems.some(c => c.visible && !c._mergeHidden)" style="padding:8px 12px; font-size:12px; color:var(--text-muted); font-style:italic;">暂无可见列</div>
                     </div>
                 </div>
+                <div v-if="activeSource==='enterprise' || activeSource==='system'" style="margin-bottom:12px; padding:10px 16px; background:#fffbeb; border:1px solid #fcd34d; border-radius:8px; font-size:13px; color:#92400e; display:flex; align-items:center; gap:8px;">
+                    <span>⚠</span> 当前使用{{ activeSource==='enterprise' ? '企业' : '系统' }}模板（只读），如需修改请切换到「我的模板」或另存为新模板
+                </div>
                 <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; padding:12px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
                     <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500;"
                            :style="{cursor: activeSource === 'enterprise' || activeSource === 'system' ? 'not-allowed' : 'pointer', opacity: activeSource === 'enterprise' || activeSource === 'system' ? 0.5 : 1}"
@@ -738,10 +741,6 @@
                 </div>
             </div>
 
-            <!-- 底部提示 -->
-            <div v-if="activeSource==='enterprise'" style="padding:12px 24px; border-top:1px solid var(--border-light); background:#fffbeb; font-size:13px; color:#92400e; display:flex; align-items:center; gap:8px;">
-                <span>⚠</span> 当前使用企业模板（只读），如需修改请切换到「我的模板」或另存为新模板
-            </div>
         </div>
     </div>
 
