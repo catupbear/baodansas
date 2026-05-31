@@ -165,9 +165,9 @@ def apply_mapping(fields: Dict[str, str], company_short: str = "") -> Dict[str, 
         company = fields.get("保险公司", "")
         if company:
             if address:
-                import re
-                m = re.search(r'(?:省|自治区)?\s*(.+?)市', address)
-                result["保司（带地区）"] = (m.group(1) + company) if m else company
+                from insurance.policy_parser import extract_city_from_address
+                city = extract_city_from_address(address)
+                result["保司（带地区）"] = (city + company) if city else company
             else:
                 result["保司（带地区）"] = company
 

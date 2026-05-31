@@ -1063,6 +1063,22 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
     _build_insurer_with_region(fields)
 
 
+def extract_city_from_address(address: str) -> str:
+    """从地址中提取城市名（去掉省/自治区前缀，只取市区名）"""
+    if not address:
+        return ""
+    # 去掉省/自治区前缀
+    addr_no_prov = re.sub(r'^.*?(?:省|自治区)\s*', '', address)
+    m = re.search(r'(.+?)市', addr_no_prov)
+    if m:
+        return m.group(1)
+    # 东莞、中山等不设区的地级市，地址中可能无"市"字
+    for c in ("东莞", "中山", "嘉峪关", "儋州"):
+        if c in address:
+            return c
+    return ""
+
+
 def _build_insurer_with_region(fields: dict):
     """从保司地址提取城市名，拼接承保公司，生成"保司带地区"字段。
     地址为空时仅用承保公司名称，承保公司为空则不生成。"""
@@ -1075,11 +1091,7 @@ def _build_insurer_with_region(fields: dict):
         fields["保司带地区"] = company
         return
 
-    city = ""
-    m = re.search(r'(?:省|自治区)?\s*(.+?)市', address)
-    if m:
-        city = m.group(1)
-
+    city = extract_city_from_address(address)
     fields["保司带地区"] = city + company if city else company
 
 

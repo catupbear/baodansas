@@ -440,9 +440,9 @@ def list_records():
                 _comp = df.get("承保公司", "")
                 if _comp:
                     if _addr:
-                        import re as _re
-                        _m = _re.search(r'(?:省|自治区)?\s*(.+?)市', _addr)
-                        df["保司（带地区）"] = (_m.group(1) + _comp) if _m else _comp
+                        from insurance.policy_parser import extract_city_from_address
+                        _city = extract_city_from_address(_addr)
+                        df["保司（带地区）"] = (_city + _comp) if _city else _comp
                     else:
                         df["保司（带地区）"] = _comp
             if has_config and record.get("display_fields"):

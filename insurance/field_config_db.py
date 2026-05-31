@@ -1145,8 +1145,9 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
                 if rk in result:
                     _addr = result.get("保司地址", "")
                     if _addr:
-                        _m = re.search(r'(?:省|自治区)?\s*(.+?)市', _addr)
-                        result[rk] = (_m.group(1) + alias) if _m else alias
+                        from insurance.policy_parser import extract_city_from_address
+                        _city = extract_city_from_address(_addr)
+                        result[rk] = (_city + alias) if _city else alias
                     else:
                         result[rk] = alias
 
