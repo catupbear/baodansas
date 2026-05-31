@@ -580,6 +580,17 @@
                         <button class="btn btn-primary btn-sm" @click="saveColumnConfig('list_columns')" :disabled="activeSource === 'enterprise'">保存</button>
                     </div>
                 </div>
+                <!-- 列头预览 -->
+                <div style="margin-bottom:16px; border:1px solid var(--border-light); border-radius:8px; overflow:hidden;">
+                    <div style="padding:6px 12px; background:var(--surface-secondary); font-size:11px; color:var(--text-muted); border-bottom:1px solid var(--border-light);">列头预览（{{ listColItems.filter(c => c.visible).length }} 列）</div>
+                    <div style="display:flex; overflow-x:auto; background:#fff;">
+                        <div v-for="col in listColItems.filter(c => c.visible).sort((a,b) => listColItems.indexOf(a) - listColItems.indexOf(b))" :key="col.key"
+                             style="flex-shrink:0; padding:8px 12px; font-size:12px; font-weight:600; color:var(--text-secondary); border-right:1px solid var(--border-light); white-space:nowrap;">
+                            {{ col.display_name || col.key }}
+                        </div>
+                        <div v-if="!listColItems.some(c => c.visible)" style="padding:8px 12px; font-size:12px; color:var(--text-muted); font-style:italic;">暂无可见列</div>
+                    </div>
+                </div>
                 <div class="alias-table-wrap">
                     <table class="alias-table">
                         <thead>
@@ -632,6 +643,17 @@
                     <div style="display:flex; gap:8px;">
                         <button class="btn btn-outline btn-sm" @click="resetColumnConfig('export_columns')" :disabled="activeSource === 'enterprise'">恢复默认</button>
                         <button class="btn btn-primary btn-sm" @click="saveColumnConfig('export_columns')" :disabled="activeSource === 'enterprise'">保存</button>
+                    </div>
+                </div>
+                <!-- 列头预览 -->
+                <div style="margin-bottom:16px; border:1px solid var(--border-light); border-radius:8px; overflow:hidden;">
+                    <div style="padding:6px 12px; background:var(--surface-secondary); font-size:11px; color:var(--text-muted); border-bottom:1px solid var(--border-light);">列头预览（{{ exportColItems.filter(c => c.visible && !c._mergeHidden).length }} 列）</div>
+                    <div style="display:flex; overflow-x:auto; background:#fff;">
+                        <div v-for="col in exportColItems.filter(c => c.visible && !c._mergeHidden).sort((a,b) => exportColItems.indexOf(a) - exportColItems.indexOf(b))" :key="col.key"
+                             style="flex-shrink:0; padding:8px 12px; font-size:12px; font-weight:600; color:var(--text-secondary); border-right:1px solid var(--border-light); white-space:nowrap;">
+                            {{ col.display_name || col.key }}
+                        </div>
+                        <div v-if="!exportColItems.some(c => c.visible && !c._mergeHidden)" style="padding:8px 12px; font-size:12px; color:var(--text-muted); font-style:italic;">暂无可见列</div>
                     </div>
                 </div>
                 <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; padding:12px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
