@@ -1604,6 +1604,8 @@ createApp({
         // 从已有保单数据导入默认值（合并到现有列表，不覆盖已有配置）
         const importingDefaults = ref(false);
         const autoLoadAliasFromDb = async () => {
+            // 只读模式（企业/系统模板）不合并数据库数据，避免脏数据覆盖已配置的别名
+            if (activeSource.value === 'enterprise' || activeSource.value === 'system') return;
             // 进入页面自动加载，与已保存配置合并
             if (aliasAutoLoaded) return;
             aliasAutoLoaded = true;
