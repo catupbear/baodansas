@@ -1138,17 +1138,17 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
             # 如果已有承保公司字段则一并更新
             if "承保公司" in result:
                 result["承保公司"] = alias
-            # 同步更新"保司（带地区）"：用简称替换原公司名
+            # 同步更新"保司（带地区）"：用简称替换原公司名；无地址时直接用简称
             region_key = "保司（带地区）"
             alt_region_key = "保司带地区"
             for rk in (region_key, alt_region_key):
-                if rk in result and result[rk]:
-                    # 从地址重新提取城市前缀，拼接简称
+                if rk in result:
                     _addr = result.get("保司地址", "")
                     if _addr:
                         _m = re.search(r'(?:省|自治区)?\s*(.+?)市', _addr)
-                        if _m:
-                            result[rk] = _m.group(1) + alias
+                        result[rk] = (_m.group(1) + alias) if _m else alias
+                    else:
+                        result[rk] = alias
 
     # 2. 险种简称替换（支持包含匹配：配置key是险种全称的子串即可命中）
     type_aliases = {item["key"]: item["value"] for item in config.get("policy_type_alias", [])}
