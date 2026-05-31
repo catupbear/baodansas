@@ -543,39 +543,43 @@
 
             <!-- Tab 3: 自动计算公式 -->
             <div v-show="activeTab==='formula'" style="padding:24px;">
-                <!-- 计算字段选择 -->
+                <!-- 筛选 + 添加 -->
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
                     <div style="display:flex; align-items:center; gap:12px;">
-                        <span style="font-size:13px; font-weight:500; color:var(--text-secondary);">计算字段：</span>
-                        <select v-model="currentFormulaField" style="font-size:14px; font-weight:500;">
+                        <span style="font-size:13px; font-weight:500; color:var(--text-secondary);">筛选字段：</span>
+                        <select v-model="formulaFilter" style="font-size:13px; padding:4px 8px; border:1px solid var(--border-light); border-radius:4px;">
+                            <option value="">全部</option>
                             <option v-for="f in formulaFields" :value="f">{{ f }}</option>
                         </select>
+                        <span v-if="flatRules.length > 0" style="font-size:12px; color:var(--text-muted);">共 {{ filteredFlatRules.length }} 条规则</span>
                     </div>
                     <button class="btn btn-primary btn-sm" @click="openFormulaModal(null)" :disabled="activeSource === 'enterprise'">+ 添加规则</button>
                 </div>
 
-                <!-- 规则列表 -->
+                <!-- 规则列表（扁平展示所有字段） -->
                 <table class="rule-table">
                     <thead>
                         <tr>
-                            <th style="width:160px;">承保公司</th>
+                            <th style="width:120px;">计算字段</th>
+                            <th style="width:140px;">承保公司</th>
                             <th style="width:100px;">险种</th>
                             <th>计算公式</th>
                             <th style="width:100px; text-align:center;">操作</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="(rule, idx) in currentRules" :key="idx">
-                            <td style="font-weight:500;">{{ rule.company }}</td>
-                            <td>{{ rule.policyType }}</td>
-                            <td class="formula-cell">{{ rule.display }}</td>
+                        <tr v-for="item in filteredFlatRules" :key="item.field + '-' + item.idx">
+                            <td><span style="font-weight:500; color:var(--primary);">{{ item.field }}</span></td>
+                            <td style="font-weight:500;">{{ item.rule.company }}</td>
+                            <td>{{ item.rule.policyType }}</td>
+                            <td class="formula-cell">{{ item.rule.display }}</td>
                             <td style="text-align:center; white-space:nowrap;">
-                                <button class="btn btn-outline btn-sm" style="margin-right:4px;" @click="openFormulaModal(idx)" :disabled="activeSource === 'enterprise'">编辑</button>
-                                <button class="btn btn-sm" style="color:var(--danger); background:transparent; border:1px solid #fecaca;" @click="deleteRule(idx)" :disabled="activeSource === 'enterprise'">删除</button>
+                                <button class="btn btn-outline btn-sm" style="margin-right:4px;" @click="editFlatRule(item)" :disabled="activeSource === 'enterprise'">编辑</button>
+                                <button class="btn btn-sm" style="color:var(--danger); background:transparent; border:1px solid #fecaca;" @click="deleteFlatRule(item)" :disabled="activeSource === 'enterprise'">删除</button>
                             </td>
                         </tr>
-                        <tr v-if="currentRules.length === 0">
-                            <td colspan="4" style="text-align:center; color:var(--text-muted); padding:40px 0;">
+                        <tr v-if="filteredFlatRules.length === 0">
+                            <td colspan="5" style="text-align:center; color:var(--text-muted); padding:40px 0;">
                                 暂无规则，点击右上角"添加规则"开始配置
                             </td>
                         </tr>
@@ -787,6 +791,13 @@
                 <h3 style="font-size:16px; font-weight:600;">{{ editingRuleIdx !== null ? '编辑' : '添加' }}计算规则</h3>
             </div>
             <div style="padding:24px;">
+                <!-- 计算字段 -->
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">计算字段</label>
+                    <select v-model="currentFormulaField" style="width:100%; padding:8px 12px;">
+                        <option v-for="f in formulaFields" :value="f">{{ f }}</option>
+                    </select>
+                </div>
                 <!-- 承保公司 + 险种 -->
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
                     <div>
@@ -1429,7 +1440,12 @@ createApp({
         };
 
         // === Tab 3: 自动计算公式 ===
-        const formulaFields = ['佣金率', '佣金', '采购费率', '公司利润', '跟单利润'];
+        const BASE_FORMULA_FIELDS = ['佣金率', '佣金', '采购费率', '公司利润', '跟单利润'];
+        // 动态包含导出列配置中的自定义字段
+        const formulaFields = computed(() => {
+            const custom = exportColItems.value.filter(c => c.custom && !c.merge).map(c => c.key);
+            return [...BASE_FORMULA_FIELDS, ...custom.filter(k => !BASE_FORMULA_FIELDS.includes(k))];
+        });
         const currentFormulaField = ref('佣金率');
 
         const allRules = ref({
@@ -1442,6 +1458,32 @@ createApp({
 
         const currentRules = computed(() => allRules.value[currentFormulaField.value] || []);
 
+        // 筛选字段（空串=全部）
+        const formulaFilter = ref('');
+
+        // 扁平化所有规则
+        const flatRules = computed(() => {
+            const list = [];
+            for (const field of formulaFields.value) {
+                const rules = allRules.value[field] || [];
+                rules.forEach((rule, idx) => list.push({ field, idx, rule }));
+            }
+            return list;
+        });
+        const filteredFlatRules = computed(() => {
+            if (!formulaFilter.value) return flatRules.value;
+            return flatRules.value.filter(item => item.field === formulaFilter.value);
+        });
+
+        function editFlatRule(item) {
+            currentFormulaField.value = item.field;
+            openFormulaModal(item.idx);
+        }
+        function deleteFlatRule(item) {
+            currentFormulaField.value = item.field;
+            deleteRule(item.idx);
+        }
+
         // 公式弹窗
         const showFormulaModal = ref(false);
         const editingRuleIdx = ref(null);
@@ -1452,21 +1494,34 @@ createApp({
         const companyShortList = computed(() => [...new Set(companyAliasList.value.filter(i => i.enabled && i.value).map(i => i.value))]);
         const policyTypeShortList = computed(() => [...new Set(policyAliasList.value.filter(i => i.enabled && i.value).map(i => i.value))]);
 
-        const allFields = ['保费', '车船税', '佣金率', '佣金', '采购费率', '公司利润', '跟单利润'];
-        const availableFields = computed(() => allFields.filter(f => f !== currentFormulaField.value));
+        const BASE_ALL_FIELDS = ['保费', '车船税', '佣金率', '佣金', '采购费率', '公司利润', '跟单利润'];
+        // 公式中可引用的字段：基础字段 + 自定义字段
+        const allFields = computed(() => {
+            const custom = exportColItems.value.filter(c => c.custom && !c.merge).map(c => c.key);
+            return [...BASE_ALL_FIELDS, ...custom.filter(k => !BASE_ALL_FIELDS.includes(k))];
+        });
+        const availableFields = computed(() => allFields.value.filter(f => f !== currentFormulaField.value));
         const operators = ['+', '-', '×', '÷', '(', ')'];
 
-        const sampleValues = { '保费': 5000, '车船税': 300, '佣金率': 0.15, '佣金': 750, '采购费率': 0.05, '公司利润': 200, '跟单利润': 100 };
+        const BASE_SAMPLE_VALUES = { '保费': 5000, '车船税': 300, '佣金率': 0.15, '佣金': 750, '采购费率': 0.05, '公司利润': 200, '跟单利润': 100 };
+        // 动态示例值：自定义字段默认用 0
+        const sampleValues = computed(() => {
+            const vals = { ...BASE_SAMPLE_VALUES };
+            for (const f of allFields.value) {
+                if (!(f in vals)) vals[f] = 0;
+            }
+            return vals;
+        });
 
         const formulaError = computed(() => {
             if (!formulaForm.value.display) return '';
             try {
-                const expr = formulaForm.value.display
-                    .replace(/×/g, '*').replace(/÷/g, '/')
-                    .replace(/保费/g, '5000').replace(/车船税/g, '300')
-                    .replace(/佣金率/g, '0.15').replace(/佣金/g, '750')
-                    .replace(/采购费率/g, '0.05').replace(/公司利润/g, '200')
-                    .replace(/跟单利润/g, '100');
+                let expr = formulaForm.value.display.replace(/×/g, '*').replace(/÷/g, '/');
+                // 按字段名长度从长到短替换，避免短名误命中
+                const sorted = Object.entries(sampleValues.value).sort((a, b) => b[0].length - a[0].length);
+                for (const [k, v] of sorted) {
+                    expr = expr.replace(new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), String(v));
+                }
                 const result = Function('"use strict"; return (' + expr + ')')();
                 if (isNaN(result) || !isFinite(result)) return '公式计算结果无效';
                 return '';
@@ -1478,8 +1533,9 @@ createApp({
         const previewExpression = computed(() => {
             if (!formulaForm.value.display) return '';
             let expr = formulaForm.value.display;
-            for (const [k, v] of Object.entries(sampleValues)) {
-                expr = expr.replace(new RegExp(k, 'g'), String(v));
+            const sorted = Object.entries(sampleValues.value).sort((a, b) => b[0].length - a[0].length);
+            for (const [k, v] of sorted) {
+                expr = expr.replace(new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), String(v));
             }
             return expr;
         });
@@ -1510,6 +1566,8 @@ createApp({
                 const rule = currentRules.value[idx];
                 formulaForm.value = { company: rule.company, policyType: rule.policyType, display: rule.display };
             } else {
+                // 新建规则：如果筛选了特定字段，默认选中该字段
+                if (formulaFilter.value) currentFormulaField.value = formulaFilter.value;
                 formulaForm.value = { company: '', policyType: '', display: '' };
             }
             showFormulaModal.value = true;
@@ -1530,6 +1588,9 @@ createApp({
                 display: formulaForm.value.display,
                 tokens: formulaForm.value.display.split(/\s+/).filter(Boolean),
             };
+            if (!allRules.value[currentFormulaField.value]) {
+                allRules.value[currentFormulaField.value] = [];
+            }
             const rules = allRules.value[currentFormulaField.value];
             if (editingRuleIdx.value !== null) {
                 rules.splice(editingRuleIdx.value, 1, rule);
@@ -1620,19 +1681,19 @@ createApp({
             dateFields.value.forEach(f => { if (dateMap[f.name]) f.format = dateMap[f.name]; });
 
             // 公式 - 解析 key 格式 "字段名:公司:险种"
-            const newRules = { '佣金率': [], '佣金': [], '采购费率': [], '公司利润': [], '跟单利润': [] };
+            const newRules = {};
+            for (const f of formulaFields.value) newRules[f] = [];
             (data.fee_formula || []).forEach(item => {
                 const parts = item.key.split(':');
                 if (parts.length === 3) {
                     const [fieldName, company, policyType] = parts;
                     const val = item.value;
-                    if (newRules[fieldName]) {
-                        newRules[fieldName].push({
-                            company, policyType,
-                            display: typeof val === 'object' ? val.display : String(val),
-                            tokens: typeof val === 'object' ? val.tokens : [],
-                        });
-                    }
+                    if (!newRules[fieldName]) newRules[fieldName] = [];
+                    newRules[fieldName].push({
+                        company, policyType,
+                        display: typeof val === 'object' ? val.display : String(val),
+                        tokens: typeof val === 'object' ? val.tokens : [],
+                    });
                 }
             });
             allRules.value = newRules;
@@ -2037,6 +2098,7 @@ createApp({
             dateFormats, datetimeFormats, DATETIME_FIELDS, dateFields, sampleDate, quickFormatValue,
             formatDate, applyQuickFormat,
             formulaFields, currentFormulaField, currentRules, allRules,
+            formulaFilter, flatRules, filteredFlatRules, editFlatRule, deleteFlatRule,
             showFormulaModal, editingRuleIdx, formulaInput, formulaForm,
             companyShortList, policyTypeShortList, availableFields, operators,
             formulaError, previewExpression, previewResult,
