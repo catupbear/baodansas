@@ -2850,7 +2850,7 @@ def export_excel():
         output.seek(0)
 
         from datetime import datetime
-        time_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        time_str = datetime.now().strftime("%Y%m%d_%H%M")
         user_name = g.current_user.get("name", "") or g.current_user.get("username", "")
         download_name = f"{user_name}_保单导出_{sheet_name}_{time_str}.xlsx" if user_name else f"保单导出_{sheet_name}_{time_str}.xlsx"
         return send_file(
