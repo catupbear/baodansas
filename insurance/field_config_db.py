@@ -1302,10 +1302,10 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
         target_field = parts[0]
         rule_company = parts[1] if len(parts) > 1 else ""
         rule_policy_type = parts[2] if len(parts) > 2 else ""
-        # 匹配公司和险种（包含匹配）
-        if rule_company and rule_company not in record_company and record_company not in rule_company:
+        # 匹配公司和险种（包含匹配，"全部"匹配所有）
+        if rule_company and rule_company != "全部" and rule_company not in record_company and record_company not in rule_company:
             continue
-        if rule_policy_type and rule_policy_type not in record_policy_type and record_policy_type not in rule_policy_type:
+        if rule_policy_type and rule_policy_type != "全部" and rule_policy_type not in record_policy_type and record_policy_type not in rule_policy_type:
             continue
         # 取公式字符串（value 可能是 dict{display,tokens} 或直接字符串）
         if isinstance(raw_value, dict):

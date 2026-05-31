@@ -804,6 +804,7 @@
                         <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">承保公司</label>
                         <select v-model="formulaForm.company" style="width:100%; padding:8px 12px;">
                             <option value="">请选择</option>
+                            <option value="全部">全部</option>
                             <option v-for="c in companyShortList" :value="c">{{ c }}</option>
                         </select>
                     </div>
@@ -811,6 +812,7 @@
                         <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">险种</label>
                         <select v-model="formulaForm.policyType" style="width:100%; padding:8px 12px;">
                             <option value="">请选择</option>
+                            <option value="全部">全部</option>
                             <option v-for="p in policyTypeShortList" :value="p">{{ p }}</option>
                         </select>
                     </div>
