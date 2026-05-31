@@ -675,7 +675,9 @@
                     </div>
                 </div>
                 <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; padding:12px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
-                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:500;" @click="toggleMergeByPlate">
+                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500;"
+                           :style="{cursor: activeSource === 'enterprise' || activeSource === 'system' ? 'not-allowed' : 'pointer', opacity: activeSource === 'enterprise' || activeSource === 'system' ? 0.5 : 1}"
+                           @click="activeSource !== 'enterprise' && activeSource !== 'system' && toggleMergeByPlate()">
                         <div style="position:relative; width:36px; height:20px; flex-shrink:0;">
                             <div style="position:absolute; inset:0; border-radius:10px; transition:background 0.2s;" :style="{ background: mergeByPlate ? 'var(--primary)' : '#d1d5db' }"></div>
                             <div style="position:absolute; width:16px; height:16px; top:2px; border-radius:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); transition:left 0.2s;" :style="{ left: mergeByPlate ? '18px' : '2px' }"></div>
@@ -684,7 +686,9 @@
                     </label>
                     <span style="font-size:11px; color:var(--text-muted);">开启后，同车牌的多条保单合并为一行，保费/保单号等按险种拆分为独立列</span>
                     <div style="width:1px; height:20px; background:var(--border-light); margin:0 4px;"></div>
-                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:500;" @click="togglePlateFormatPingan">
+                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500;"
+                           :style="{cursor: activeSource === 'enterprise' || activeSource === 'system' ? 'not-allowed' : 'pointer', opacity: activeSource === 'enterprise' || activeSource === 'system' ? 0.5 : 1}"
+                           @click="activeSource !== 'enterprise' && activeSource !== 'system' && togglePlateFormatPingan()">
                         <div style="position:relative; width:36px; height:20px; flex-shrink:0;">
                             <div style="position:absolute; inset:0; border-radius:10px; transition:background 0.2s;" :style="{ background: plateFormatPingan ? 'var(--primary)' : '#d1d5db' }"></div>
                             <div style="position:absolute; width:16px; height:16px; top:2px; border-radius:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); transition:left 0.2s;" :style="{ left: plateFormatPingan ? '18px' : '2px' }"></div>
