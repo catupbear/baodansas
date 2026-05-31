@@ -124,3 +124,38 @@ MySQL（库名 pdfocr），使用 PooledDB 连接池，表在首次启动时自�
 - 保单识别使用 Queue 串行消费，同一时刻只处理一个 PDF
 - 通讯录解析依赖企业微信 API，有频率限制，已通过数据库缓存缓解
 - policy_parser.py 包含 50+ 保险公司的正则规则，新增保司需持续维护
+
+## 新增保单提取字段的完整流程
+
+新增一个 OCR 提取字段（如车架号、身份证号码）需要改动以下 **4 个文件**，缺一不可：
+
+### 1. `insurance/policy_parser.py` — 提取规则（核心）
+
+- 编写正则提取逻辑（函数或在 `_extract_common_fields` 中调用）
+- 将提取结果写入 `fields["字段名"]`
+- 更新底部的 `FIELD_ORDER` 列表（控制导出时字段排序）
+
+### 2. `insurance/field_mapping.py` — 字段映射
+
+- `OUTPUT_COLUMNS`：新增导出列名（如 `"车架号"`）
+- `DEFAULT_MAPPING`：新增 OCR 字段 → 导出列的映射（如 `"车架号VIN": "车架号"`）
+- `get_available_ocr_fields()`：新增可选字段名
+
+### 3. `insurance/config/field_mapping.json` — 持久化配置
+
+- `output_columns` 数组：新增导出列名
+- `default_mapping` 对象：新增映射关系
+- 该文件在首次启动时自动生成，后续新增字段需手动添加或删除此文件让系统重新生成
+
+### 4. `insurance/field_config_db.py` — 前端列配置
+
+- `DEFAULT_COLUMNS`：新增字段定义（key、visible、order、display_name）
+- 这是**前端「页面列配置」和「导出列配置」中显示的字段列表**
+- 不加到这里 → 前端配置页面看不到该字段，用户无法勾选显示
+- `_fix_missing_defaults()` 会自动将新字段补充到已有模板末尾（默认 `visible=False`，不影响已有模板）
+
+### 注意事项
+
+- 4 个文件的字段名必须对应：`policy_parser` 提取的 key → `field_mapping` 映射 → `field_config_db` 前端显示
+- 已有用户的模板：新字段自动补充但默认不勾选（`visible=False`），用户手动开启
+- 新用户/新模板：按 `DEFAULT_COLUMNS` 中的 `visible` 值决定是否默认显示
