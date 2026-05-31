@@ -1547,17 +1547,16 @@ createApp({
                 enabled: !!(c.value),
             }));
 
-            // 险种简称
+            // 险种简称（含快捷映射开关）
             const policies = data.policy_type_alias || [];
-            policyAliasList.value = policies.map(p => ({
+            const quickAliasItem = policies.find(p => p.key === '__quick_alias__');
+            policyTypeQuickAlias.value = !!(quickAliasItem && quickAliasItem.value);
+            policyAliasList.value = policies.filter(p => p.key !== '__quick_alias__').map(p => ({
                 key: p.key,
                 value: p.value || '',
                 defaultValue: '',
                 enabled: !!(p.value),
             }));
-
-            // 险种快捷映射开关
-            policyTypeQuickAlias.value = !!data.policy_type_quick_alias;
 
             // 日期格式
             const dateMap = {};
@@ -1592,13 +1591,11 @@ createApp({
                 .filter(i => i.key)
                 .map(i => ({ key: i.key.trim(), value: i.enabled ? (i.value || '').trim() : '' }));
 
-            // 险种简称
+            // 险种简称（含快捷映射开关）
             config.policy_type_alias = policyAliasList.value
                 .filter(i => i.key)
                 .map(i => ({ key: i.key.trim(), value: i.enabled ? (i.value || '').trim() : '' }));
-
-            // 险种快捷映射开关
-            config.policy_type_quick_alias = policyTypeQuickAlias.value;
+            config.policy_type_alias.push({ key: '__quick_alias__', value: policyTypeQuickAlias.value ? '1' : '' });
 
             // 日期格式
             config.date_format = dateFields.value.map(f => ({ key: f.name, value: f.format }));
