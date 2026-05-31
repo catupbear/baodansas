@@ -1151,20 +1151,27 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
                     else:
                         result[rk] = alias
 
-    # 2. 险种简称替换（支持包含匹配：配置key是险种全称的子串即可命中）
-    type_aliases = {item["key"]: item["value"] for item in config.get("policy_type_alias", [])}
+    # 2. 险种简称替换
     policy_type_val = result.get("险种类型") or result.get("险种") or ""
     if policy_type_val:
         alias = None
-        # 优先精确匹配
-        if policy_type_val in type_aliases:
-            alias = type_aliases[policy_type_val]
+        if config.get("policy_type_quick_alias"):
+            # 快捷映射：直接按分类映射为 交强险/商业险/驾意险/非车险
+            from insurance.policy_parser import get_policy_type_code
+            _, short_name = get_policy_type_code(policy_type_val)
+            # "驾乘/意外险" → "驾意险"
+            _QUICK_DISPLAY = {"交强险": "交强险", "商业险": "商业险", "驾乘/意外险": "驾意险", "非车险": "非车险"}
+            alias = _QUICK_DISPLAY.get(short_name, short_name)
         else:
-            # 包含匹配：按key长度从长到短匹配，避免短key误命中
-            for key in sorted(type_aliases.keys(), key=len, reverse=True):
-                if key and key in policy_type_val:
-                    alias = type_aliases[key]
-                    break
+            # 逐条匹配（支持包含匹配：配置key是险种全称的子串即可命中）
+            type_aliases = {item["key"]: item["value"] for item in config.get("policy_type_alias", [])}
+            if policy_type_val in type_aliases:
+                alias = type_aliases[policy_type_val]
+            else:
+                for key in sorted(type_aliases.keys(), key=len, reverse=True):
+                    if key and key in policy_type_val:
+                        alias = type_aliases[key]
+                        break
         if alias:
             result["险种类型"] = alias
             if "险种" in result:

@@ -462,8 +462,17 @@
                     <span v-if="aliasListLoading" style="font-size:12px; color:var(--text-muted);">加载中...</span>
                 </div>
 
+                <!-- 险种快捷映射开关 -->
+                <div v-if="aliasType === 'policy_type'" style="display:flex; align-items:center; gap:12px; margin-bottom:16px; padding:12px 16px; background:var(--surface-secondary); border-radius:8px;">
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px;">
+                        <input type="checkbox" v-model="policyTypeQuickAlias" :disabled="activeSource === 'enterprise'" style="width:16px; height:16px; accent-color:var(--primary);">
+                        <span style="font-weight:500;">简化险种名称</span>
+                    </label>
+                    <span style="font-size:12px; color:var(--text-muted);">开启后所有险种自动映射为：交强险、商业险、驾意险、非车险</span>
+                </div>
+
                 <!-- 批量操作栏 -->
-                <div class="alias-batch-bar">
+                <div class="alias-batch-bar" v-show="aliasType !== 'policy_type' || !policyTypeQuickAlias">
                     <div class="batch-info">
                         已选 {{ aliasEnabledCount }}/{{ currentAliasList.length }} 条
                     </div>
@@ -474,7 +483,7 @@
                 </div>
 
                 <!-- 列表 -->
-                <div class="alias-table-wrap">
+                <div class="alias-table-wrap" v-show="aliasType !== 'policy_type' || !policyTypeQuickAlias">
                     <table class="alias-table">
                         <thead>
                             <tr>
@@ -1273,6 +1282,7 @@ createApp({
         const aliasType = ref('company');
         const companyAliasList = ref([]);   // [{key, value, defaultValue, enabled}]
         const policyAliasList = ref([]);
+        const policyTypeQuickAlias = ref(false);  // 险种快捷映射开关
         const aliasListLoading = ref(false);
         let aliasAutoLoaded = false;        // 是否已自动加载过
 
@@ -1545,6 +1555,9 @@ createApp({
                 enabled: !!(p.value),
             }));
 
+            // 险种快捷映射开关
+            policyTypeQuickAlias.value = !!data.policy_type_quick_alias;
+
             // 日期格式
             const dateMap = {};
             (data.date_format || []).forEach(d => dateMap[d.key] = d.value);
@@ -1582,6 +1595,9 @@ createApp({
             config.policy_type_alias = policyAliasList.value
                 .filter(i => i.key)
                 .map(i => ({ key: i.key.trim(), value: i.enabled ? (i.value || '').trim() : '' }));
+
+            // 险种快捷映射开关
+            config.policy_type_quick_alias = policyTypeQuickAlias.value;
 
             // 日期格式
             config.date_format = dateFields.value.map(f => ({ key: f.name, value: f.format }));
@@ -1741,7 +1757,7 @@ createApp({
         };
 
         // 监听所有配置数据变化
-        watch([companyAliasList, policyAliasList], triggerAutoSave, { deep: true });
+        watch([companyAliasList, policyAliasList, policyTypeQuickAlias], triggerAutoSave, { deep: true });
         watch([() => dateFields.value.map(f => f.format).join(',')], triggerAutoSave);
         watch(allRules, triggerAutoSave, { deep: true });
 
@@ -1962,7 +1978,7 @@ createApp({
             markDeleteTemplate, saveTemplateManager,
             selectTemplate, selectAdminTemplate, createTemplate,
             activeTab,
-            aliasType, currentAliasList, aliasEnabledCount, aliasAllChecked, aliasListLoading,
+            aliasType, currentAliasList, aliasEnabledCount, aliasAllChecked, aliasListLoading, policyTypeQuickAlias,
             aliasToggleAll, aliasBatchEnable, aliasBatchDisable,
             dateFormats, datetimeFormats, DATETIME_FIELDS, dateFields, sampleDate, quickFormatValue,
             formatDate, applyQuickFormat,
