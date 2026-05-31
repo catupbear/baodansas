@@ -1442,21 +1442,13 @@ createApp({
         };
 
         // === Tab 3: 自动计算公式 ===
-        const BASE_FORMULA_FIELDS = ['佣金率', '佣金', '采购费率', '公司利润', '跟单利润'];
-        // 动态包含导出列配置中的自定义字段
+        // 计算字段完全从导出列配置中的自定义字段动态生成
         const formulaFields = computed(() => {
-            const custom = exportColItems.value.filter(c => c.custom && !c.merge).map(c => c.key);
-            return [...BASE_FORMULA_FIELDS, ...custom.filter(k => !BASE_FORMULA_FIELDS.includes(k))];
+            return exportColItems.value.filter(c => c.custom && !c.merge).map(c => c.key);
         });
-        const currentFormulaField = ref('佣金率');
+        const currentFormulaField = ref('');
 
-        const allRules = ref({
-            '佣金率': [],
-            '佣金': [],
-            '采购费率': [],
-            '公司利润': [],
-            '跟单利润': [],
-        });
+        const allRules = ref({});
 
         const currentRules = computed(() => allRules.value[currentFormulaField.value] || []);
 
@@ -1496,19 +1488,18 @@ createApp({
         const companyShortList = computed(() => [...new Set(companyAliasList.value.filter(i => i.enabled && i.value).map(i => i.value))]);
         const policyTypeShortList = computed(() => [...new Set(policyAliasList.value.filter(i => i.enabled && i.value).map(i => i.value))]);
 
-        const BASE_ALL_FIELDS = ['保费', '车船税', '佣金率', '佣金', '采购费率', '公司利润', '跟单利润'];
-        // 公式中可引用的字段：基础字段 + 自定义字段
+        // 公式中可引用的字段：保费、车船税 + 所有自定义字段
         const allFields = computed(() => {
+            const base = ['保费', '车船税'];
             const custom = exportColItems.value.filter(c => c.custom && !c.merge).map(c => c.key);
-            return [...BASE_ALL_FIELDS, ...custom.filter(k => !BASE_ALL_FIELDS.includes(k))];
+            return [...base, ...custom.filter(k => !base.includes(k))];
         });
         const availableFields = computed(() => allFields.value.filter(f => f !== currentFormulaField.value));
         const operators = ['+', '-', '×', '÷', '(', ')'];
 
-        const BASE_SAMPLE_VALUES = { '保费': 5000, '车船税': 300, '佣金率': 0.15, '佣金': 750, '采购费率': 0.05, '公司利润': 200, '跟单利润': 100 };
-        // 动态示例值：自定义字段默认用 0
+        // 动态示例值：保费和车船税有默认值，其他字段默认 0
         const sampleValues = computed(() => {
-            const vals = { ...BASE_SAMPLE_VALUES };
+            const vals = { '保费': 5000, '车船税': 300 };
             for (const f of allFields.value) {
                 if (!(f in vals)) vals[f] = 0;
             }
