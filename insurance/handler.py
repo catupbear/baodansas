@@ -708,6 +708,7 @@ class InsuranceHandler:
     SAME_PDF_FILL_FIELDS = [
         "车牌号", "投保人", "被保险人", "车主", "证件号码",
         "车架号VIN", "发动机号", "厂牌型号",
+        "被保险人身份证号码", "投保人身份证号码",
     ]
 
     def _cross_fill_same_pdf(self, policies: list):
@@ -775,7 +776,9 @@ class InsuranceHandler:
     # ------------------------------------------------------------------ #
 
     # 可从同车牌历史保单互补的字段
-    CROSS_FILL_FIELDS = ["投保人", "被保险人", "车主"]
+    CROSS_FILL_FIELDS = ["投保人", "被保险人", "车主", "车架号VIN", "被保险人身份证号码", "投保人身份证号码"]
+    # 其中需要人名验证的字段
+    _PERSON_VALIDATE_FIELDS = {"投保人", "被保险人", "车主"}
 
     @staticmethod
     def _is_vehicle_policy(parsed_fields: dict) -> bool:
@@ -820,6 +823,7 @@ class InsuranceHandler:
         missing = [f for f in self.CROSS_FILL_FIELDS if not parsed_fields.get(f)]
         filled = []
         for field in missing:
+            need_person_check = field in self._PERSON_VALIDATE_FIELDS
             for rec in history:
                 hist_fields = rec.get("parsed_fields") or {}
                 if isinstance(hist_fields, str):
@@ -828,7 +832,7 @@ class InsuranceHandler:
                     except (TypeError, json.JSONDecodeError, ValueError):
                         hist_fields = {}
                 val = hist_fields.get(field, "")
-                if val and _is_valid_person(val):
+                if val and (not need_person_check or _is_valid_person(val)):
                     parsed_fields[field] = val
                     filled.append(f"{field}={val}")
                     break
@@ -845,11 +849,11 @@ class InsuranceHandler:
                         hist_fields = {}
                 if not self._is_vehicle_policy(hist_fields):
                     continue
-                for field in self.CROSS_FILL_FIELDS:
+                # 仅对人名字段做长度校验替换，身份证/车架号等非人名字段不做此替换
+                for field in self._PERSON_VALIDATE_FIELDS:
                     cur_val = parsed_fields.get(field, "")
                     hist_val = hist_fields.get(field, "")
                     if cur_val and hist_val and cur_val != hist_val:
-                        # 取更长的值（更可信），但必须通过人名/公司名验证
                         if len(hist_val) > len(cur_val) and _is_valid_person(hist_val):
                             parsed_fields[field] = hist_val
                             filled.append(f"{field}={hist_val}(校验替换:{cur_val})")
@@ -913,13 +917,15 @@ class InsuranceHandler:
                 continue
             back_filled = []
             for field in self.CROSS_FILL_FIELDS:
-                if not hist_fields.get(field) and current_vals.get(field) and _is_valid_person(current_vals[field]):
-                    hist_fields[field] = current_vals[field]
-                    back_filled.append(f"{field}={current_vals[field]}")
+                need_person_check = field in self._PERSON_VALIDATE_FIELDS
+                if not hist_fields.get(field) and current_vals.get(field):
+                    if not need_person_check or _is_valid_person(current_vals[field]):
+                        hist_fields[field] = current_vals[field]
+                        back_filled.append(f"{field}={current_vals[field]}")
 
-            # 反向校验：当前是车险，历史也是车险，短值被长值替换
+            # 反向校验：当前是车险，历史也是车险，人名字段短值被长值替换
             if is_current_vehicle and self._is_vehicle_policy(hist_fields):
-                for field in self.CROSS_FILL_FIELDS:
+                for field in self._PERSON_VALIDATE_FIELDS:
                     cur_val = current_vals.get(field, "")
                     hist_val = hist_fields.get(field, "")
                     if cur_val and hist_val and cur_val != hist_val and len(cur_val) > len(hist_val) and _is_valid_person(cur_val):
@@ -929,7 +935,7 @@ class InsuranceHandler:
 
             # 反向覆盖：当前是车险，历史是非车险，覆盖历史非车险的投保人、被保人、车主
             if is_current_vehicle and self._is_non_vehicle_policy(hist_fields):
-                for field in self.CROSS_FILL_FIELDS:
+                for field in self._PERSON_VALIDATE_FIELDS:
                     cur_val = current_vals.get(field, "")
                     hist_val = hist_fields.get(field, "")
                     if cur_val and hist_val != cur_val and _is_valid_person(cur_val):
@@ -955,8 +961,8 @@ class InsuranceHandler:
                 except Exception as e:
                     logger.warning("同车牌反向互补失败: record_id=%s, %s", rec["id"], e)
 
-    # 无车牌时按人名互补的字段（车牌号 + 交叉填充字段）
-    PERSON_FILL_FIELDS = ["车牌号", "投保人", "被保险人", "车主"]
+    # 无车牌时按人名互补的字段
+    PERSON_FILL_FIELDS = ["车牌号", "投保人", "被保险人", "车主", "车架号VIN", "被保险人身份证号码", "投保人身份证号码"]
 
     def _cross_fill_by_person(self, parsed_fields: dict, record_id: int = None):
         """
