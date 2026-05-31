@@ -464,11 +464,12 @@
 
                 <!-- 险种快捷映射开关 -->
                 <div v-if="aliasType === 'policy_type'" style="display:flex; align-items:center; gap:12px; margin-bottom:16px; padding:12px 16px; background:var(--surface-secondary); border-radius:8px;">
-                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px;">
+                    <label style="display:flex; align-items:center; gap:8px; font-size:13px;" :style="{cursor: activeSource === 'enterprise' ? 'not-allowed' : 'pointer', opacity: activeSource === 'enterprise' ? 0.6 : 1}">
                         <input type="checkbox" v-model="policyTypeQuickAlias" :disabled="activeSource === 'enterprise'" style="width:16px; height:16px; accent-color:var(--primary);">
                         <span style="font-weight:500;">简化险种名称</span>
                     </label>
                     <span style="font-size:12px; color:var(--text-muted);">开启后所有险种自动映射为：交强险、商业险、驾意险、非车险</span>
+                    <span v-if="activeSource === 'enterprise'" style="font-size:11px; color:var(--warning); margin-left:auto;">企业模板（只读），如需修改请切换到「我的模板」</span>
                 </div>
 
                 <!-- 批量操作栏 -->
