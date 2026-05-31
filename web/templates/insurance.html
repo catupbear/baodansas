@@ -3389,7 +3389,11 @@ createApp({
         function startEditField(label) {
             const item = previewFieldsList.value.find(f => (f.key || f.label) === label);
             editingField.value = label;
-            editingValue.value = item ? (item.value || '') : '';
+            let val = item ? (item.value || '') : '';
+            if (label.includes('率') && typeof val === 'string' && val.endsWith('%')) {
+                val = val.slice(0, -1);
+            }
+            editingValue.value = val;
             // 自动聚焦输入框
             Vue.nextTick(() => {
                 const input = document.getElementById('field-edit-input');
@@ -3465,7 +3469,12 @@ createApp({
         function startListEdit(record, col) {
             listEditing.recordId = record.id;
             listEditing.col = col;
-            listEditing.value = (record.display_fields || {})[col] || '';
+            let val = (record.display_fields || {})[col] || '';
+            // "率"字段的百分号是自动生成的，编辑时去掉让用户只改数字
+            if (col.includes('率') && typeof val === 'string' && val.endsWith('%')) {
+                val = val.slice(0, -1);
+            }
+            listEditing.value = val;
             listEditing.saving = false;
             // 下一帧聚焦输入框
             Vue.nextTick(() => {
