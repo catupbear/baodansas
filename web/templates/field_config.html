@@ -1749,7 +1749,7 @@ createApp({
         let autoSaveTimer = null;
         let configLoaded = false;  // 防止初始加载时触发
         const triggerAutoSave = () => {
-            if (!configLoaded || (activeSource.value === 'enterprise' || activeSource.value === 'system')) return;
+            if (!configLoaded || (!adminTarget.value && (activeSource.value === 'enterprise' || activeSource.value === 'system'))) return;
             if (autoSaveTimer) clearTimeout(autoSaveTimer);
             autoSaveTimer = setTimeout(() => saveConfig(), 800);
         };
