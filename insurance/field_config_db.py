@@ -1185,9 +1185,13 @@ def evaluate_formula(formula: str, fields: dict) -> str:
 
     try:
         result = eval(expr)  # noqa: S307 # 已通过正则白名单校验
-        # 格式化输出：整数则不显示小数点
-        if isinstance(result, float) and result == int(result):
-            return str(int(result))
+        if isinstance(result, float):
+            # 截断到2位小数（不四舍五入）
+            import math
+            result = math.floor(result * 100) / 100
+            if result == int(result):
+                return str(int(result))
+            return f"{result:.2f}"
         return str(result)
     except Exception as e:
         logger.debug("公式计算失败: %s，expr=%s", e, expr)
