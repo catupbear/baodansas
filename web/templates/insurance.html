@@ -4030,8 +4030,12 @@ createApp({
                 const blob = await resp.blob();
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                const dateStr = new Date().toISOString().slice(0, 10);
-                a.href = url; a.download = `${labelPrefix}_${dateStr}.xlsx`;
+                const now = new Date();
+                const dateStr = now.toISOString().slice(0, 10);
+                const timeStr = String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0');
+                const userName = (currentUser.value && (currentUser.value.name || '')) || '';
+                const namePrefix = userName ? `${userName}_` : '';
+                a.href = url; a.download = `${namePrefix}${labelPrefix}_${dateStr}_${timeStr}.xlsx`;
                 document.body.appendChild(a); a.click(); document.body.removeChild(a);
                 URL.revokeObjectURL(url);
                 let exportCount = data.length;
