@@ -1071,6 +1071,45 @@ def find_compulsory_end_dates(db, plates: list) -> dict:
         conn.close()
 
 
+def find_insurer_info_by_plates(db, plates: list) -> dict:
+    """
+    批量查询车牌对应的保司公司名称和保司地址。
+    返回 {车牌: {"insurer_name": ..., "insurer_address": ...}}，取最新一条有值记录。
+    """
+    if not plates:
+        return {}
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        placeholders = ",".join(["%s"] * len(plates))
+        cursor.execute(
+            f"SELECT pf.plate_no, pf.insurer_name, pf.insurer_address "
+            f"FROM insurance_policy_fields pf "
+            f"JOIN insurance_records r ON r.id = pf.record_id "
+            f"WHERE pf.plate_no IN ({placeholders}) "
+            f"AND r.status = 'done' "
+            f"AND (pf.insurer_name != '' OR pf.insurer_address != '') "
+            f"ORDER BY r.id DESC",
+            plates,
+        )
+        result = {}
+        for row in cursor.fetchall():
+            plate = row["plate_no"]
+            if plate not in result:
+                result[plate] = {"insurer_name": row["insurer_name"] or "", "insurer_address": row["insurer_address"] or ""}
+            else:
+                # 互相补充：已有记录缺某个字段时从后续记录补
+                if not result[plate]["insurer_name"] and row["insurer_name"]:
+                    result[plate]["insurer_name"] = row["insurer_name"]
+                if not result[plate]["insurer_address"] and row["insurer_address"]:
+                    result[plate]["insurer_address"] = row["insurer_address"]
+        return result
+    except Exception:
+        return {}
+    finally:
+        conn.close()
+
+
 def find_records_by_person(db, applicant: str = "", insured: str = "", owner: str = "",
                            exclude_id: int = None) -> list:
     """

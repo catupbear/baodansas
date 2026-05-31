@@ -377,8 +377,64 @@ def list_records():
                         record["display_fields"]["跟单人"] = upload_user["name"]
                 except Exception:
                     pass
-            # 兼容历史记录：实时计算"保司（带地区）"；无地址时直接用承保公司
-            df = record["display_fields"]
+            # 时间戳转字符串（避免 Flask jsonify 将 datetime 序列化为 GMT 格式导致前端时区偏移）
+            for ts_field in ("created_at", "updated_at"):
+                if record.get(ts_field) and not isinstance(record[ts_field], str):
+                    record[ts_field] = str(record[ts_field])
+
+        # 保司公司名称 / 保司地址同车牌互补：当前页内互补，不够再查数据库
+        _plate_insurer_pool = {}  # {车牌: {"name": ..., "addr": ...}}
+        _plates_missing_insurer = set()
+        for record in result.get("records", []):
+            df = record.get("display_fields", {})
+            plate = df.get("车牌", "") or df.get("车牌号", "")
+            if not plate:
+                continue
+            name_val = df.get("保司公司名称", "")
+            addr_val = df.get("保司地址", "")
+            if plate not in _plate_insurer_pool:
+                _plate_insurer_pool[plate] = {"name": "", "addr": ""}
+            if name_val and not _plate_insurer_pool[plate]["name"]:
+                _plate_insurer_pool[plate]["name"] = name_val
+            if addr_val and not _plate_insurer_pool[plate]["addr"]:
+                _plate_insurer_pool[plate]["addr"] = addr_val
+            if not name_val or not addr_val:
+                _plates_missing_insurer.add(plate)
+        # 当前页互补不够的车牌，从数据库查
+        if _plates_missing_insurer:
+            _still_missing = set()
+            for p in _plates_missing_insurer:
+                pool = _plate_insurer_pool.get(p, {})
+                if not pool.get("name") or not pool.get("addr"):
+                    _still_missing.add(p)
+            if _still_missing:
+                try:
+                    from insurance.db import find_insurer_info_by_plates
+                    _db_insurer = find_insurer_info_by_plates(_db, list(_still_missing))
+                    for p, info in _db_insurer.items():
+                        if p not in _plate_insurer_pool:
+                            _plate_insurer_pool[p] = {"name": "", "addr": ""}
+                        if not _plate_insurer_pool[p]["name"] and info.get("insurer_name"):
+                            _plate_insurer_pool[p]["name"] = info["insurer_name"]
+                        if not _plate_insurer_pool[p]["addr"] and info.get("insurer_address"):
+                            _plate_insurer_pool[p]["addr"] = info["insurer_address"]
+                except Exception:
+                    logger.debug("查询同车牌保司信息失败")
+        # 回填缺失字段
+        for record in result.get("records", []):
+            df = record.get("display_fields", {})
+            plate = df.get("车牌", "") or df.get("车牌号", "")
+            if not plate or plate not in _plate_insurer_pool:
+                continue
+            pool = _plate_insurer_pool[plate]
+            if not df.get("保司公司名称") and pool["name"]:
+                df["保司公司名称"] = pool["name"]
+            if not df.get("保司地址") and pool["addr"]:
+                df["保司地址"] = pool["addr"]
+
+        # 互补后：计算"保司（带地区）" + 应用用户配置
+        for record in result.get("records", []):
+            df = record.get("display_fields", {})
             if not df.get("保司（带地区）"):
                 _addr = df.get("保司地址", "")
                 _comp = df.get("承保公司", "")
@@ -389,13 +445,8 @@ def list_records():
                         df["保司（带地区）"] = (_m.group(1) + _comp) if _m else _comp
                     else:
                         df["保司（带地区）"] = _comp
-            # 应用用户配置（简称映射、日期格式、公式计算）
             if has_config and record.get("display_fields"):
                 record["display_fields"] = apply_user_config_to_fields(user_config, record["display_fields"])
-            # 时间戳转字符串（避免 Flask jsonify 将 datetime 序列化为 GMT 格式导致前端时区偏移）
-            for ts_field in ("created_at", "updated_at"):
-                if record.get(ts_field) and not isinstance(record[ts_field], str):
-                    record[ts_field] = str(record[ts_field])
 
         # 注入交强到期时间：从当前页记录中找同车牌的交强险终保日期
         list_visible_keys = {c["key"] for c in list_col_cfg.get("columns", []) if c.get("visible")}
