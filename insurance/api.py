@@ -816,7 +816,8 @@ def update_supported_companies_config():
 def _cross_fill_from_siblings(db, record_id: int, file_md5: str, parsed_fields: dict):
     """从同一 PDF（相同 file_md5）的兄弟记录中互补缺失的基础字段"""
     fill_fields = ["车牌号", "投保人", "被保险人", "车主", "证件号码",
-                   "车架号VIN", "发动机号", "厂牌型号"]
+                   "车架号VIN", "发动机号", "厂牌型号",
+                   "保司公司名称", "保司地址"]
     # 检查当前记录是否有缺失字段
     missing = [f for f in fill_fields if not parsed_fields.get(f)]
     if not missing:
