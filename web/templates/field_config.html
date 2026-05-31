@@ -489,7 +489,15 @@
                                 <td style="color:var(--text-secondary);">{{ item.key }}</td>
                                 <td><input type="text" v-model="item.value" :disabled="!item.enabled || activeSource === 'enterprise'" :placeholder="item.defaultValue || ''" /></td>
                             </tr>
-                            <tr v-if="!currentAliasList.length">
+                            <tr v-if="aliasListLoading && !currentAliasList.length">
+                                <td colspan="3" style="text-align:center; padding:40px; color:var(--text-muted);">
+                                    <span style="display:inline-flex; align-items:center; gap:8px;">
+                                        <svg width="16" height="16" viewBox="0 0 16 16" style="animation:spin 1s linear infinite;"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="28" stroke-dashoffset="8" stroke-linecap="round"/></svg>
+                                        正在加载...
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr v-else-if="!currentAliasList.length">
                                 <td colspan="3" style="text-align:center; padding:40px; color:var(--text-muted);">
                                     暂无数据，数据将在打开页面时自动从已有保单加载
                                 </td>
