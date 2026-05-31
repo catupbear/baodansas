@@ -46,9 +46,12 @@ DEFAULT_COLUMNS = [
     {"key": "识别时间", "visible": True, "order": 18, "display_name": "识别时间", "type": "record"},
     {"key": "群名",     "visible": True, "order": 19, "display_name": "群名",     "type": "record"},
     {"key": "发送人",   "visible": True, "order": 20, "display_name": "发送人",   "type": "record"},
-    {"key": "保司公司名称", "visible": True, "order": 21, "display_name": "保司公司名称"},
-    {"key": "保司地址",     "visible": True, "order": 22, "display_name": "保司地址"},
-    {"key": "保司（带地区）", "visible": True, "order": 23, "display_name": "保司（带地区）"},
+    {"key": "被保险人身份证号码", "visible": True, "order": 21, "display_name": "被保险人身份证号码"},
+    {"key": "投保人身份证号码", "visible": True, "order": 22, "display_name": "投保人身份证号码"},
+    {"key": "车架号",     "visible": True, "order": 23, "display_name": "车架号"},
+    {"key": "保司公司名称", "visible": True, "order": 24, "display_name": "保司公司名称"},
+    {"key": "保司地址",     "visible": True, "order": 25, "display_name": "保司地址"},
+    {"key": "保司（带地区）", "visible": True, "order": 26, "display_name": "保司（带地区）"},
 ]
 
 # 记录级字段的 key 集合（用于前端区分渲染方式）
@@ -690,9 +693,14 @@ def _fix_missing_defaults(db, config_type, columns, scope, scope_id):
     existing_keys = {c["key"] for c in columns}
     max_order = len(columns)
     added = 0
+    # 已有配置的用户，新补充的字段默认不显示，避免影响已有模板
+    has_existing_config = len(columns) > 0
     for dc in DEFAULT_COLUMNS:
         if dc["key"] not in existing_keys:
-            columns.append({**dc, "order": max_order})
+            new_col = {**dc, "order": max_order}
+            if has_existing_config:
+                new_col["visible"] = False
+            columns.append(new_col)
             max_order += 1
             added += 1
     if added or changed:
