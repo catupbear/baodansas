@@ -1937,7 +1937,7 @@
                 </div>
                 <div class="px-5 py-4 space-y-3">
                     <p class="text-sm text-gray-600">
-                        当前共 <strong class="text-amber-600">{{ batchExportTotal }}</strong> 条数据，每次导出不能超过 500 条，请选择分批导出：
+                        当前共 <strong class="text-amber-600">{{ batchExportTotal }}</strong> 条数据，每次导出不能超过 1000 条，请选择分批导出：
                     </p>
                     <div class="space-y-2 max-h-64 overflow-y-auto">
                         <button v-for="(batch, idx) in batchExportRanges" :key="idx"
@@ -1975,7 +1975,7 @@
                 </div>
                 <div class="px-5 py-4 space-y-3">
                     <p class="text-sm text-gray-600">
-                        当前共 <strong class="text-amber-600">{{ batchDlTotal }}</strong> 个保单文件，每次下载不能超过 500 个，请选择分批下载：
+                        当前共 <strong class="text-amber-600">{{ batchDlTotal }}</strong> 个保单文件，每次下载不能超过 1000 个，请选择分批下载：
                     </p>
                     <div class="space-y-2 max-h-64 overflow-y-auto">
                         <button v-for="(batch, idx) in batchDlRanges" :key="idx"
@@ -3997,7 +3997,7 @@ createApp({
         const exportPendingType = ref('');       // 'success'|'abnormal'|'nonpolicy'|'failed'|'records'
         const exportPendingData = ref(null);     // 暂存导出数据
         const exportPendingFileName = ref('');
-        const EXPORT_BATCH_LIMIT = 500;          // 单次导出上限
+        const EXPORT_BATCH_LIMIT = 1000;         // 单次导出上限
         const batchExportVisible = ref(false);   // 分批导出弹窗
         const batchExportTotal = ref(0);         // 总条数
         const batchExportRanges = ref([]);       // 分批范围列表

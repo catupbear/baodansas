@@ -3033,8 +3033,8 @@ def batch_download_start():
 
         if not record_ids:
             return jsonify({"code": 400, "msg": "缺少 record_ids 参数"}), 400
-        if len(record_ids) > 500:
-            return jsonify({"code": 400, "msg": "单次下载不超过 500 条"}), 400
+        if len(record_ids) > 1000:
+            return jsonify({"code": 400, "msg": "单次下载不超过 1000 条"}), 400
 
         # 收集文件信息
         files_to_zip = []
