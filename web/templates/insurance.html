@@ -1108,7 +1108,7 @@
         </div>
 
         <!-- 记录表格 -->
-        <div class="card">
+        <div class="card" style="display:flex;flex-direction:column;max-height:calc(100vh - 280px);">
             <!-- 加载中 / 空数据提示（独立于表格，不受列宽影响） -->
             <div v-if="isLoadingRecords" class="text-center py-12 text-gray-400">
                 <svg class="w-6 h-6 animate-spin mx-auto mb-2 text-orange-400" fill="none" viewBox="0 0 24 24">
@@ -1123,7 +1123,7 @@
                 </svg>
                 暂无识别记录
             </div>
-            <div v-else class="table-scroll-wrapper" style="max-height: 65vh;">
+            <div v-else class="table-scroll-wrapper" style="flex:1;min-height:0;max-height:none;">
                 <table class="records-table text-left">
                     <thead>
                         <tr>
@@ -1311,8 +1311,9 @@
                 </table>
             </div>
 
-            <!-- 分页器 -->
-            <div v-if="recordPagination.total > 0" class="px-4 py-3 border-t flex items-center justify-between">
+            <!-- 分页器（固定在底部） -->
+            <div v-if="recordPagination.total > 0" class="px-4 py-3 border-t flex items-center justify-between"
+                 style="flex-shrink:0;background:#fff;">
                 <span class="text-xs text-gray-400">
                     共 {{ recordPagination.total }} 条，第 {{ recordPagination.page }} / {{ recordPagination.totalPages }} 页
                 </span>
