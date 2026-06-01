@@ -1293,6 +1293,8 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
 
     # 4. 公式计算（key格式："目标字段:公司简称:险种简称"）
     # 先用原始数值计算所有公式，最后再转百分比显示，避免"率"字段被提前转成"10%"影响后续公式
+    # 手动修改过的字段不被公式覆盖
+    manual_fields = config.get("_manual_fields") or set()
     record_company = result.get("保险公司简称") or result.get("承保公司") or result.get("保险公司") or ""
     record_policy_type = result.get("险种类型") or result.get("险种") or ""
     rate_fields = []  # 记录需要转百分比的字段
@@ -1317,6 +1319,9 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
         else:
             formula = str(raw_value)
         if target_field and formula:
+            # 手动修改过的字段不被公式覆盖
+            if target_field in manual_fields:
+                continue
             calculated = evaluate_formula(formula, result)
             if calculated:
                 result[target_field] = calculated

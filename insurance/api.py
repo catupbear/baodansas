@@ -604,9 +604,10 @@ def update_record_fields(record_id):
                 df = json.loads(df)
             except (TypeError, json.JSONDecodeError):
                 df = {}
-        # 用 parsed_fields 更新 display_fields 基础字段，保留额外的补充字段
+        # 只更新本次修改的字段到 display_fields，保留其他已有的补充字段
         display_fields = dict(df)
-        display_fields.update(pf)
+        for field_name, new_value in updated_fields.items():
+            display_fields[field_name] = new_value
 
         # 更新数据库（同步更新 display_fields）
         update_insurance_record(_db, record_id, {
@@ -615,10 +616,11 @@ def update_record_fields(record_id):
             "display_fields": display_fields,
         })
 
-        # 重新应用用户配置（公式计算等）
+        # 重新应用用户配置（公式计算等），手动修改的字段不被公式覆盖
         user = g.current_user
         user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
         if user_config and any(user_config.get(k) for k in user_config):
+            user_config["_manual_fields"] = set(mf)
             display_fields = apply_user_config_to_fields(user_config, display_fields)
 
         return jsonify({"code": 0, "msg": "保存成功", "data": {

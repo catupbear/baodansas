@@ -3435,7 +3435,8 @@ createApp({
                         records.value[idx].parsed_fields = json.data.parsed_fields;
                         records.value[idx].manual_fields = json.data.manual_fields;
                         if (json.data.display_fields) {
-                            records.value[idx].display_fields = json.data.display_fields;
+                            if (!records.value[idx].display_fields) records.value[idx].display_fields = {};
+                            Object.assign(records.value[idx].display_fields, json.data.display_fields);
                         }
                     }
                 } else {
@@ -3511,11 +3512,11 @@ createApp({
                 }
                 const json = await resp.json();
                 if (json.code === 0) {
-                    // 用后端重新计算后的 display_fields 更新整行（公式字段会自动重算）
+                    // 合并后端返回的 display_fields（保留前端动态补充的字段）
+                    if (!record.display_fields) record.display_fields = {};
                     if (json.data && json.data.display_fields) {
-                        record.display_fields = json.data.display_fields;
+                        Object.assign(record.display_fields, json.data.display_fields);
                     } else {
-                        if (!record.display_fields) record.display_fields = {};
                         record.display_fields[col] = newValue;
                     }
                     showMessage('已保存', true);
