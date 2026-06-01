@@ -604,11 +604,11 @@
                 </div>
                 <!-- 列头预览 -->
                 <div style="margin-bottom:16px; border:1px solid var(--border-light); border-radius:8px; overflow:hidden;">
-                    <div style="padding:6px 12px; background:var(--surface-secondary); font-size:11px; color:var(--text-muted); border-bottom:1px solid var(--border-light);">列头预览（{{ listColItems.filter(c => c.visible).length }} 列）</div>
+                    <div style="padding:6px 12px; background:var(--surface-secondary); font-size:11px; color:var(--text-muted); border-bottom:1px solid var(--border-light);">列头预览（{{ listColItems.filter(c => c.visible).length }} 列，{{ listColItems.filter(c => c.visible && c.frozen).length }} 列冻结）</div>
                     <div style="display:flex; overflow-x:auto; background:#fff;">
                         <div v-for="col in listColItems.filter(c => c.visible).sort((a,b) => listColItems.indexOf(a) - listColItems.indexOf(b))" :key="col.key"
-                             style="flex-shrink:0; padding:8px 12px; font-size:12px; font-weight:600; color:var(--text-secondary); border-right:1px solid var(--border-light); white-space:nowrap;">
-                            {{ col.display_name || col.key }}
+                             :style="{ flexShrink: 0, padding: '8px 12px', fontSize: '12px', fontWeight: 600, color: col.frozen ? 'var(--primary)' : 'var(--text-secondary)', borderRight: '1px solid var(--border-light)', whiteSpace: 'nowrap', background: col.frozen ? 'var(--primary-bg)' : 'transparent' }">
+                            {{ col.display_name || col.key }}<span v-if="col.frozen" style="margin-left:4px;font-size:10px;">📌</span>
                         </div>
                         <div v-if="!listColItems.some(c => c.visible)" style="padding:8px 12px; font-size:12px; color:var(--text-muted); font-style:italic;">暂无可见列</div>
                     </div>
@@ -619,6 +619,7 @@
                             <tr>
                                 <th style="width:40px;"></th>
                                 <th style="width:50px;">显示</th>
+                                <th style="width:50px;" title="冻结列固定在左侧，滚动时不会移出视野">冻结</th>
                                 <th>字段标识</th>
                                 <th style="width:180px;">显示名称</th>
                                 <th style="width:150px;">固定值</th>
@@ -636,6 +637,7 @@
                                 @dragend="onDragEnd">
                                 <td><span class="drag-handle" :style="activeSource === 'enterprise' ? 'cursor:not-allowed;opacity:0.3' : ''">⠿</span></td>
                                 <td><input type="checkbox" v-model="col.visible" :disabled="activeSource === 'enterprise'"></td>
+                                <td><input type="checkbox" v-model="col.frozen" :disabled="activeSource === 'enterprise'" title="冻结此列，固定在左侧"></td>
                                 <td style="color:var(--text-muted);">{{ col.key }}<span v-if="col.custom" style="margin-left:6px;font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:3px;">自定义</span></td>
                                 <td><input type="text" v-model="col.display_name" :disabled="activeSource === 'enterprise'" :placeholder="col.key" /></td>
                                 <td><input v-if="col.custom" type="text" v-model="fixedValues[col.key]" placeholder="无数据时自动填充" style="font-size:12px;" @change="saveFixedValues" /></td>
@@ -649,7 +651,8 @@
                     <button class="btn btn-outline btn-sm" @click="addCustomCol('list')" :disabled="!newColName.list?.trim()">添加字段</button>
                 </div>
                 <div style="margin-top:8px; font-size:11px; color:var(--text-muted);">
-                    固定值为个人设置，不受模板影响。也可在「自动计算公式」tab 中配置公式来计算值
+                    固定值为个人设置，不受模板影响。也可在「自动计算公式」tab 中配置公式来计算值<br>
+                    冻结列会固定在表格左侧，水平滚动时始终可见。冻结列必须是列表中排在最前面的连续列
                 </div>
             </div>
 
@@ -1130,6 +1133,8 @@ createApp({
                 if (data.code === 0) {
                     const config = data.data;
                     const columns = config.columns && config.columns.length ? config.columns : JSON.parse(JSON.stringify(DEFAULT_COLUMNS));
+                    // 确保每列都有 frozen 属性（兼容旧配置）
+                    columns.forEach(c => { if (c.frozen === undefined) c.frozen = false; });
                     columns.sort((a, b) => (a.order || 0) - (b.order || 0));
                     if (configType === 'list_columns') {
                         listColConfig.value = config;

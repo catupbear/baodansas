@@ -220,16 +220,20 @@
             position: sticky; left: 0; z-index: 1;
         }
         .records-table th.sticky-col-check { z-index: 3; }
-        /* 文件名列固定 */
-        .records-table th.sticky-col-name,
-        .records-table td.sticky-col-name {
-            position: sticky; left: 40px; z-index: 1;
+        /* 冻结列通用样式 */
+        .records-table th.frozen-col,
+        .records-table td.frozen-col {
+            position: sticky; z-index: 1;
+        }
+        .records-table th.frozen-col { z-index: 3; background: var(--surface-secondary) !important; }
+        .records-table td.frozen-col { background: inherit; }
+        /* 最后一个冻结列右边框 */
+        .records-table th.frozen-col-last,
+        .records-table td.frozen-col-last {
             border-right: 2px solid var(--border-light);
         }
-        .records-table th.sticky-col-name { z-index: 3; }
         /* sticky 列背景继承行背景 */
-        .records-table td.sticky-col-check,
-        .records-table td.sticky-col-name { background: inherit; }
+        .records-table td.sticky-col-check { background: inherit; }
         .records-table tbody tr { background: var(--surface); transition: background 0.15s ease; }
         .records-table tbody tr:hover { background: var(--primary-bg) !important; }
 
@@ -1153,10 +1157,13 @@
                             <th class="sticky-col-check" style="min-width:40px;">
                                 <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" class="cursor-pointer">
                             </th>
-                            <th v-for="col in visibleListColumns" :key="col.key"
-                                :class="col.key === '文件名' ? 'sticky-col-name' : ''"
+                            <th v-for="(col, colIdx) in visibleListColumns" :key="col.key"
+                                :class="[
+                                    col.frozen ? 'frozen-col' : '',
+                                    col.frozen && col.key === frozenColStyles._lastFrozenKey ? 'frozen-col-last' : ''
+                                ].join(' ')"
                                 class="text-gray-600 font-medium"
-                                :style="{ minWidth: col.key === '文件名' ? '150px' : (col.key === '创建时间' || col.key === '识别时间') ? '150px' : col.key === '群名' ? '100px' : '80px' }">
+                                :style="col.frozen && frozenColStyles[col.key] ? frozenColStyles[col.key] : { minWidth: (col.key === '创建时间' || col.key === '识别时间') ? '150px' : col.key === '群名' ? '100px' : '80px' }">
                                 {{ col.display_name }}
                             </th>
                             <th v-if="isSuperAdmin" style="min-width:70px;">识别方式</th>
@@ -1172,8 +1179,12 @@
                                 <input type="checkbox" :value="record.id" v-model="selectedRecordIds" class="cursor-pointer">
                             </td>
                             <!-- 动态列（按列配置渲染） -->
-                            <td v-for="col in visibleListColumns" :key="col.key"
-                                :class="col.key === '文件名' ? 'sticky-col-name' : ''"
+                            <td v-for="(col, colIdx) in visibleListColumns" :key="col.key"
+                                :class="[
+                                    col.frozen ? 'frozen-col' : '',
+                                    col.frozen && col.key === frozenColStyles._lastFrozenKey ? 'frozen-col-last' : ''
+                                ].join(' ')"
+                                :style="col.frozen && frozenColStyles[col.key] ? frozenColStyles[col.key] : {}"
                                 class="text-gray-700 text-sm">
                                 <!-- 文件名 -->
                                 <template v-if="col.key === '文件名'">
@@ -2702,12 +2713,31 @@ createApp({
         // 计算实际显示的列（按 order 排序，只取 visible 的）
         const visibleListColumns = computed(() => {
             if (!listColumnConfig.value.length) {
-                return outputColumns.value.map(col => ({ key: col, display_name: col }));
+                return outputColumns.value.map(col => ({ key: col, display_name: col, frozen: false }));
             }
             return listColumnConfig.value
                 .filter(c => c.visible !== false)
                 .sort((a, b) => (a.order || 0) - (b.order || 0))
-                .map(c => ({ key: c.key, display_name: c.display_name || c.key }));
+                .map(c => ({ key: c.key, display_name: c.display_name || c.key, frozen: !!c.frozen }));
+        });
+        // 冻结列的 left 偏移量映射（key → CSS left 值）
+        // 复选框列固定 40px 宽，冻结列依次累加
+        // 冻结列样式：所有标记 frozen 的列依次堆叠到左侧
+        const frozenColStyles = computed(() => {
+            const styles = {};
+            let left = 40; // 复选框列宽度
+            const cols = visibleListColumns.value;
+            const frozenKeys = [];
+            for (const col of cols) {
+                if (!col.frozen) continue;
+                const width = col.key === '文件名' ? 180 : 120;
+                styles[col.key] = { left: left + 'px', minWidth: width + 'px' };
+                left += width;
+                frozenKeys.push(col.key);
+            }
+            // 标记最后一个冻结列的 key，用于添加右边框
+            styles._lastFrozenKey = frozenKeys.length ? frozenKeys[frozenKeys.length - 1] : null;
+            return styles;
         });
         const mappingConfig = ref({ default_mapping: {}, company_mappings: {} });
         const availableOcrFields = ref([]);
@@ -5451,7 +5481,7 @@ createApp({
             extractionRules, loadExtractionRules,
             rawTextVisible, rawTextContent, rawTextFileName,
             successResults, abnormalResults, nonPolicyResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal, getPolicyHint, getRecordHint,
-            outputColumns, listColumnConfig, visibleListColumns, getMappedValue, getDocCategory, docCategories,
+            outputColumns, listColumnConfig, visibleListColumns, frozenColStyles, getMappedValue, getDocCategory, docCategories,
             isLoadingFiles, loadingFileCount, loadingFileTotal, loadingPercent,
             handleFileSelect, handleDrop, removeFile, clearFiles,
             previewFile, previewResultFile, showRawText,
