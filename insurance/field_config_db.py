@@ -1198,7 +1198,7 @@ def evaluate_formula(formula: str, fields: dict) -> str:
         return ""
 
 
-def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
+def apply_user_config_to_fields(config: dict, fields: dict, formula_only: bool = False) -> dict:
     """
     将用户字段配置应用到一条保单记录，返回 fields 的副本。
 
@@ -1215,83 +1215,101 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
     2. 险种简称替换（policy_type_alias）
     3. 日期格式化（date_format）
     4. 公式计算（fee_formula）
+
+    formula_only=True 时跳过 1-3 步，仅执行公式计算和固定值填充。
+    用于数据已经过完整处理但需要重新计算公式的场景（如导出）。
     """
     result = dict(fields)
 
-    # 1. 公司简称替换（支持包含匹配：配置key是公司全称的子串即可命中）
-    # 手动修改过的字段不被简称替换覆盖
+    # 手动修改过的字段不被简称替换/公式覆盖
     manual_fields = config.get("_manual_fields") or set()
-    company_aliases = {item["key"]: item["value"] for item in config.get("company_alias", [])}
-    company_val = result.get("保险公司") or result.get("承保公司") or result.get("保险公司简称") or ""
-    if company_val:
-        alias = None
-        # 优先精确匹配
-        if company_val in company_aliases:
-            alias = company_aliases[company_val]
-        else:
-            # 包含匹配：按key长度从长到短，避免短key误命中
-            for key in sorted(company_aliases.keys(), key=len, reverse=True):
-                if key and key in company_val:
-                    alias = company_aliases[key]
-                    break
-        if alias:
-            if "保险公司简称" not in manual_fields:
-                result["保险公司简称"] = alias
-            if "承保公司" in result and "承保公司" not in manual_fields:
-                result["承保公司"] = alias
-            # 同步更新"保司（带地区）"：用简称替换原公司名；无地址时直接用简称
-            region_key = "保司（带地区）"
-            alt_region_key = "保司带地区"
-            for rk in (region_key, alt_region_key):
-                if rk in result and rk not in manual_fields:
-                    _addr = result.get("保司地址", "")
-                    if _addr:
-                        from insurance.policy_parser import extract_city_from_address
-                        _city = extract_city_from_address(_addr)
-                        result[rk] = (_city + alias) if _city else alias
+
+    if formula_only:
+        # 跳过别名/日期格式，仅执行公式计算（从步骤4开始）
+        # 先将"率"字段中的百分比格式还原为数值，便于公式引用
+        for key, val in result.items():
+            if "率" in key and isinstance(val, str) and val.endswith("%"):
+                try:
+                    num = float(val[:-1])
+                    if abs(num) < 100:
+                        result[key] = str(num / 100)
                     else:
-                        result[rk] = alias
-
-    # 2. 险种简称替换
-    policy_type_items = config.get("policy_type_alias", [])
-    # 从列表中提取快捷映射开关
-    _quick_alias_on = any(item.get("key") == "__quick_alias__" and item.get("value") for item in policy_type_items)
-    policy_type_val = result.get("险种类型") or result.get("险种") or ""
-    if policy_type_val:
-        alias = None
-        if _quick_alias_on:
-            # 快捷映射：直接按分类映射为 交强险/商业险/驾意险/非车险
-            from insurance.policy_parser import get_policy_type_code
-            _, short_name = get_policy_type_code(policy_type_val)
-            _QUICK_DISPLAY = {"交强险": "交强险", "商业险": "商业险", "驾乘/意外险": "驾意险", "非车险": "非车险"}
-            alias = _QUICK_DISPLAY.get(short_name, short_name)
-        else:
-            # 逐条匹配（支持包含匹配：配置key是险种全称的子串即可命中）
-            type_aliases = {item["key"]: item["value"] for item in policy_type_items if item.get("key") != "__quick_alias__"}
-            if policy_type_val in type_aliases:
-                alias = type_aliases[policy_type_val]
+                        result[key] = str(num)
+                except (ValueError, TypeError):
+                    pass
+    else:
+        # 1. 公司简称替换（支持包含匹配：配置key是公司全称的子串即可命中）
+        company_aliases = {item["key"]: item["value"] for item in config.get("company_alias", [])}
+        company_val = result.get("保险公司") or result.get("承保公司") or result.get("保险公司简称") or ""
+        if company_val:
+            alias = None
+            # 优先精确匹配
+            if company_val in company_aliases:
+                alias = company_aliases[company_val]
             else:
-                for key in sorted(type_aliases.keys(), key=len, reverse=True):
-                    if key and key in policy_type_val:
-                        alias = type_aliases[key]
+                # 包含匹配：按key长度从长到短，避免短key误命中
+                for key in sorted(company_aliases.keys(), key=len, reverse=True):
+                    if key and key in company_val:
+                        alias = company_aliases[key]
                         break
-        if alias:
-            if "险种类型" not in manual_fields:
-                result["险种类型"] = alias
-            if "险种" in result and "险种" not in manual_fields:
-                result["险种"] = alias
+            if alias:
+                if "保险公司简称" not in manual_fields:
+                    result["保险公司简称"] = alias
+                if "承保公司" in result and "承保公司" not in manual_fields:
+                    result["承保公司"] = alias
+                # 同步更新"保司（带地区）"：用简称替换原公司名；无地址时直接用简称
+                region_key = "保司（带地区）"
+                alt_region_key = "保司带地区"
+                for rk in (region_key, alt_region_key):
+                    if rk in result and rk not in manual_fields:
+                        _addr = result.get("保司地址", "")
+                        if _addr:
+                            from insurance.policy_parser import extract_city_from_address
+                            _city = extract_city_from_address(_addr)
+                            result[rk] = (_city + alias) if _city else alias
+                        else:
+                            result[rk] = alias
 
-    # 3. 日期格式化
-    date_fmt_map = {item.get("key", ""): item.get("value", "") for item in config.get("date_format", [])}
-    for field_name, fmt in date_fmt_map.items():
-        if field_name and fmt and field_name in result:
-            raw_date = result[field_name]
-            if raw_date:
-                result[field_name] = _format_date(str(raw_date), fmt)
-    # 创建时间/识别时间：如果没有用户配置格式，默认保留时间部分
-    for ts_field in ("创建时间", "识别时间"):
-        if ts_field in result and ts_field not in date_fmt_map and result[ts_field]:
-            result[ts_field] = _format_date(str(result[ts_field]), "YYYY-MM-DD HH:mm")
+        # 2. 险种简称替换
+        policy_type_items = config.get("policy_type_alias", [])
+        # 从列表中提取快捷映射开关
+        _quick_alias_on = any(item.get("key") == "__quick_alias__" and item.get("value") for item in policy_type_items)
+        policy_type_val = result.get("险种类型") or result.get("险种") or ""
+        if policy_type_val:
+            alias = None
+            if _quick_alias_on:
+                # 快捷映射：直接按分类映射为 交强险/商业险/驾意险/非车险
+                from insurance.policy_parser import get_policy_type_code
+                _, short_name = get_policy_type_code(policy_type_val)
+                _QUICK_DISPLAY = {"交强险": "交强险", "商业险": "商业险", "驾乘/意外险": "驾意险", "非车险": "非车险"}
+                alias = _QUICK_DISPLAY.get(short_name, short_name)
+            else:
+                # 逐条匹配（支持包含匹配：配置key是险种全称的子串即可命中）
+                type_aliases = {item["key"]: item["value"] for item in policy_type_items if item.get("key") != "__quick_alias__"}
+                if policy_type_val in type_aliases:
+                    alias = type_aliases[policy_type_val]
+                else:
+                    for key in sorted(type_aliases.keys(), key=len, reverse=True):
+                        if key and key in policy_type_val:
+                            alias = type_aliases[key]
+                            break
+            if alias:
+                if "险种类型" not in manual_fields:
+                    result["险种类型"] = alias
+                if "险种" in result and "险种" not in manual_fields:
+                    result["险种"] = alias
+
+        # 3. 日期格式化
+        date_fmt_map = {item.get("key", ""): item.get("value", "") for item in config.get("date_format", [])}
+        for field_name, fmt in date_fmt_map.items():
+            if field_name and fmt and field_name in result:
+                raw_date = result[field_name]
+                if raw_date:
+                    result[field_name] = _format_date(str(raw_date), fmt)
+        # 创建时间/识别时间：如果没有用户配置格式，默认保留时间部分
+        for ts_field in ("创建时间", "识别时间"):
+            if ts_field in result and ts_field not in date_fmt_map and result[ts_field]:
+                result[ts_field] = _format_date(str(result[ts_field]), "YYYY-MM-DD HH:mm")
 
     # 4. 公式计算（key格式："目标字段:公司简称:险种简称"）
     # 先用原始数值计算所有公式，最后再转百分比显示，避免"率"字段被提前转成"10%"影响后续公式
