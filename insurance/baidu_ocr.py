@@ -7,9 +7,12 @@ API文档: https://cloud.baidu.com/doc/OCR/s/1k3h7y3db
 """
 
 import base64
+import logging
 import time
 import requests
 from typing import Dict, Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 def _is_clause_page(text: str) -> bool:
