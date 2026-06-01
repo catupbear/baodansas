@@ -1219,6 +1219,8 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
     result = dict(fields)
 
     # 1. 公司简称替换（支持包含匹配：配置key是公司全称的子串即可命中）
+    # 手动修改过的字段不被简称替换覆盖
+    manual_fields = config.get("_manual_fields") or set()
     company_aliases = {item["key"]: item["value"] for item in config.get("company_alias", [])}
     company_val = result.get("保险公司") or result.get("承保公司") or result.get("保险公司简称") or ""
     if company_val:
@@ -1233,16 +1235,15 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
                     alias = company_aliases[key]
                     break
         if alias:
-            # 写入简称（同时更新保险公司简称字段）
-            result["保险公司简称"] = alias
-            # 如果已有承保公司字段则一并更新
-            if "承保公司" in result:
+            if "保险公司简称" not in manual_fields:
+                result["保险公司简称"] = alias
+            if "承保公司" in result and "承保公司" not in manual_fields:
                 result["承保公司"] = alias
             # 同步更新"保司（带地区）"：用简称替换原公司名；无地址时直接用简称
             region_key = "保司（带地区）"
             alt_region_key = "保司带地区"
             for rk in (region_key, alt_region_key):
-                if rk in result:
+                if rk in result and rk not in manual_fields:
                     _addr = result.get("保司地址", "")
                     if _addr:
                         from insurance.policy_parser import extract_city_from_address
@@ -1275,8 +1276,9 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
                         alias = type_aliases[key]
                         break
         if alias:
-            result["险种类型"] = alias
-            if "险种" in result:
+            if "险种类型" not in manual_fields:
+                result["险种类型"] = alias
+            if "险种" in result and "险种" not in manual_fields:
                 result["险种"] = alias
 
     # 3. 日期格式化
@@ -1293,8 +1295,6 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
 
     # 4. 公式计算（key格式："目标字段:公司简称:险种简称"）
     # 先用原始数值计算所有公式，最后再转百分比显示，避免"率"字段被提前转成"10%"影响后续公式
-    # 手动修改过的字段不被公式覆盖
-    manual_fields = config.get("_manual_fields") or set()
     record_company = result.get("保险公司简称") or result.get("承保公司") or result.get("保险公司") or ""
     record_policy_type = result.get("险种类型") or result.get("险种") or ""
     rate_fields = []  # 记录需要转百分比的字段
@@ -1356,9 +1356,9 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
             plate = result.get("车牌号") or result.get("车牌") or ""
             formatted = _format_plate_with_hyphen(plate)
             if formatted != plate:
-                if "车牌号" in result:
+                if "车牌号" in result and "车牌号" not in manual_fields:
                     result["车牌号"] = formatted
-                if "车牌" in result:
+                if "车牌" in result and "车牌" not in manual_fields:
                     result["车牌"] = formatted
 
     return result

@@ -488,6 +488,15 @@ def list_records():
                     logger.debug("查询交强到期时间失败")
             for record in result.get("records", []):
                 df = record.get("display_fields", {})
+                # 手动填写过的交强到期时间不被覆盖
+                _mf_raw = record.get("manual_fields")
+                if isinstance(_mf_raw, str):
+                    try:
+                        _mf_raw = json.loads(_mf_raw)
+                    except (TypeError, json.JSONDecodeError):
+                        _mf_raw = []
+                if isinstance(_mf_raw, list) and "交强到期时间" in _mf_raw:
+                    continue
                 plate = df.get("车牌", "") or df.get("车牌号", "")
                 if plate:
                     df["交强到期时间"] = _plate_compulsory_end.get(plate, "")
@@ -2844,10 +2853,12 @@ def export_excel():
                     fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
                     if has_config and not skip_config:
                         fields = apply_user_config_to_fields(user_config, fields)
-                    # 注入交强到期时间
+                    # 注入交强到期时间（手动填写过的不覆盖）
                     if need_compulsory_end:
-                        plate = fields.get("车牌", "") or fields.get("车牌号", "") or ""
-                        fields["交强到期时间"] = plate_compulsory_end.get(plate, "")
+                        _inv_mf = inv.get("manual_fields", [])
+                        if "交强到期时间" not in _inv_mf:
+                            plate = fields.get("车牌", "") or fields.get("车牌号", "") or ""
+                            fields["交强到期时间"] = plate_compulsory_end.get(plate, "")
                     row = []
                     for col in field_names:
                         if col == "文件名":

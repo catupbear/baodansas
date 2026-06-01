@@ -1358,12 +1358,15 @@ def query_insurance_records(
         offset = (page - 1) * page_size
         if dedup:
             # 去重：每个保单号取最新的 id；空保单号全部保留
+            # 外层 JOIN 关联表获取 plate_no，按车牌排序
             id_sql = (
+                f"SELECT t.id FROM ("
                 f"SELECT MAX({col_prefix}id) as id FROM {from_clause} {full_where} "
                 f"GROUP BY pf.policy_no "
                 f"UNION ALL "
-                f"SELECT {col_prefix}id FROM {from_clause} {empty_where} "
-                f"ORDER BY id DESC LIMIT %s OFFSET %s"
+                f"SELECT {col_prefix}id FROM {from_clause} {empty_where}"
+                f") t LEFT JOIN insurance_policy_fields pf2 ON t.id = pf2.record_id "
+                f"ORDER BY COALESCE(pf2.plate_no, '') ASC, t.id DESC LIMIT %s OFFSET %s"
             )
             cursor.execute(id_sql, params + params + [page_size, offset])
         else:
