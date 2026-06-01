@@ -1271,7 +1271,7 @@
                                                    @click="isDateField(col.key) && $event.target.showPicker && $event.target.showPicker()"
                                                    @keyup.enter="saveListEdit(record)"
                                                    @keyup.escape="cancelListEdit()"
-                                                   ref="listEditInput">
+                                                   class="list-edit-input">
                                             <button @click="saveListEdit(record)" :disabled="listEditing.saving"
                                                     class="text-xs text-white rounded px-1.5 py-0.5 cursor-pointer"
                                                     style="background:#f97316;">{{ listEditing.saving ? '..' : '✓' }}</button>
@@ -3667,7 +3667,7 @@ createApp({
             listEditing.value = val;
             listEditing.saving = false;
             Vue.nextTick(() => {
-                const inp = document.querySelector('input[ref="listEditInput"]');
+                const inp = document.querySelector('.list-edit-input');
                 if (inp) {
                     inp.focus();
                     if (isDateField(col) && inp.showPicker) try { inp.showPicker(); } catch(e) {}
