@@ -1265,13 +1265,13 @@
                                     <template v-if="listEditing.recordId === record.id && listEditing.col === col.key">
                                         <div class="flex items-center gap-1">
                                             <input v-model="listEditing.value"
+                                                   v-auto-picker="isDateField(col.key)"
                                                    :type="isDateField(col.key) ? 'date' : 'text'"
-                                                   class="text-sm border border-orange-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-orange-300"
+                                                   class="text-sm border border-orange-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-orange-300 list-edit-input"
                                                    :style="isDateField(col.key) ? 'width:160px;cursor:pointer;' : 'width:160px;'"
                                                    @click="isDateField(col.key) && $event.target.showPicker && $event.target.showPicker()"
                                                    @keyup.enter="saveListEdit(record)"
                                                    @keyup.escape="cancelListEdit()"
-                                                   class="list-edit-input">
                                             <button @click="saveListEdit(record)" :disabled="listEditing.saving"
                                                     class="text-xs text-white rounded px-1.5 py-0.5 cursor-pointer"
                                                     style="background:#f97316;">{{ listEditing.saving ? '..' : '✓' }}</button>
@@ -2444,7 +2444,7 @@ if (!checkAuth()) throw new Error('redirect');
 
 const { createApp, ref, computed, reactive, onMounted } = Vue;
 
-createApp({
+const _app = createApp({
     setup() {
         const currentUser = ref(getUser());
         const isSuperAdmin = computed(() => currentUser.value && currentUser.value.role === 'super_admin');
@@ -3668,10 +3668,7 @@ createApp({
             listEditing.saving = false;
             Vue.nextTick(() => {
                 const inp = document.querySelector('.list-edit-input');
-                if (inp) {
-                    inp.focus();
-                    if (isDateField(col) && inp.showPicker) try { inp.showPicker(); } catch(e) {}
-                }
+                if (inp) inp.focus();
             });
         }
 
@@ -5671,7 +5668,15 @@ createApp({
             // 设置已迁移到 /monitor-config 页面
         };
     },
-}).mount('#app');
+});
+_app.directive('auto-picker', {
+    mounted(el, binding) {
+        if (!binding.value) return;
+        el.focus();
+        if (el.showPicker) setTimeout(() => { try { el.showPicker(); } catch(e) {} }, 0);
+    }
+});
+_app.mount('#app');
 </script>
 </body>
 </html>{% endraw %}
