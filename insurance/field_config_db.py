@@ -1344,19 +1344,25 @@ def apply_user_config_to_fields(config: dict, fields: dict, formula_only: bool =
     # 收集所有公式目标字段，用于判断是否需要第二轮
     formula_targets = {tf for tf, _ in matched_formulas}
 
-    # 公式目标字段集合：有公式规则的字段不受 manual_fields 保护
-    # （用户配了公式就是要自动算，应覆盖之前的手动值）
-    formula_target_set = {tf for tf, _ in matched_formulas}
+    # 判断公式是否引用了其他字段（计算公式 vs 常量公式）
+    # 常量公式（如"0"、"500"）→ 尊重 manual_fields，不覆盖手动值
+    # 计算公式（引用其他字段，如"保费 × (应付费率 ÷ 100)"）→ 始终重算
+    all_field_keys = set(result.keys())
+    def _is_computed_formula(formula_str: str) -> bool:
+        """判断公式是否引用了记录中的其他字段"""
+        normalized = formula_str.replace("×", "*").replace("÷", "/")
+        return any(k in normalized for k in all_field_keys)
 
     for round_idx in range(2):
         changed = False
         for target_field, formula in matched_formulas:
-            # 手动修改过 且 没有公式规则指向它 → 跳过（保留手动值）
-            # 有公式规则指向的字段 → 强制计算（公式优先于手动值）
-            if target_field in manual_fields and target_field not in formula_target_set:
-                if round_idx == 0 and "率" in target_field:
-                    rate_fields.append(target_field)
-                continue
+            if target_field in manual_fields:
+                # 计算公式（引用其他字段）→ 强制重算，覆盖手动值
+                # 常量公式（纯数字）→ 尊重手动值，跳过
+                if not _is_computed_formula(formula):
+                    if round_idx == 0 and "率" in target_field:
+                        rate_fields.append(target_field)
+                    continue
             old_val = result.get(target_field)
             calculated = evaluate_formula(formula, result)
             if calculated:
