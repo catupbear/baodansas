@@ -367,6 +367,11 @@ def list_records():
             # 补充车主：display_fields 缺失时从关联表补充
             if not record.get("display_fields"):
                 record["display_fields"] = {}
+            # DEBUG：记录从DB读取后的交强到期时间
+            _df_debug = record.get("display_fields", {})
+            if _df_debug.get("交强到期时间"):
+                logger.info("[DEBUG-列表] record_id=%s DB读取后 交强到期时间=%s, manual_fields=%s",
+                            record.get("id"), _df_debug.get("交强到期时间"), record.get("manual_fields"))
             pf_owner = record.pop("_pf_owner", None)
             if pf_owner and not record["display_fields"].get("车主"):
                 record["display_fields"]["车主"] = pf_owner
@@ -462,7 +467,12 @@ def list_records():
                     user_config["_manual_fields"] = set(_mf) if isinstance(_mf, list) else set()
                 else:
                     user_config.pop("_manual_fields", None)
+                _before_val = record["display_fields"].get("交强到期时间", "<不存在>")
                 record["display_fields"] = apply_user_config_to_fields(user_config, record["display_fields"])
+                _after_val = record["display_fields"].get("交强到期时间", "<不存在>")
+                if _before_val != _after_val:
+                    logger.info("[DEBUG-列表] record_id=%s apply_user_config前后交强到期时间变化: %s → %s",
+                                record.get("id"), _before_val, _after_val)
 
         # 注入交强到期时间：从当前页记录中找同车牌的交强险终保日期
         list_visible_keys = {c["key"] for c in list_col_cfg.get("columns", []) if c.get("visible")}
@@ -499,11 +509,20 @@ def list_records():
                         _mf_raw = json.loads(_mf_raw)
                     except (TypeError, json.JSONDecodeError):
                         _mf_raw = []
-                if not (isinstance(_mf_raw, list) and "交强到期时间" in _mf_raw):
+                _is_manual = isinstance(_mf_raw, list) and "交强到期时间" in _mf_raw
+                _existing_val = df.get("交强到期时间", "<不存在>")
+                if not _is_manual:
                     # 未手动填写过，从同车牌其他保单注入交强到期时间
                     plate = df.get("车牌", "") or df.get("车牌号", "")
                     if plate:
-                        df["交强到期时间"] = _plate_compulsory_end.get(plate, "")
+                        _inject_val = _plate_compulsory_end.get(plate, "")
+                        df["交强到期时间"] = _inject_val
+                        if _existing_val and _existing_val != "<不存在>" and _inject_val != _existing_val:
+                            logger.info("[DEBUG-列表] record_id=%s 注入覆盖了交强到期时间: %s → %s",
+                                        record.get("id"), _existing_val, _inject_val)
+                else:
+                    logger.info("[DEBUG-列表] record_id=%s 手动字段保护，保留交强到期时间=%s, manual_fields=%s",
+                                record.get("id"), _existing_val, _mf_raw)
 
         # 复用已加载的页面列配置
         result["column_config"] = list_col_cfg
@@ -634,11 +653,30 @@ def update_record_fields(record_id):
             display_fields[field_name] = new_value
 
         # 更新数据库（同步更新 display_fields）
+        logger.info("[DEBUG-保存] record_id=%s, 更新字段=%s, manual_fields=%s", record_id, updated_fields, mf)
+        logger.info("[DEBUG-保存] 写入DB前 display_fields中交强到期时间=%s", display_fields.get("交强到期时间", "<不存在>"))
         update_insurance_record(_db, record_id, {
             "parsed_fields": pf,
             "manual_fields": mf,
             "display_fields": display_fields,
         })
+
+        # 验证写入是否成功：重新从DB读取
+        _verify_record = get_insurance_record(_db, record_id)
+        _verify_df = _verify_record.get("display_fields", {}) if _verify_record else {}
+        if isinstance(_verify_df, str):
+            try:
+                _verify_df = json.loads(_verify_df)
+            except Exception:
+                _verify_df = {}
+        _verify_mf = _verify_record.get("manual_fields", []) if _verify_record else []
+        if isinstance(_verify_mf, str):
+            try:
+                _verify_mf = json.loads(_verify_mf)
+            except Exception:
+                _verify_mf = []
+        logger.info("[DEBUG-保存] 写入DB后重读 display_fields中交强到期时间=%s, manual_fields=%s",
+                     _verify_df.get("交强到期时间", "<不存在>"), _verify_mf)
 
         # 重新应用用户配置（公式计算等），手动修改的字段不被公式覆盖
         user = g.current_user
@@ -646,6 +684,8 @@ def update_record_fields(record_id):
         if user_config and any(user_config.get(k) for k in user_config):
             user_config["_manual_fields"] = set(mf)
             display_fields = apply_user_config_to_fields(user_config, display_fields)
+
+        logger.info("[DEBUG-保存] apply_user_config后 display_fields中交强到期时间=%s", display_fields.get("交强到期时间", "<不存在>"))
 
         return jsonify({"code": 0, "msg": "保存成功", "data": {
             "parsed_fields": pf,
