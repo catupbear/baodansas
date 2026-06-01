@@ -597,16 +597,27 @@ def update_record_fields(record_id):
             if field_name not in mf:
                 mf.append(field_name)
 
-        # 更新数据库
+        # 读取现有 display_fields 作为基础（包含跟单人、车主等补充字段）
+        df = record.get("display_fields") or "{}"
+        if isinstance(df, str):
+            try:
+                df = json.loads(df)
+            except (TypeError, json.JSONDecodeError):
+                df = {}
+        # 用 parsed_fields 更新 display_fields 基础字段，保留额外的补充字段
+        display_fields = dict(df)
+        display_fields.update(pf)
+
+        # 更新数据库（同步更新 display_fields）
         update_insurance_record(_db, record_id, {
             "parsed_fields": pf,
             "manual_fields": mf,
+            "display_fields": display_fields,
         })
 
-        # 重新应用用户配置（公式计算等），返回最新的 display_fields
+        # 重新应用用户配置（公式计算等）
         user = g.current_user
         user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
-        display_fields = dict(pf)
         if user_config and any(user_config.get(k) for k in user_config):
             display_fields = apply_user_config_to_fields(user_config, display_fields)
 
