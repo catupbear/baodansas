@@ -499,11 +499,11 @@ def list_records():
                         _mf_raw = json.loads(_mf_raw)
                     except (TypeError, json.JSONDecodeError):
                         _mf_raw = []
-                if isinstance(_mf_raw, list) and "交强到期时间" in _mf_raw:
-                    continue
-                plate = df.get("车牌", "") or df.get("车牌号", "")
-                if plate:
-                    df["交强到期时间"] = _plate_compulsory_end.get(plate, "")
+                if not (isinstance(_mf_raw, list) and "交强到期时间" in _mf_raw):
+                    # 未手动填写过，从同车牌其他保单注入交强到期时间
+                    plate = df.get("车牌", "") or df.get("车牌号", "")
+                    if plate:
+                        df["交强到期时间"] = _plate_compulsory_end.get(plate, "")
 
         # 复用已加载的页面列配置
         result["column_config"] = list_col_cfg
