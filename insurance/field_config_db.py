@@ -1344,19 +1344,21 @@ def apply_user_config_to_fields(config: dict, fields: dict, formula_only: bool =
     # 收集所有公式目标字段，用于判断是否需要第二轮
     formula_targets = {tf for tf, _ in matched_formulas}
 
+    # 公式目标字段集合：有公式规则的字段不受 manual_fields 保护
+    # （用户配了公式就是要自动算，应覆盖之前的手动值）
+    formula_target_set = {tf for tf, _ in matched_formulas}
+
     for round_idx in range(2):
         changed = False
         for target_field, formula in matched_formulas:
-            if target_field in manual_fields:
-                logger.debug("[公式调试] 跳过手动字段: %s, manual_fields=%s", target_field, manual_fields)
+            # 手动修改过 且 没有公式规则指向它 → 跳过（保留手动值）
+            # 有公式规则指向的字段 → 强制计算（公式优先于手动值）
+            if target_field in manual_fields and target_field not in formula_target_set:
                 if round_idx == 0 and "率" in target_field:
                     rate_fields.append(target_field)
                 continue
             old_val = result.get(target_field)
             calculated = evaluate_formula(formula, result)
-            logger.debug("[公式调试] round=%d target=%s formula=%s old=%s calc=%s 保费=%s 应付费率=%s",
-                         round_idx, target_field, formula, old_val, calculated,
-                         result.get("保费", "N/A"), result.get("应付费率", "N/A"))
             if calculated:
                 result[target_field] = calculated
                 if round_idx == 0 and "率" in target_field:
