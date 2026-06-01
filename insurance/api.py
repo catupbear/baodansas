@@ -447,6 +447,17 @@ def list_records():
                     else:
                         df["保司（带地区）"] = _comp
             if has_config and record.get("display_fields"):
+                # 传入手动修改字段列表，避免公式覆盖用户手动编辑的值
+                _mf = record.get("manual_fields")
+                if _mf:
+                    if isinstance(_mf, str):
+                        try:
+                            _mf = json.loads(_mf)
+                        except (TypeError, json.JSONDecodeError):
+                            _mf = []
+                    user_config["_manual_fields"] = set(_mf) if isinstance(_mf, list) else set()
+                else:
+                    user_config.pop("_manual_fields", None)
                 record["display_fields"] = apply_user_config_to_fields(user_config, record["display_fields"])
 
         # 注入交强到期时间：从当前页记录中找同车牌的交强险终保日期

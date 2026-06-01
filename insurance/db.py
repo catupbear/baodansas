@@ -1382,7 +1382,7 @@ def query_insurance_records(
                 "r2.id, r2.roomid, r2.room_name, r2.sender, r2.sender_name, "
                 "r2.filename, r2.cos_url, r2.ocr_engine, r2.doc_category, r2.confidence, "
                 "r2.dingtalk_synced, r2.status, r2.source, r2.created_at, r2.updated_at, "
-                "r2.company_short, r2.is_abnormal, r2.hint, r2.display_fields, "
+                "r2.company_short, r2.is_abnormal, r2.hint, r2.display_fields, r2.manual_fields, "
                 "r2.abnormal_override_reason, r2.user_id, "
                 "pf3.owner AS _pf_owner"
             )

@@ -1319,8 +1319,10 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
         else:
             formula = str(raw_value)
         if target_field and formula:
-            # 手动修改过的字段不被公式覆盖
+            # 手动修改过的字段不被公式覆盖，但仍需百分比格式化
             if target_field in manual_fields:
+                if "率" in target_field:
+                    rate_fields.append(target_field)
                 continue
             calculated = evaluate_formula(formula, result)
             if calculated:
