@@ -1333,6 +1333,8 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
     # 所有公式算完后，再将"率"字段转为百分比显示
     for field in rate_fields:
         try:
+            if field not in result:
+                continue
             val = float(result[field])
             if abs(val) < 1:
                 result[field] = f"{val * 100:g}%"
