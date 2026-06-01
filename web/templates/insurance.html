@@ -947,6 +947,29 @@
                         @click="recordFilter.date_shortcut = 'all'; recordFilter.date_start = ''; recordFilter.date_end = ''; loadRecords()"
                         class="text-xs text-gray-400 hover:text-orange-500 cursor-pointer ml-1"
                         title="清除日期筛选">&times; 清除</button>
+                <!-- 排序 -->
+                <div class="flex items-center gap-1.5 ml-2 pl-2" style="border-left:1px solid #e5e7eb;">
+                    <span class="text-xs text-gray-500 font-medium whitespace-nowrap">排序:</span>
+                    <select v-model="recordFilter.sort_by" @change="loadRecords()"
+                            class="text-xs border border-gray-200 rounded-lg px-1.5 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 text-gray-600 cursor-pointer"
+                            style="min-width:80px;">
+                        <option value="created_at">创建日期</option>
+                        <option value="updated_at">识别日期</option>
+                        <option value="plate_no">车牌</option>
+                        <option value="sign_date">签单日期</option>
+                        <option value="start_date">起保日期</option>
+                        <option value="end_date">终保日期</option>
+                        <option value="company_short">保司</option>
+                        <option value="policy_no">保单号</option>
+                    </select>
+                    <button @click="recordFilter.sort_order = recordFilter.sort_order === 'asc' ? 'desc' : 'asc'; loadRecords()"
+                            class="text-xs px-2 py-1 rounded-lg border border-gray-200 bg-white hover:border-orange-300 cursor-pointer transition-colors flex items-center gap-0.5"
+                            :title="recordFilter.sort_order === 'asc' ? '升序（点击切换为降序）' : '降序（点击切换为升序）'">
+                        <span v-if="recordFilter.sort_order === 'asc'" style="font-size:14px;line-height:1;">↑</span>
+                        <span v-else style="font-size:14px;line-height:1;">↓</span>
+                        <span class="text-gray-500">{{ recordFilter.sort_order === 'asc' ? '升序' : '降序' }}</span>
+                    </button>
+                </div>
                 <!-- 展开高级搜索按钮 -->
                 <button @click="showAdvancedSearch = !showAdvancedSearch"
                         class="text-xs px-2.5 py-1 rounded-full transition-colors cursor-pointer ml-auto"
@@ -4839,6 +4862,9 @@ createApp({
             start_date_end: '',     // 起保日期止
             end_date_start: '',     // 终保日期起
             end_date_end: '',       // 终保日期止
+            // 排序
+            sort_by: 'created_at',  // 排序字段
+            sort_order: 'desc',     // 排序方向
         });
         // 展开/折叠高级搜索
         const showAdvancedSearch = ref(false);
@@ -4946,6 +4972,8 @@ createApp({
         function clearAllFilters() {
             Object.keys(recordFilter).forEach(k => {
                 if (k === 'dedup') { recordFilter[k] = true; }
+                else if (k === 'sort_by') { recordFilter[k] = 'created_at'; }
+                else if (k === 'sort_order') { recordFilter[k] = 'desc'; }
                 else { recordFilter[k] = ''; }
             });
             showAdvancedSearch.value = false;
@@ -5046,6 +5074,9 @@ createApp({
                 if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
                 // 保司筛选改为服务端
                 if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
+                // 排序
+                if (recordFilter.sort_by) params.set('sort_by', recordFilter.sort_by);
+                if (recordFilter.sort_order) params.set('sort_order', recordFilter.sort_order);
                 _appendDateParams(params);
                 // 失败/待处理 tab 下不去重，避免记录被过滤掉
                 if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');

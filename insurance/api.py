@@ -296,6 +296,8 @@ def list_records():
     end_date_start = request.args.get("end_date_start", "")
     end_date_end = request.args.get("end_date_end", "")
     dedup = request.args.get("dedup", "") == "1"
+    sort_by = request.args.get("sort_by", "")
+    sort_order = request.args.get("sort_order", "desc")
 
     try:
         result = query_insurance_records(
@@ -331,6 +333,8 @@ def list_records():
             end_date_start=end_date_start,
             end_date_end=end_date_end,
             dedup=dedup,
+            sort_by=sort_by,
+            sort_order=sort_order,
         )
         # 列表返回 display_fields（轻量映射字段）替代 parsed_fields
         # 获取用户字段配置，应用简称/日期格式/公式计算

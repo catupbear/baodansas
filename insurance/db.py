@@ -1189,6 +1189,8 @@ def query_insurance_records(
     end_date_start: str = "",
     end_date_end: str = "",
     dedup: bool = False,
+    sort_by: str = "",
+    sort_order: str = "desc",
 ) -> dict:
     """
     分页查询保单识别记录，支持按群、状态、关键词、来源、识别方式、文档类型筛选。
@@ -1354,11 +1356,51 @@ def query_insurance_records(
             total = cursor.fetchone()["cnt"]
         pages = max(1, (total + page_size - 1) // page_size)
 
+        # 构建排序子句
+        _dir = "ASC" if sort_order.upper() == "ASC" else "DESC"
+        # 排序字段白名单映射（id 查询阶段 / 最终数据查询阶段使用不同别名）
+        _sort_map_id = {
+            "plate_no": "COALESCE(pf.plate_no, '')",
+            "created_at": "r.created_at",
+            "updated_at": "r.updated_at",
+            "sign_date": "COALESCE(pf.sign_date_iso, '')",
+            "start_date": "COALESCE(pf.start_date_iso, '')",
+            "end_date": "COALESCE(pf.end_date_iso, '')",
+            "company_short": "COALESCE(r.company_short, '')",
+            "policy_no": "COALESCE(pf.policy_no, '')",
+        }
+        _sort_map_id_dedup = {
+            "plate_no": "COALESCE(pf2.plate_no, '')",
+            "created_at": "t.id",
+            "updated_at": "t.id",
+            "sign_date": "COALESCE(pf2.sign_date_iso, '')",
+            "start_date": "COALESCE(pf2.start_date_iso, '')",
+            "end_date": "COALESCE(pf2.end_date_iso, '')",
+            "company_short": "COALESCE(pf2.company, '')",
+            "policy_no": "COALESCE(pf2.policy_no, '')",
+        }
+        _sort_map_final = {
+            "plate_no": "COALESCE(pf3.plate_no, '')",
+            "created_at": "r2.created_at",
+            "updated_at": "r2.updated_at",
+            "sign_date": "COALESCE(pf3.sign_date_iso, '')",
+            "start_date": "COALESCE(pf3.start_date_iso, '')",
+            "end_date": "COALESCE(pf3.end_date_iso, '')",
+            "company_short": "COALESCE(r2.company_short, '')",
+            "policy_no": "COALESCE(pf3.policy_no, '')",
+        }
+        _sort_key = sort_by if sort_by in _sort_map_id else "created_at"
+        # 默认无 sort_by 时按创建时间降序
+        if not sort_by:
+            _dir = "DESC"
+        id_order = f"{_sort_map_id[_sort_key]} {_dir}, r.id DESC"
+        dedup_order = f"{_sort_map_id_dedup[_sort_key]} {_dir}, t.id DESC"
+        final_order = f"{_sort_map_final[_sort_key]} {_dir}, r2.id DESC"
+
         # 延迟关联：先查 id（轻量排序），再用 id 取完整数据
         offset = (page - 1) * page_size
         if dedup:
             # 去重：每个保单号取最新的 id；空保单号全部保留
-            # 外层 JOIN 关联表获取 plate_no，按车牌排序
             id_sql = (
                 f"SELECT t.id FROM ("
                 f"SELECT MAX({col_prefix}id) as id FROM {from_clause} {full_where} "
@@ -1366,21 +1408,19 @@ def query_insurance_records(
                 f"UNION ALL "
                 f"SELECT {col_prefix}id FROM {from_clause} {empty_where}"
                 f") t LEFT JOIN insurance_policy_fields pf2 ON t.id = pf2.record_id "
-                f"ORDER BY COALESCE(pf2.plate_no, '') ASC, t.id DESC LIMIT %s OFFSET %s"
+                f"ORDER BY {dedup_order} LIMIT %s OFFSET %s"
             )
             cursor.execute(id_sql, params + params + [page_size, offset])
         else:
-            # 按车牌号排序（需要 JOIN 关联表获取 plate_no）
             cursor.execute(
                 f"SELECT r.id FROM {from_clause} {where_clause} "
-                f"ORDER BY COALESCE(pf.plate_no, '') ASC, r.created_at DESC LIMIT %s OFFSET %s",
+                f"ORDER BY {id_order} LIMIT %s OFFSET %s",
                 params + [page_size, offset]
             )
         id_rows = cursor.fetchall()
         if id_rows:
             ids = [r["id"] for r in id_rows]
             placeholders = ",".join(["%s"] * len(ids))
-            # 列表只返回轻量字段，parsed_fields 等大字段移到详情接口
             select_cols = (
                 "r2.id, r2.roomid, r2.room_name, r2.sender, r2.sender_name, "
                 "r2.filename, r2.cos_url, r2.ocr_engine, r2.doc_category, r2.confidence, "
@@ -1392,7 +1432,7 @@ def query_insurance_records(
             cursor.execute(
                 f"SELECT {select_cols} FROM insurance_records r2 "
                 f"LEFT JOIN insurance_policy_fields pf3 ON r2.id = pf3.record_id "
-                f"WHERE r2.id IN ({placeholders}) ORDER BY COALESCE(pf3.plate_no, '') ASC, r2.created_at DESC",
+                f"WHERE r2.id IN ({placeholders}) ORDER BY {final_order}",
                 ids
             )
             records = list(cursor.fetchall())
