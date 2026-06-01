@@ -3500,11 +3500,13 @@ createApp({
                         records.value[idx].manual_fields = json.data.manual_fields;
                         if (json.data.display_fields) {
                             if (!records.value[idx].display_fields) records.value[idx].display_fields = {};
+                            const editedField = fieldName;
+                            records.value[idx].display_fields[editedField] = newValue;
                             const returned = json.data.display_fields;
                             for (const [k, v] of Object.entries(returned)) {
                                 if (v !== '' && v !== null && v !== undefined) {
                                     records.value[idx].display_fields[k] = v;
-                                } else if (!records.value[idx].display_fields[k]) {
+                                } else if (k === editedField || !records.value[idx].display_fields[k]) {
                                     records.value[idx].display_fields[k] = v;
                                 }
                             }
@@ -3606,19 +3608,19 @@ createApp({
                 const json = await resp.json();
                 if (json.code === 0) {
                     // 合并后端返回的 display_fields
-                    // 不用空值覆盖已有值（如交强到期时间由列表页动态注入，保存API不含该数据）
+                    // 用户编辑的字段必须更新（包括清空），其他字段不用空值覆盖已有值
                     if (!record.display_fields) record.display_fields = {};
+                    // 先更新用户编辑的字段（确保清空操作生效）
+                    record.display_fields[col] = newValue;
                     if (json.data && json.data.display_fields) {
                         const returned = json.data.display_fields;
                         for (const [k, v] of Object.entries(returned)) {
                             if (v !== '' && v !== null && v !== undefined) {
                                 record.display_fields[k] = v;
-                            } else if (!record.display_fields[k]) {
+                            } else if (k === col || !record.display_fields[k]) {
                                 record.display_fields[k] = v;
                             }
                         }
-                    } else {
-                        record.display_fields[col] = newValue;
                     }
                     showMessage('已保存', true);
                 } else {
