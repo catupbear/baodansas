@@ -1251,7 +1251,8 @@
                                             <input v-model="listEditing.value"
                                                    :type="isDateField(col.key) ? 'date' : 'text'"
                                                    class="text-sm border border-orange-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-orange-300"
-                                                   style="width:160px;"
+                                                   :style="isDateField(col.key) ? 'width:160px;cursor:pointer;' : 'width:160px;'"
+                                                   @click="isDateField(col.key) && $event.target.showPicker && $event.target.showPicker()"
                                                    @keyup.enter="saveListEdit(record)"
                                                    @keyup.escape="cancelListEdit()"
                                                    ref="listEditInput">
@@ -2194,6 +2195,8 @@
                                         <input id="field-edit-input"
                                                v-model="editingValue"
                                                :type="isDateField(editingField) ? 'date' : 'text'"
+                                               :style="isDateField(editingField) ? 'cursor:pointer;' : ''"
+                                               @click="isDateField(editingField) && $event.target.showPicker && $event.target.showPicker()"
                                                @keyup.enter="saveEditField"
                                                @keyup.escape="cancelEditField"
                                                class="min-w-0 flex-1 px-2 py-0.5 text-sm border border-orange-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-400"
@@ -3453,10 +3456,12 @@ createApp({
                 val = normalizeDateForInput(val);
             }
             editingValue.value = val;
-            // 自动聚焦输入框
             Vue.nextTick(() => {
                 const input = document.getElementById('field-edit-input');
-                if (input) input.focus();
+                if (input) {
+                    input.focus();
+                    if (isDateField(label) && input.showPicker) try { input.showPicker(); } catch(e) {}
+                }
             });
         }
 
@@ -3566,10 +3571,12 @@ createApp({
             }
             listEditing.value = val;
             listEditing.saving = false;
-            // 下一帧聚焦输入框
             Vue.nextTick(() => {
                 const inp = document.querySelector('input[ref="listEditInput"]');
-                if (inp) inp.focus();
+                if (inp) {
+                    inp.focus();
+                    if (isDateField(col) && inp.showPicker) try { inp.showPicker(); } catch(e) {}
+                }
             });
         }
 
