@@ -1263,7 +1263,7 @@
                                 <!-- 保单字段（可点击编辑） -->
                                 <template v-else>
                                     <template v-if="listEditing.recordId === record.id && listEditing.col === col.key">
-                                        <div class="flex items-center gap-1" style="background:#fff;border-radius:6px;padding:2px 4px;">
+                                        <div class="flex items-center gap-1">
                                             <input v-model="listEditing.value"
                                                    v-auto-picker="isDateField(col.key)"
                                                    :type="isDateField(col.key) ? 'date' : 'text'"
