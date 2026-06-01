@@ -1475,7 +1475,7 @@
     </div>
 
     <!-- ========== 批量重新识别失败明细弹窗 ========== -->
-    <div v-if="batchFailModal.visible" class="fixed inset-0 z-[1000] flex items-center justify-center" style="background:rgba(0,0,0,0.4);" @click.self="batchFailModal.visible = false">
+    <div v-if="batchFailModal.visible" class="fixed inset-0 flex items-center justify-center" style="z-index:1000;background:rgba(0,0,0,0.4);" @click.self="batchFailModal.visible = false">
         <div style="background:#fff;border-radius:12px;width:560px;max-width:90vw;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
             <div style="padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;">
                 <span style="font-size:14px;font-weight:600;color:#1f2937;">识别失败明细（{{ batchFailModal.errors.length }} 条）</span>
