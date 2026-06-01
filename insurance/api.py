@@ -3670,7 +3670,9 @@ def save_column_config_api():
         else:
             scope, scope_id = _get_user_scope()
 
-        save_column_config(_db, config_type, scope, scope_id, columns)
+        template_name = body.get("template_name")
+        save_column_config(_db, config_type, scope, scope_id, columns,
+                           template_name=template_name)
         return jsonify({"code": 0, "msg": "列配置已保存"})
     except Exception as e:
         logger.exception("保存列配置失败")

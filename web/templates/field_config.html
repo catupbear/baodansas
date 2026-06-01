@@ -1173,7 +1173,7 @@ createApp({
             const items = configType === 'list_columns' ? listColItems.value : exportColItems.value;
             const columns = items.map((col, idx) => ({ ...col, order: idx }));
             try {
-                const colBody = { config_type: configType, columns };
+                const colBody = { config_type: configType, columns, template_name: activeTemplateName.value };
                 if (adminTarget.value) {
                     colBody.target_scope = adminTarget.value.scope;
                     if (adminTarget.value.scope_id != null) colBody.target_scope_id = adminTarget.value.scope_id;
@@ -1190,7 +1190,7 @@ createApp({
                     const otherType = configType === 'list_columns' ? 'export_columns' : 'list_columns';
                     const otherItems = otherType === 'list_columns' ? listColItems.value : exportColItems.value;
                     const otherColumns = otherItems.map((col, idx) => ({ ...col, order: idx }));
-                    const otherBody = { config_type: otherType, columns: otherColumns };
+                    const otherBody = { config_type: otherType, columns: otherColumns, template_name: activeTemplateName.value };
                     if (adminTarget.value) {
                         otherBody.target_scope = adminTarget.value.scope;
                         if (adminTarget.value.scope_id != null) otherBody.target_scope_id = adminTarget.value.scope_id;
@@ -1940,18 +1940,25 @@ createApp({
                 return;
             }
 
-            // 先加载默认值预填充，再保存新模板
             showTemplateDropdown.value = false;
             loading.value = true;
             try {
-                // 获取默认值
-                const defaultResp = await authFetch('/api/insurance/field-config/defaults');
-                const defaultJson = await defaultResp.json();
-                if (defaultJson.code === 0 && defaultJson.data) {
-                    applyConfig(defaultJson.data);
+                // 基于当前查看的模板创建：如果正在查看企业/系统模板，
+                // 先从该模板加载完整配置（含公式、自定义字段），再另存为自己的模板
+                const copySource = activeSource.value;
+                if (copySource === 'enterprise' || copySource === 'system') {
+                    // 当前已在查看企业/系统模板，表单中已有完整配置（含公式），
+                    // 直接用当前表单数据创建，无需重新加载
+                } else {
+                    // 当前是自己的模板，加载系统默认值预填充
+                    const defaultResp = await authFetch('/api/insurance/field-config/defaults');
+                    const defaultJson = await defaultResp.json();
+                    if (defaultJson.code === 0 && defaultJson.data) {
+                        applyConfig(defaultJson.data);
+                    }
                 }
 
-                // 保存新模板
+                // 保存新模板（含公式和所有配置）
                 const config = buildConfig();
                 const resp = await authFetch('/api/insurance/field-config/save-and-apply', {
                     method: 'POST',
@@ -1963,10 +1970,25 @@ createApp({
                     return;
                 }
 
+                // 如果是从企业/系统模板复制，需要同步列配置（含自定义字段）
+                if (copySource === 'enterprise' || copySource === 'system') {
+                    for (const colType of ['list_columns', 'export_columns']) {
+                        const items = colType === 'list_columns' ? listColItems.value : exportColItems.value;
+                        const columns = items.map((col, idx) => ({ ...col, order: idx }));
+                        await authFetch('/api/insurance/column-config', {
+                            method: 'POST',
+                            body: JSON.stringify({ config_type: colType, columns, template_name: trimmed }),
+                        });
+                    }
+                }
+
                 myTemplates.value.push({ name: trimmed, visible: false });
                 activeSource.value = 'own';
                 activeTemplateName.value = trimmed;
-                showToast('模板「' + trimmed + '」已创建', 'success');
+                const hint = (copySource === 'enterprise' || copySource === 'system')
+                    ? '模板「' + trimmed + '」已从' + (copySource === 'enterprise' ? '企业' : '系统') + '模板复制创建'
+                    : '模板「' + trimmed + '」已创建';
+                showToast(hint, 'success');
             } catch (e) {
                 if (e.message !== '未登录') showToast('创建模板失败: ' + e.message, 'error');
             } finally {
