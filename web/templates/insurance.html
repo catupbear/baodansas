@@ -204,11 +204,14 @@
         .toggle-switch input:checked + .toggle-track::after { transform: translateX(20px); }
 
         /* 识别记录表格 */
-        .records-table { font-size: 13px; border-collapse: separate; border-spacing: 0; width: 100%; }
+        .records-table { font-size: 13px; border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
         .records-table th, .records-table td {
-            white-space: nowrap; border-bottom: 1px solid var(--border-light);
+            border-bottom: 1px solid var(--border-light);
             padding: 8px 12px;
         }
+        .records-table th { white-space: nowrap; }
+        .records-table td { white-space: nowrap; }
+        .records-table td.allow-wrap { white-space: normal; word-break: break-all; max-width: 200px; }
         .records-table th {
             position: sticky; top: 0; z-index: 2;
             background: var(--surface-secondary);
@@ -226,16 +229,28 @@
             position: sticky; z-index: 1;
         }
         .records-table th.frozen-col { z-index: 3; background: var(--surface-secondary) !important; }
-        .records-table td.frozen-col { background: inherit; }
+        .records-table td.frozen-col { background: var(--surface) !important; }
         /* 最后一个冻结列右边框 */
         .records-table th.frozen-col-last,
         .records-table td.frozen-col-last {
             border-right: 2px solid var(--border-light);
         }
-        /* sticky 列背景继承行背景 */
-        .records-table td.sticky-col-check { background: inherit; }
+        /* sticky 列背景 */
+        .records-table td.sticky-col-check { background: var(--surface) !important; }
         .records-table tbody tr { background: var(--surface); transition: background 0.15s ease; }
+        .records-table tbody tr:hover td.sticky-col-check,
+        .records-table tbody tr:hover td.frozen-col { background: var(--primary-bg) !important; }
         .records-table tbody tr:hover { background: var(--primary-bg) !important; }
+
+        /* 列宽拖拽手柄 */
+        .records-table th { position: relative; }
+        .col-resize-handle {
+            position: absolute; right: -3px; top: 0; bottom: 0; width: 6px;
+            cursor: col-resize; z-index: 4; user-select: none;
+        }
+        .col-resize-handle:hover, .col-resize-handle.active {
+            background: var(--primary-light);
+        }
 
         /* 分页器 */
         .pagination-btn {
@@ -1163,8 +1178,10 @@
                                     col.frozen && col.key === frozenColStyles._lastFrozenKey ? 'frozen-col-last' : ''
                                 ].join(' ')"
                                 class="text-gray-600 font-medium"
-                                :style="col.frozen && frozenColStyles[col.key] ? frozenColStyles[col.key] : { minWidth: (col.key === '创建时间' || col.key === '识别时间') ? '150px' : col.key === '群名' ? '100px' : '80px' }">
+                                :style="getColStyle(col)">
                                 {{ col.display_name }}
+                                <span class="col-resize-handle"
+                                      @mousedown.prevent="startColResize($event, col)"></span>
                             </th>
                             <th v-if="isSuperAdmin" style="min-width:70px;">识别方式</th>
                             <th v-if="isSuperAdmin" style="min-width:60px;">置信度</th>
@@ -1182,9 +1199,10 @@
                             <td v-for="(col, colIdx) in visibleListColumns" :key="col.key"
                                 :class="[
                                     col.frozen ? 'frozen-col' : '',
-                                    col.frozen && col.key === frozenColStyles._lastFrozenKey ? 'frozen-col-last' : ''
+                                    col.frozen && col.key === frozenColStyles._lastFrozenKey ? 'frozen-col-last' : '',
+                                    wrapColumns.includes(col.key) ? 'allow-wrap' : ''
                                 ].join(' ')"
-                                :style="col.frozen && frozenColStyles[col.key] ? frozenColStyles[col.key] : {}"
+                                :style="getColStyle(col, true)"
                                 class="text-gray-700 text-sm">
                                 <!-- 文件名 -->
                                 <template v-if="col.key === '文件名'">
@@ -1265,7 +1283,7 @@
                                     </template>
                                     <template v-else>
                                         <span class="cursor-pointer hover:bg-orange-50 px-1 py-0.5 rounded transition-colors select-none"
-                                              style="-webkit-user-select:none;user-select:none;display:inline-flex;align-items:center;gap:8px;"
+                                              style="-webkit-user-select:none;user-select:none;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;"
                                               @click="startListEdit(record, col.key)"
                                               :title="'点击编辑'">
                                             {{ (record.display_fields || {})[col.key] || '' }}
@@ -2723,9 +2741,12 @@ createApp({
             return listColumnConfig.value
                 .filter(c => c.visible !== false)
                 .sort((a, b) => (a.order || 0) - (b.order || 0))
-                .map(c => ({ key: c.key, display_name: c.display_name || c.key, frozen: !!c.frozen }));
+                .map(c => ({ key: c.key, display_name: c.display_name || c.key, frozen: !!c.frozen, width: c.width || null }));
         });
         // 冻结列的 left 偏移量映射（key → CSS left 值）
+        // 允许自动换行的列（人名、公司名等可能较长的字段）
+        const wrapColumns = ['被保险人', '投保人', '车主', '行驶证车主', '保险公司', '保险公司简称'];
+
         // 复选框列固定 40px 宽，冻结列依次累加
         // 冻结列样式：所有标记 frozen 的列依次堆叠到左侧
         const frozenColStyles = computed(() => {
@@ -2735,8 +2756,8 @@ createApp({
             const frozenKeys = [];
             for (const col of cols) {
                 if (!col.frozen) continue;
-                const width = col.key === '文件名' ? 180 : 120;
-                styles[col.key] = { left: left + 'px', minWidth: width + 'px' };
+                const width = col.width || (col.key === '文件名' ? 180 : 120);
+                styles[col.key] = { left: left + 'px', minWidth: width + 'px', width: width + 'px' };
                 left += width;
                 frozenKeys.push(col.key);
             }
@@ -2744,6 +2765,78 @@ createApp({
             styles._lastFrozenKey = frozenKeys.length ? frozenKeys[frozenKeys.length - 1] : null;
             return styles;
         });
+        // 列宽拖拽相关
+        function getColStyle(col, isTd) {
+            if (col.frozen && frozenColStyles.value[col.key]) {
+                const s = { ...frozenColStyles.value[col.key] };
+                if (col.width) s.width = col.width + 'px';
+                return s;
+            }
+            const style = {};
+            if (col.width) {
+                style.width = col.width + 'px';
+                style.minWidth = col.width + 'px';
+            } else if (!isTd) {
+                style.minWidth = (col.key === '创建时间' || col.key === '识别时间') ? '150px' : col.key === '群名' ? '100px' : '80px';
+            }
+            return style;
+        }
+
+        let _resizing = null;
+        function startColResize(e, col) {
+            const th = e.target.parentElement;
+            const startX = e.clientX;
+            const startW = th.offsetWidth;
+            const handle = e.target;
+            handle.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+
+            const onMove = (ev) => {
+                const diff = ev.clientX - startX;
+                const newW = Math.max(50, startW + diff);
+                th.style.width = newW + 'px';
+                th.style.minWidth = newW + 'px';
+            };
+            const onUp = (ev) => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                handle.classList.remove('active');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                const diff = ev.clientX - startX;
+                const newW = Math.max(50, startW + diff);
+                // 更新 listColumnConfig 中对应列的 width
+                const cfg = listColumnConfig.value.find(c => c.key === col.key);
+                if (cfg) {
+                    cfg.width = newW;
+                    saveColumnWidths();
+                }
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        }
+
+        let _saveWidthTimer = null;
+        function saveColumnWidths() {
+            // 防抖：拖拽频繁时只保存最后一次
+            clearTimeout(_saveWidthTimer);
+            _saveWidthTimer = setTimeout(async () => {
+                try {
+                    await authFetch('/api/insurance/column-config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            config_type: 'list_columns',
+                            columns: listColumnConfig.value,
+                        }),
+                    });
+                } catch (e) {
+                    console.warn('保存列宽失败', e);
+                }
+            }, 500);
+        }
+
         const mappingConfig = ref({ default_mapping: {}, company_mappings: {} });
         const availableOcrFields = ref([]);
         const mappingModalVisible = ref(false);
@@ -5532,7 +5625,7 @@ createApp({
             extractionRules, loadExtractionRules,
             rawTextVisible, rawTextContent, rawTextFileName,
             successResults, abnormalResults, nonPolicyResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal, getPolicyHint, getRecordHint,
-            outputColumns, listColumnConfig, visibleListColumns, frozenColStyles, getMappedValue, getDocCategory, docCategories,
+            outputColumns, listColumnConfig, visibleListColumns, frozenColStyles, wrapColumns, getColStyle, startColResize, getMappedValue, getDocCategory, docCategories,
             isLoadingFiles, loadingFileCount, loadingFileTotal, loadingPercent,
             handleFileSelect, handleDrop, removeFile, clearFiles,
             previewFile, previewResultFile, showRawText,
