@@ -25,7 +25,7 @@ DEFAULT_TEMPLATE_NAME = "默认模板"
 
 # 默认列配置（与 field_mapping.py 的 OUTPUT_COLUMNS 保持一致）
 DEFAULT_COLUMNS = [
-    {"key": "文件名",   "visible": True, "order": 0, "display_name": "文件名",   "type": "record"},
+    {"key": "文件名",   "visible": True, "order": 0, "display_name": "文件名",   "type": "record", "frozen": True},
     {"key": "文档类型", "visible": True, "order": 1, "display_name": "文档类型", "type": "record"},
     {"key": "承保公司", "visible": True, "order": 2, "display_name": "承保公司"},
     {"key": "保单号",   "visible": True, "order": 3, "display_name": "保单号"},
@@ -1295,40 +1295,55 @@ def apply_user_config_to_fields(config: dict, fields: dict) -> dict:
 
     # 4. 公式计算（key格式："目标字段:公司简称:险种简称"）
     # 先用原始数值计算所有公式，最后再转百分比显示，避免"率"字段被提前转成"10%"影响后续公式
+    # 多轮计算：公式之间可能有依赖（如"合计应付手续费"依赖"应付费率"），
+    # 第一轮计算后，用更新的值再算一轮，确保依赖链正确传递
     record_company = result.get("保险公司简称") or result.get("承保公司") or result.get("保险公司") or ""
     record_policy_type = result.get("险种类型") or result.get("险种") or ""
     rate_fields = []  # 记录需要转百分比的字段
+
+    # 预处理：筛选出匹配当前记录的公式列表
+    matched_formulas = []
     for item in config.get("fee_formula", []):
         raw_key = item.get("key", "")
         raw_value = item.get("value", "")
         if not raw_key:
             continue
-        # 解析 key："目标字段:公司:险种" 或旧格式 "目标字段"
         parts = raw_key.split(":", 2)
         target_field = parts[0]
         rule_company = parts[1] if len(parts) > 1 else ""
         rule_policy_type = parts[2] if len(parts) > 2 else ""
-        # 匹配公司和险种（包含匹配，"全部"匹配所有）
         if rule_company and rule_company != "全部" and rule_company not in record_company and record_company not in rule_company:
             continue
         if rule_policy_type and rule_policy_type != "全部" and rule_policy_type not in record_policy_type and record_policy_type not in rule_policy_type:
             continue
-        # 取公式字符串（value 可能是 dict{display,tokens} 或直接字符串）
         if isinstance(raw_value, dict):
             formula = raw_value.get("display", "")
         else:
             formula = str(raw_value)
         if target_field and formula:
-            # 手动修改过的字段不被公式覆盖，但仍需百分比格式化
+            matched_formulas.append((target_field, formula))
+
+    # 收集所有公式目标字段，用于判断是否需要第二轮
+    formula_targets = {tf for tf, _ in matched_formulas}
+
+    for round_idx in range(2):
+        changed = False
+        for target_field, formula in matched_formulas:
             if target_field in manual_fields:
-                if "率" in target_field:
+                if round_idx == 0 and "率" in target_field:
                     rate_fields.append(target_field)
                 continue
+            old_val = result.get(target_field)
             calculated = evaluate_formula(formula, result)
             if calculated:
                 result[target_field] = calculated
-                if "率" in target_field:
+                if round_idx == 0 and "率" in target_field:
                     rate_fields.append(target_field)
+                if calculated != old_val:
+                    changed = True
+        # 第一轮如果没有变化，或没有公式引用其他公式目标字段，跳过第二轮
+        if not changed:
+            break
 
     # 所有公式算完后，再将"率"字段转为百分比显示
     for field in rate_fields:
