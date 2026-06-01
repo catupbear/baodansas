@@ -4850,12 +4850,14 @@ createApp({
                     .filter(r => r.status === 'done' || r.status === 'success')
                     .map(r => {
                         const df = r.display_fields || {};
-                        const row = {};
+                        // 发送全部字段给后端，由后端按导出列配置筛选
+                        // 避免列表页不可见但导出需要的字段（如交强到期时间）丢失
+                        const row = { ...df };
                         const em = extraMap(r);
-                        for (const col of colsToUse) {
-                            row[col] = em[col] !== undefined ? em[col] : (df[col] || '');
+                        for (const [k, v] of Object.entries(em)) {
+                            if (v !== undefined) row[k] = v;
                         }
-                        return { fields: row, filename: r.filename || '' };
+                        return { fields: row, filename: r.filename || '', manual_fields: r.manual_fields || [] };
                     });
             } catch (e) {
                 showMessage(`查询数据失败: ${e.message}`, false);
