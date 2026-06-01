@@ -928,7 +928,8 @@ def update_insurance_record(db, record_id: int, updates: dict):
         cs = _extract_company_short(updates)
         if cs:
             data["company_short"] = cs
-    if "parsed_fields" in updates:
+    if "parsed_fields" in updates and "display_fields" not in updates:
+        # 仅在调用方未显式传入 display_fields 时才从 parsed_fields 重新生成
         pf_raw = updates["parsed_fields"]
         if isinstance(pf_raw, str):
             try:
