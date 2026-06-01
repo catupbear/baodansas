@@ -1248,7 +1248,8 @@
                                 <template v-else>
                                     <template v-if="listEditing.recordId === record.id && listEditing.col === col.key">
                                         <div class="flex items-center gap-1">
-                                            <input v-model="listEditing.value" type="text"
+                                            <input v-model="listEditing.value"
+                                                   :type="isDateField(col.key) ? 'date' : 'text'"
                                                    class="text-sm border border-orange-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-orange-300"
                                                    style="width:160px;"
                                                    @keyup.enter="saveListEdit(record)"
@@ -2192,6 +2193,7 @@
                                     <div class="flex-1 flex items-center gap-1 ml-2 min-w-0">
                                         <input id="field-edit-input"
                                                v-model="editingValue"
+                                               :type="isDateField(editingField) ? 'date' : 'text'"
                                                @keyup.enter="saveEditField"
                                                @keyup.escape="cancelEditField"
                                                class="min-w-0 flex-1 px-2 py-0.5 text-sm border border-orange-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-400"
@@ -3447,6 +3449,9 @@ createApp({
             if (label.includes('率') && typeof val === 'string' && val.endsWith('%')) {
                 val = val.slice(0, -1);
             }
+            if (isDateField(label)) {
+                val = normalizeDateForInput(val);
+            }
             editingValue.value = val;
             // 自动聚焦输入框
             Vue.nextTick(() => {
@@ -3524,6 +3529,22 @@ createApp({
         };
         const listEditing = reactive({ recordId: null, col: '', value: '', saving: false });
 
+        // 判断字段是否为日期类型（名称含"日期"、"时间"、"到期"）
+        function isDateField(fieldName) {
+            return /日期|时间|到期/.test(fieldName || '');
+        }
+
+        // 将各种中文日期格式转为 YYYY-MM-DD（date input 需要）
+        function normalizeDateForInput(val) {
+            if (!val) return '';
+            // 已经是 YYYY-MM-DD
+            if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+            // YYYY年MM月DD日 / YYYY年M月D日
+            const m = val.match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/);
+            if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+            return val;
+        }
+
         function startListEdit(record, col) {
             listEditing.recordId = record.id;
             listEditing.col = col;
@@ -3531,6 +3552,10 @@ createApp({
             // "率"字段的百分号是自动生成的，编辑时去掉让用户只改数字
             if (col.includes('率') && typeof val === 'string' && val.endsWith('%')) {
                 val = val.slice(0, -1);
+            }
+            // 日期字段转为标准格式供 date input 使用
+            if (isDateField(col)) {
+                val = normalizeDateForInput(val);
             }
             listEditing.value = val;
             listEditing.saving = false;
@@ -5518,7 +5543,7 @@ createApp({
             loadRecords, loadRecordStats, gotoRecordPage, getParsedField, getRecordMappedValue, formatTime,
             retryRecord, reocrRecord, reuploadRecord, reocrPreviewFile, previewReocring, syncRecordToDingtalk, previewRecord, previewAutoRecord, previewSiblings, siblingDropdownOpen, switchToSibling, loadAutoRecordRawText,
             markNormalVisible, markNormalRecord, markNormalReason, markNormalSaving, getQuickReasons, openMarkNormal, confirmMarkNormal, undoMarkNormal,
-            editingField, editingValue, fieldSaving, startEditField, cancelEditField, saveEditField, isManualField,
+            editingField, editingValue, fieldSaving, startEditField, cancelEditField, saveEditField, isManualField, isDateField,
             listEditing, startListEdit, cancelListEdit, saveListEdit,
             recordDetailVisible, currentRecord, openRecordDetail,
             // 联系人编辑
