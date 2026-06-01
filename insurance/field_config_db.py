@@ -1348,18 +1348,21 @@ def apply_user_config_to_fields(config: dict, fields: dict, formula_only: bool =
         changed = False
         for target_field, formula in matched_formulas:
             if target_field in manual_fields:
+                logger.debug("[公式调试] 跳过手动字段: %s, manual_fields=%s", target_field, manual_fields)
                 if round_idx == 0 and "率" in target_field:
                     rate_fields.append(target_field)
                 continue
             old_val = result.get(target_field)
             calculated = evaluate_formula(formula, result)
+            logger.debug("[公式调试] round=%d target=%s formula=%s old=%s calc=%s 保费=%s 应付费率=%s",
+                         round_idx, target_field, formula, old_val, calculated,
+                         result.get("保费", "N/A"), result.get("应付费率", "N/A"))
             if calculated:
                 result[target_field] = calculated
                 if round_idx == 0 and "率" in target_field:
                     rate_fields.append(target_field)
                 if calculated != old_val:
                     changed = True
-        # 第一轮如果没有变化，或没有公式引用其他公式目标字段，跳过第二轮
         if not changed:
             break
 
