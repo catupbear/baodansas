@@ -3429,11 +3429,14 @@ createApp({
                     // 更新本地数据
                     previewAutoRecord.value.parsed_fields = json.data.parsed_fields;
                     previewAutoRecord.value.manual_fields = json.data.manual_fields;
-                    // 同步更新记录列表中的数据
+                    // 同步更新记录列表中的数据（含公式重算后的 display_fields）
                     const idx = records.value.findIndex(r => r.id === previewAutoRecord.value.id);
                     if (idx !== -1) {
                         records.value[idx].parsed_fields = json.data.parsed_fields;
                         records.value[idx].manual_fields = json.data.manual_fields;
+                        if (json.data.display_fields) {
+                            records.value[idx].display_fields = json.data.display_fields;
+                        }
                     }
                 } else {
                     alert('保存失败：' + (json.msg || '未知错误'));
@@ -3508,9 +3511,13 @@ createApp({
                 }
                 const json = await resp.json();
                 if (json.code === 0) {
-                    // 更新本地 display_fields
-                    if (!record.display_fields) record.display_fields = {};
-                    record.display_fields[col] = newValue;
+                    // 用后端重新计算后的 display_fields 更新整行（公式字段会自动重算）
+                    if (json.data && json.data.display_fields) {
+                        record.display_fields = json.data.display_fields;
+                    } else {
+                        if (!record.display_fields) record.display_fields = {};
+                        record.display_fields[col] = newValue;
+                    }
                     showMessage('已保存', true);
                 } else {
                     showMessage(json.msg || '保存失败', false);

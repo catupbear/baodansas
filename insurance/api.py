@@ -603,9 +603,17 @@ def update_record_fields(record_id):
             "manual_fields": mf,
         })
 
+        # 重新应用用户配置（公式计算等），返回最新的 display_fields
+        user = g.current_user
+        user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
+        display_fields = dict(pf)
+        if user_config and any(user_config.get(k) for k in user_config):
+            display_fields = apply_user_config_to_fields(user_config, display_fields)
+
         return jsonify({"code": 0, "msg": "保存成功", "data": {
             "parsed_fields": pf,
             "manual_fields": mf,
+            "display_fields": display_fields,
         }})
     except Exception as e:
         logger.exception("更新保单字段 %d 失败", record_id)
