@@ -519,7 +519,7 @@
 
             <!-- Tab 2: 日期格式 -->
             <div v-show="activeTab==='date'" style="padding:24px;">
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
                     <div style="font-size:13px; color:var(--text-muted);">为每个时间字段选择显示格式</div>
                     <div style="display:flex; align-items:center; gap:8px;">
                         <select v-model="quickFormatValue" style="font-size:12px; padding:4px 8px; border-radius:6px; border:1px solid var(--border);">
@@ -528,6 +528,20 @@
                         </select>
                         <div class="quick-action" @click="applyQuickFormat(quickFormatValue)">⚡ 一键统一</div>
                     </div>
+                </div>
+
+                <!-- 补零开关：开启后月/日/时/分不补前导零（如 2026/5/7 而非 2026/05/07） -->
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; padding:12px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
+                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500;"
+                           :style="{cursor: activeSource === 'enterprise' || activeSource === 'system' ? 'not-allowed' : 'pointer', opacity: activeSource === 'enterprise' || activeSource === 'system' ? 0.5 : 1}"
+                           @click="activeSource !== 'enterprise' && activeSource !== 'system' && (dateNoPad = !dateNoPad)">
+                        <div style="position:relative; width:36px; height:20px; flex-shrink:0;">
+                            <div style="position:absolute; inset:0; border-radius:10px; transition:background 0.2s;" :style="{ background: dateNoPad ? 'var(--primary)' : '#d1d5db' }"></div>
+                            <div style="position:absolute; width:16px; height:16px; top:2px; border-radius:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); transition:left 0.2s;" :style="{ left: dateNoPad ? '18px' : '2px' }"></div>
+                        </div>
+                        不自动补零
+                    </label>
+                    <span style="font-size:11px; color:var(--text-muted);">开启后月、日、时、分不补前导 0（如 2026/5/7，而非 2026/05/07）</span>
                 </div>
 
                 <div style="background:var(--surface-secondary); border-radius:8px; padding:4px 20px;">
@@ -1425,13 +1439,15 @@ createApp({
         ]);
         const sampleDate = new Date(2026, 4, 7, 14, 30);
         const quickFormatValue = ref('');
+        const dateNoPad = ref(false);  // 不自动补前导零开关
 
         const formatDate = (date, fmt) => {
+            const pad = n => dateNoPad.value ? String(n) : String(n).padStart(2, '0');
             const y = date.getFullYear();
-            const m = String(date.getMonth() + 1).padStart(2, '0');
-            const d = String(date.getDate()).padStart(2, '0');
-            const H = String(date.getHours()).padStart(2, '0');
-            const min = String(date.getMinutes()).padStart(2, '0');
+            const m = pad(date.getMonth() + 1);
+            const d = pad(date.getDate());
+            const H = pad(date.getHours());
+            const min = pad(date.getMinutes());
             const map = {
                 'YYYY-MM-DD': `${y}-${m}-${d}`,
                 'YYYY/MM/DD': `${y}/${m}/${d}`,
@@ -1683,6 +1699,7 @@ createApp({
             // 日期格式
             const dateMap = {};
             (data.date_format || []).forEach(d => dateMap[d.key] = d.value);
+            dateNoPad.value = !!dateMap['__no_pad__'];  // 不补零开关
             dateFields.value.forEach(f => { if (dateMap[f.name]) f.format = dateMap[f.name]; });
 
             // 公式 - 解析 key 格式 "字段名:公司:险种"
@@ -1719,8 +1736,9 @@ createApp({
                 .map(i => ({ key: i.key.trim(), value: i.enabled ? (i.value || '').trim() : '' }));
             config.policy_type_alias.push({ key: '__quick_alias__', value: policyTypeQuickAlias.value ? '1' : '' });
 
-            // 日期格式
+            // 日期格式（含不补零开关 __no_pad__）
             config.date_format = dateFields.value.map(f => ({ key: f.name, value: f.format }));
+            config.date_format.push({ key: '__no_pad__', value: dateNoPad.value ? '1' : '' });
 
             // 公式
             const formulaItems = [];
@@ -1878,7 +1896,7 @@ createApp({
 
         // 监听所有配置数据变化
         watch([companyAliasList, policyAliasList, policyTypeQuickAlias], triggerAutoSave, { deep: true });
-        watch([() => dateFields.value.map(f => f.format).join(',')], triggerAutoSave);
+        watch([() => dateFields.value.map(f => f.format).join(','), dateNoPad], triggerAutoSave);
         watch(allRules, triggerAutoSave, { deep: true });
 
         // 切换模板
@@ -2122,7 +2140,7 @@ createApp({
             activeTab,
             aliasType, currentAliasList, aliasEnabledCount, aliasAllChecked, aliasListLoading, policyTypeQuickAlias,
             aliasToggleAll, aliasBatchEnable, aliasBatchDisable,
-            dateFormats, datetimeFormats, DATETIME_FIELDS, dateFields, sampleDate, quickFormatValue,
+            dateFormats, datetimeFormats, DATETIME_FIELDS, dateFields, sampleDate, quickFormatValue, dateNoPad,
             formatDate, applyQuickFormat,
             formulaFields, currentFormulaField, currentRules, allRules,
             formulaFilter, flatRules, filteredFlatRules, editFlatRule, deleteFlatRule,

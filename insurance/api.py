@@ -529,10 +529,12 @@ def list_records():
                     logger.debug("查询交强到期时间失败")
             # 交强到期时间的显示格式（从用户配置读取）
             _compulsory_fmt = ""
+            _compulsory_no_pad = False
             for _item in (user_config or {}).get("date_format", []):
                 if _item.get("key") == "交强到期时间":
                     _compulsory_fmt = _item.get("value", "")
-                    break
+                elif _item.get("key") == "__no_pad__" and _item.get("value"):
+                    _compulsory_no_pad = True
             for record in result.get("records", []):
                 df = record.get("display_fields", {})
                 # 手动填写过的交强到期时间已在 apply_user_config 中按配置格式化，保持不变
@@ -550,7 +552,7 @@ def list_records():
                     continue
                 _inject_val = _plate_compulsory_end.get(_norm_plate(plate), "")
                 if _inject_val and _compulsory_fmt:
-                    _inject_val = _format_date(str(_inject_val), _compulsory_fmt)
+                    _inject_val = _format_date(str(_inject_val), _compulsory_fmt, _compulsory_no_pad)
                 df["交强到期时间"] = _inject_val
 
         # 复用已加载的页面列配置
@@ -2781,6 +2783,7 @@ def export_excel():
             need_compulsory_end = "交强到期时间" in field_names
             plate_compulsory_end = {}
             export_compulsory_fmt = ""
+            export_compulsory_no_pad = False
             if need_compulsory_end:
                 # 交强到期时间统一以「数据库原始数据」(insurance_policy_fields.end_date) 为准。
                 # 导出的 invoices 来自前端请求体，config_applied=True 时其中的车牌/终保日期可能
@@ -2803,7 +2806,8 @@ def export_excel():
                 for _item in (user_config or {}).get("date_format", []):
                     if _item.get("key") == "交强到期时间":
                         export_compulsory_fmt = _item.get("value", "")
-                        break
+                    elif _item.get("key") == "__no_pad__" and _item.get("value"):
+                        export_compulsory_no_pad = True
 
             def _inject_compulsory_end(row_fields):
                 """向一行数据注入并格式化交强到期时间（手动填写过的不覆盖）。"""
@@ -2817,7 +2821,7 @@ def export_excel():
                     return
                 _cv = plate_compulsory_end.get(_norm_plate(plate), "")
                 if _cv and export_compulsory_fmt:
-                    _cv = _format_date(str(_cv), export_compulsory_fmt)
+                    _cv = _format_date(str(_cv), export_compulsory_fmt, export_compulsory_no_pad)
                 if _cv:
                     row_fields["交强到期时间"] = _cv
 

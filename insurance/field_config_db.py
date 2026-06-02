@@ -117,18 +117,39 @@ def _format_plate_with_hyphen(plate: str) -> str:
     return plate
 
 
-def _format_date(raw: str, fmt: str) -> str:
+def _build_date_str(dt: datetime, fmt: str, no_pad: bool = False) -> str:
+    """
+    根据前端日期格式（YYYY/MM/DD、YYYY-MM-DD HH:mm 等）构建日期字符串。
+    no_pad=True 时月/日/时/分不补前导零（如 2026/5/7）；否则补零至两位（与 strftime 一致）。
+    按 token 替换，YYYY 先于其它，MM(月)/mm(分) 区分大小写，互不干扰。
+    """
+    def _n(v: int) -> str:
+        return str(v) if no_pad else f"{v:02d}"
+    return (fmt
+            .replace("YYYY", str(dt.year))
+            .replace("MM", _n(dt.month))
+            .replace("DD", _n(dt.day))
+            .replace("HH", _n(dt.hour))
+            .replace("mm", _n(dt.minute)))
+
+
+def _format_date(raw: str, fmt: str, no_pad: bool = False) -> str:
     """
     日期格式转换（内部函数）。
     支持解析：YYYY-MM-DD[ HH:mm]、YYYY/MM/DD、YYYY年MM月DD日、YYYYMMDD、ISO 8601
     fmt 支持前端格式（YYYY-MM-DD / YYYY-MM-DD HH:mm）或 strftime 格式，自动识别。
+    no_pad=True 时（仅前端格式生效）月/日/时/分不补前导零（如 2026/5/7）。
     解析失败则原样返回。
     """
     if not raw or not fmt:
         return raw
-    # 自动转换前端格式为 strftime 格式
-    if "YYYY" in fmt or ("MM" in fmt and "DD" in fmt):
-        fmt = _convert_fmt_to_strftime(fmt)
+    # 是否前端格式（含 YYYY 或 MM+DD）：是则走可控补零的手动构建，否则用 strftime（始终补零）
+    is_frontend_fmt = "YYYY" in fmt or ("MM" in fmt and "DD" in fmt)
+    strftime_fmt = fmt if not is_frontend_fmt else _convert_fmt_to_strftime(fmt)
+
+    def _render(dt: datetime) -> str:
+        return _build_date_str(dt, fmt, no_pad) if is_frontend_fmt else dt.strftime(strftime_fmt)
+
     # 尝试多种格式解析（含时间的优先匹配）
     raw_str = str(raw).strip()
     # ISO 8601 / datetime 格式（如 2026-05-26T14:30:00 或 2026-05-26 14:30:00）
@@ -137,7 +158,7 @@ def _format_date(raw: str, fmt: str) -> str:
         try:
             dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)),
                           int(m.group(4)), int(m.group(5)), int(m.group(6) or 0))
-            return dt.strftime(fmt)
+            return _render(dt)
         except (ValueError, OverflowError):
             pass
     # 纯日期格式
@@ -152,7 +173,7 @@ def _format_date(raw: str, fmt: str) -> str:
         if m:
             try:
                 dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-                return dt.strftime(fmt)
+                return _render(dt)
             except (ValueError, OverflowError):
                 pass
     return raw
@@ -1289,16 +1310,20 @@ def apply_user_config_to_fields(config: dict, fields: dict, formula_only: bool =
                     result["险种"] = alias
 
         # 3. 日期格式化
-        date_fmt_map = {item.get("key", ""): item.get("value", "") for item in config.get("date_format", [])}
+        date_items = config.get("date_format", [])
+        # __no_pad__：全局开关，开启时月/日/时/分不补前导零
+        _date_no_pad = any(item.get("key") == "__no_pad__" and item.get("value") for item in date_items)
+        date_fmt_map = {item.get("key", ""): item.get("value", "") for item in date_items
+                        if item.get("key") != "__no_pad__"}
         for field_name, fmt in date_fmt_map.items():
             if field_name and fmt and field_name in result:
                 raw_date = result[field_name]
                 if raw_date:
-                    result[field_name] = _format_date(str(raw_date), fmt)
+                    result[field_name] = _format_date(str(raw_date), fmt, _date_no_pad)
         # 创建时间/识别时间：如果没有用户配置格式，默认保留时间部分
         for ts_field in ("创建时间", "识别时间"):
             if ts_field in result and ts_field not in date_fmt_map and result[ts_field]:
-                result[ts_field] = _format_date(str(result[ts_field]), "YYYY-MM-DD HH:mm")
+                result[ts_field] = _format_date(str(result[ts_field]), "YYYY-MM-DD HH:mm", _date_no_pad)
 
     # 4. 公式计算（key格式："目标字段:公司简称:险种简称"）
     # 先用原始数值计算所有公式，最后再转百分比显示，避免"率"字段被提前转成"10%"影响后续公式
