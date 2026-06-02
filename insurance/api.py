@@ -10,6 +10,7 @@ import hashlib
 import io
 import json
 import logging
+import re
 
 import pymysql
 import pymysql.cursors
@@ -33,7 +34,7 @@ from .field_config_db import (
     rename_template, update_template_visibility, delete_template as delete_template_db,
     get_template_config, save_full_template,
     get_active_template, set_active_template,
-    get_effective_config, apply_user_config_to_fields,
+    get_effective_config, apply_user_config_to_fields, _format_date,
     get_column_config, save_column_config, delete_column_config,
     get_user_fixed_values, save_user_fixed_values,
     get_merge_by_plate, save_merge_by_plate,
@@ -63,6 +64,14 @@ from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, get_sender_user_name_map
 from core.notify import notify_error
 
 logger = logging.getLogger(__name__)
+
+
+def _norm_plate(plate) -> str:
+    """车牌归一化（仅用于匹配，不改变显示值）：去掉连字符和空格。
+    数据库存储的车牌无连字符，但前端对平安等保单会格式化为「粤B-CM3220」，
+    匹配交强到期时间时需统一归一化，避免「粤B-CM3220」与「粤BCM3220」不匹配。"""
+    return (plate or "").replace("-", "").replace("—", "").replace(" ", "")
+
 
 # 创建蓝图，不设 url_prefix（路由中已写全路径）
 insurance_bp = Blueprint("insurance", __name__)
@@ -442,6 +451,24 @@ def list_records():
             if not df.get("保司地址") and pool["addr"]:
                 df["保司地址"] = pool["addr"]
 
+        # 交强到期时间：必须在 apply_user_config（日期格式化）之前，用「原始」终保日期
+        # 构建 车牌→交强险终保日期 映射。否则等终保日期被格式化后再读取，若其格式不含年份
+        # （如 MM月DD日），年份信息已丢失，交强到期时间将无法按自身配置的格式正确显示。
+        list_visible_keys = {c["key"] for c in list_col_cfg.get("columns", []) if c.get("visible")}
+        _need_compulsory_end = "交强到期时间" in list_visible_keys
+        _plate_compulsory_end = {}
+        if _need_compulsory_end:
+            for record in result.get("records", []):
+                df = record.get("display_fields", {})
+                plate = df.get("车牌", "") or df.get("车牌号", "")
+                policy_type = df.get("险种", "") or df.get("险种类型", "")
+                if plate and ("交强" in policy_type or "交通事故责任强制" in policy_type):
+                    end_date = df.get("终保日期", "")
+                    # 仅采用「含 4 位年份」的终保日期；无年份的（已被格式化为 MM月DD日 等）
+                    # 留给数据库兜底查询，避免格式化时丢失年份导致格式不统一
+                    if end_date and re.search(r"\d{4}", str(end_date)):
+                        _plate_compulsory_end[_norm_plate(plate)] = end_date
+
         # 互补后：计算"保司（带地区）" + 应用用户配置
         for record in result.get("records", []):
             df = record.get("display_fields", {})
@@ -480,55 +507,49 @@ def list_records():
                     logger.info("[DEBUG-列表] record_id=%s apply_user_config前后交强到期时间变化: %s → %s",
                                 record.get("id"), _before_val, _after_val)
 
-        # 注入交强到期时间：从当前页记录中找同车牌的交强险终保日期
-        list_visible_keys = {c["key"] for c in list_col_cfg.get("columns", []) if c.get("visible")}
-        if "交强到期时间" in list_visible_keys:
-            _plate_compulsory_end = {}
-            for record in result.get("records", []):
-                df = record.get("display_fields", {})
-                plate = df.get("车牌", "") or df.get("车牌号", "")
-                policy_type = df.get("险种", "") or df.get("险种类型", "")
-                if plate and ("交强" in policy_type or "交通事故责任强制" in policy_type):
-                    end_date = df.get("终保日期", "")
-                    if end_date:
-                        _plate_compulsory_end[plate] = end_date
-            # 如果当前页没有交强险记录，从数据库查同车牌的交强险终保日期
+        # 注入交强到期时间（使用格式化前构建的原始终保日期映射，并按其配置格式格式化）
+        if _need_compulsory_end:
+            # 如果当前页没有交强险记录，从数据库查同车牌的交强险终保日期（原始值）
             _plates_need_lookup = set()
             for record in result.get("records", []):
                 df = record.get("display_fields", {})
                 plate = df.get("车牌", "") or df.get("车牌号", "")
-                if plate and plate not in _plate_compulsory_end:
-                    _plates_need_lookup.add(plate)
+                np = _norm_plate(plate)
+                if np and np not in _plate_compulsory_end:
+                    _plates_need_lookup.add(np)
             if _plates_need_lookup:
                 try:
                     from insurance.db import find_compulsory_end_dates
                     _db_end_dates = find_compulsory_end_dates(_db, list(_plates_need_lookup))
-                    _plate_compulsory_end.update(_db_end_dates)
+                    for _p, _v in _db_end_dates.items():
+                        _plate_compulsory_end.setdefault(_norm_plate(_p), _v)
                 except Exception:
                     logger.debug("查询交强到期时间失败")
+            # 交强到期时间的显示格式（从用户配置读取）
+            _compulsory_fmt = ""
+            for _item in (user_config or {}).get("date_format", []):
+                if _item.get("key") == "交强到期时间":
+                    _compulsory_fmt = _item.get("value", "")
+                    break
             for record in result.get("records", []):
                 df = record.get("display_fields", {})
-                # 手动填写过的交强到期时间不被覆盖
+                # 手动填写过的交强到期时间已在 apply_user_config 中按配置格式化，保持不变
                 _mf_raw = record.get("manual_fields")
                 if isinstance(_mf_raw, str):
                     try:
                         _mf_raw = json.loads(_mf_raw)
                     except (TypeError, json.JSONDecodeError):
                         _mf_raw = []
-                _is_manual = isinstance(_mf_raw, list) and "交强到期时间" in _mf_raw
-                _existing_val = df.get("交强到期时间", "<不存在>")
-                if not _is_manual:
-                    # 未手动填写过，从同车牌其他保单注入交强到期时间
-                    plate = df.get("车牌", "") or df.get("车牌号", "")
-                    if plate:
-                        _inject_val = _plate_compulsory_end.get(plate, "")
-                        df["交强到期时间"] = _inject_val
-                        if _existing_val and _existing_val != "<不存在>" and _inject_val != _existing_val:
-                            logger.info("[DEBUG-列表] record_id=%s 注入覆盖了交强到期时间: %s → %s",
-                                        record.get("id"), _existing_val, _inject_val)
-                else:
-                    logger.info("[DEBUG-列表] record_id=%s 手动字段保护，保留交强到期时间=%s, manual_fields=%s",
-                                record.get("id"), _existing_val, _mf_raw)
+                if isinstance(_mf_raw, list) and "交强到期时间" in _mf_raw:
+                    continue
+                # 未手动填写过，从同车牌其他保单注入交强到期时间（原始终保日期）并格式化
+                plate = df.get("车牌", "") or df.get("车牌号", "")
+                if not plate:
+                    continue
+                _inject_val = _plate_compulsory_end.get(_norm_plate(plate), "")
+                if _inject_val and _compulsory_fmt:
+                    _inject_val = _format_date(str(_inject_val), _compulsory_fmt)
+                df["交强到期时间"] = _inject_val
 
         # 复用已加载的页面列配置
         result["column_config"] = list_col_cfg
@@ -2752,6 +2773,52 @@ def export_excel():
             # 检查是否启用按车牌合并
             merge_enabled = body.get("merge_by_plate", False)
 
+            # 交强到期时间：用「原始」终保日期（apply_user_config 之前）构建 车牌→交强险终保日期
+            # 映射，合并/不合并两种导出模式共用。注入后再按交强到期时间自身配置的格式格式化，
+            # 避免读取已格式化的终保日期导致年份丢失。
+            need_compulsory_end = "交强到期时间" in field_names
+            plate_compulsory_end = {}
+            export_compulsory_fmt = ""
+            if need_compulsory_end:
+                # 交强到期时间统一以「数据库原始数据」(insurance_policy_fields.end_date) 为准。
+                # 导出的 invoices 来自前端请求体，config_applied=True 时其中的车牌/终保日期可能
+                # 已被规则转换（车牌加连字符、日期格式化丢年份），不可作为匹配依据。
+                # 故仅取前端车牌做归一化 key，终保日期值一律走数据库原始查询。
+                all_plates = set()
+                for inv in invoices:
+                    f = inv.get("fields", {}) if isinstance(inv, dict) else {}
+                    np = _norm_plate(f.get("车牌", "") or f.get("车牌号", ""))
+                    if np:
+                        all_plates.add(np)
+                if all_plates and _db:
+                    try:
+                        from insurance.db import find_compulsory_end_dates
+                        db_end_dates = find_compulsory_end_dates(_db, list(all_plates))
+                        for _p, _v in db_end_dates.items():
+                            plate_compulsory_end[_norm_plate(_p)] = _v
+                    except Exception:
+                        logger.debug("导出时查询交强到期时间失败")
+                for _item in (user_config or {}).get("date_format", []):
+                    if _item.get("key") == "交强到期时间":
+                        export_compulsory_fmt = _item.get("value", "")
+                        break
+
+            def _inject_compulsory_end(row_fields):
+                """向一行数据注入并格式化交强到期时间（手动填写过的不覆盖）。"""
+                if not need_compulsory_end:
+                    return
+                if row_fields.get("交强到期时间"):
+                    # 已有值（如手动填写，已被 apply_user_config 格式化）则不覆盖
+                    return
+                plate = row_fields.get("车牌", "") or row_fields.get("车牌号", "") or ""
+                if not plate:
+                    return
+                _cv = plate_compulsory_end.get(_norm_plate(plate), "")
+                if _cv and export_compulsory_fmt:
+                    _cv = _format_date(str(_cv), export_compulsory_fmt)
+                if _cv:
+                    row_fields["交强到期时间"] = _cv
+
             if merge_enabled:
                 # ---- 按车牌合并导出 ----
                 # 判断车牌是否可合并（空、新车、*-* 格式的不合并）
@@ -2843,6 +2910,10 @@ def export_excel():
                             row[k] = v
                     merged_rows.append(row)
 
+                # 注入交强到期时间（同车牌交强险终保日期，按配置格式格式化）
+                for row in merged_rows:
+                    _inject_compulsory_end(row)
+
                 # 3. 排序（按车牌）
                 merged_rows.sort(key=lambda r: r.get("车牌", ""))
 
@@ -2866,31 +2937,6 @@ def export_excel():
                     headers = list(field_names)
                 ws.append(headers)
 
-                # 构建车牌 → 交强到期时间映射（从同车牌的交强险记录取终保日期）
-                need_compulsory_end = "交强到期时间" in field_names
-                plate_compulsory_end = {}
-                if need_compulsory_end:
-                    all_plates = set()
-                    for inv in invoices:
-                        f = inv.get("fields", {}) if isinstance(inv, dict) else {}
-                        plate = f.get("车牌", "") or f.get("车牌号", "") or ""
-                        policy_type = f.get("险种", "") or f.get("险种类型", "") or ""
-                        if plate:
-                            all_plates.add(plate)
-                            if "交强" in policy_type or "交通事故责任强制" in policy_type:
-                                end_date = f.get("终保日期", "")
-                                if end_date:
-                                    plate_compulsory_end[plate] = end_date
-                    # 兜底：当前导出记录中没有交强险的车牌，从数据库查询
-                    plates_need_lookup = [p for p in all_plates if p not in plate_compulsory_end]
-                    if plates_need_lookup and _db:
-                        try:
-                            from insurance.db import find_compulsory_end_dates
-                            db_end_dates = find_compulsory_end_dates(_db, plates_need_lookup)
-                            plate_compulsory_end.update(db_end_dates)
-                        except Exception:
-                            logger.debug("导出时查询交强到期时间失败")
-
                 # 排序：按车牌，相同车牌按险种（商业险→交强险→驾意险）
                 _type_order = {"商业险": 0, "交强险": 1, "驾意险": 2}
                 def _normal_sort_key(inv):
@@ -2903,12 +2949,8 @@ def export_excel():
                     fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
                     if has_config and not skip_config:
                         fields = apply_user_config_to_fields(user_config, fields)
-                    # 注入交强到期时间（手动填写过的不覆盖）
-                    if need_compulsory_end:
-                        _inv_mf = inv.get("manual_fields", [])
-                        if "交强到期时间" not in _inv_mf:
-                            plate = fields.get("车牌", "") or fields.get("车牌号", "") or ""
-                            fields["交强到期时间"] = plate_compulsory_end.get(plate, "")
+                    # 注入交强到期时间（原始终保日期，按配置格式格式化；手动填写过的不覆盖）
+                    _inject_compulsory_end(fields)
                     row = []
                     for col in field_names:
                         if col == "文件名":
