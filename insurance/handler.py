@@ -1415,7 +1415,8 @@ class InsuranceHandler:
         if ocr_engine == "pdfplumber" and policies:
             first_fields = policies[0].get("fields", {})
             missing_keys = [k for k in _SUPPLEMENT_KEYS if not first_fields.get(k)]
-            if missing_keys:
+            # 仅当缺失字段达到 5 个(含)以上才触发 OCR 补充，避免个别字段缺失就无谓调用 OCR
+            if len(missing_keys) >= 5:
                 ocr_text = self._run_ocr_engines(pdf_bytes)
                 if ocr_text:
                     ocr_raw_text = ocr_text
