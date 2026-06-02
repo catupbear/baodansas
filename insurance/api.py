@@ -455,6 +455,12 @@ def list_records():
                         df["保司（带地区）"] = (_city + _comp) if _city else _comp
                     else:
                         df["保司（带地区）"] = _comp
+            # 将创建时间/识别时间注入 display_fields，使日期格式配置能生效
+            if record.get("display_fields") is not None:
+                if record.get("created_at") and "创建时间" not in record["display_fields"]:
+                    record["display_fields"]["创建时间"] = str(record["created_at"])
+                if record.get("updated_at") and "识别时间" not in record["display_fields"]:
+                    record["display_fields"]["识别时间"] = str(record["updated_at"])
             if has_config and record.get("display_fields"):
                 # 传入手动修改字段列表，避免公式覆盖用户手动编辑的值
                 _mf = record.get("manual_fields")
