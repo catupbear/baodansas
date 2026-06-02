@@ -286,6 +286,7 @@ def list_records():
     doc_category = request.args.get("doc_category", "")
     is_abnormal = request.args.get("is_abnormal", "")
     company_short = request.args.get("company_short", "")
+    policy_type = request.args.get("policy_type", "")
     date_start = request.args.get("date_start", "")
     date_end = request.args.get("date_end", "")
     updated_at_date_start = request.args.get("updated_at_date_start", "")
@@ -323,6 +324,7 @@ def list_records():
             doc_category=doc_category,
             is_abnormal=is_abnormal,
             company_short=company_short,
+            policy_type=policy_type,
             date_start=date_start,
             date_end=date_end,
             updated_at_date_start=updated_at_date_start,
@@ -865,7 +867,7 @@ def get_stats():
     try:
         filters = {}
         for key in ("roomid", "source_type", "source", "sender", "keyword",
-                     "company_short", "ocr_engine", "date_start", "date_end",
+                     "company_short", "policy_type", "ocr_engine", "date_start", "date_end",
                      "updated_at_date_start", "updated_at_date_end",
                      "search_company", "search_policy_no", "search_plate_no",
                      "search_applicant", "search_insured", "search_salesperson",

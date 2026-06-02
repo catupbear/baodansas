@@ -1155,6 +1155,45 @@ def find_records_by_person(db, applicant: str = "", insured: str = "", owner: st
         conn.close()
 
 
+def _policy_types_for_category(db, category: str) -> list:
+    """返回属于指定大类（商业险/交强险/驾意险/非车险）的所有原始 policy_type 值。
+
+    险种大类由 get_policy_type_code 按关键词归类（驾意险/非车险为兜底类，无法用 LIKE
+    精确匹配），因此先取库中 distinct 的原始险种全称逐一归类，再用 IN 过滤，保证与列表
+    展示的归类完全一致。distinct 险种基数很小，仅在启用险种筛选时查询。"""
+    if not category:
+        return []
+    from insurance.policy_parser import get_policy_type_code
+    # 大类中文 → type_code（get_policy_type_code 返回的 label 为「驾乘/意外险」，
+    # 与前端「驾意险」用词不同，故统一用稳定的 type_code 比较）
+    _cat_to_code = {
+        "商业险": "commercial",
+        "交强险": "compulsory",
+        "驾意险": "accident",
+        "非车险": "non_vehicle",
+    }
+    code = _cat_to_code.get(category)
+    if not code:
+        return []
+    result = []
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT DISTINCT policy_type FROM insurance_policy_fields WHERE policy_type != ''"
+        )
+        for row in cursor.fetchall():
+            pt = row.get("policy_type") or ""
+            if pt and get_policy_type_code(pt)[0] == code:
+                result.append(pt)
+        return result
+    except Exception:
+        logger.debug("查询险种分类失败")
+        return result
+    finally:
+        conn.close()
+
+
 def query_insurance_records(
     db,
     page: int = 1,
@@ -1169,6 +1208,7 @@ def query_insurance_records(
     doc_category: str = "",
     is_abnormal: str = "",
     company_short: str = "",
+    policy_type: str = "",
     date_start: str = "",
     date_end: str = "",
     updated_at_date_start: str = "",
@@ -1263,6 +1303,15 @@ def query_insurance_records(
     if company_short:
         conditions.append(f"{col_prefix}company_short = %s")
         params.append(company_short)
+    # 险种大类筛选：将大类映射为属于该类的原始险种全称，用 IN 过滤（与列表归类一致）
+    if policy_type:
+        _pt_values = _policy_types_for_category(db, policy_type)
+        if _pt_values:
+            _ph = ",".join(["%s"] * len(_pt_values))
+            conditions.append(f"pf.policy_type IN ({_ph})")
+            params.extend(_pt_values)
+        else:
+            conditions.append("0")  # 该大类无匹配险种，返回空
     if date_start:
         conditions.append(f"{col_prefix}created_at >= %s")
         params.append(date_start)
@@ -1640,7 +1689,7 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
             "start_date_start", "start_date_end",
             "end_date_start", "end_date_end",
         ]
-        need_join = dedup or any(filters.get(k) for k in _pf_keys)
+        need_join = dedup or bool(filters.get("policy_type")) or any(filters.get(k) for k in _pf_keys)
         col_prefix = "r." if need_join else ""
 
         # 构建 WHERE 条件
@@ -1669,6 +1718,15 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
         if filters.get("company_short"):
             where_parts.append(f"{col_prefix}company_short = %s")
             params.append(filters["company_short"])
+        # 险种大类筛选（与 query_insurance_records 逻辑一致）
+        if filters.get("policy_type"):
+            _pt_values = _policy_types_for_category(db, filters["policy_type"])
+            if _pt_values:
+                _ph = ",".join(["%s"] * len(_pt_values))
+                where_parts.append(f"pf.policy_type IN ({_ph})")
+                params.extend(_pt_values)
+            else:
+                where_parts.append("0")
         if filters.get("ocr_engine"):
             where_parts.append(f"{col_prefix}ocr_engine = %s")
             params.append(filters["ocr_engine"])

@@ -926,6 +926,18 @@
                         <option v-for="c in recordCompanyList" :key="c" :value="c">{{ c }}</option>
                     </select>
                 </div>
+                <!-- 险种筛选（大类） -->
+                <div class="flex items-center gap-1.5">
+                    <span class="text-xs text-gray-500 font-medium">险种:</span>
+                    <select v-model="recordPolicyTypeFilter" @change="loadRecords()"
+                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
+                        <option value="">全部</option>
+                        <option value="商业险">商业险</option>
+                        <option value="交强险">交强险</option>
+                        <option value="驾意险">驾意险</option>
+                        <option value="非车险">非车险</option>
+                    </select>
+                </div>
                 <!-- 清空所有筛选 -->
                 <button @click="clearAllFilters()"
                         class="text-xs text-gray-400 hover:text-orange-500 cursor-pointer ml-auto whitespace-nowrap"
@@ -4446,6 +4458,7 @@ const _app = createApp({
             }
             if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
             if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
+            if (recordPolicyTypeFilter.value) params.set('policy_type', recordPolicyTypeFilter.value);
             if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
             _appendDateParams(params);
             if (recordFilter.dedup) params.set('dedup', '1');
@@ -4496,6 +4509,7 @@ const _app = createApp({
 
         // 保司和文档类型筛选
         const recordCompanyFilter = ref('');
+        const recordPolicyTypeFilter = ref('');  // 险种大类筛选（商业险/交强险/驾意险/非车险）
         const recordDocTypeFilter = ref('');
         const recordCompanyList = computed(() => {
             const set = new Set();
@@ -4574,6 +4588,7 @@ const _app = createApp({
                     if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
                     if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
                     if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
+                    if (recordPolicyTypeFilter.value) params.set('policy_type', recordPolicyTypeFilter.value);
                     _appendDateParams(params);
                     _appendAdvancedParams(params);
 
@@ -4760,6 +4775,7 @@ const _app = createApp({
                 if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
                 if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
                 if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
+                if (recordPolicyTypeFilter.value) params.set('policy_type', recordPolicyTypeFilter.value);
                 _appendDateParams(params);
                 _appendAdvancedParams(params);
 
@@ -4956,6 +4972,7 @@ const _app = createApp({
                     if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
                     if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
                     if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
+                    if (recordPolicyTypeFilter.value) params.set('policy_type', recordPolicyTypeFilter.value);
                     _appendDateParams(params);
                     if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');
                     _appendAdvancedParams(params);
@@ -5140,6 +5157,8 @@ const _app = createApp({
                 else if (k === 'sort_order') { recordFilter[k] = 'desc'; }
                 else { recordFilter[k] = ''; }
             });
+            recordCompanyFilter.value = '';
+            recordPolicyTypeFilter.value = '';
             showAdvancedSearch.value = false;
             loadRecords();
         }
@@ -5238,6 +5257,7 @@ const _app = createApp({
                 if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
                 // 保司筛选改为服务端
                 if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
+                if (recordPolicyTypeFilter.value) params.set('policy_type', recordPolicyTypeFilter.value);
                 // 排序
                 if (recordFilter.sort_by) params.set('sort_by', recordFilter.sort_by);
                 if (recordFilter.sort_order) params.set('sort_order', recordFilter.sort_order);
@@ -5645,7 +5665,7 @@ const _app = createApp({
             roomList, monitorRooms, monitorUsers,
             recordFilter, statusLabel, onSourceTypeChange, clearAllFilters, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
             recordPagination, visiblePages, recordStats,
-            recordActiveTab, recordTabs, recordCompanyFilter, recordDocTypeFilter,
+            recordActiveTab, recordTabs, recordCompanyFilter, recordPolicyTypeFilter, recordDocTypeFilter,
             recordCompanyList, recordDocTypes, exportRecordsExcel,
             loadRecords, loadRecordStats, gotoRecordPage, getParsedField, getRecordMappedValue, formatTime,
             retryRecord, reocrRecord, reuploadRecord, reocrPreviewFile, previewReocring, syncRecordToDingtalk, previewRecord, previewAutoRecord, previewSiblings, siblingDropdownOpen, switchToSibling, loadAutoRecordRawText,
