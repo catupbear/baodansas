@@ -465,6 +465,14 @@ def get_policy_type_code(policy_type: str) -> tuple:
     """根据险种类型返回 (type_code, type_name)"""
     if not policy_type:
         return "accident", "驾乘/意外险"
+    # 兼容简称：导出按车牌合并时险种已被替换为简称（如"商业险"/"交强险"），
+    # 此时全称匹配会失效，需先按简称关键字归类，否则保费会错落到"非车险"前缀列
+    if "交强" in policy_type:
+        return "compulsory", "交强险"
+    if "商业险" in policy_type or "商业" in policy_type:
+        return "commercial", "商业险"
+    if "驾意" in policy_type:
+        return "accident", "驾乘/意外险"
     if "交通事故责任强制" in policy_type:
         return "compulsory", "交强险"
     if "商业保险" in policy_type or "机动车辆保险" in policy_type or "机动车辆综合险" in policy_type:
