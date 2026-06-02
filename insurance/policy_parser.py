@@ -377,6 +377,7 @@ def _identify_policy_type(text: str) -> Optional[str]:
         r"(驾乘人员意外险\S*?(?:[（(]\S+?[)）])?)",  # 中华联合格式（如"驾乘人员意外险A款（团体）"）
         r"(驾乘守护(?:[（(]\S+?[)）])?)",   # 亚太驾乘守护（企业尊贵版）等
         r"(驾乘无忧\S+)",
+        r"(家乘无忧[\d.]*(?:[（(]\S+?[)）])?)",  # 亚太家乘无忧2.0（单交版）：司乘意外+家财组合产品
         r"(机动车驾乘人员意外伤害保险(?:[（(]\S+?[)）])?)",
         r"(机动车辆驾乘人员意外伤害保险)",  # 大家财险格式
         r"(机动车车上人员补充意外伤害保险)",
@@ -477,6 +478,9 @@ def get_policy_type_code(policy_type: str) -> tuple:
         return "compulsory", "交强险"
     if "商业保险" in policy_type or "机动车辆保险" in policy_type or "机动车辆综合险" in policy_type:
         return "commercial", "商业险"
+    # 家乘无忧/司乘意外等组合产品按主险（司乘人员意外）归为驾意险，须在"家财"规则前判断
+    if "家乘" in policy_type or "司乘" in policy_type:
+        return "accident", "驾乘/意外险"
     if "驾乘" in policy_type or "意外" in policy_type or "出行险" in policy_type or "出行无忧" in policy_type or "安心行" in policy_type or "E车无忧" in policy_type or "卓越全意保" in policy_type:
         return "accident", "驾乘/意外险"
     if "账户" in policy_type or "资金安全" in policy_type or "信用卡" in policy_type or "盗用" in policy_type:
@@ -1735,6 +1739,14 @@ def _extract_insured_zhonghua(text: str, text_merged: str, fields: dict):
 
 def _extract_insured_common(text: str, text_merged: str, fields: dict):
     """通用被保险人提取"""
+    # 亚太家乘无忧等组合产品："驾意险被保险人：特定被保险人" + "家财险被保险人：魏吉愉"
+    # 险种作前缀，真实人名在"家财险/财产险被保险人："后，需优先提取避免被后续合并文本误取为"家财险"
+    m = re.search(r"(?:家财险|财产险|家财)被保险人[：:]\s*([一-鿿]{2,6})(?=\s|证件|联系|身份|$)", text)
+    if m:
+        val = _clean_person_name(m.group(1))
+        if _is_valid_person(val):
+            fields["被保险人"] = val
+            return
     # 非车险表格格式："被保人 XXX"（"被保人"而非"被保险人"，无冒号）
     for line in text.split('\n'):
         m = re.match(r'\s*被保人\s+([\u4e00-\u9fff].+)', line)
