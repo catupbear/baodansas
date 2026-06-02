@@ -1238,14 +1238,6 @@
                                         {{ statusLabel(record.status) }}
                                     </span>
                                 </template>
-                                <!-- 创建时间 -->
-                                <template v-else-if="col.key === '创建时间'">
-                                    <span class="text-gray-500 text-xs">{{ (record.display_fields && record.display_fields['创建时间']) || formatTime(record.created_at) }}</span>
-                                </template>
-                                <!-- 识别时间 -->
-                                <template v-else-if="col.key === '识别时间'">
-                                    <span class="text-gray-500 text-xs">{{ (record.display_fields && record.display_fields['识别时间']) || formatTime(record.updated_at) }}</span>
-                                </template>
                                 <!-- 群名 -->
                                 <template v-else-if="col.key === '群名'">
                                     <span v-if="record.roomid" class="cursor-pointer hover:text-orange-600 hover:underline"
