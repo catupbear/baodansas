@@ -2770,11 +2770,8 @@ def export_excel():
                 standalone_rows = []
                 for inv in invoices:
                     fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
-                    if has_config:
-                        if skip_config:
-                            fields = apply_user_config_to_fields(user_config, fields, formula_only=True)
-                        else:
-                            fields = apply_user_config_to_fields(user_config, fields)
+                    if has_config and not skip_config:
+                        fields = apply_user_config_to_fields(user_config, fields)
                     plate = fields.get("车牌", "") or fields.get("车牌号", "") or ""
                     if not _plate_mergeable(plate):
                         standalone_rows.append(fields)
@@ -2904,11 +2901,8 @@ def export_excel():
                 invoices.sort(key=_normal_sort_key)
                 for inv in invoices:
                     fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
-                    if has_config:
-                        if skip_config:
-                            fields = apply_user_config_to_fields(user_config, fields, formula_only=True)
-                        else:
-                            fields = apply_user_config_to_fields(user_config, fields)
+                    if has_config and not skip_config:
+                        fields = apply_user_config_to_fields(user_config, fields)
                     # 注入交强到期时间（手动填写过的不覆盖）
                     if need_compulsory_end:
                         _inv_mf = inv.get("manual_fields", [])
