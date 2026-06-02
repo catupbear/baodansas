@@ -1240,11 +1240,11 @@
                                 </template>
                                 <!-- 创建时间 -->
                                 <template v-else-if="col.key === '创建时间'">
-                                    <span class="text-gray-500 text-xs">{{ formatTime(record.created_at) }}</span>
+                                    <span class="text-gray-500 text-xs">{{ (record.display_fields && record.display_fields['创建时间']) || formatTime(record.created_at) }}</span>
                                 </template>
                                 <!-- 识别时间 -->
                                 <template v-else-if="col.key === '识别时间'">
-                                    <span class="text-gray-500 text-xs">{{ formatTime(record.updated_at) }}</span>
+                                    <span class="text-gray-500 text-xs">{{ (record.display_fields && record.display_fields['识别时间']) || formatTime(record.updated_at) }}</span>
                                 </template>
                                 <!-- 群名 -->
                                 <template v-else-if="col.key === '群名'">
@@ -2386,11 +2386,11 @@
                         -->
                         <div>
                             <label class="text-xs text-gray-500 font-medium">创建时间</label>
-                            <p class="text-sm text-gray-800 mt-0.5">{{ formatTime(currentRecord?.created_at) }}</p>
+                            <p class="text-sm text-gray-800 mt-0.5">{{ (currentRecord?.display_fields && currentRecord.display_fields['创建时间']) || formatTime(currentRecord?.created_at) }}</p>
                         </div>
                         <div>
                             <label class="text-xs text-gray-500 font-medium">识别时间</label>
-                            <p class="text-sm text-gray-800 mt-0.5">{{ formatTime(currentRecord?.updated_at) }}</p>
+                            <p class="text-sm text-gray-800 mt-0.5">{{ (currentRecord?.display_fields && currentRecord.display_fields['识别时间']) || formatTime(currentRecord?.updated_at) }}</p>
                         </div>
                         <div v-if="currentRecord?.error_message">
                             <label class="text-xs text-gray-500 font-medium">错误信息</label>
@@ -2627,8 +2627,8 @@ const _app = createApp({
                     '文件名': rec.filename || '',
                     '文档类型': rec.doc_category || '',
                     '状态': statusLabel(rec.status),
-                    '创建时间': rec.created_at || '',
-                    '识别时间': rec.updated_at || '',
+                    '创建时间': (rec.display_fields && rec.display_fields['创建时间']) || rec.created_at || '',
+                    '识别时间': (rec.display_fields && rec.display_fields['识别时间']) || rec.updated_at || '',
                     '群名': rec.room_name || rec.roomid || '',
                     '发送人': rec.sender_name || rec.sender || '',
                 };
@@ -4977,8 +4977,8 @@ const _app = createApp({
                     '文件名': r.filename || '',
                     '文档类型': r.doc_category || '',
                     '状态': statusLabel(r.status),
-                    '创建时间': r.created_at || '',
-                    '识别时间': r.updated_at || '',
+                    '创建时间': (r.display_fields && r.display_fields['创建时间']) || r.created_at || '',
+                    '识别时间': (r.display_fields && r.display_fields['识别时间']) || r.updated_at || '',
                     '群名': r.room_name || r.roomid || '',
                     '发送人': r.sender_name || r.sender || '',
                 });
