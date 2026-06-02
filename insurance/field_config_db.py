@@ -723,17 +723,6 @@ def _fix_missing_defaults(db, config_type, columns, scope, scope_id):
             max_order += 1
             added += 1
 
-    # 一次性修复：之前自动补充时未设 visible=False 的新增字段
-    # 仅对个人模板（user scope）执行，企业/全局模板由管理员主动配置，不应覆盖
-    _NEW_FIELDS_HIDDEN = {"被保险人身份证号码", "投保人身份证号码", "车架号"}
-    if has_existing_config and scope == "user":
-        for c in columns:
-            if c["key"] in _NEW_FIELDS_HIDDEN and c.get("visible") is True:
-                default_names = {dc["key"]: dc["display_name"] for dc in DEFAULT_COLUMNS}
-                if c.get("display_name") == default_names.get(c["key"]):
-                    c["visible"] = False
-                    changed = True
-
     if added or changed:
         save_column_config(db, config_type, scope, scope_id, columns)
         if added:
