@@ -1404,6 +1404,9 @@ createApp({
             { label: 'MM-DD-YYYY（05-07-2026）', value: 'MM-DD-YYYY' },
             { label: 'DD/MM/YYYY（07/05/2026）', value: 'DD/MM/YYYY' },
             { label: 'YYYYMMDD（20260507）', value: 'YYYYMMDD' },
+            { label: 'MM-DD（05-07）', value: 'MM-DD' },
+            { label: 'MM/DD（05/07）', value: 'MM/DD' },
+            { label: 'MM月DD日（05月07日）', value: 'MM月DD日' },
         ];
         const datetimeFormats = [
             ...dateFormats,
@@ -1435,6 +1438,9 @@ createApp({
                 'MM-DD-YYYY': `${m}-${d}-${y}`,
                 'DD/MM/YYYY': `${d}/${m}/${y}`,
                 'YYYYMMDD': `${y}${m}${d}`,
+                'MM-DD': `${m}-${d}`,
+                'MM/DD': `${m}/${d}`,
+                'MM月DD日': `${m}月${d}日`,
                 'YYYY-MM-DD HH:mm': `${y}-${m}-${d} ${H}:${min}`,
                 'YYYY/MM/DD HH:mm': `${y}/${m}/${d} ${H}:${min}`,
                 'YYYY年MM月DD日 HH:mm': `${y}年${m}月${d}日 ${H}:${min}`,
