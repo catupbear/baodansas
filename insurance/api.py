@@ -23,6 +23,7 @@ from .db import (
     get_insurance_config,
     get_insurance_record,
     get_insurance_stats,
+    get_record_company_list,
     query_insurance_records,
     save_insurance_record,
     set_insurance_config,
@@ -892,6 +893,25 @@ def get_stats():
         return jsonify({"code": 0, "data": stats})
     except Exception as e:
         logger.exception("获取保单统计失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/record-companies", methods=["GET"])
+def list_record_companies():
+    """
+    获取列表「保司」筛选下拉的全库保司简称列表（权限范围内、去重排序）。
+    与前端「从当前页记录现算」不同，这里返回全库数据，不受分页影响。
+    返回: {code:0, data: ["人民财产", "国寿财产", ...]}
+    """
+    try:
+        companies = get_record_company_list(
+            _db,
+            user_ids=_get_user_ids_filter(),
+            enterprise_id=_get_enterprise_id_filter(),
+        )
+        return jsonify({"code": 0, "data": companies})
+    except Exception as e:
+        logger.exception("获取保司列表失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 

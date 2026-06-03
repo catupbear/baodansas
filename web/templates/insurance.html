@@ -300,7 +300,7 @@
                 </div>
                 <!-- 页面级 Tab 切换 -->
                 <div class="flex items-center gap-1 ml-4">
-                    <button @click="pageTab = 'records'; loadRecords(); loadRecordStats()" :class="pageTab === 'records' ? 'active' : ''" class="page-tab-btn">
+                    <button @click="pageTab = 'records'; loadRecords(); loadRecordStats(); loadRecordCompanies()" :class="pageTab === 'records' ? 'active' : ''" class="page-tab-btn">
                         识别记录
                     </button>
                     <button @click="pageTab = 'upload'" :class="pageTab === 'upload' ? 'active' : ''" class="page-tab-btn">
@@ -4511,14 +4511,17 @@ const _app = createApp({
         const recordCompanyFilter = ref('');
         const recordPolicyTypeFilter = ref('');  // 险种大类筛选（商业险/交强险/驾意险/非车险）
         const recordDocTypeFilter = ref('');
-        const recordCompanyList = computed(() => {
-            const set = new Set();
-            for (const r of records.value) {
-                const c = r.company_short || '';
-                if (c) set.add(c);
+        // 保司筛选下拉：从后端获取全库保司列表（不受当前分页影响）
+        const recordCompanyList = ref([]);
+        async function loadRecordCompanies() {
+            try {
+                const resp = await authFetch('/api/insurance/record-companies');
+                const json = await resp.json();
+                recordCompanyList.value = (json.data || []);
+            } catch (e) {
+                recordCompanyList.value = [];
             }
-            return [...set].sort();
-        });
+        }
         const recordDocTypes = computed(() => {
             const map = {};
             for (const r of records.value) {
@@ -5614,6 +5617,8 @@ const _app = createApp({
             // 默认筛选今天
             setDateShortcut('today');
             loadRecordStats();
+            // 加载保司筛选下拉（全库去重列表）
+            loadRecordCompanies();
         });
 
         return {
@@ -5666,7 +5671,7 @@ const _app = createApp({
             recordFilter, statusLabel, onSourceTypeChange, clearAllFilters, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
             recordPagination, visiblePages, recordStats,
             recordActiveTab, recordTabs, recordCompanyFilter, recordPolicyTypeFilter, recordDocTypeFilter,
-            recordCompanyList, recordDocTypes, exportRecordsExcel,
+            recordCompanyList, loadRecordCompanies, recordDocTypes, exportRecordsExcel,
             loadRecords, loadRecordStats, gotoRecordPage, getParsedField, getRecordMappedValue, formatTime,
             retryRecord, reocrRecord, reuploadRecord, reocrPreviewFile, previewReocring, syncRecordToDingtalk, previewRecord, previewAutoRecord, previewSiblings, siblingDropdownOpen, switchToSibling, loadAutoRecordRawText,
             markNormalVisible, markNormalRecord, markNormalReason, markNormalSaving, getQuickReasons, openMarkNormal, confirmMarkNormal, undoMarkNormal,

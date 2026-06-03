@@ -1665,6 +1665,47 @@ def get_company_stats(db) -> list:
         conn.close()
 
 
+def get_record_company_list(db, user_ids: list = None, enterprise_id: int = None) -> list:
+    """
+    获取全库（权限范围内）去重后的保险公司简称列表，供列表「保司」筛选下拉使用。
+    与 get_company_stats 不同：不限制 status/doc_category/confidence，
+    只要 company_short 非空即纳入，确保下拉覆盖列表中可能出现的所有保司（不受分页影响）。
+    权限过滤逻辑与 query_insurance_records 保持一致。
+    返回: ["人民财产", "国寿财产", ...]，按简称升序排列。
+    """
+    conditions = ["company_short != ''"]
+    params = []
+    # 按账号权限过滤
+    if user_ids is not None:
+        if user_ids:
+            ph = ",".join(["%s"] * len(user_ids))
+            conditions.append(f"user_id IN ({ph})")
+            params.extend(user_ids)
+        else:
+            return []  # 空列表 = 无权限，不返回任何保司
+    # 按企业过滤
+    if enterprise_id is not None:
+        conditions.append("enterprise_id = %s")
+        params.append(enterprise_id)
+
+    where = " AND ".join(conditions)
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            f"""
+            SELECT DISTINCT company_short
+            FROM insurance_records
+            WHERE {where}
+            ORDER BY company_short
+            """,
+            params,
+        )
+        return [r["company_short"] for r in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
 def get_insurance_stats(db, filters: dict = None) -> dict:
     """
     获取保单识别统计信息，支持筛选条件。
