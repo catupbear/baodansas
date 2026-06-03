@@ -726,6 +726,17 @@ _ID_PATTERN = r'([1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]
 def _extract_id_numbers(text: str, text_merged: str, fields: dict):
     """提取投保人和被保险人的身份证号码"""
 
+    # 限制提取区域：身份证号只在「保单正文」中提取，剔除后面的「保险条款/释义」附录。
+    # 条款附录中的"注册编号"（如 C00013732522023030738143）含 18 位长数字串，
+    # 会被误识别为身份证号（如紫金驾意险被保险人按座位数承保、本无身份证号）。
+    # "注册编号"仅出现在条款附录的标题区，正文不含，故以其首次出现处作为正文边界。
+    _m_zce = re.search(r'注册编号', text)
+    if _m_zce and _m_zce.start() > 50:
+        text = text[:_m_zce.start()]
+    _m_zce2 = re.search(r'注册编号', text_merged)
+    if _m_zce2 and _m_zce2.start() > 50:
+        text_merged = text_merged[:_m_zce2.start()]
+
     # === 被保险人身份证号码 ===
 
     # 交强险：被保险人身份[证]?号[码]?(组织机构代码/统一社会信用代码)
