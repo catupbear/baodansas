@@ -813,9 +813,24 @@ def _extract_id_numbers(text: str, text_merged: str, fields: dict):
         if m:
             fields["被保险人身份证号码"] = m.group(1)
 
-    # 兜底：被保险人后200字内第一个身份证号
+    # 交强险脱敏还原：被保险人身份证号码常被脱敏（如 44148119910714****），
+    # 但文档其它位置（如"纳税人识别号"）含完整号码，按脱敏前缀在全文还原完整号码。
+    # 比兜底更可靠：完整号码与"被保险人"锚点距离过远时兜底无法命中。
     if "被保险人身份证号码" not in fields:
-        m = re.search(r'被保险人[\s\S]{0,200}?' + _ID_PATTERN, text)
+        m_mask = re.search(r'(\d{12,16})\*{2,}', text)
+        if m_mask:
+            prefix = m_mask.group(1)
+            m_full = re.search(
+                r'(?<!\d)' + re.escape(prefix) + r'\d{1,5}[\dXx](?!\d)', text
+            )
+            if m_full and re.fullmatch(_ID_PATTERN, m_full.group(0)):
+                fields["被保险人身份证号码"] = m_full.group(0)
+
+    # 兜底：被保险人后200字内第一个身份证号
+    # 加数字边界 (?<!\d)...(?!\d)，避免匹配到条款"注册编号"等长数字串中嵌套的伪身份证
+    # （如紫金驾意险被保险人按座位数承保、本无身份证号，注册编号会误命中）
+    if "被保险人身份证号码" not in fields:
+        m = re.search(r'被保险人[\s\S]{0,200}?(?<!\d)' + _ID_PATTERN + r'(?!\d)', text)
         if m:
             fields["被保险人身份证号码"] = m.group(1)
 
@@ -838,10 +853,11 @@ def _extract_id_numbers(text: str, text_merged: str, fields: dict):
         if m:
             fields["投保人身份证号码"] = m.group(1)
 
-    # 投保人信息块（太平/阳光/亚太/大家/国任/人保驾乘等）
+    # 投保人信息块（太平/阳光/亚太/大家/国任/人保驾乘/紫金驾意等）
+    # 紫金驾意险标题为"投保人基本信息"，且OCR可能将"投保人名称："拆行，故兼容"基本"
     if "投保人身份证号码" not in fields:
         m = re.search(
-            r'投保人(?:信息|姓名)[：:\s]*[\s\S]{0,200}?证件号码[：:\s]*' + _ID_PATTERN,
+            r'投保人(?:基本)?(?:信息|姓名)[：:\s]*[\s\S]{0,200}?证件号码[：:\s]*' + _ID_PATTERN,
             text
         )
         if m:
