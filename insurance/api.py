@@ -39,6 +39,7 @@ from .field_config_db import (
     get_effective_config, apply_user_config_to_fields, match_fee_formulas, _format_date,
     get_column_config, save_column_config, delete_column_config,
     get_user_fixed_values, save_user_fixed_values,
+    get_remark_selector_config, save_remark_selector_config,
     get_merge_by_plate, save_merge_by_plate,
     get_plate_format_pingan, save_plate_format_pingan,
     MERGE_SHARED_FIELDS, MERGE_SPLIT_FIELDS, MERGE_PREFIXES, MERGE_EXTRA_COLUMNS,
@@ -61,6 +62,7 @@ from .field_mapping import (
 )
 from .policy_parser import get_extraction_rules, parse_policy_text, parse_policy_text_multi, get_policy_type_code
 from .ocr_service import extract_text_from_pdf
+from . import remark_options_db
 from auth.decorators import login_required
 from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, get_sender_user_name_map
 from core.notify import notify_error
@@ -2161,6 +2163,104 @@ def update_config():
         return jsonify({"code": 0, "msg": "配置已更新"})
     except Exception as e:
         logger.exception("更新保单配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+# ============================================================
+# 备注快捷选择（选项池 + 配置）
+# ============================================================
+
+@insurance_bp.route("/api/insurance/remark-options/config", methods=["GET"])
+@login_required
+def get_remark_selector_config_api():
+    """读取当前用户 scope 的备注快捷选择配置。"""
+    try:
+        scope, scope_id = _get_user_scope()
+        cfg = get_remark_selector_config(_db, scope, scope_id)
+        stats = remark_options_db.get_stats(_db, scope, scope_id)
+        return jsonify({"code": 0, "data": {"config": cfg, "stats": stats}})
+    except Exception as e:
+        logger.exception("读取备注快捷选择配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/remark-options/config", methods=["PUT"])
+@login_required
+def save_remark_selector_config_api():
+    """保存当前用户 scope 的备注快捷选择配置。"""
+    try:
+        body = request.get_json(force=True) or {}
+        scope, scope_id = _get_user_scope()
+        save_remark_selector_config(_db, scope, scope_id, body.get("config", body))
+        return jsonify({"code": 0, "msg": "已保存"})
+    except Exception as e:
+        logger.exception("保存备注快捷选择配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/remark-options/sheets", methods=["POST"])
+@login_required
+def remark_options_sheets():
+    """上传 Excel，返回 sheet 名列表（不落库）。"""
+    try:
+        f = request.files.get("file")
+        if not f:
+            return jsonify({"code": 400, "msg": "缺少文件"}), 400
+        names = remark_options_db.read_sheet_names(f.read())
+        return jsonify({"code": 0, "data": {"sheets": names}})
+    except Exception as e:
+        logger.exception("读取 sheet 列表失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/remark-options/import", methods=["POST"])
+@login_required
+def remark_options_import():
+    """上传 Excel + 选定 sheet → 清空当前 scope 旧池 + 导入新池。"""
+    try:
+        f = request.files.get("file")
+        sheet = request.form.get("sheet", "")
+        if not f or not sheet:
+            return jsonify({"code": 400, "msg": "缺少文件或 sheet"}), 400
+        rows = remark_options_db.parse_sheet_rows(f.read(), sheet)
+        scope, scope_id = _get_user_scope()
+        n = remark_options_db.import_options(_db, scope, scope_id, rows)
+        return jsonify({"code": 0, "msg": f"导入成功 {n} 条", "data": {"count": n}})
+    except Exception as e:
+        logger.exception("导入备注选项池失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/remark-options/query", methods=["GET"])
+@login_required
+def remark_options_query():
+    """按 handler/company/policy_type/keyword + mode 查询候选 remark。"""
+    try:
+        scope, scope_id = _get_user_scope()
+        opts = remark_options_db.query_options(
+            _db, scope, scope_id,
+            handler=request.args.get("handler", ""),
+            company=request.args.get("company", ""),
+            policy_type=request.args.get("policy_type", ""),
+            keyword=request.args.get("keyword", ""),
+            mode=request.args.get("mode", "exact"),
+        )
+        return jsonify({"code": 0, "data": {"options": opts}})
+    except Exception as e:
+        logger.exception("查询备注候选失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/remark-options", methods=["DELETE"])
+@login_required
+def remark_options_clear():
+    """清空当前 scope 选项池。"""
+    try:
+        scope, scope_id = _get_user_scope()
+        n = remark_options_db.clear_options(_db, scope, scope_id)
+        return jsonify({"code": 0, "msg": f"已清空 {n} 条"})
+    except Exception as e:
+        logger.exception("清空备注选项池失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
