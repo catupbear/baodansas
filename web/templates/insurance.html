@@ -962,15 +962,15 @@
                             : 'background:white;border:1px solid #e5e7eb;color:#6b7280;'">
                     {{ s.label }}
                 </button>
-                <!-- 自定义日期区间 -->
+                <!-- 自定义日期区间（创建/识别日期支持选到具体时间，保单日期仅到天） -->
                 <template v-if="recordFilter.date_shortcut === 'custom'">
-                    <input type="date" v-model="recordFilter.date_start"
-                           class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
-                           @change="loadRecords()">
+                    <input :type="dateTypeSupportsTime ? 'datetime-local' : 'date'" v-model="recordFilter.date_start"
+                           class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer"
+                           @click="openNativePicker" @change="loadRecords()">
                     <span class="text-xs text-gray-400">至</span>
-                    <input type="date" v-model="recordFilter.date_end"
-                           class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"
-                           @change="loadRecords()">
+                    <input :type="dateTypeSupportsTime ? 'datetime-local' : 'date'" v-model="recordFilter.date_end"
+                           class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer"
+                           @click="openNativePicker" @change="loadRecords()">
                 </template>
                 <!-- 清除日期 -->
                 <button v-if="recordFilter.date_shortcut && recordFilter.date_shortcut !== 'all'"
@@ -4443,18 +4443,22 @@ const _app = createApp({
         function _appendDateParams(params) {
             if (!recordFilter.date_start && !recordFilter.date_end) return;
             const type = recordFilter.date_type || 'created_at';
+            // datetime-local 取值为 "YYYY-MM-DDTHH:MM"，转成 MySQL 可识别的 "YYYY-MM-DD HH:MM"
+            const _norm = (v) => (v || '').replace('T', ' ');
             if (type === 'created_at' || type === 'updated_at') {
                 // created_at/updated_at 是 TIMESTAMP，后端用 < end，快捷按钮的 end 是次日，正确
                 const paramPrefix = type === 'updated_at' ? 'updated_at_' : '';
-                if (recordFilter.date_start) params.set(paramPrefix + 'date_start', recordFilter.date_start);
-                if (recordFilter.date_end) params.set(paramPrefix + 'date_end', recordFilter.date_end);
+                if (recordFilter.date_start) params.set(paramPrefix + 'date_start', _norm(recordFilter.date_start));
+                if (recordFilter.date_end) params.set(paramPrefix + 'date_end', _norm(recordFilter.date_end));
             } else {
-                // 保单日期是 DATE 类型，后端用 <= end
+                // 保单日期是 DATE 类型，后端用 <= end，仅精确到天
                 // 快捷按钮生成的 end 是"次日"（如今天=19号 → end=20号），需减一天
                 // 自定义日期由用户手动选择，直接使用原值
-                if (recordFilter.date_start) params.set(type + '_start', recordFilter.date_start);
+                // 切换日期类型时可能残留带时间的值，统一截取日期部分（YYYY-MM-DD）
+                const _day = (v) => (v || '').slice(0, 10);
+                if (recordFilter.date_start) params.set(type + '_start', _day(recordFilter.date_start));
                 if (recordFilter.date_end) {
-                    let endVal = recordFilter.date_end;
+                    let endVal = _day(recordFilter.date_end);
                     if (recordFilter.date_shortcut && recordFilter.date_shortcut !== 'custom') {
                         const d = new Date(endVal);
                         d.setDate(d.getDate() - 1);
@@ -5083,6 +5087,16 @@ const _app = createApp({
             sort_by: 'created_at',  // 排序字段
             sort_order: 'desc',     // 排序方向
         });
+        // 创建/识别日期为 TIMESTAMP 类型，自定义区间可精确到具体时间；保单日期为 DATE 类型仅到天
+        const dateTypeSupportsTime = computed(() =>
+            ['created_at', 'updated_at'].includes(recordFilter.date_type));
+        // 点击 date/datetime 输入框任意位置即弹出原生选择器（默认仅点右侧图标才弹出）
+        function openNativePicker(e) {
+            const el = e && e.currentTarget;
+            if (el && typeof el.showPicker === 'function') {
+                try { el.showPicker(); } catch (_) { /* 非用户激活等情况忽略 */ }
+            }
+        }
         // 展开/折叠高级搜索
         const showAdvancedSearch = ref(false);
         // 日期快捷选项
@@ -5731,7 +5745,7 @@ const _app = createApp({
             records, filteredRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
             isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask, collapseDownloadTask, expandDownloadTask, retryDownloadTask, batchFailModal, batchFailRetry, batchFailUpload,
             roomList, monitorRooms, monitorUsers,
-            recordFilter, statusLabel, onSourceTypeChange, clearAllFilters, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
+            recordFilter, dateTypeSupportsTime, openNativePicker, statusLabel, onSourceTypeChange, clearAllFilters, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
             recordPagination, visiblePages, recordStats,
             recordActiveTab, recordTabs, recordCompanyFilter, recordPolicyTypeFilter, recordDocTypeFilter,
             recordCompanyList, loadRecordCompanies, recordDocTypes, exportRecordsExcel,
