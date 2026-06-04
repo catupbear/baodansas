@@ -1295,6 +1295,11 @@
                                                 <span style="font-size:11px;line-height:1;">{{ (record.display_fields || {})[col.key] ? '修改' : '填写' }}</span>
                                             </span>
                                         </span>
+                                        <button v-if="remarkSelector.enabled && col.key === remarkSelector.config.target_key"
+                                                @click.stop="openRemarkSelector(record)"
+                                                class="text-xs rounded cursor-pointer"
+                                                style="background:#fff7ed;border:1px solid #fdba74;color:#c2410c;margin-left:6px;padding:4px 8px;white-space:nowrap;"
+                                                title="按经办人/投保公司/险种筛选备注">选择</button>
                                     </template>
                                 </template>
                             </td>
@@ -2457,6 +2462,39 @@
     </transition>
 
     <!-- 设置已迁移到独立的监控配置页面 /monitor-config -->
+
+    <!-- 备注快捷选择弹窗 -->
+    <div v-if="remarkPicker.show" class="fixed inset-0 z-50 flex items-center justify-center"
+         style="background:rgba(0,0,0,.4);" @click.self="remarkPicker.show=false">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4" style="max-height:80vh;display:flex;flex-direction:column;">
+        <div class="px-5 py-3 border-b flex items-center justify-between">
+          <h3 class="font-semibold text-gray-800">选择备注</h3>
+          <button @click="remarkPicker.show=false" class="text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+        <div class="px-5 py-3 border-b space-y-2 text-sm">
+          <div class="flex flex-wrap items-center gap-3">
+            <label class="flex items-center gap-1"><input type="checkbox" v-model="remarkPicker.useHandler" @change="queryRemarkOptions">经办人：{{ remarkPicker.handler || '—' }}</label>
+            <label class="flex items-center gap-1"><input type="checkbox" v-model="remarkPicker.useCompany" @change="queryRemarkOptions">投保公司：{{ remarkPicker.company || '—' }}</label>
+            <label class="flex items-center gap-1"><input type="checkbox" v-model="remarkPicker.usePolicyType" @change="queryRemarkOptions">险种：{{ remarkPicker.policy_type || '—' }}</label>
+          </div>
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-1"><input type="radio" value="exact" v-model="remarkPicker.mode" @change="queryRemarkOptions">精准</label>
+            <label class="flex items-center gap-1"><input type="radio" value="fuzzy" v-model="remarkPicker.mode" @change="queryRemarkOptions">模糊</label>
+            <input v-model="remarkPicker.keyword" @input="queryRemarkOptions" placeholder="搜索备注关键词"
+                   class="flex-1 border rounded px-2 py-1">
+          </div>
+        </div>
+        <div class="px-5 py-2 overflow-auto" style="flex:1;">
+          <div v-if="remarkPicker.loading" class="text-gray-400 text-sm py-4 text-center">加载中…</div>
+          <div v-else-if="!remarkPicker.options.length" class="text-gray-400 text-sm py-4 text-center">未匹配到，可放宽筛选或直接手动填写</div>
+          <ul v-else class="divide-y">
+            <li v-for="(opt,idx) in remarkPicker.options" :key="idx"
+                @click="pickRemark(opt)"
+                class="py-2 px-2 cursor-pointer hover:bg-orange-50 text-sm text-gray-700">{{ opt }}</li>
+          </ul>
+        </div>
+      </div>
+    </div>
 
 </div>
 
@@ -3673,6 +3711,77 @@ const _app = createApp({
             '保费': '保费合计', '车船税': '车船税', '业务员': '业务员',
         };
         const listEditing = reactive({ recordId: null, col: '', value: '', saving: false });
+
+        // ========== 备注快捷选择 ==========
+        const remarkSelector = reactive({
+            enabled: false,
+            config: { target_key: '备注', key_handler: '经办人', key_company: '承保公司', key_policy_type: '险种' },
+        });
+        const remarkPicker = reactive({
+            show: false, record: null, loading: false,
+            mode: 'exact',                              // exact | fuzzy
+            handler: '', company: '', policy_type: '',  // 当前筛选键值（取自记录）
+            useHandler: true, useCompany: true, usePolicyType: true,
+            keyword: '', options: [],
+        });
+
+        async function loadRemarkSelectorConfig() {
+            try {
+                const resp = await authFetch('/api/insurance/remark-options/config');
+                const json = await resp.json();
+                if (json.code === 0 && json.data && json.data.config) {
+                    remarkSelector.config = json.data.config;
+                    remarkSelector.enabled = !!json.data.config.enabled;
+                }
+            } catch (e) { /* 静默：未配置不影响列表 */ }
+        }
+
+        function openRemarkSelector(record) {
+            const df = record.display_fields || {};
+            const c = remarkSelector.config;
+            remarkPicker.record = record;
+            remarkPicker.handler = df[c.key_handler] || '';
+            remarkPicker.company = df[c.key_company] || '';
+            remarkPicker.policy_type = df[c.key_policy_type] || '';
+            remarkPicker.useHandler = !!remarkPicker.handler;
+            remarkPicker.useCompany = !!remarkPicker.company;
+            remarkPicker.usePolicyType = !!remarkPicker.policy_type;
+            remarkPicker.mode = 'exact';
+            remarkPicker.keyword = '';
+            remarkPicker.show = true;
+            queryRemarkOptions();
+        }
+
+        async function queryRemarkOptions() {
+            remarkPicker.loading = true;
+            try {
+                const p = new URLSearchParams();
+                if (remarkPicker.useHandler) p.set('handler', remarkPicker.handler);
+                if (remarkPicker.useCompany) p.set('company', remarkPicker.company);
+                if (remarkPicker.usePolicyType) p.set('policy_type', remarkPicker.policy_type);
+                if (remarkPicker.keyword) p.set('keyword', remarkPicker.keyword);
+                p.set('mode', remarkPicker.mode);
+                const resp = await authFetch('/api/insurance/remark-options/query?' + p.toString());
+                const json = await resp.json();
+                remarkPicker.options = (json.code === 0 && json.data) ? json.data.options : [];
+            } catch (e) {
+                remarkPicker.options = [];
+            } finally {
+                remarkPicker.loading = false;
+            }
+        }
+
+        async function pickRemark(value) {
+            const record = remarkPicker.record;
+            const col = remarkSelector.config.target_key;
+            // 复用单元格保存逻辑：进入编辑态→写值→保存（确保计入 manual_fields）
+            listEditing.recordId = record.id;
+            listEditing.col = col;
+            listEditing.value = value;
+            listEditing.saving = false;
+            await saveListEdit(record);
+            remarkPicker.show = false;
+        }
 
         // 判断字段是否为日期类型（名称含"日期"、"时间"、"到期"）
         function isDateField(fieldName) {
@@ -5696,6 +5805,8 @@ const _app = createApp({
             loadRecordStats();
             // 加载保司筛选下拉（全库去重列表）
             loadRecordCompanies();
+            // 加载备注快捷选择配置
+            loadRemarkSelectorConfig();
         });
 
         return {
@@ -5755,6 +5866,7 @@ const _app = createApp({
             deleteRecordVisible, deleteRecordTarget, deleteRecordSaving, openDeleteRecord, confirmDeleteRecord,
             editingField, editingValue, fieldSaving, startEditField, cancelEditField, saveEditField, isManualField, isDateField,
             listEditing, startListEdit, cancelListEdit, saveListEdit,
+            remarkSelector, remarkPicker, openRemarkSelector, queryRemarkOptions, pickRemark,
             recordDetailVisible, currentRecord, openRecordDetail,
             // 联系人编辑
             contactEditVisible, contactEditSaving, contactEditForm, contactNameInput,
