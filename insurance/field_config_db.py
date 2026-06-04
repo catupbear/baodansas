@@ -1398,6 +1398,15 @@ def apply_user_config_to_fields(config: dict, fields: dict, formula_only: bool =
             if ts_field in result and ts_field not in date_fmt_map and result[ts_field]:
                 result[ts_field] = _format_date(str(result[ts_field]), "YYYY-MM-DD HH:mm", _date_no_pad)
 
+    # 3.4 固定值填充（来自列配置中自定义字段的 fixed_value）
+    # 必须在「百分比归一化 / 公式计算 / 百分比显示」之前执行：
+    # 否则靠固定值取值的字段（如 应付费率 固定值=0）在公式计算时还是空的，
+    # 会导致 合计=保费×应付费率 算不出（留空），且固定值不会被转成百分比显示。
+    fixed_values = config.get("fixed_values", {})
+    for field_name, fixed_val in fixed_values.items():
+        if fixed_val and not result.get(field_name):
+            result[field_name] = fixed_val
+
     # 3.5 百分比标记字段归一化（is_percent）
     # 用户在这类列填的是「百分数」（如填 "10" 表示 10%），统一还原为小数（0.1）：
     #   - 供下方公式按 0.1 参与计算（如 应付手续费 = 保费 × 费率）
@@ -1466,12 +1475,6 @@ def apply_user_config_to_fields(config: dict, fields: dict, formula_only: bool =
             result[_pf] = f"{float(raw) * 100:g}%"
         except (ValueError, TypeError):
             pass
-
-    # 5. 固定值填充（来自列配置中自定义字段的 fixed_value）
-    fixed_values = config.get("fixed_values", {})
-    for field_name, fixed_val in fixed_values.items():
-        if fixed_val and not result.get(field_name):
-            result[field_name] = fixed_val
 
     # 6. 平安车牌格式化（粤BB446T → 粤B-B446T）
     if config.get("plate_format_pingan"):
