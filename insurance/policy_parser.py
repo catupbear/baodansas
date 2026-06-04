@@ -1219,10 +1219,20 @@ def _extract_policy_no(text: str, fields: dict, company_short: str, policy_type:
                         return
                 break
 
-    # 华农等格式："保单号\n保单号：XXX\n流水号 流水号：YYY"，优先取保单号而非流水号
-    m = re.search(r"保单号[：:]\s*(\d{15,30})", text)
+    # 申能"保险组合单"格式：优先取整单号（"保险组合单号"），避免误取各险种"分项保单号"
+    # 例：申能"驾乘无忧+出行不便"组合单，整单号 6203430000060260000569，
+    #     下含"分项保单号：6203430110160260001601"等子项
+    m = re.search(r"保险组合单号[：:\s]*([A-Za-z0-9]{15,30})", text)
     if m:
         fields["保单号"] = m.group(1)
+        return
+
+    # 华农等格式："保单号\n保单号：XXX\n流水号 流水号：YYY"，优先取保单号而非流水号
+    # 排除"分项保单号"（组合单子项编号），避免误取
+    for m in re.finditer(r"(分项)?保单号[：:]\s*(\d{15,30})", text):
+        if m.group(1):  # "分项保单号" 跳过
+            continue
+        fields["保单号"] = m.group(2)
         return
 
     # 华泰/京东安联等格式："保险单号Policy No.：XXX" 或 "保单号码Policy No.:XXX"
@@ -3597,6 +3607,10 @@ def _find_policy_boundaries(text: str) -> List[dict]:
             _ctx_start = max(0, pos - 20)
             _ctx = text[_ctx_start:pos]
             if '交强险' in _ctx:
+                continue
+            # 排除"分项保单号"（保险组合单中的子项险种编号，属于同一份整单，不应拆分）
+            # 例：申能"驾乘无忧+出行不便"组合单，含"锦程交通意外伤害保险 分项保单号：xxx"等多个子项
+            if re.search(r'分项\s*$', _ctx):
                 continue
             # 排除重复/近似的保单号（互为前缀关系视为同一保单号，如 OCR 截断差异）
             is_dup = any(no_val.startswith(sn) or sn.startswith(no_val) for sn in seen_nos)
