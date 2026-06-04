@@ -27,6 +27,7 @@ from .db import (
     query_insurance_records,
     save_insurance_record,
     set_insurance_config,
+    soft_delete_record,
     update_insurance_record,
     upsert_insurance_record_by_policy,
 )
@@ -771,6 +772,27 @@ def undo_mark_record_normal(record_id):
         return jsonify({"code": 0, "msg": "已撤销标记"})
     except Exception as e:
         logger.exception("撤销标记失败 record_id=%d", record_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/records/<int:record_id>", methods=["DELETE"])
+def delete_record(record_id):
+    """软删除保单识别记录（仅超级管理员）。记录不会物理删除，仅打 deleted_at 标记。"""
+    from flask import g
+    if g.current_user.get("role") != ROLE_SUPER_ADMIN:
+        return jsonify({"code": 403, "msg": "无权限，仅超级管理员可删除记录"}), 403
+    try:
+        record = get_insurance_record(_db, record_id)
+        if not record:
+            return jsonify({"code": 404, "msg": "记录不存在"}), 404
+        ok = soft_delete_record(_db, record_id)
+        if not ok:
+            return jsonify({"code": 400, "msg": "记录已被删除"}), 400
+        logger.info("软删除保单记录 id=%d by user_id=%s, filename=%s",
+                    record_id, g.current_user.get("user_id"), record.get("filename"))
+        return jsonify({"code": 0, "msg": "已删除"})
+    except Exception as e:
+        logger.exception("软删除保单记录失败 record_id=%d", record_id)
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 

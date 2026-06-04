@@ -1361,6 +1361,12 @@
                                         {{ record._syncing ? '同步中...' : (record.dingtalk_synced ? '更新同步' : '同步') }}
                                     </button>
                                     -->
+                                    <!-- 删除（仅超级管理员） -->
+                                    <button v-if="isSuperAdmin"
+                                            @click="openDeleteRecord(record)"
+                                            class="btn" style="padding:3px 8px;font-size:11px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;">
+                                        删除
+                                    </button>
                                 </div>
                             </td>
                         </tr>
@@ -1457,6 +1463,33 @@
                     <button @click="confirmMarkNormal" :disabled="markNormalSaving || !markNormalReason.trim()"
                             class="btn btn-primary" style="padding:6px 16px;font-size:13px;">
                         {{ markNormalSaving ? '保存中...' : '确认标记' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </transition>
+
+    <!-- 删除确认弹窗（仅超级管理员） -->
+    <transition name="fade">
+        <div v-if="deleteRecordVisible" class="fixed inset-0 modal-mask flex items-center justify-center" style="z-index:60;"
+             @click.self="deleteRecordVisible = false">
+            <div class="bg-white rounded-xl shadow-2xl" style="width:400px;max-width:90vw;" @click.stop>
+                <div class="px-5 py-4 border-b flex items-center justify-between">
+                    <h3 class="text-base font-semibold text-gray-800">删除确认</h3>
+                    <button @click="deleteRecordVisible = false" class="text-gray-400 hover:text-gray-600 text-xl leading-none cursor-pointer">&times;</button>
+                </div>
+                <div class="px-5 py-4 space-y-2">
+                    <p class="text-sm text-gray-600">确定要删除这条保单识别记录吗？</p>
+                    <p v-if="deleteRecordTarget" class="text-sm text-gray-500 break-all">
+                        文件：<span class="text-gray-700">{{ deleteRecordTarget.filename || '—' }}</span>
+                    </p>
+                    <p class="text-xs text-gray-400">删除后将从列表中移除（软删除，可由后台恢复）。</p>
+                </div>
+                <div class="px-5 py-3 border-t flex justify-end gap-2">
+                    <button @click="deleteRecordVisible = false" class="btn btn-outline" style="padding:6px 16px;font-size:13px;">取消</button>
+                    <button @click="confirmDeleteRecord" :disabled="deleteRecordSaving"
+                            class="btn" style="padding:6px 16px;font-size:13px;background:#dc2626;color:#fff;border:1px solid #b91c1c;">
+                        {{ deleteRecordSaving ? '删除中...' : '确认删除' }}
                     </button>
                 </div>
             </div>
@@ -5447,6 +5480,36 @@ const _app = createApp({
             }
         }
 
+        // ===== 删除记录（软删除，仅超级管理员） =====
+        const deleteRecordVisible = ref(false);
+        const deleteRecordTarget = ref(null);
+        const deleteRecordSaving = ref(false);
+        function openDeleteRecord(record) {
+            deleteRecordTarget.value = record;
+            deleteRecordVisible.value = true;
+        }
+        async function confirmDeleteRecord() {
+            const record = deleteRecordTarget.value;
+            if (!record) return;
+            deleteRecordSaving.value = true;
+            try {
+                const resp = await authFetch(`/api/insurance/records/${record.id}`, { method: 'DELETE' });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showMessage('已删除', true);
+                    deleteRecordVisible.value = false;
+                    loadRecords(false);
+                    loadRecordStats();
+                } else {
+                    showMessage(data.msg || '删除失败', false);
+                }
+            } catch (e) {
+                showMessage(`删除失败: ${e.message}`, false);
+            } finally {
+                deleteRecordSaving.value = false;
+            }
+        }
+
         // ===== 标记正常 =====
         const markNormalVisible = ref(false);
         const markNormalRecord = ref(null);
@@ -5675,6 +5738,7 @@ const _app = createApp({
             loadRecords, loadRecordStats, gotoRecordPage, getParsedField, getRecordMappedValue, formatTime,
             retryRecord, reocrRecord, reuploadRecord, reocrPreviewFile, previewReocring, syncRecordToDingtalk, previewRecord, previewAutoRecord, previewSiblings, siblingDropdownOpen, switchToSibling, loadAutoRecordRawText,
             markNormalVisible, markNormalRecord, markNormalReason, markNormalSaving, getQuickReasons, openMarkNormal, confirmMarkNormal, undoMarkNormal,
+            deleteRecordVisible, deleteRecordTarget, deleteRecordSaving, openDeleteRecord, confirmDeleteRecord,
             editingField, editingValue, fieldSaving, startEditField, cancelEditField, saveEditField, isManualField, isDateField,
             listEditing, startListEdit, cancelListEdit, saveListEdit,
             recordDetailVisible, currentRecord, openRecordDetail,

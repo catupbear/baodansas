@@ -349,6 +349,7 @@ def init_insurance_tables(db):
             ("policy_index", "TINYINT DEFAULT 1 COMMENT '当前记录在同一PDF中的序号（从1开始）'"),
             ("page_range", "VARCHAR(32) DEFAULT '' COMMENT '提取数据来源页码范围（如1-2）'"),
             ("ocr_text", "LONGTEXT COMMENT 'OCR识别原文（pdfplumber+ocr模式下保存OCR文本）'"),
+            ("deleted_at", "DATETIME DEFAULT NULL COMMENT '软删除时间（非NULL表示已删除，列表/统计默认过滤）'"),
         ]
         for col_name, col_def in new_columns:
             try:
@@ -795,10 +796,29 @@ def check_file_md5_exists(db, file_md5: str) -> dict | None:
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute(
-            "SELECT id, filename, status FROM insurance_records WHERE file_md5 = %s AND status = 'done' LIMIT 1",
+            "SELECT id, filename, status FROM insurance_records WHERE file_md5 = %s AND status = 'done' AND deleted_at IS NULL LIMIT 1",
             (file_md5,)
         )
         return cursor.fetchone()
+    finally:
+        conn.close()
+
+
+def soft_delete_record(db, record_id: int) -> bool:
+    """
+    软删除一条保单识别记录（设置 deleted_at=NOW()）。
+    列表、统计、保司下拉、MD5 去重检测均会过滤掉已软删除记录。
+    返回 True 表示本次成功删除，False 表示记录不存在或已被删除。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE insurance_records SET deleted_at = NOW() WHERE id = %s AND deleted_at IS NULL",
+            (record_id,),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
     finally:
         conn.close()
 
@@ -1251,6 +1271,9 @@ def query_insurance_records(
     # 主表别名前缀
     col_prefix = "r."
 
+    # 排除已软删除的记录
+    conditions.append(f"{col_prefix}deleted_at IS NULL")
+
     # 去重模式下排除 duplicate 状态的记录
     if dedup:
         conditions.append(f"{col_prefix}status != 'duplicate'")
@@ -1657,6 +1680,7 @@ def get_company_stats(db) -> list:
               AND doc_category = '保单'
               AND confidence > 0
               AND company_short != ''
+              AND deleted_at IS NULL
             GROUP BY company_short
             ORDER BY cnt DESC
         """)
@@ -1673,7 +1697,7 @@ def get_record_company_list(db, user_ids: list = None, enterprise_id: int = None
     权限过滤逻辑与 query_insurance_records 保持一致。
     返回: ["人民财产", "国寿财产", ...]，按简称升序排列。
     """
-    conditions = ["company_short != ''"]
+    conditions = ["company_short != ''", "deleted_at IS NULL"]
     params = []
     # 按账号权限过滤
     if user_ids is not None:
@@ -1736,6 +1760,8 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
         # 构建 WHERE 条件
         where_parts = []
         params = []
+        # 排除已软删除的记录
+        where_parts.append(f"{col_prefix}deleted_at IS NULL")
         # 去重模式下排除 duplicate 状态的记录，避免 total 与各子状态之和不一致
         if dedup:
             where_parts.append(f"{col_prefix}status != 'duplicate'")
