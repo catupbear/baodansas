@@ -767,6 +767,58 @@
             </div>
 
         </div>
+
+        <!-- 备注快捷选择 -->
+        <div class="card" style="margin-top:24px;">
+            <h3 style="font-size:16px; font-weight:600; margin-bottom:4px;">备注快捷选择</h3>
+            <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">
+                按经办人 / 投保公司 / 险种联动筛选备注话术，供台账「备注」字段快捷点选。选项池来自每日上传的 Excel，导入会清空旧池但不影响历史已选值。
+            </p>
+            <label style="display:flex; align-items:center; gap:8px; font-size:14px; font-weight:500; margin-bottom:16px;">
+                <input type="checkbox" v-model="remarkCfg.enabled"> 启用备注快捷选择
+            </label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; font-size:13px;">
+                <label>备注目标字段
+                    <select v-model="remarkCfg.target_key" style="width:100%; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-top:4px;">
+                        <option v-for="k in remarkFieldKeys" :key="k" :value="k">{{ k }}</option>
+                    </select>
+                </label>
+                <label>经办人字段
+                    <select v-model="remarkCfg.key_handler" style="width:100%; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-top:4px;">
+                        <option v-for="k in remarkFieldKeys" :key="k" :value="k">{{ k }}</option>
+                    </select>
+                </label>
+                <label>投保公司字段
+                    <select v-model="remarkCfg.key_company" style="width:100%; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-top:4px;">
+                        <option v-for="k in remarkFieldKeys" :key="k" :value="k">{{ k }}</option>
+                    </select>
+                </label>
+                <label>险种字段
+                    <select v-model="remarkCfg.key_policy_type" style="width:100%; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-top:4px;">
+                        <option v-for="k in remarkFieldKeys" :key="k" :value="k">{{ k }}</option>
+                    </select>
+                </label>
+            </div>
+            <button class="btn btn-primary btn-sm" @click="saveRemarkCfg" :disabled="remarkSaving">{{ remarkSaving ? '保存中…' : '保存配置' }}</button>
+
+            <hr style="margin:20px 0; border:none; border-top:1px solid var(--border-light);">
+
+            <div style="font-size:13px; margin-bottom:12px;">
+                当前选项池：<b>{{ remarkStats.count }}</b> 条
+                <span v-if="remarkStats.last_import" style="color:var(--text-muted);">· 最后导入 {{ remarkStats.last_import }}</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <input type="file" accept=".xlsx,.xls" @change="onRemarkFile" ref="remarkFileEl">
+                <select v-if="remarkSheets.length" v-model="remarkSheet" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
+                    <option v-for="s in remarkSheets" :key="s" :value="s">{{ s }}</option>
+                </select>
+                <button v-if="remarkSheets.length" class="btn btn-primary btn-sm" @click="doRemarkImport" :disabled="remarkImporting">{{ remarkImporting ? '导入中…' : '导入选定 sheet' }}</button>
+                <button class="btn btn-outline btn-sm" @click="clearRemarkPool">清空选项池</button>
+            </div>
+            <div style="margin-top:8px; font-size:11px; color:var(--text-muted);">
+                上传 Excel 后选择要导入的 sheet（默认最后一个），点击导入即清空旧池并写入。
+            </div>
+        </div>
     </div>
 
     <!-- 模板管理弹窗 -->
@@ -1104,6 +1156,76 @@ createApp({
         const exportColConfig = ref({ source: 'default', columns: [] });
         const listColItems = ref([]);
         const exportColItems = ref([]);
+
+        // ========== 备注快捷选择 ==========
+        const remarkCfg = reactive({ enabled:false, target_key:'备注', key_handler:'经办人', key_company:'承保公司', key_policy_type:'险种' });
+        const remarkStats = reactive({ count:0, last_import:'' });
+        const remarkSheets = ref([]);
+        const remarkSheet = ref('');
+        const remarkSaving = ref(false);
+        const remarkImporting = ref(false);
+        const remarkFileEl = ref(null);
+        let remarkFile = null;
+        // 字段候选：取自列配置（list_columns）的字段 key
+        const remarkFieldKeys = computed(() => (listColItems.value || []).map(c => c.key));
+
+        async function loadRemarkCfg() {
+            try {
+                const resp = await authFetch('/api/insurance/remark-options/config');
+                const json = await resp.json();
+                if (json.code === 0 && json.data) {
+                    Object.assign(remarkCfg, json.data.config || {});
+                    Object.assign(remarkStats, json.data.stats || {});
+                }
+            } catch (e) { /* 静默 */ }
+        }
+        async function saveRemarkCfg() {
+            remarkSaving.value = true;
+            try {
+                await authFetch('/api/insurance/remark-options/config', {
+                    method:'PUT', body: JSON.stringify({ config: { ...remarkCfg } })
+                });
+                alert('已保存');
+            } catch (e) { alert('保存失败: ' + e.message); }
+            finally { remarkSaving.value = false; }
+        }
+        function onRemarkFile(e) {
+            remarkFile = e.target.files[0];
+            remarkSheets.value = []; remarkSheet.value = '';
+            if (!remarkFile) return;
+            const fd = new FormData(); fd.append('file', remarkFile);
+            authFetch('/api/insurance/remark-options/sheets', { method:'POST', body: fd })
+                .then(r => r.json()).then(j => {
+                    if (j.code === 0 && j.data) {
+                        remarkSheets.value = j.data.sheets || [];
+                        remarkSheet.value = remarkSheets.value[remarkSheets.value.length - 1] || '';
+                    } else { alert(j.msg || '读取 sheet 失败'); }
+                }).catch(err => alert('读取 sheet 失败: ' + err.message));
+        }
+        async function doRemarkImport() {
+            if (!remarkFile || !remarkSheet.value) return;
+            remarkImporting.value = true;
+            try {
+                const fd = new FormData();
+                fd.append('file', remarkFile); fd.append('sheet', remarkSheet.value);
+                const r = await authFetch('/api/insurance/remark-options/import', { method:'POST', body: fd });
+                const j = await r.json();
+                alert(j.msg || '完成');
+                remarkSheets.value = []; remarkSheet.value = ''; remarkFile = null;
+                if (remarkFileEl.value) remarkFileEl.value.value = '';
+                await loadRemarkCfg();
+            } catch (e) { alert('导入失败: ' + e.message); }
+            finally { remarkImporting.value = false; }
+        }
+        async function clearRemarkPool() {
+            if (!confirm('确认清空当前选项池？历史已选备注不受影响')) return;
+            try {
+                const r = await authFetch('/api/insurance/remark-options', { method:'DELETE' });
+                const j = await r.json();
+                alert(j.msg || '已清空');
+                await loadRemarkCfg();
+            } catch (e) { alert('清空失败: ' + e.message); }
+        }
 
         // 标记原始差异字段在合并模式下隐藏（清理和补充由后端处理）
         function applyMergeHidden() {
@@ -2140,6 +2262,8 @@ createApp({
             Promise.all([loadColumnConfig('export_columns'), loadMergeConfig(), loadPlateFormatConfig()]).then(() => {
                 applyMergeHidden();
             });
+            // 加载备注快捷选择配置
+            loadRemarkCfg();
             // 初始加载完成后才启用自动保存
             nextTick(() => { configLoaded = true; });
         });
@@ -2172,6 +2296,10 @@ createApp({
             fixedValues, saveFixedValues,
             mergeByPlate, loadMergeConfig, saveMergeConfig, toggleMergeByPlate,
             plateFormatPingan, loadPlateFormatConfig, savePlateFormatConfig, togglePlateFormatPingan,
+            // 备注快捷选择
+            remarkCfg, remarkStats, remarkFieldKeys, remarkSheets, remarkSheet,
+            remarkSaving, remarkImporting, remarkFileEl,
+            onRemarkFile, doRemarkImport, saveRemarkCfg, clearRemarkPool,
         };
     }
 }).mount('#app');
