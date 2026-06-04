@@ -382,6 +382,27 @@ def init_insurance_tables(db):
         except Exception:
             pass
 
+        # 备注快捷选择 - 选项池表（按 scope 隔离，每日清空重导）
+        try:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS insurance_remark_options (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    scope VARCHAR(16) NOT NULL DEFAULT 'global' COMMENT 'global/enterprise/user',
+                    scope_id VARCHAR(64) DEFAULT NULL COMMENT '企业parent_id或user_id',
+                    handler VARCHAR(64) DEFAULT '' COMMENT '经办人',
+                    company VARCHAR(128) DEFAULT '' COMMENT '投保公司',
+                    policy_type VARCHAR(64) DEFAULT '' COMMENT '险种名称',
+                    remark TEXT COMMENT '备注信息',
+                    batch_no VARCHAR(32) DEFAULT '' COMMENT '导入批次(时间戳)',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    KEY idx_remark_opt_scope (scope, scope_id, handler, company, policy_type)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='备注快捷选择选项池'
+                """
+            )
+        except Exception:
+            pass
+
         conn.commit()
         logger.info("保单识别数据库表初始化完成（DDL）")
     finally:
