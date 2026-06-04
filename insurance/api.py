@@ -36,7 +36,7 @@ from .field_config_db import (
     rename_template, update_template_visibility, delete_template as delete_template_db,
     get_template_config, save_full_template,
     get_active_template, set_active_template,
-    get_effective_config, apply_user_config_to_fields, _format_date,
+    get_effective_config, apply_user_config_to_fields, match_fee_formulas, _format_date,
     get_column_config, save_column_config, delete_column_config,
     get_user_fixed_values, save_user_fixed_values,
     get_merge_by_plate, save_merge_by_plate,
@@ -2736,6 +2736,62 @@ def batch_sync_dingtalk():
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
+# ------------------------------------------------------------------ #
+# Excel 导出：活公式 / 数字单元格 辅助
+# ------------------------------------------------------------------ #
+
+def _formula_to_excel(formula_display, col_letter_map, row_num):
+    """
+    将「按字段名引用」的公式转换为 Excel 活公式（按单元格引用）。
+
+    formula_display: 如 "保费 × 应付费率"
+    col_letter_map:  {字段key: 列字母}，如 {"保费": "K", "应付费率": "M"}
+    row_num:         当前数据所在的 Excel 行号
+
+    返回如 "=K2*M2"。若公式引用了「未导出的列」（替换后仍残留中文），返回 None，
+    由调用方回退为静态值。
+    """
+    expr = str(formula_display).replace("×", "*").replace("÷", "/")
+    # 按字段名长度降序替换，避免短字段名替换掉长字段名的一部分
+    for key in sorted(col_letter_map.keys(), key=len, reverse=True):
+        if key and key in expr:
+            expr = expr.replace(key, f"{col_letter_map[key]}{row_num}")
+    expr = expr.strip()
+    if not expr:
+        return None
+    # 仍含中文 → 引用了未导出列，放弃（回退静态值）
+    if re.search(r"[一-鿿]", expr):
+        return None
+    # 仅允许：字母(单元格列)、数字、运算符、括号、小数点、空格
+    if not re.match(r"^[A-Za-z0-9\s\+\-\*\/\.\(\)]+$", expr):
+        return None
+    return "=" + expr
+
+
+def _percent_text_to_decimal(s):
+    """ "20%" / "20.0%" → 0.2（小数）。非纯百分比数字返回 None。"""
+    if not isinstance(s, str):
+        return None
+    t = s.strip()
+    if not t.endswith("%"):
+        return None
+    body = t[:-1].strip().replace(",", "")
+    if re.fullmatch(r"-?\d+(\.\d+)?", body):
+        return float(body) / 100
+    return None
+
+
+def _pure_number(s):
+    """纯数字字符串 → int/float，否则 None（用于把公式引用的金额列转为数字单元格）。"""
+    if not isinstance(s, str):
+        return None
+    t = s.strip().replace(",", "")
+    if re.fullmatch(r"-?\d+(\.\d+)?", t):
+        f = float(t)
+        return int(f) if f == int(f) else f
+    return None
+
+
 @insurance_bp.route("/api/insurance/export/excel", methods=["POST"])
 def export_excel():
     """
@@ -2811,6 +2867,48 @@ def export_excel():
                     user_config = {}
                 user_config["fixed_values"] = export_fixed_vals
             has_config = user_config and any(user_config.get(k) for k in user_config)
+
+            # ---- 活公式导出准备 ----
+            # 字段key → 列字母（用于把公式中的字段名替换为单元格引用）
+            col_letter_map = {f: get_column_letter(i + 1) for i, f in enumerate(field_names)}
+            # 公式引用到的「金额列」集合：导出时需写成数字单元格，公式才能计算
+            formula_referenced_cols = set()
+            for _item in (user_config or {}).get("fee_formula", []):
+                _val = _item.get("value", "")
+                _disp = _val.get("display", "") if isinstance(_val, dict) else str(_val)
+                _norm = _disp.replace("×", "*").replace("÷", "/")
+                for _c in field_names:
+                    if _c and _c in _norm:
+                        formula_referenced_cols.add(_c)
+
+            def _postprocess_row(row_idx, src_fields):
+                """把刚写入的一行做三类单元格修正：公式列→活公式；费率列→小数+百分比格式；
+                公式引用的金额列→数字。src_fields 为该行的字段字典（用于按公司/险种匹配公式）。"""
+                if not has_config:
+                    return
+                # 该行匹配到的「计算公式」：目标字段 → 公式表达式
+                formula_map = {tf: f for tf, f, is_comp in match_fee_formulas(user_config, src_fields) if is_comp}
+                for cidx, col in enumerate(field_names, start=1):
+                    cell = ws.cell(row=row_idx, column=cidx)
+                    cur = cell.value
+                    # 1) 公式目标列 → Excel 活公式（失败则回退静态值）
+                    if col in formula_map:
+                        excel_f = _formula_to_excel(formula_map[col], col_letter_map, row_idx)
+                        if excel_f:
+                            cell.value = excel_f
+                            cell.number_format = "0.00"
+                            continue
+                    # 2) 费率列（值形如 "20%"）→ 转小数 + 百分比格式，使其能参与公式
+                    dec = _percent_text_to_decimal(cur)
+                    if dec is not None:
+                        cell.value = dec
+                        cell.number_format = "0.0%"
+                        continue
+                    # 3) 公式引用到的金额列 → 转数字
+                    if col in formula_referenced_cols:
+                        num = _pure_number(cur)
+                        if num is not None:
+                            cell.value = num
 
             # 前端标记数据是否已经过 apply_user_config 处理（识别记录导出时为 True）
             # 避免重复应用险种简称等别名导致值被二次转换
@@ -2977,6 +3075,8 @@ def export_excel():
                     for col in field_names:
                         row.append(row_data.get(col, ""))
                     ws.append(row)
+                    # 合并模式：行内已无险种，多按公司匹配公式；命中则写活公式，否则保留静态值
+                    _postprocess_row(ws.max_row, row_data)
             else:
                 # ---- 普通导出（不合并，直接按用户勾选的列导出） ----
                 if field_display_names:
@@ -3006,6 +3106,8 @@ def export_excel():
                         else:
                             row.append(fields.get(col, ""))
                     ws.append(row)
+                    # 写入活公式 / 费率列转百分比数字 / 公式引用的金额列转数字
+                    _postprocess_row(ws.max_row, fields)
 
         # 设置所有行高为 22
         for row_idx in range(1, ws.max_row + 1):

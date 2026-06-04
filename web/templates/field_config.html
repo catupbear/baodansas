@@ -637,6 +637,7 @@
                                 <th>字段标识</th>
                                 <th style="width:180px;">显示名称</th>
                                 <th style="width:150px;">固定值</th>
+                                <th style="width:60px;">百分比</th>
                                 <th style="width:40px;"></th>
                             </tr>
                         </thead>
@@ -655,6 +656,7 @@
                                 <td style="color:var(--text-muted);">{{ col.key }}<span v-if="col.custom" style="margin-left:6px;font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:3px;">自定义</span></td>
                                 <td><input type="text" v-model="col.display_name" :disabled="activeSource === 'enterprise'" :placeholder="col.key" /></td>
                                 <td><input v-if="col.custom" type="text" v-model="fixedValues[col.key]" placeholder="无数据时自动填充" style="font-size:12px;" @change="saveFixedValues" /></td>
+                                <td style="text-align:center;"><input v-if="col.custom" type="checkbox" v-model="col.is_percent" :disabled="activeSource === 'enterprise'" title="勾选后此列按百分比处理：填 10 表示 10%，公式按 0.1 计算，导出显示 10%" /></td>
                                 <td><button v-if="col.custom" @click="removeCustomCol(listColItems, idx)" :disabled="activeSource === 'enterprise'" style="color:var(--danger);cursor:pointer;background:none;border:none;font-size:14px;" title="删除">✕</button></td>
                             </tr>
                         </tbody>
@@ -730,6 +732,7 @@
                                 <th>字段标识</th>
                                 <th style="width:180px;">Excel 列头</th>
                                 <th style="width:150px;">固定值</th>
+                                <th style="width:60px;">百分比</th>
                                 <th style="width:40px;"></th>
                             </tr>
                         </thead>
@@ -748,6 +751,7 @@
                                 <td style="color:var(--text-muted);">{{ col.key }}<span v-if="col.merge" style="margin-left:6px;font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;">合并</span><span v-else-if="col.custom" style="margin-left:6px;font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:3px;">自定义</span></td>
                                 <td><input type="text" v-model="col.display_name" :disabled="activeSource === 'enterprise'" :placeholder="col.key" /></td>
                                 <td><input v-if="col.custom && !col.merge" type="text" v-model="fixedValues[col.key]" placeholder="无数据时自动填充" style="font-size:12px;" @change="saveFixedValues" /></td>
+                                <td style="text-align:center;"><input v-if="col.custom && !col.merge" type="checkbox" v-model="col.is_percent" :disabled="activeSource === 'enterprise'" title="勾选后此列按百分比处理：填 10 表示 10%，公式按 0.1 计算，导出显示 10%" /></td>
                                 <td><button v-if="col.custom && !col.merge" @click="removeCustomCol(exportColItems, idx)" :disabled="activeSource === 'enterprise'" style="color:var(--danger);cursor:pointer;background:none;border:none;font-size:14px;" title="删除">✕</button></td>
                             </tr>
                         </tbody>
@@ -1181,6 +1185,13 @@ createApp({
                     targetItems.splice(i, 1);
                 }
             }
+            // 同步「百分比」标记（字段级属性，两侧保持一致；以当前保存的这一侧为准）
+            const srcPercent = new Map(sourceItems.filter(c => c.custom).map(c => [c.key, !!c.is_percent]));
+            for (const t of targetItems) {
+                if (t.custom && srcPercent.has(t.key)) {
+                    t.is_percent = srcPercent.get(t.key);
+                }
+            }
         };
 
         const saveColumnConfig = async (configType) => {
@@ -1318,7 +1329,7 @@ createApp({
                 showToast('字段已存在', 'error');
                 return;
             }
-            const newCol = { key: name, visible: true, order: items.length, display_name: name, custom: true };
+            const newCol = { key: name, visible: true, order: items.length, display_name: name, custom: true, is_percent: false };
             items.push(newCol);
             // 双向同步：添加到另一侧
             if (target === 'list') {
@@ -1352,11 +1363,17 @@ createApp({
             const listKeys = new Set(listColItems.value.map(c => c.key));
             // 导出列中独有的字段（页面列没有的）
             const exportOnly = exportColItems.value.filter(c => !listKeys.has(c.key));
-            // 用页面列的顺序、可见性、显示名覆盖
-            const synced = listColItems.value.map((col, idx) => ({
-                key: col.key, visible: col.visible, order: idx,
-                display_name: col.display_name, custom: col.custom || false,
-            }));
+            // 用页面列的顺序、可见性、显示名覆盖；保留导出侧已设置的「百分比」标记
+            const exportByKey = new Map(exportColItems.value.map(c => [c.key, c]));
+            const synced = listColItems.value.map((col, idx) => {
+                const ex = exportByKey.get(col.key);
+                const item = {
+                    key: col.key, visible: col.visible, order: idx,
+                    display_name: col.display_name, custom: col.custom || false,
+                };
+                if (col.is_percent || (ex && ex.is_percent)) item.is_percent = true;
+                return item;
+            });
             // 追加导出列独有的字段
             for (const col of exportOnly) {
                 synced.push({ ...col, order: synced.length });

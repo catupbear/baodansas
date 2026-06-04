@@ -696,6 +696,14 @@ def get_effective_config(db, user_id: int, role: str, parent_id=None) -> dict:
             config = {}
         config["plate_format_pingan"] = True
 
+    # 注入「百分比」标记字段集合：列配置中勾选了 is_percent 的自定义字段
+    # 用于 apply_user_config_to_fields 把用户填的百分数（10）按 10% 处理
+    percent_keys = get_percent_fields(db, user_id, role, parent_id)
+    if percent_keys:
+        if config is None:
+            config = {}
+        config["percent_fields"] = percent_keys
+
     return config
 
 
@@ -864,6 +872,27 @@ def get_column_config(db, config_type: str, user_id: int, role: str, parent_id=N
         return {"source": "default", "columns": list(DEFAULT_COLUMNS)}
     finally:
         conn.close()
+
+
+def get_percent_fields(db, user_id: int, role: str, parent_id=None) -> set:
+    """
+    返回被标记为「百分比」的自定义字段 key 集合。
+
+    取导出列配置 + 页面列配置中 is_percent=True 的列（并集，前端两侧同步，
+    取并集可兼容任一侧先勾选/同步未及时的情况）。这类字段：
+    - 用户填的是百分数（如填 "10" 表示 10%）
+    - 公式计算时按 0.1 参与，显示时转回 "10%"
+    """
+    keys = set()
+    for config_type in ("export_columns", "list_columns"):
+        try:
+            cfg = get_column_config(db, config_type, user_id, role, parent_id)
+            for c in cfg.get("columns", []):
+                if c.get("is_percent") and c.get("key"):
+                    keys.add(c["key"])
+        except Exception:
+            logger.debug("读取百分比字段配置失败: %s", config_type)
+    return keys
 
 
 def save_column_config(db, config_type: str, scope: str, scope_id, columns: list,
@@ -1208,6 +1237,50 @@ def evaluate_formula(formula: str, fields: dict) -> str:
         return ""
 
 
+def match_fee_formulas(config: dict, fields: dict) -> list:
+    """
+    筛选出匹配当前记录的公式列表。
+
+    返回 [(target_field, formula, is_computed), ...]：
+    - target_field：公式目标字段名
+    - formula：公式表达式（display，按字段名引用）
+    - is_computed：是否为「计算公式」（引用了记录中的其他字段，如"保费 × 应付费率"）。
+                   False 表示「常量公式」（纯数字，如"0"、"500"）。
+
+    公式 key 格式："目标字段:公司简称:险种简称"，按公司/险种匹配当前记录。
+    供 apply_user_config_to_fields 与导出（生成 Excel 活公式）共用，避免匹配逻辑重复。
+    """
+    record_company = fields.get("保险公司简称") or fields.get("承保公司") or fields.get("保险公司") or ""
+    record_policy_type = fields.get("险种类型") or fields.get("险种") or ""
+    all_field_keys = set(fields.keys())
+
+    matched = []
+    for item in (config or {}).get("fee_formula", []):
+        raw_key = item.get("key", "")
+        raw_value = item.get("value", "")
+        if not raw_key:
+            continue
+        parts = raw_key.split(":", 2)
+        target_field = parts[0]
+        rule_company = parts[1] if len(parts) > 1 else ""
+        rule_policy_type = parts[2] if len(parts) > 2 else ""
+        if rule_company and rule_company != "全部" and rule_company not in record_company and record_company not in rule_company:
+            continue
+        if rule_policy_type and rule_policy_type != "全部" and rule_policy_type not in record_policy_type and record_policy_type not in rule_policy_type:
+            continue
+        if isinstance(raw_value, dict):
+            formula = raw_value.get("display", "")
+        else:
+            formula = str(raw_value)
+        if not (target_field and formula):
+            continue
+        # 计算公式 vs 常量公式：公式中是否出现记录里的其他字段名
+        normalized = formula.replace("×", "*").replace("÷", "/")
+        is_computed = any(k in normalized for k in all_field_keys)
+        matched.append((target_field, formula, is_computed))
+    return matched
+
+
 def apply_user_config_to_fields(config: dict, fields: dict, formula_only: bool = False) -> dict:
     """
     将用户字段配置应用到一条保单记录，返回 fields 的副本。
@@ -1325,55 +1398,36 @@ def apply_user_config_to_fields(config: dict, fields: dict, formula_only: bool =
             if ts_field in result and ts_field not in date_fmt_map and result[ts_field]:
                 result[ts_field] = _format_date(str(result[ts_field]), "YYYY-MM-DD HH:mm", _date_no_pad)
 
+    # 3.5 百分比标记字段归一化（is_percent）
+    # 用户在这类列填的是「百分数」（如填 "10" 表示 10%），统一还原为小数（0.1）：
+    #   - 供下方公式按 0.1 参与计算（如 应付手续费 = 保费 × 费率）
+    #   - 末尾随 rate_fields 一起转回 "10%" 显示
+    # 兼容已带 "%" 的值（"10%" 同样还原为 0.1），保证幂等。
+    percent_fields = config.get("percent_fields") or set()
+    for _pf in percent_fields:
+        raw = result.get(_pf)
+        if raw in (None, ""):
+            continue
+        txt = str(raw).strip().rstrip("%").replace(",", "")
+        if re.fullmatch(r"-?\d+(\.\d+)?", txt):
+            result[_pf] = str(float(txt) / 100)
+
     # 4. 公式计算（key格式："目标字段:公司简称:险种简称"）
     # 先用原始数值计算所有公式，最后再转百分比显示，避免"率"字段被提前转成"10%"影响后续公式
     # 多轮计算：公式之间可能有依赖（如"合计应付手续费"依赖"应付费率"），
     # 第一轮计算后，用更新的值再算一轮，确保依赖链正确传递
-    record_company = result.get("保险公司简称") or result.get("承保公司") or result.get("保险公司") or ""
-    record_policy_type = result.get("险种类型") or result.get("险种") or ""
     rate_fields = []  # 记录需要转百分比的字段
 
-    # 预处理：筛选出匹配当前记录的公式列表
-    matched_formulas = []
-    for item in config.get("fee_formula", []):
-        raw_key = item.get("key", "")
-        raw_value = item.get("value", "")
-        if not raw_key:
-            continue
-        parts = raw_key.split(":", 2)
-        target_field = parts[0]
-        rule_company = parts[1] if len(parts) > 1 else ""
-        rule_policy_type = parts[2] if len(parts) > 2 else ""
-        if rule_company and rule_company != "全部" and rule_company not in record_company and record_company not in rule_company:
-            continue
-        if rule_policy_type and rule_policy_type != "全部" and rule_policy_type not in record_policy_type and record_policy_type not in rule_policy_type:
-            continue
-        if isinstance(raw_value, dict):
-            formula = raw_value.get("display", "")
-        else:
-            formula = str(raw_value)
-        if target_field and formula:
-            matched_formulas.append((target_field, formula))
-
-    # 收集所有公式目标字段，用于判断是否需要第二轮
-    formula_targets = {tf for tf, _ in matched_formulas}
-
-    # 判断公式是否引用了其他字段（计算公式 vs 常量公式）
-    # 常量公式（如"0"、"500"）→ 尊重 manual_fields，不覆盖手动值
-    # 计算公式（引用其他字段，如"保费 × (应付费率 ÷ 100)"）→ 始终重算
-    all_field_keys = set(result.keys())
-    def _is_computed_formula(formula_str: str) -> bool:
-        """判断公式是否引用了记录中的其他字段"""
-        normalized = formula_str.replace("×", "*").replace("÷", "/")
-        return any(k in normalized for k in all_field_keys)
+    # 预处理：筛选出匹配当前记录的公式列表（含 is_computed 标记，逻辑统一在 match_fee_formulas）
+    matched_formulas = match_fee_formulas(config, result)
 
     for round_idx in range(2):
         changed = False
-        for target_field, formula in matched_formulas:
+        for target_field, formula, is_computed in matched_formulas:
             if target_field in manual_fields:
                 # 计算公式（引用其他字段）→ 强制重算，覆盖手动值
                 # 常量公式（纯数字）→ 尊重手动值，跳过
-                if not _is_computed_formula(formula):
+                if not is_computed:
                     if round_idx == 0 and "率" in target_field:
                         rate_fields.append(target_field)
                     continue
@@ -1398,6 +1452,18 @@ def apply_user_config_to_fields(config: dict, fields: dict, formula_only: bool =
                 result[field] = f"{val * 100:g}%"
             else:
                 result[field] = f"{val:g}%"
+        except (ValueError, TypeError):
+            pass
+
+    # 百分比标记字段（is_percent）：已归一化为小数，统一 ×100 转回百分比显示。
+    # 这里不复用上面的 abs<1 启发式，避免 ">=100%" 的值（如 1.5）被误判。
+    # 若值已是 "10%"（float 失败）则原样保留，保证与 rate_fields 不冲突、幂等。
+    for _pf in percent_fields:
+        raw = result.get(_pf)
+        if raw in (None, ""):
+            continue
+        try:
+            result[_pf] = f"{float(raw) * 100:g}%"
         except (ValueError, TypeError):
             pass
 
