@@ -2282,10 +2282,15 @@ def remark_options_import():
         sheet = request.form.get("sheet", "")
         if not f or not sheet:
             return jsonify({"code": 400, "msg": "缺少文件或 sheet"}), 400
-        rows = remark_options_db.parse_sheet_rows(f.read(), sheet)
+        parsed = remark_options_db.parse_sheet_rows(f.read(), sheet)
+        rows = parsed["rows"]
+        missing = parsed["missing"]
         scope, scope_id, template_name = _resolve_remark_settings_target()
         n = remark_options_db.import_options(_db, scope, scope_id, template_name, rows)
-        return jsonify({"code": 0, "msg": f"导入成功 {n} 条", "data": {"count": n}})
+        msg = f"导入成功 {n} 条"
+        if missing:
+            msg += f"；注意：该表缺少 [{'、'.join(missing)}] 列，对应筛选条件将无法生效"
+        return jsonify({"code": 0, "msg": msg, "data": {"count": n, "missing": missing}})
     except Exception as e:
         logger.exception("导入备注选项池失败")
         return jsonify({"code": 500, "msg": str(e)}), 500

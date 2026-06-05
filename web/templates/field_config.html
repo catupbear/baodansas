@@ -806,6 +806,10 @@
                 当前选项池：<b>{{ remarkStats.count }}</b> 条
                 <span v-if="remarkStats.last_import" style="color:var(--text-muted);">· 最后导入 {{ fmtRemarkTime(remarkStats.last_import) }}</span>
             </div>
+            <div v-if="remarkImportMissing.length" style="display:flex; align-items:flex-start; gap:6px; margin-bottom:12px; padding:8px 12px; background:#fffbeb; border:1px solid #fde68a; border-radius:8px; font-size:12px; color:#92400e; line-height:1.5;">
+                <span style="flex-shrink:0;">⚠</span>
+                <span>上次导入的表缺少 <b>{{ remarkImportMissing.join('、') }}</b> 列，这些字段不会参与联动筛选。请确认 Excel 表头包含 日期 / 经办人 / 投保公司 / 备注信息 / 险种名称。</span>
+            </div>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                 <input type="file" accept=".xlsx,.xls" @change="onRemarkFile" ref="remarkFileEl">
                 <select v-if="remarkSheets.length" v-model="remarkSheet" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
@@ -1165,6 +1169,7 @@ createApp({
         const remarkSheet = ref('');
         const remarkSaving = ref(false);
         const remarkImporting = ref(false);
+        const remarkImportMissing = ref([]);   // 上次导入缺失的列
         const remarkFileEl = ref(null);
         let remarkFile = null;
         // 字段候选：页面列 + 导出列 + 当前已配置值 的并集（确保已配置项始终可选，不出现空白）
@@ -1245,6 +1250,7 @@ createApp({
                 remarkInjectTarget(fd);
                 const r = await authFetch('/api/insurance/remark-options/import', { method:'POST', body: fd });
                 const j = await r.json();
+                remarkImportMissing.value = (j.data && j.data.missing) ? j.data.missing : [];
                 alert(j.msg || '完成');
                 remarkSheets.value = []; remarkSheet.value = ''; remarkFile = null;
                 if (remarkFileEl.value) remarkFileEl.value.value = '';
@@ -2335,7 +2341,7 @@ createApp({
             plateFormatPingan, loadPlateFormatConfig, savePlateFormatConfig, togglePlateFormatPingan,
             // 备注快捷选择
             remarkCfg, remarkStats, remarkFieldKeys, remarkSheets, remarkSheet,
-            remarkSaving, remarkImporting, remarkFileEl,
+            remarkSaving, remarkImporting, remarkImportMissing, remarkFileEl,
             onRemarkFile, doRemarkImport, saveRemarkCfg, clearRemarkPool, fmtRemarkTime,
         };
     }

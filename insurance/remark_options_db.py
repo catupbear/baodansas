@@ -37,10 +37,16 @@ def read_sheet_names(file_bytes: bytes) -> list:
         wb.close()
 
 
-def parse_sheet_rows(file_bytes: bytes, sheet_name: str) -> list:
+# 期望存在的筛选列（remark 为必需，单独校验）：内部 key → 提示用列名
+_EXPECTED_FILTER_COLS = [("handler", "经办人"), ("company", "投保公司"), ("policy_type", "险种名称")]
+
+
+def parse_sheet_rows(file_bytes: bytes, sheet_name: str) -> dict:
     """
-    解析指定 sheet，返回 [{"handler","company","policy_type","remark"}, ...]。
+    解析指定 sheet，返回 {"rows": [...], "missing": [缺失的筛选列名], "found": [存在的筛选列名]}。
+    rows 每项为 {"handler","company","policy_type","remark"}。
     按表头名定位列（容忍尾部多余空列、列顺序变化）；remark 为空的行跳过。
+    缺少「备注信息」列直接报错；缺少经办人/投保公司/险种名称仅记录到 missing，不报错。
     """
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
     try:
@@ -51,7 +57,7 @@ def parse_sheet_rows(file_bytes: bytes, sheet_name: str) -> list:
         try:
             header = next(rows_iter)
         except StopIteration:
-            return []
+            return {"rows": [], "missing": [c[1] for c in _EXPECTED_FILTER_COLS], "found": []}
         # 表头列名 → 列索引
         col_idx = {}
         for i, name in enumerate(header):
@@ -60,6 +66,9 @@ def parse_sheet_rows(file_bytes: bytes, sheet_name: str) -> list:
                 col_idx[key] = i
         if "remark" not in col_idx:
             raise ValueError("未找到「备注信息」列")
+
+        missing = [label for key, label in _EXPECTED_FILTER_COLS if key not in col_idx]
+        found = [label for key, label in _EXPECTED_FILTER_COLS if key in col_idx]
 
         def _cell(row, key):
             i = col_idx.get(key)
@@ -80,7 +89,7 @@ def parse_sheet_rows(file_bytes: bytes, sheet_name: str) -> list:
                 "policy_type": _cell(row, "policy_type"),
                 "remark": remark,
             })
-        return out
+        return {"rows": out, "missing": missing, "found": found}
     finally:
         wb.close()
 
