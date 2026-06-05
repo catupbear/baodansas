@@ -449,6 +449,7 @@
                 <button class="tab-btn" :class="{active: activeTab==='formula'}" @click="activeTab='formula'">自动计算公式</button>
                 <button class="tab-btn" :class="{active: activeTab==='listCols'}" @click="activeTab='listCols'">页面列配置</button>
                 <button class="tab-btn" :class="{active: activeTab==='exportCols'}" @click="activeTab='exportCols'">导出列配置</button>
+                <button class="tab-btn" :class="{active: activeTab==='remark'}" @click="activeTab='remark'">备注快捷选择</button>
             </div>
 
             <!-- Tab 1: 别名设置 -->
@@ -766,11 +767,9 @@
                 </div>
             </div>
 
-        </div>
-
-        <!-- 备注快捷选择 -->
-        <div class="card" style="margin-top:24px;">
-            <h3 style="font-size:16px; font-weight:600; margin-bottom:4px;">备注快捷选择</h3>
+            <!-- Tab 6: 备注快捷选择 -->
+            <div v-show="activeTab==='remark'" style="padding:24px;">
+                <h3 style="font-size:16px; font-weight:600; margin-bottom:4px;">备注快捷选择</h3>
             <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">
                 按经办人 / 投保公司 / 险种联动筛选备注话术，供台账「备注」字段快捷点选。选项池来自每日上传的 Excel，导入会清空旧池但不影响历史已选值。
             </p>
@@ -818,6 +817,8 @@
             <div style="margin-top:8px; font-size:11px; color:var(--text-muted);">
                 上传 Excel 后选择要导入的 sheet（默认最后一个），点击导入即清空旧池并写入。
             </div>
+            </div>
+
         </div>
     </div>
 
@@ -1166,8 +1167,15 @@ createApp({
         const remarkImporting = ref(false);
         const remarkFileEl = ref(null);
         let remarkFile = null;
-        // 字段候选：取自列配置（list_columns）的字段 key
-        const remarkFieldKeys = computed(() => (listColItems.value || []).map(c => c.key));
+        // 字段候选：页面列 + 导出列 + 当前已配置值 的并集（确保已配置项始终可选，不出现空白）
+        const remarkFieldKeys = computed(() => {
+            const keys = [];
+            const push = k => { if (k && !keys.includes(k)) keys.push(k); };
+            (listColItems.value || []).forEach(c => push(c.key));
+            (exportColItems.value || []).forEach(c => push(c.key));
+            ['target_key', 'key_handler', 'key_company', 'key_policy_type'].forEach(f => push(remarkCfg[f]));
+            return keys;
+        });
 
         async function loadRemarkCfg() {
             try {
