@@ -1326,29 +1326,31 @@ class InsuranceHandler:
                     garbled_count += 1
                 elif cp < 0x20 and ch not in '\n\r\t':  # 控制字符
                     garbled_count += 1
-            # U+FFFE/U+FFFF 出现时：白名单保司清理非字符后继续用 pdfplumber，其余降级 OCR
-            # 部分保司（如太平洋）PDF 虽含非字符但 pdfplumber 提取文本可用
-            _NONCHAR_WHITELIST = {"太平洋"}
+            # U+FFFE/U+FFFF 出现时：不再按保司白名单判断，而是清理非字符后用解析质量决定。
+            # 很多保司（人保、太平洋等）PDF 虽含非字符，但清理后文本完全可用；若直接降级 OCR
+            # 反而引入 OCR 误识（如车牌 0→O）。仅当清理后文本仍解析不出有效保单时才降级。
             garbled_ratio = garbled_count / len(text) if text else 0
             if has_nonchar:
-                # 白名单保司的 PDF 虽含非字符但 pdfplumber 文本可用，跳过降级
-                _NONCHAR_KW = {"太平洋": "太平洋产险"}
-                matched_company = ""
-                for short, kw in _NONCHAR_KW.items():
-                    if kw in text:
-                        matched_company = short
-                        break
-                if matched_company:
-                    # 清理非字符后继续使用 pdfplumber 文本
-                    text = ''.join(ch for ch in text if ord(ch) not in
-                                   (0xFFFE, 0xFFFF) and not (0xFDD0 <= ord(ch) <= 0xFDEF))
+                cleaned = ''.join(ch for ch in text if ord(ch) not in
+                                  (0xFFFE, 0xFFFF) and not (0xFDD0 <= ord(ch) <= 0xFDEF))
+                keep_pdfplumber = False
+                try:
+                    prelim = parse_policy_text(cleaned)
+                    conf = prelim.get("confidence", 0)
+                    cat = prelim.get("doc_category", "")
+                    keep_pdfplumber = conf >= 0.4 and cat != "其他"
+                except Exception as e:
+                    logger.warning("非字符清理后质量检查失败: %s", e)
+                if keep_pdfplumber:
+                    # 清理非字符后继续使用 pdfplumber 文本（比 OCR 更准确）
+                    text = cleaned
                     logger.info(
-                        "pdfplumber 含Unicode非字符（count=%d）但检测到[%s]，清理后继续使用",
-                        garbled_count, matched_company,
+                        "pdfplumber 含Unicode非字符（count=%d）但清理后文本可用（confidence=%.2f），继续使用",
+                        garbled_count, conf,
                     )
                 else:
                     logger.info(
-                        "pdfplumber 提取文本含Unicode非字符（U+FFFE/U+FFFF），字体编码异常，降级 OCR（count=%d）",
+                        "pdfplumber 含Unicode非字符且清理后仍无法解析有效保单，降级 OCR（count=%d）",
                         garbled_count,
                     )
                     needs_fallback = True

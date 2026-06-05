@@ -1464,6 +1464,12 @@ def _extract_insured(text: str, text_merged: str, fields: dict, company_short: s
         if "被保险人" in fields:
             return
 
+    # ===== 阳光商业险：被保险人合并单元格，标签落在地址行 =====
+    if company_short == "阳光":
+        _extract_insured_yangguang(text, text_merged, fields)
+        if "被保险人" in fields:
+            return
+
     # ===== 通用提取逻辑 =====
     _extract_insured_common(text, text_merged, fields)
 
@@ -1772,6 +1778,37 @@ def _extract_insured_zhonghua(text: str, text_merged: str, fields: dict):
         val = _clean_person_name(m.group(1))
         if _is_valid_person(val):
             fields["被保险人"] = val
+
+
+def _extract_insured_yangguang(text: str, text_merged: str, fields: dict):
+    """阳光商业险被保险人提取。
+
+    阳光保单中"被保险人"为合并单元格（跨"名称""地址"两行），pdfplumber 把合并标签
+    落在了"地址"行，导致真正的被保险人名称所在的"名称 XXX 证件号码 YYY"行没有被
+    "被保险人"标签关联。典型布局：
+        投保人 薛德民
+        名称 深圳市民丰胶粘制品有限公司 证件号码 91440300326351425P
+        被保险人 广东省...（地址值，地址标签掉到下一行）
+        地址 联系方式 136****7771
+    策略：定位"被保险人"标签行，向上回溯最近的"名称 XXX 证件号码"行取名称。
+    """
+    lines = text.split('\n')
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        # 被保险人标签行：独立成行，或后跟地址等值（而非姓名）
+        if stripped == '被保险人' or re.match(r'^被保险人[\s（(]', stripped):
+            # 向上回溯最近的"名称 XXX 证件号码"行（含标签行本身，兜底名称与标签同行）
+            for j in range(i, max(-1, i - 4), -1):
+                m = re.search(
+                    r'名称\s+([一-鿿][一-鿿（）()·\w]{1,38}?)\s+证件号码',
+                    lines[j],
+                )
+                if m:
+                    val = _clean_person_name(m.group(1))
+                    if _is_valid_person(val):
+                        fields["被保险人"] = val
+                        return
+            break
 
 
 def _extract_insured_common(text: str, text_merged: str, fields: dict):
@@ -2241,6 +2278,24 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
 # 车辆信息提取
 # ============================================================
 
+def _normalize_plate(plate: str) -> str:
+    """归一化车牌序号中的 OCR 易混字符。
+
+    依据国标 GA 36-2018：车牌序号（第2位发牌机关代号之后的部分）只使用
+    数字 0-9 和字母 A-Z，且不含字母 I、O（即为避免与数字 1、0 混淆）。
+    因此序号里出现的 O/I 必然是 OCR 误识，归一化为 0/1。
+    省份汉字(第0位)与发牌机关代号字母(第1位)保持不变。
+    """
+    # 仅处理标准车牌：省份汉字 + 字母 + 序号
+    PROVINCE_CHARS = "京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁"
+    if not plate or len(plate) < 3:
+        return plate
+    if plate[0] not in PROVINCE_CHARS or not plate[1].isalpha():
+        return plate
+    seq = plate[2:].replace("O", "0").replace("I", "1")
+    return plate[:2] + seq
+
+
 def _extract_vehicle_info(text: str, fields: dict, company_short: str):
     """提取车牌号、车架号、发动机号等"""
 
@@ -2323,6 +2378,10 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
                         fields["车牌号"] = prov + rest
                         break
                 break
+
+    # 归一化车牌序号中的 OCR 易混字符（O→0、I→1），排除"新车"等占位值
+    if fields.get("车牌号") and fields["车牌号"] != "新车":
+        fields["车牌号"] = _normalize_plate(fields["车牌号"])
 
     # 车架号/VIN
     for p in [
