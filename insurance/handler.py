@@ -665,7 +665,8 @@ class InsuranceHandler:
         passwd = sdk_conf.get("proxy_passwd", "")
         timeout = sdk_conf.get("timeout", 30)
 
-        try:
+        # 单次下载尝试：成功返回 (True, bytes)，失败返回 (False, ret 错误码)
+        def _try_once():
             if filesize > MAX_MEMORY_SIZE:
                 # 大文件走临时文件，避免占用大量内存
                 tmp_fd, tmp_path = tempfile.mkstemp(suffix=".pdf")
@@ -675,10 +676,9 @@ class InsuranceHandler:
                         sdkfileid, proxy, passwd, timeout, tmp_path
                     )
                     if ret != 0:
-                        logger.error("下载大文件失败, ret=%d", ret)
-                        return b""
+                        return False, ret
                     with open(tmp_path, "rb") as f:
-                        return f.read()
+                        return True, f.read()
                 finally:
                     try:
                         os.remove(tmp_path)
@@ -690,15 +690,39 @@ class InsuranceHandler:
                     sdkfileid, proxy, passwd, timeout
                 )
                 if ret != 0:
-                    logger.error("下载媒体文件失败, ret=%d", ret)
-                    notify_error("保单识别", "_download_media", f"下载媒体文件失败, ret={ret}", f"sdkfileid={sdkfileid[:30]}...")
-                    return b""
-                return data if data else b""
+                    return False, ret
+                return True, (data if data else b"")
 
-        except Exception as e:
-            logger.error("下载媒体文件异常, sdkfileid=%s: %s", sdkfileid, e, exc_info=True)
-            notify_error("保单识别", "_download_media", str(e), f"sdkfileid={sdkfileid[:30]}...")
-            return b""
+        # 下载偶发网络错误（如 10001）时自动重试，间隔递增 1s/2s
+        max_attempts = 3
+        last_ret = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                ok, payload = _try_once()
+                if ok:
+                    return payload
+                last_ret = payload
+                logger.warning(
+                    "下载媒体文件失败, ret=%s (第 %d/%d 次)",
+                    last_ret, attempt, max_attempts,
+                )
+            except Exception as e:
+                last_ret = str(e)
+                logger.warning(
+                    "下载媒体文件异常, sdkfileid=%s: %s (第 %d/%d 次)",
+                    sdkfileid, e, attempt, max_attempts,
+                    exc_info=(attempt == max_attempts),
+                )
+            if attempt < max_attempts:
+                time.sleep(attempt)  # 1s, 2s 退避
+
+        logger.error("下载媒体文件失败（已重试 %d 次）, ret=%s", max_attempts, last_ret)
+        notify_error(
+            "保单识别", "_download_media",
+            f"下载媒体文件失败（已重试 {max_attempts} 次）, ret={last_ret}",
+            f"sdkfileid={sdkfileid[:30]}...",
+        )
+        return b""
 
     # ------------------------------------------------------------------ #
     # 同一 PDF 多保单互补
