@@ -1198,8 +1198,9 @@ def _scope_id_cond_rs(scope_id):
     return "scope_id = %s", [scope_id]
 
 
-def get_remark_selector_config(db, scope: str, scope_id) -> dict:
-    """读取指定 scope 的备注快捷选择配置；无则返回默认值副本。"""
+def get_remark_selector_config(db, scope: str, scope_id, template_name: str = None) -> dict:
+    """读取指定 scope+模板 的备注快捷选择配置；无则返回默认值副本。"""
+    template_name = template_name or DEFAULT_TEMPLATE_NAME
     sid_cond, sid_params = _scope_id_cond_rs(scope_id)
     conn = db.pool.connection()
     try:
@@ -1207,8 +1208,8 @@ def get_remark_selector_config(db, scope: str, scope_id) -> dict:
         cursor.execute(
             f"SELECT config_value FROM user_field_config "
             f"WHERE scope = %s AND {sid_cond} AND config_type = 'remark_selector' "
-            f"AND config_key = 'config' LIMIT 1",
-            [scope] + sid_params
+            f"AND config_key = 'config' AND template_name = %s LIMIT 1",
+            [scope] + sid_params + [template_name]
         )
         row = cursor.fetchone()
         result = dict(REMARK_SELECTOR_DEFAULT)
@@ -1222,8 +1223,9 @@ def get_remark_selector_config(db, scope: str, scope_id) -> dict:
         conn.close()
 
 
-def save_remark_selector_config(db, scope: str, scope_id, config: dict):
-    """保存指定 scope 的备注快捷选择配置（仅保留已知键）。"""
+def save_remark_selector_config(db, scope: str, scope_id, config: dict, template_name: str = None):
+    """保存指定 scope+模板 的备注快捷选择配置（仅保留已知键）。"""
+    template_name = template_name or DEFAULT_TEMPLATE_NAME
     clean = dict(REMARK_SELECTOR_DEFAULT)
     for k in REMARK_SELECTOR_DEFAULT:
         if k in (config or {}):
@@ -1237,21 +1239,21 @@ def save_remark_selector_config(db, scope: str, scope_id, config: dict):
         cursor.execute(
             f"SELECT id FROM user_field_config "
             f"WHERE scope = %s AND {sid_cond} AND config_type = 'remark_selector' "
-            f"AND config_key = 'config' LIMIT 1",
-            [scope] + sid_params
+            f"AND config_key = 'config' AND template_name = %s LIMIT 1",
+            [scope] + sid_params + [template_name]
         )
         if cursor.fetchone():
             cursor.execute(
                 f"UPDATE user_field_config SET config_value = %s, updated_at = NOW() "
                 f"WHERE scope = %s AND {sid_cond} AND config_type = 'remark_selector' "
-                f"AND config_key = 'config'",
-                [json_val, scope] + sid_params
+                f"AND config_key = 'config' AND template_name = %s",
+                [json_val, scope] + sid_params + [template_name]
             )
         else:
             cursor.execute(
                 "INSERT INTO user_field_config (scope, scope_id, config_type, config_key, config_value, template_name) "
                 "VALUES (%s, %s, 'remark_selector', 'config', %s, %s)",
-                [scope, scope_id, json_val, DEFAULT_TEMPLATE_NAME]
+                [scope, scope_id, json_val, template_name]
             )
         conn.commit()
     finally:

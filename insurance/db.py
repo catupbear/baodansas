@@ -390,15 +390,24 @@ def init_insurance_tables(db):
                     id BIGINT PRIMARY KEY AUTO_INCREMENT,
                     scope VARCHAR(16) NOT NULL DEFAULT 'global' COMMENT 'global/enterprise/user',
                     scope_id VARCHAR(64) DEFAULT NULL COMMENT '企业parent_id或user_id',
+                    template_name VARCHAR(64) NOT NULL DEFAULT '默认模板' COMMENT '所属模板',
                     handler VARCHAR(64) DEFAULT '' COMMENT '经办人',
                     company VARCHAR(128) DEFAULT '' COMMENT '投保公司',
                     policy_type VARCHAR(64) DEFAULT '' COMMENT '险种名称',
                     remark TEXT COMMENT '备注信息',
                     batch_no VARCHAR(32) DEFAULT '' COMMENT '导入批次(时间戳)',
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    KEY idx_remark_opt_scope (scope, scope_id, handler, company, policy_type)
+                    KEY idx_remark_opt_scope (scope, scope_id, template_name, handler, company, policy_type)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='备注快捷选择选项池'
                 """
+            )
+        except Exception:
+            pass
+        # 旧表升级：补 template_name 列（幂等）
+        try:
+            cursor.execute(
+                "ALTER TABLE insurance_remark_options "
+                "ADD COLUMN template_name VARCHAR(64) NOT NULL DEFAULT '默认模板' COMMENT '所属模板' AFTER scope_id"
             )
         except Exception:
             pass

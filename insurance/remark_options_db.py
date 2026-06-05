@@ -85,15 +85,15 @@ def parse_sheet_rows(file_bytes: bytes, sheet_name: str) -> list:
         wb.close()
 
 
-def _scope_cond(scope, scope_id):
-    """统一 scope 过滤条件（scope_id 为 None 时用 IS NULL）。"""
+def _scope_cond(scope, scope_id, template_name):
+    """统一 scope+模板 过滤条件（scope_id 为 None 时用 IS NULL）。"""
     if scope_id is None:
-        return "scope = %s AND scope_id IS NULL", [scope]
-    return "scope = %s AND scope_id = %s", [scope, str(scope_id)]
+        return "scope = %s AND scope_id IS NULL AND template_name = %s", [scope, template_name]
+    return "scope = %s AND scope_id = %s AND template_name = %s", [scope, str(scope_id), template_name]
 
 
-def import_options(db, scope, scope_id, rows: list) -> int:
-    """清空当前 scope 旧池 + 批量插入新池（去重 handler+company+policy_type+remark）。返回插入条数。"""
+def import_options(db, scope, scope_id, template_name, rows: list) -> int:
+    """清空当前 scope+模板 旧池 + 批量插入新池（去重 handler+company+policy_type+remark）。返回插入条数。"""
     batch_no = datetime.now().strftime("%Y%m%d%H%M%S")
     seen = set()
     dedup = []
@@ -104,7 +104,7 @@ def import_options(db, scope, scope_id, rows: list) -> int:
         seen.add(k)
         dedup.append(r)
 
-    cond, params = _scope_cond(scope, scope_id)
+    cond, params = _scope_cond(scope, scope_id, template_name)
     conn = db.pool.connection()
     try:
         cursor = conn.cursor()
@@ -113,27 +113,27 @@ def import_options(db, scope, scope_id, rows: list) -> int:
             sid = None if scope_id is None else str(scope_id)
             cursor.executemany(
                 "INSERT INTO insurance_remark_options "
-                "(scope, scope_id, handler, company, policy_type, remark, batch_no) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                [(scope, sid, r["handler"], r["company"], r["policy_type"], r["remark"], batch_no)
+                "(scope, scope_id, template_name, handler, company, policy_type, remark, batch_no) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                [(scope, sid, template_name, r["handler"], r["company"], r["policy_type"], r["remark"], batch_no)
                  for r in dedup]
             )
         conn.commit()
-        logger.info("备注选项池导入: scope=%s scope_id=%s 插入=%d batch=%s",
-                    scope, scope_id, len(dedup), batch_no)
+        logger.info("备注选项池导入: scope=%s scope_id=%s template=%s 插入=%d batch=%s",
+                    scope, scope_id, template_name, len(dedup), batch_no)
         return len(dedup)
     finally:
         conn.close()
 
 
-def query_options(db, scope, scope_id, handler="", company="", policy_type="",
+def query_options(db, scope, scope_id, template_name, handler="", company="", policy_type="",
                   keyword="", mode="exact", limit=500) -> list:
     """
     按键查询候选 remark。mode=exact 精确等值；mode=fuzzy 子串包含。
     任一键为空则该键不参与过滤。keyword 始终按 remark 子串过滤。
     返回去重后的 remark 字符串列表（保序）。
     """
-    cond, params = _scope_cond(scope, scope_id)
+    cond, params = _scope_cond(scope, scope_id, template_name)
     where = [cond]
 
     def _add(field, value):
@@ -174,9 +174,9 @@ def query_options(db, scope, scope_id, handler="", company="", policy_type="",
         conn.close()
 
 
-def clear_options(db, scope, scope_id) -> int:
-    """清空当前 scope 选项池。返回删除条数。"""
-    cond, params = _scope_cond(scope, scope_id)
+def clear_options(db, scope, scope_id, template_name) -> int:
+    """清空当前 scope+模板 选项池。返回删除条数。"""
+    cond, params = _scope_cond(scope, scope_id, template_name)
     conn = db.pool.connection()
     try:
         cursor = conn.cursor()
@@ -187,9 +187,9 @@ def clear_options(db, scope, scope_id) -> int:
         conn.close()
 
 
-def get_stats(db, scope, scope_id) -> dict:
+def get_stats(db, scope, scope_id, template_name) -> dict:
     """返回 {"count": N, "last_import": "YYYYMMDDHHMMSS" or ""}。"""
-    cond, params = _scope_cond(scope, scope_id)
+    cond, params = _scope_cond(scope, scope_id, template_name)
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)

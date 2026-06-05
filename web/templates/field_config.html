@@ -431,7 +431,7 @@
     <!-- 代管提示条 -->
     <div v-if="adminTarget" style="background:#fef3c7; border-bottom:1px solid #fcd34d; padding:8px 24px; display:flex; align-items:center; justify-content:center; gap:12px;">
         <span style="font-size:13px; color:#92400e;">正在代管编辑：<b>{{ adminTarget.label }}</b> 的「{{ activeTemplateName }}」模板（{{ adminTarget.scope === 'enterprise' ? '企业级' : '员工级' }}），修改将直接保存到对方配置</span>
-        <button @click="adminTarget = null; loadTemplates(); loadConfig(); loadColumnConfig('list_columns'); loadColumnConfig('export_columns'); loadMergeConfig(); loadPlateFormatConfig();" style="font-size:12px; padding:3px 12px; background:#fff; border:1px solid #fcd34d; border-radius:4px; cursor:pointer; color:#92400e;">退出代管</button>
+        <button @click="adminTarget = null; loadTemplates(); loadConfig(); loadColumnConfig('list_columns'); loadColumnConfig('export_columns'); loadMergeConfig(); loadPlateFormatConfig(); loadRemarkCfg();" style="font-size:12px; padding:3px 12px; background:#fff; border:1px solid #fcd34d; border-radius:4px; cursor:pointer; color:#92400e;">退出代管</button>
     </div>
 
     <!-- 主内容区 -->
@@ -1177,6 +1177,27 @@ createApp({
             return keys;
         });
 
+        // 备注快捷选择：拼接「模板 + 代管」查询串
+        function remarkQuery() {
+            let q = `template=${encodeURIComponent(activeTemplateName.value)}`;
+            if (adminTarget.value) {
+                q += `&target_scope=${adminTarget.value.scope}`;
+                if (adminTarget.value.scope_id != null) q += `&target_scope_id=${adminTarget.value.scope_id}`;
+            }
+            return q;
+        }
+        // 备注快捷选择：注入「模板 + 代管」到 body/FormData
+        function remarkInjectTarget(obj) {
+            const isForm = (typeof FormData !== 'undefined') && (obj instanceof FormData);
+            const set = (k, v) => isForm ? obj.append(k, v) : (obj[k] = v);
+            set('template_name', activeTemplateName.value);
+            if (adminTarget.value) {
+                set('target_scope', adminTarget.value.scope);
+                if (adminTarget.value.scope_id != null) set('target_scope_id', adminTarget.value.scope_id);
+            }
+            return obj;
+        }
+
         // 批次号 YYYYMMDDHHMMSS → YYYY-MM-DD HH:mm:ss
         function fmtRemarkTime(s) {
             if (!s || s.length < 14) return s || '';
@@ -1184,7 +1205,7 @@ createApp({
         }
         async function loadRemarkCfg() {
             try {
-                const resp = await authFetch('/api/insurance/remark-options/config');
+                const resp = await authFetch('/api/insurance/remark-options/config?' + remarkQuery());
                 const json = await resp.json();
                 if (json.code === 0 && json.data) {
                     Object.assign(remarkCfg, json.data.config || {});
@@ -1196,7 +1217,7 @@ createApp({
             remarkSaving.value = true;
             try {
                 await authFetch('/api/insurance/remark-options/config', {
-                    method:'PUT', body: JSON.stringify({ config: { ...remarkCfg } })
+                    method:'PUT', body: JSON.stringify(remarkInjectTarget({ config: { ...remarkCfg } }))
                 });
                 alert('已保存');
             } catch (e) { alert('保存失败: ' + e.message); }
@@ -1221,6 +1242,7 @@ createApp({
             try {
                 const fd = new FormData();
                 fd.append('file', remarkFile); fd.append('sheet', remarkSheet.value);
+                remarkInjectTarget(fd);
                 const r = await authFetch('/api/insurance/remark-options/import', { method:'POST', body: fd });
                 const j = await r.json();
                 alert(j.msg || '完成');
@@ -1233,7 +1255,7 @@ createApp({
         async function clearRemarkPool() {
             if (!confirm('确认清空当前选项池？历史已选备注不受影响')) return;
             try {
-                const r = await authFetch('/api/insurance/remark-options', { method:'DELETE' });
+                const r = await authFetch('/api/insurance/remark-options?' + remarkQuery(), { method:'DELETE' });
                 const j = await r.json();
                 alert(j.msg || '已清空');
                 await loadRemarkCfg();
@@ -2075,6 +2097,7 @@ createApp({
                 await loadConfig(name, source);
                 // 切换模板时同步重载列配置和合并开关
                 await Promise.all([loadColumnConfig('list_columns'), loadColumnConfig('export_columns'), loadMergeConfig(), loadPlateFormatConfig()]);
+                loadRemarkCfg();
                 if (source === 'system') {
                     showToast('已切换到系统模板「' + name + '」（只读）', 'warning');
                 } else if (source === 'enterprise') {
@@ -2101,6 +2124,7 @@ createApp({
                 loadColumnConfig('export_columns'),
                 loadMergeConfig(), loadPlateFormatConfig(),
             ]);
+            loadRemarkCfg();
             configLoaded = true;
             showToast('正在代管编辑：' + label + ' 的「' + name + '」模板', 'warning');
         };
