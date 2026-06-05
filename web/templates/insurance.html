@@ -145,6 +145,16 @@
             color: #fff;
         }
 
+        /* 字段说明「?」图标 */
+        .field-help-icon {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 14px; height: 14px; margin-left: 3px; vertical-align: middle;
+            border-radius: 50%; background: #cbd5e1; color: #fff;
+            font-size: 10px; font-weight: 700; line-height: 1;
+            cursor: help; user-select: none;
+        }
+        .field-help-icon:hover { background: #f97316; }
+
         /* 保司标签 */
         .company-tag {
             padding: 4px 10px; border-radius: 6px;
@@ -1191,6 +1201,7 @@
                                 class="text-gray-600 font-medium"
                                 :style="getColStyle(col)">
                                 {{ col.display_name }}
+                                <span v-if="fieldHelp[col.key]" class="field-help-icon" :title="fieldHelp[col.key]">?</span>
                                 <span class="col-resize-handle"
                                       @mousedown.prevent="startColResize($event, col)"></span>
                             </th>
@@ -1216,12 +1227,18 @@
                                 class="text-gray-700 text-sm">
                                 <!-- 文件名 -->
                                 <template v-if="col.key === '文件名'">
-                                    <span v-if="record.cos_url"
-                                          class="text-orange-600 hover:underline text-sm truncate block cursor-pointer" style="max-width:180px;"
-                                          :title="record.filename"
-                                          @click="previewRecord(record)">
-                                        {{ record.filename || '—' }}
-                                    </span>
+                                    <div v-if="record.cos_url" class="flex items-center gap-1">
+                                        <span class="text-orange-600 hover:underline text-sm truncate cursor-pointer" style="max-width:140px;"
+                                              :title="record.filename"
+                                              @click="previewRecord(record)">
+                                            {{ record.filename || '—' }}
+                                        </span>
+                                        <button @click="previewRecord(record)" title="点击预览文件"
+                                                class="flex-shrink-0 inline-flex items-center gap-0.5 text-xs text-orange-600 bg-orange-50 hover:bg-orange-100 px-1.5 py-0.5 rounded border border-orange-200 leading-none">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                            预览
+                                        </button>
+                                    </div>
                                     <span v-else class="text-gray-600 text-sm truncate block" style="max-width:180px;" :title="record.filename">
                                         {{ record.filename || '—' }}
                                     </span>
@@ -2852,6 +2869,10 @@ const _app = createApp({
             '跟单人', '跟单人利润', '出单渠道', '车船税',
             '保司公司名称', '保司地址', '保司（带地区）', '保司联系电话',
         ]);
+        // 字段数据来源说明（鼠标悬停在「?」上查看，面向普通用户）
+        const fieldHelp = ref({
+            '保司（带地区）': '系统自动生成：从保单里识别承保公司，并从保司地址中提取所在城市，拼成"城市+保司"，例如"深圳平安"。识别不到地址时只显示保司名称；若设置了保司简称，会用简称替换。',
+        });
         // 列配置（从后端 list_records 返回）
         const listColumnConfig = ref([]);
         // 计算实际显示的列（按 order 排序，只取 visible 的）
@@ -5884,7 +5905,7 @@ const _app = createApp({
             extractionRules, loadExtractionRules,
             rawTextVisible, rawTextContent, rawTextFileName,
             successResults, abnormalResults, nonPolicyResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal, getPolicyHint, getRecordHint,
-            outputColumns, listColumnConfig, visibleListColumns, frozenColStyles, getColStyle, startColResize, getMappedValue, getDocCategory, docCategories,
+            outputColumns, listColumnConfig, visibleListColumns, fieldHelp, frozenColStyles, getColStyle, startColResize, getMappedValue, getDocCategory, docCategories,
             isLoadingFiles, loadingFileCount, loadingFileTotal, loadingPercent,
             handleFileSelect, handleDrop, removeFile, clearFiles,
             previewFile, previewResultFile, showRawText,

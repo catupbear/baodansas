@@ -199,6 +199,16 @@
         }
         .op-chip:hover { background: #e5e7eb; color: var(--text-primary); }
 
+        /* 字段说明「?」图标 */
+        .field-help-icon {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 14px; height: 14px; margin-left: 4px; vertical-align: middle;
+            border-radius: 50%; background: #cbd5e1; color: #fff;
+            font-size: 10px; font-weight: 700; line-height: 1;
+            cursor: help; user-select: none;
+        }
+        .field-help-icon:hover { background: #f97316; }
+
         /* 预览区 */
         .preview-box {
             background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;
@@ -654,7 +664,7 @@
                                 <td><span class="drag-handle" :style="activeSource === 'enterprise' ? 'cursor:not-allowed;opacity:0.3' : ''">⠿</span></td>
                                 <td><input type="checkbox" v-model="col.visible" :disabled="activeSource === 'enterprise'"></td>
                                 <td><input type="checkbox" v-model="col.frozen" :disabled="activeSource === 'enterprise'" title="冻结此列，固定在左侧"></td>
-                                <td style="color:var(--text-muted);">{{ col.key }}<span v-if="col.custom" style="margin-left:6px;font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:3px;">自定义</span></td>
+                                <td style="color:var(--text-muted);">{{ col.key }}<span v-if="fieldHelp[col.key]" class="field-help-icon" :title="fieldHelp[col.key]">?</span><span v-if="col.custom" style="margin-left:6px;font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:3px;">自定义</span></td>
                                 <td><input type="text" v-model="col.display_name" :disabled="activeSource === 'enterprise'" :placeholder="col.key" /></td>
                                 <td><input v-if="col.custom" type="text" v-model="fixedValues[col.key]" placeholder="无数据时自动填充" style="font-size:12px;" @change="saveFixedValues" /></td>
                                 <td style="text-align:center;"><input v-if="col.custom" type="checkbox" v-model="col.is_percent" :disabled="activeSource === 'enterprise'" title="勾选后此列按百分比处理：填 10 表示 10%，公式按 0.1 计算，导出显示 10%" /></td>
@@ -749,7 +759,7 @@
                                 @dragend="onDragEnd">
                                 <td><span class="drag-handle" :style="activeSource === 'enterprise' ? 'cursor:not-allowed;opacity:0.3' : ''">⠿</span></td>
                                 <td><input type="checkbox" v-model="col.visible" :disabled="activeSource === 'enterprise'"></td>
-                                <td style="color:var(--text-muted);">{{ col.key }}<span v-if="col.merge" style="margin-left:6px;font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;">合并</span><span v-else-if="col.custom" style="margin-left:6px;font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:3px;">自定义</span></td>
+                                <td style="color:var(--text-muted);">{{ col.key }}<span v-if="fieldHelp[col.key]" class="field-help-icon" :title="fieldHelp[col.key]">?</span><span v-if="col.merge" style="margin-left:6px;font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;">合并</span><span v-else-if="col.custom" style="margin-left:6px;font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:3px;">自定义</span></td>
                                 <td><input type="text" v-model="col.display_name" :disabled="activeSource === 'enterprise'" :placeholder="col.key" /></td>
                                 <td><input v-if="col.custom && !col.merge" type="text" v-model="fixedValues[col.key]" placeholder="无数据时自动填充" style="font-size:12px;" @change="saveFixedValues" /></td>
                                 <td style="text-align:center;"><input v-if="col.custom && !col.merge" type="checkbox" v-model="col.is_percent" :disabled="activeSource === 'enterprise'" title="勾选后此列按百分比处理：填 10 表示 10%，公式按 0.1 计算，导出显示 10%" /></td>
@@ -1161,6 +1171,11 @@ createApp({
         const exportColConfig = ref({ source: 'default', columns: [] });
         const listColItems = ref([]);
         const exportColItems = ref([]);
+
+        // 字段数据来源说明（鼠标悬停在「?」上查看，面向普通用户）
+        const fieldHelp = ref({
+            '保司（带地区）': '系统自动生成：从保单里识别承保公司，并从保司地址中提取所在城市，拼成"城市+保司"，例如"深圳平安"。识别不到地址时只显示保司名称；若设置了保司简称，会用简称替换。',
+        });
 
         // ========== 备注快捷选择 ==========
         const remarkCfg = reactive({ enabled:false, target_key:'备注', key_handler:'经办人', key_company:'承保公司', key_policy_type:'险种' });
@@ -2332,7 +2347,7 @@ createApp({
             companyShortList, policyTypeShortList, availableFields, operators,
             formulaError, previewExpression, previewResult,
             insertField, insertOp, openFormulaModal, saveFormula, deleteRule,
-            listColConfig, exportColConfig, listColItems, exportColItems,
+            listColConfig, exportColConfig, listColItems, exportColItems, fieldHelp,
             loadColumnConfig, saveColumnConfig, resetColumnConfig, resetPending, doResetColumn,
             dragState, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd,
             newColName, addCustomCol, removeCustomCol, syncListToExport,
