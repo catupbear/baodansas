@@ -804,7 +804,7 @@
 
             <div style="font-size:13px; margin-bottom:12px;">
                 当前选项池：<b>{{ remarkStats.count }}</b> 条
-                <span v-if="remarkStats.last_import" style="color:var(--text-muted);">· 最后导入 {{ remarkStats.last_import }}</span>
+                <span v-if="remarkStats.last_import" style="color:var(--text-muted);">· 最后导入 {{ fmtRemarkTime(remarkStats.last_import) }}</span>
             </div>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                 <input type="file" accept=".xlsx,.xls" @change="onRemarkFile" ref="remarkFileEl">
@@ -1177,6 +1177,11 @@ createApp({
             return keys;
         });
 
+        // 批次号 YYYYMMDDHHMMSS → YYYY-MM-DD HH:mm:ss
+        function fmtRemarkTime(s) {
+            if (!s || s.length < 14) return s || '';
+            return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)} ${s.slice(8,10)}:${s.slice(10,12)}:${s.slice(12,14)}`;
+        }
         async function loadRemarkCfg() {
             try {
                 const resp = await authFetch('/api/insurance/remark-options/config');
@@ -2307,7 +2312,7 @@ createApp({
             // 备注快捷选择
             remarkCfg, remarkStats, remarkFieldKeys, remarkSheets, remarkSheet,
             remarkSaving, remarkImporting, remarkFileEl,
-            onRemarkFile, doRemarkImport, saveRemarkCfg, clearRemarkPool,
+            onRemarkFile, doRemarkImport, saveRemarkCfg, clearRemarkPool, fmtRemarkTime,
         };
     }
 }).mount('#app');
