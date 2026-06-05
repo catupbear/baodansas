@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # 支持的 config_type 类型
 CONFIG_TYPES = ["company_alias", "policy_type_alias", "date_format", "fee_formula",
-                "list_columns", "export_columns"]
+                "list_columns", "export_columns", "remark_selector"]
 
 # 默认模板名
 DEFAULT_TEMPLATE_NAME = "默认模板"
@@ -1173,6 +1173,87 @@ def save_user_fixed_values(db, user_id: int, values: dict):
                 "INSERT INTO user_field_config (scope, scope_id, config_type, config_key, config_value, template_name) "
                 "VALUES ('user', %s, 'custom_fixed_values', 'values', %s, %s)",
                 [user_id, json_val, DEFAULT_TEMPLATE_NAME]
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# ------------------------------------------------------------------ #
+# 备注快捷选择配置（remark_selector），按 scope 存储
+# ------------------------------------------------------------------ #
+
+REMARK_SELECTOR_DEFAULT = {
+    "enabled": False,
+    "target_key": "备注",
+    "key_handler": "经办人",
+    "key_company": "承保公司",
+    "key_policy_type": "险种",
+}
+
+
+def _scope_id_cond_rs(scope_id):
+    if scope_id is None:
+        return "scope_id IS NULL", []
+    return "scope_id = %s", [scope_id]
+
+
+def get_remark_selector_config(db, scope: str, scope_id, template_name: str = None) -> dict:
+    """读取指定 scope+模板 的备注快捷选择配置；无则返回默认值副本。"""
+    template_name = template_name or DEFAULT_TEMPLATE_NAME
+    sid_cond, sid_params = _scope_id_cond_rs(scope_id)
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            f"SELECT config_value FROM user_field_config "
+            f"WHERE scope = %s AND {sid_cond} AND config_type = 'remark_selector' "
+            f"AND config_key = 'config' AND template_name = %s LIMIT 1",
+            [scope] + sid_params + [template_name]
+        )
+        row = cursor.fetchone()
+        result = dict(REMARK_SELECTOR_DEFAULT)
+        if row and row.get("config_value"):
+            try:
+                result.update(json.loads(row["config_value"]))
+            except (TypeError, json.JSONDecodeError):
+                pass
+        return result
+    finally:
+        conn.close()
+
+
+def save_remark_selector_config(db, scope: str, scope_id, config: dict, template_name: str = None):
+    """保存指定 scope+模板 的备注快捷选择配置（仅保留已知键）。"""
+    template_name = template_name or DEFAULT_TEMPLATE_NAME
+    clean = dict(REMARK_SELECTOR_DEFAULT)
+    for k in REMARK_SELECTOR_DEFAULT:
+        if k in (config or {}):
+            clean[k] = config[k]
+    clean["enabled"] = bool(clean.get("enabled"))
+    json_val = json.dumps(clean, ensure_ascii=False)
+    sid_cond, sid_params = _scope_id_cond_rs(scope_id)
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"SELECT id FROM user_field_config "
+            f"WHERE scope = %s AND {sid_cond} AND config_type = 'remark_selector' "
+            f"AND config_key = 'config' AND template_name = %s LIMIT 1",
+            [scope] + sid_params + [template_name]
+        )
+        if cursor.fetchone():
+            cursor.execute(
+                f"UPDATE user_field_config SET config_value = %s, updated_at = NOW() "
+                f"WHERE scope = %s AND {sid_cond} AND config_type = 'remark_selector' "
+                f"AND config_key = 'config' AND template_name = %s",
+                [json_val, scope] + sid_params + [template_name]
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO user_field_config (scope, scope_id, config_type, config_key, config_value, template_name) "
+                "VALUES (%s, %s, 'remark_selector', 'config', %s, %s)",
+                [scope, scope_id, json_val, template_name]
             )
         conn.commit()
     finally:

@@ -39,6 +39,7 @@ from .field_config_db import (
     get_effective_config, apply_user_config_to_fields, match_fee_formulas, _format_date,
     get_column_config, save_column_config, delete_column_config,
     get_user_fixed_values, save_user_fixed_values,
+    get_remark_selector_config, save_remark_selector_config,
     get_merge_by_plate, save_merge_by_plate,
     get_plate_format_pingan, save_plate_format_pingan,
     MERGE_SHARED_FIELDS, MERGE_SPLIT_FIELDS, MERGE_PREFIXES, MERGE_EXTRA_COLUMNS,
@@ -61,6 +62,7 @@ from .field_mapping import (
 )
 from .policy_parser import get_extraction_rules, parse_policy_text, parse_policy_text_multi, get_policy_type_code
 from .ocr_service import extract_text_from_pdf
+from . import remark_options_db
 from auth.decorators import login_required
 from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, get_sender_user_name_map
 from core.notify import notify_error
@@ -2161,6 +2163,164 @@ def update_config():
         return jsonify({"code": 0, "msg": "配置已更新"})
     except Exception as e:
         logger.exception("更新保单配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+# ============================================================
+# 备注快捷选择（选项池 + 配置）—— 按模板存储
+# ============================================================
+
+def _resolve_remark_settings_target(extra=None):
+    """
+    设置态：解析 (scope, scope_id, template_name)。
+    - 超管带 target_scope → 代管写到对方企业/员工；否则按当前登录人 scope。
+    - template_name 取自请求（args/form/body），默认「默认模板」。
+    extra: 可传 JSON body（PUT 用）。
+    """
+    from flask import g
+    user = g.current_user
+
+    def _pick(key):
+        v = request.values.get(key)
+        if v is None and isinstance(extra, dict):
+            v = extra.get(key)
+        return v
+
+    template_name = _pick("template_name") or _pick("template") or "默认模板"
+    target_scope = _pick("target_scope")
+    target_scope_id = _pick("target_scope_id")
+    if user["role"] == ROLE_SUPER_ADMIN and target_scope:
+        scope = target_scope
+        scope_id = int(target_scope_id) if target_scope_id else None
+    else:
+        scope, scope_id = _get_user_scope()
+    return scope, scope_id, template_name
+
+
+def _resolve_remark_runtime_target():
+    """
+    运行态（台账列表）：按用户当前启用模板解析 (scope, scope_id, template_name)。
+    逻辑与 get_effective_config 一致。
+    """
+    from flask import g
+    user = g.current_user
+    active = get_active_template(_db, user["user_id"])
+    source = active.get("source", "own")
+    template_name = active.get("template_name", "默认模板")
+    role = user["role"]
+    parent_id = user.get("parent_id")
+    if source == "system":
+        scope, scope_id = "global", None
+    elif source == "enterprise":
+        scope, scope_id = "enterprise", parent_id
+    else:
+        if role == ROLE_SUPER_ADMIN:
+            scope, scope_id = "global", None
+        elif role == ROLE_ENTERPRISE:
+            scope, scope_id = "enterprise", parent_id
+        else:
+            scope, scope_id = "user", user["user_id"]
+    return scope, scope_id, template_name
+
+
+@insurance_bp.route("/api/insurance/remark-options/config", methods=["GET"])
+@login_required
+def get_remark_selector_config_api():
+    """
+    读取备注快捷选择配置 + 选项池统计。
+    - 带 template 参数 → 设置态（读指定模板，支持代管）。
+    - 不带 → 运行态（读当前启用模板）。
+    """
+    try:
+        if request.args.get("template") or request.args.get("template_name"):
+            scope, scope_id, template_name = _resolve_remark_settings_target()
+        else:
+            scope, scope_id, template_name = _resolve_remark_runtime_target()
+        cfg = get_remark_selector_config(_db, scope, scope_id, template_name)
+        stats = remark_options_db.get_stats(_db, scope, scope_id, template_name)
+        return jsonify({"code": 0, "data": {"config": cfg, "stats": stats, "template_name": template_name}})
+    except Exception as e:
+        logger.exception("读取备注快捷选择配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/remark-options/config", methods=["PUT"])
+@login_required
+def save_remark_selector_config_api():
+    """保存指定模板的备注快捷选择配置（支持代管）。"""
+    try:
+        body = request.get_json(force=True) or {}
+        scope, scope_id, template_name = _resolve_remark_settings_target(extra=body)
+        save_remark_selector_config(_db, scope, scope_id, body.get("config", body), template_name)
+        return jsonify({"code": 0, "msg": "已保存"})
+    except Exception as e:
+        logger.exception("保存备注快捷选择配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/remark-options/sheets", methods=["POST"])
+@login_required
+def remark_options_sheets():
+    """上传 Excel，返回 sheet 名列表（不落库）。"""
+    try:
+        f = request.files.get("file")
+        if not f:
+            return jsonify({"code": 400, "msg": "缺少文件"}), 400
+        names = remark_options_db.read_sheet_names(f.read())
+        return jsonify({"code": 0, "data": {"sheets": names}})
+    except Exception as e:
+        logger.exception("读取 sheet 列表失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/remark-options/import", methods=["POST"])
+@login_required
+def remark_options_import():
+    """上传 Excel + 选定 sheet → 清空指定模板旧池 + 导入新池（支持代管）。"""
+    try:
+        f = request.files.get("file")
+        sheet = request.form.get("sheet", "")
+        if not f or not sheet:
+            return jsonify({"code": 400, "msg": "缺少文件或 sheet"}), 400
+        rows = remark_options_db.parse_sheet_rows(f.read(), sheet)
+        scope, scope_id, template_name = _resolve_remark_settings_target()
+        n = remark_options_db.import_options(_db, scope, scope_id, template_name, rows)
+        return jsonify({"code": 0, "msg": f"导入成功 {n} 条", "data": {"count": n}})
+    except Exception as e:
+        logger.exception("导入备注选项池失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/remark-options/query", methods=["GET"])
+@login_required
+def remark_options_query():
+    """按 handler/company/policy_type/keyword + mode 查询候选 remark（运行态，按启用模板）。"""
+    try:
+        scope, scope_id, template_name = _resolve_remark_runtime_target()
+        opts = remark_options_db.query_options(
+            _db, scope, scope_id, template_name,
+            handler=request.args.get("handler", ""),
+            company=request.args.get("company", ""),
+            policy_type=request.args.get("policy_type", ""),
+            keyword=request.args.get("keyword", ""),
+            mode=request.args.get("mode", "exact"),
+        )
+        return jsonify({"code": 0, "data": {"options": opts}})
+    except Exception as e:
+        logger.exception("查询备注候选失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/remark-options", methods=["DELETE"])
+@login_required
+def remark_options_clear():
+    """清空指定模板选项池（支持代管）。"""
+    try:
+        scope, scope_id, template_name = _resolve_remark_settings_target()
+        n = remark_options_db.clear_options(_db, scope, scope_id, template_name)
+        return jsonify({"code": 0, "msg": f"已清空 {n} 条"})
+    except Exception as e:
+        logger.exception("清空备注选项池失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
