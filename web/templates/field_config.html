@@ -783,32 +783,37 @@
             <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">
                 按经办人 / 投保公司 / 险种联动筛选备注话术，供台账「备注」字段快捷点选。选项池来自每日上传的 Excel，导入会清空旧池但不影响历史已选值。
             </p>
-            <label style="display:flex; align-items:center; gap:8px; font-size:14px; font-weight:500; margin-bottom:16px;">
-                <input type="checkbox" v-model="remarkCfg.enabled"> 启用备注快捷选择
+            <div v-if="activeSource==='enterprise'" style="margin-bottom:16px; padding:10px 16px; background:#fffbeb; border:1px solid #fcd34d; border-radius:8px; font-size:13px; color:#92400e; display:flex; align-items:center; gap:8px;">
+                <span>⚠</span> 当前为企业模板（只读），需要管理员才可以修改。如需修改请切换到「我的模板」或另存为新模板。
+            </div>
+            <label style="display:flex; align-items:center; gap:8px; font-size:14px; font-weight:500; margin-bottom:16px;"
+                   :style="{cursor: activeSource==='enterprise' ? 'not-allowed' : 'pointer', opacity: activeSource==='enterprise' ? 0.6 : 1}">
+                <input type="checkbox" v-model="remarkCfg.enabled" :disabled="activeSource==='enterprise'"> 启用备注快捷选择
             </label>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; font-size:13px;">
                 <label>备注目标字段
-                    <select v-model="remarkCfg.target_key" style="width:100%; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-top:4px;">
+                    <select v-model="remarkCfg.target_key" :disabled="activeSource==='enterprise'" style="width:100%; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-top:4px;">
                         <option v-for="k in remarkFieldKeys" :key="k" :value="k">{{ k }}</option>
                     </select>
                 </label>
                 <label>经办人字段
-                    <select v-model="remarkCfg.key_handler" style="width:100%; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-top:4px;">
+                    <select v-model="remarkCfg.key_handler" :disabled="activeSource==='enterprise'" style="width:100%; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-top:4px;">
                         <option v-for="k in remarkFieldKeys" :key="k" :value="k">{{ k }}</option>
                     </select>
                 </label>
                 <label>投保公司字段
-                    <select v-model="remarkCfg.key_company" style="width:100%; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-top:4px;">
+                    <select v-model="remarkCfg.key_company" :disabled="activeSource==='enterprise'" style="width:100%; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-top:4px;">
                         <option v-for="k in remarkFieldKeys" :key="k" :value="k">{{ k }}</option>
                     </select>
                 </label>
                 <label>险种字段
-                    <select v-model="remarkCfg.key_policy_type" style="width:100%; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-top:4px;">
+                    <select v-model="remarkCfg.key_policy_type" :disabled="activeSource==='enterprise'" style="width:100%; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-top:4px;">
                         <option v-for="k in remarkFieldKeys" :key="k" :value="k">{{ k }}</option>
                     </select>
                 </label>
             </div>
-            <button class="btn btn-primary btn-sm" @click="saveRemarkCfg" :disabled="remarkSaving">{{ remarkSaving ? '保存中…' : '保存配置' }}</button>
+            <button class="btn btn-primary btn-sm" @click="saveRemarkCfg" :disabled="remarkSaving"
+                    :style="activeSource==='enterprise' ? 'opacity:0.6; cursor:not-allowed;' : ''">{{ remarkSaving ? '保存中…' : '保存配置' }}</button>
 
             <hr style="margin:20px 0; border:none; border-top:1px solid var(--border-light);">
 
@@ -821,12 +826,14 @@
                 <span>上次导入的表缺少 <b>{{ remarkImportMissing.join('、') }}</b> 列，这些字段不会参与联动筛选。请确认 Excel 表头包含 日期 / 经办人 / 投保公司 / 备注信息 / 险种名称。</span>
             </div>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                <input type="file" accept=".xlsx,.xls" @change="onRemarkFile" ref="remarkFileEl">
+                <input type="file" accept=".xlsx,.xls" @change="onRemarkFile" ref="remarkFileEl" :disabled="activeSource==='enterprise'">
                 <select v-if="remarkSheets.length" v-model="remarkSheet" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
                     <option v-for="s in remarkSheets" :key="s" :value="s">{{ s }}</option>
                 </select>
-                <button v-if="remarkSheets.length" class="btn btn-primary btn-sm" @click="doRemarkImport" :disabled="remarkImporting">{{ remarkImporting ? '导入中…' : '导入选定 sheet' }}</button>
-                <button class="btn btn-outline btn-sm" @click="clearRemarkPool">清空选项池</button>
+                <button v-if="remarkSheets.length" class="btn btn-primary btn-sm" @click="doRemarkImport" :disabled="remarkImporting"
+                        :style="activeSource==='enterprise' ? 'opacity:0.6; cursor:not-allowed;' : ''">{{ remarkImporting ? '导入中…' : '导入选定 sheet' }}</button>
+                <button class="btn btn-outline btn-sm" @click="clearRemarkPool"
+                        :style="activeSource==='enterprise' ? 'opacity:0.6; cursor:not-allowed;' : ''">清空选项池</button>
             </div>
             <div style="margin-top:8px; font-size:11px; color:var(--text-muted);">
                 上传 Excel 后选择要导入的 sheet（默认最后一个），点击导入即清空旧池并写入。
@@ -1234,6 +1241,7 @@ createApp({
             } catch (e) { /* 静默 */ }
         }
         async function saveRemarkCfg() {
+            if (activeSource.value === 'enterprise') { showToast('企业模板（只读），需要管理员才可以修改', 'warning'); return; }
             remarkSaving.value = true;
             try {
                 await authFetch('/api/insurance/remark-options/config', {
@@ -1257,6 +1265,7 @@ createApp({
                 }).catch(err => alert('读取 sheet 失败: ' + err.message));
         }
         async function doRemarkImport() {
+            if (activeSource.value === 'enterprise') { showToast('企业模板（只读），需要管理员才可以修改', 'warning'); return; }
             if (!remarkFile || !remarkSheet.value) return;
             remarkImporting.value = true;
             try {
@@ -1274,6 +1283,7 @@ createApp({
             finally { remarkImporting.value = false; }
         }
         async function clearRemarkPool() {
+            if (activeSource.value === 'enterprise') { showToast('企业模板（只读），需要管理员才可以修改', 'warning'); return; }
             if (!confirm('确认清空当前选项池？历史已选备注不受影响')) return;
             try {
                 const r = await authFetch('/api/insurance/remark-options?' + remarkQuery(), { method:'DELETE' });
