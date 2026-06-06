@@ -2324,6 +2324,19 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
             plate = m.group(1).replace("-", "").rstrip(";；,，")
             # 清理车牌后面可能粘连的车架号等信息
             plate = re.split(r'[；;，,\s]', plate)[0]
+            # 剥离粘连的17位车架号VIN：OCR表格错位时（如安诚财险），号牌号码列的
+            # 值会与下一行的车架号列被跨行合并规则粘连，形如
+            # "粤BH917RLVSHBFAF8AF146084"。合法车牌（含省份汉字）最长8字符，
+            # 若更长且尾部恰为17位字母数字，则按"车牌+VIN"切分还原。
+            if len(plate) > 8:
+                m_vin = re.match(
+                    rf'([{PROVINCE_CHARS}][A-Z][A-Z0-9]{{4,6}})([A-Z0-9]{{17}})$',
+                    plate
+                )
+                if m_vin:
+                    # 顺带补充车架号（标准车架号规则因标签错位无法提取时兜底）
+                    fields.setdefault("车架号VIN", m_vin.group(2))
+                    plate = m_vin.group(1)
             if len(plate) >= 6:
                 fields["车牌号"] = plate
                 break
