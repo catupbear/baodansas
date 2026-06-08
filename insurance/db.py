@@ -347,7 +347,7 @@ def init_insurance_tables(db):
             ("abnormal_override_reason", "VARCHAR(128) DEFAULT NULL COMMENT '手动标记正常的原因（非NULL时强制is_abnormal=0）'"),
             ("policy_count", "TINYINT DEFAULT 1 COMMENT '同一PDF中的保单总数'"),
             ("policy_index", "TINYINT DEFAULT 1 COMMENT '当前记录在同一PDF中的序号（从1开始）'"),
-            ("page_range", "VARCHAR(32) DEFAULT '' COMMENT '提取数据来源页码范围（如1-2）'"),
+            ("page_range", "VARCHAR(255) DEFAULT '' COMMENT '提取数据来源页码范围（如1-2）'"),
             ("ocr_text", "LONGTEXT COMMENT 'OCR识别原文（pdfplumber+ocr模式下保存OCR文本）'"),
             ("deleted_at", "DATETIME DEFAULT NULL COMMENT '软删除时间（非NULL表示已删除，列表/统计默认过滤）'"),
         ]

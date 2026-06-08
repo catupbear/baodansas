@@ -549,7 +549,7 @@ class InsuranceHandler:
 
                 # 8. 更新记录为 done
                 raw_text = policy.get("raw_text", "")
-                page_range = policy.get("page_range", "")
+                page_range = policy.get("page_range", "")[:255]
                 updates = {
                     "status": "done",
                     "cos_url": cos_url,
