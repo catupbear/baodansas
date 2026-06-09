@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI保单台账 — 智能保单管理平台</title>
+<style>
+:root {
+  --bg: #07090f;
+  --bg2: #0d1120;
+  --bg3: #111827;
+  --blue: #4f6ef7;
+  --blue2: #6366f1;
+  --orange: #f05a00;
+  --purple: #7c3aed;
+  --cyan: #06b6d4;
+  --green: #10b981;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --text3: #64748b;
+  --border: rgba(255,255,255,0.07);
+  --card: rgba(255,255,255,0.03);
+  --card-hover: rgba(255,255,255,0.06);
+  --glow-blue: rgba(79,110,247,0.15);
+  --glow-orange: rgba(240,90,0,0.15);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ── 滚动条 ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: #2d3557; border-radius: 3px; }
+
+/* ── NAV ── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 60px; height: 64px;
+  background: rgba(7,9,15,0.8);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+.nav-logo { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+.nav-logo-icon {
+  width: 36px; height: 36px; border-radius: 9px;
+  background: linear-gradient(135deg, var(--orange), #ff8c42);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 900; color: #fff;
+  box-shadow: 0 0 20px rgba(240,90,0,0.4);
+}
+.nav-logo-text { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: 0.3px; }
+.nav-links { display: flex; gap: 36px; }
+.nav-links a {
+  text-decoration: none; font-size: 14px; color: var(--text2);
+  transition: color 0.2s;
+}
+.nav-links a:hover { color: var(--text); }
+.nav-cta {
+  display: flex; align-items: center; gap: 12px;
+}
+.btn-nav {
+  padding: 8px 22px; border-radius: 8px; font-size: 13.5px; font-weight: 500;
+  cursor: pointer; text-decoration: none; transition: all 0.2s;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-ghost {
+  background: transparent; color: var(--text2); border: 1px solid var(--border);
+}
+.btn-ghost:hover { background: var(--card-hover); color: var(--text); border-color: rgba(255,255,255,0.15); }
+.btn-primary-nav {
+  background: linear-gradient(135deg, var(--blue), var(--blue2));
+  color: #fff; border: none;
+  box-shadow: 0 0 20px rgba(79,110,247,0.3);
+}
+.btn-primary-nav:hover { box-shadow: 0 0 30px rgba(79,110,247,0.5); transform: translateY(-1px); }
+
+/* ── HERO ── */
+.hero {
+  min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+  padding: 120px 24px 80px;
+  position: relative; overflow: hidden;
+}
+.hero-bg-glow {
+  position: absolute; inset: 0; pointer-events: none;
+}
+.hero-bg-glow::before {
+  content: '';
+  position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+  width: 800px; height: 600px;
+  background: radial-gradient(ellipse, rgba(79,110,247,0.12) 0%, transparent 70%);
+}
+.hero-bg-glow::after {
+  content: '';
+  position: absolute; bottom: -100px; right: -100px;
+  width: 500px; height: 500px;
+  background: radial-gradient(ellipse, rgba(240,90,0,0.08) 0%, transparent 70%);
+}
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 16px; border-radius: 100px;
+  background: rgba(79,110,247,0.1); border: 1px solid rgba(79,110,247,0.25);
+  font-size: 13px; color: #818cf8; font-weight: 500;
+  margin-bottom: 28px; letter-spacing: 0.3px;
+}
+.badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blue); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.5); } }
+
+.hero h1 {
+  font-size: clamp(40px, 6vw, 72px);
+  font-weight: 800; line-height: 1.1;
+  letter-spacing: -1.5px;
+  margin-bottom: 24px;
+}
+.hero h1 .gradient-text {
+  background: linear-gradient(135deg, #818cf8, var(--blue), var(--cyan));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero h1 .orange-text {
+  background: linear-gradient(135deg, var(--orange), #ff8c42);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero-desc {
+  font-size: clamp(16px, 2vw, 20px); color: var(--text2); max-width: 640px;
+  margin: 0 auto 40px; line-height: 1.7; font-weight: 400;
+}
+.hero-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 64px; }
+.btn-hero-primary {
+  padding: 14px 32px; border-radius: 12px; font-size: 15px; font-weight: 600;
+  background: linear-gradient(135deg, var(--blue), var(--blue2));
+  color: #fff; border: none; cursor: pointer; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 8px;
+  box-shadow: 0 0 30px rgba(79,110,247,0.35), 0 4px 20px rgba(0,0,0,0.3);
+  transition: all 0.25s;
+}
+.btn-hero-primary:hover { box-shadow: 0 0 50px rgba(79,110,247,0.55), 0 4px 30px rgba(0,0,0,0.4); transform: translateY(-2px); }
+.btn-hero-secondary {
+  padding: 14px 32px; border-radius: 12px; font-size: 15px; font-weight: 500;
+  background: rgba(255,255,255,0.05); color: var(--text);
+  border: 1px solid var(--border); cursor: pointer; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 8px;
+  transition: all 0.25s; backdrop-filter: blur(10px);
+}
+.btn-hero-secondary:hover { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.15); transform: translateY(-2px); }
+
+.hero-stats {
+  display: flex; gap: 48px; justify-content: center; flex-wrap: wrap;
+}
+.hero-stat { text-align: center; }
+.hero-stat-num { font-size: 36px; font-weight: 800; letter-spacing: -1px; }
+.hero-stat-num span { font-size: 20px; font-weight: 600; margin-left: 2px; }
+.hero-stat-label { font-size: 13px; color: var(--text3); margin-top: 4px; }
+.hero-stat-divider { width: 1px; background: var(--border); height: 48px; align-self: center; }
+
+/* ── 流程演示区 ── */
+.flow-section {
+  padding: 100px 60px;
+  background: linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+  position: relative;
+}
+.section-label {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;
+  color: var(--blue); margin-bottom: 16px;
+}
+.section-label::before { content: ''; display: block; width: 20px; height: 2px; background: var(--blue); border-radius: 1px; }
+.section-title {
+  font-size: clamp(28px, 4vw, 44px); font-weight: 800; letter-spacing: -1px;
+  margin-bottom: 16px; line-height: 1.2;
+}
+.section-desc { font-size: 17px; color: var(--text2); max-width: 560px; line-height: 1.7; }
+
+.flow-steps {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+  margin-top: 64px; position: relative;
+}
+.flow-steps::before {
+  content: '';
+  position: absolute; top: 36px; left: calc(12.5% + 18px); right: calc(12.5% + 18px);
+  height: 1px; background: linear-gradient(90deg, transparent, var(--blue), var(--cyan), var(--green), transparent);
+  opacity: 0.4;
+}
+.flow-step { text-align: center; padding: 0 16px; }
+.flow-step-icon {
+  width: 72px; height: 72px; border-radius: 20px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px; margin: 0 auto 20px;
+  position: relative; z-index: 1;
+  border: 1px solid var(--border);
+  transition: transform 0.3s;
+}
+.flow-step:hover .flow-step-icon { transform: translateY(-4px); }
+.flow-step:nth-child(1) .flow-step-icon { background: rgba(79,110,247,0.12); box-shadow: 0 0 24px rgba(79,110,247,0.2); }
+.flow-step:nth-child(2) .flow-step-icon { background: rgba(240,90,0,0.12); box-shadow: 0 0 24px rgba(240,90,0,0.2); }
+.flow-step:nth-child(3) .flow-step-icon { background: rgba(124,58,237,0.12); box-shadow: 0 0 24px rgba(124,58,237,0.2); }
+.flow-step:nth-child(4) .flow-step-icon { background: rgba(16,185,129,0.12); box-shadow: 0 0 24px rgba(16,185,129,0.2); }
+.flow-step-num {
+  position: absolute; top: -8px; right: -8px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--bg); border: 1px solid var(--border);
+  font-size: 11px; font-weight: 700; color: var(--text3);
+  display: flex; align-items: center; justify-content: center;
+}
+.flow-step-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.flow-step-desc { font-size: 13.5px; color: var(--text2); line-height: 1.6; }
+
+/* ── 功能区 ── */
+.features-section {
+  padding: 100px 60px;
+  background: var(--bg);
+}
+.features-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+  margin-top: 64px;
+}
+.feature-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px; padding: 32px;
+  transition: all 0.3s;
+  position: relative; overflow: hidden;
+}
+.feature-card::before {
+  content: ''; position: absolute; inset: 0; border-radius: 20px;
+  background: linear-gradient(135deg, rgba(79,110,247,0.05), transparent);
+  opacity: 0; transition: opacity 0.3s;
+}
+.feature-card:hover { background: var(--card-hover); border-color: rgba(79,110,247,0.25); transform: translateY(-4px); box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+.feature-card:hover::before { opacity: 1; }
+.feature-card.featured {
+  grid-column: span 2;
+  background: linear-gradient(135deg, rgba(79,110,247,0.08), rgba(99,102,241,0.05));
+  border-color: rgba(79,110,247,0.2);
+}
+.feature-icon {
+  width: 52px; height: 52px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; margin-bottom: 20px;
+}
+.icon-blue { background: rgba(79,110,247,0.15); }
+.icon-orange { background: rgba(240,90,0,0.15); }
+.icon-purple { background: rgba(124,58,237,0.15); }
+.icon-cyan { background: rgba(6,182,212,0.15); }
+.icon-green { background: rgba(16,185,129,0.15); }
+.icon-pink { background: rgba(236,72,153,0.15); }
+.feature-title { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+.feature-desc { font-size: 14px; color: var(--text2); line-height: 1.7; }
+.feature-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+.tag {
+  padding: 4px 12px; border-radius: 100px; font-size: 12px; font-weight: 500;
+  background: rgba(255,255,255,0.06); color: var(--text2);
+  border: 1px solid var(--border);
+}
+.tag-blue { background: rgba(79,110,247,0.12); color: #818cf8; border-color: rgba(79,110,247,0.2); }
+.tag-orange { background: rgba(240,90,0,0.12); color: #fb923c; border-color: rgba(240,90,0,0.2); }
+.tag-green { background: rgba(16,185,129,0.12); color: #34d399; border-color: rgba(16,185,129,0.2); }
+
+/* ── 保司展示 ── */
+.insurers-section {
+  padding: 100px 60px;
+  background: var(--bg2);
+  overflow: hidden;
+}
+.insurers-track-wrap { overflow: hidden; margin-top: 48px; position: relative; }
+.insurers-track-wrap::before, .insurers-track-wrap::after {
+  content: ''; position: absolute; top: 0; bottom: 0; width: 120px; z-index: 2;
+}
+.insurers-track-wrap::before { left: 0; background: linear-gradient(90deg, var(--bg2), transparent); }
+.insurers-track-wrap::after { right: 0; background: linear-gradient(-90deg, var(--bg2), transparent); }
+.insurers-track {
+  display: flex; gap: 16px; width: max-content;
+  animation: scroll 40s linear infinite;
+}
+.insurers-track:hover { animation-play-state: paused; }
+@keyframes scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.insurer-chip {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 10px 20px; border-radius: 100px; white-space: nowrap;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  font-size: 14px; font-weight: 500; color: var(--text2);
+  transition: all 0.2s;
+}
+.insurer-chip:hover { background: rgba(79,110,247,0.1); border-color: rgba(79,110,247,0.25); color: var(--text); }
+.insurer-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--blue); opacity: 0.6; flex-shrink: 0; }
+
+/* ── 数据展示 ── */
+.dashboard-section {
+  padding: 100px 60px;
+  background: var(--bg);
+}
+.dashboard-wrap {
+  margin-top: 64px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 24px; overflow: hidden;
+  box-shadow: 0 40px 120px rgba(0,0,0,0.5);
+}
+.dashboard-bar {
+  background: var(--bg3); padding: 14px 20px;
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.dash-dot { width: 12px; height: 12px; border-radius: 50%; }
+.dash-dot:nth-child(1) { background: #ef4444; }
+.dash-dot:nth-child(2) { background: #f59e0b; }
+.dash-dot:nth-child(3) { background: #22c55e; }
+.dash-url {
+  flex: 1; text-align: center; font-size: 12px; color: var(--text3);
+  background: rgba(255,255,255,0.04); padding: 5px 16px; border-radius: 6px;
+  max-width: 280px; margin: 0 auto;
+}
+.dashboard-inner { padding: 28px; display: flex; gap: 20px; }
+.dash-sidebar {
+  width: 220px; flex-shrink: 0;
+  background: rgba(255,255,255,0.02); border-radius: 12px;
+  border: 1px solid var(--border); padding: 16px 12px;
+}
+.dash-nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: 8px; margin-bottom: 3px;
+  font-size: 13px; color: var(--text2); cursor: default;
+}
+.dash-nav-item.active { background: rgba(79,110,247,0.12); color: #818cf8; font-weight: 600; }
+.dash-nav-dot { width: 6px; height: 6px; border-radius: 50%; background: #818cf8; }
+.dash-nav-dot-gray { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); }
+.dash-main { flex: 1; }
+.dash-top-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+.dash-metric {
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px;
+}
+.dash-metric-label { font-size: 11px; color: var(--text3); margin-bottom: 8px; }
+.dash-metric-value { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
+.dash-metric-sub { font-size: 11px; color: var(--green); margin-top: 4px; }
+.dash-table { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.dash-table-head { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 0.8fr; gap: 0; padding: 10px 16px; background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--border); }
+.dash-th { font-size: 11px; font-weight: 600; color: var(--text3); letter-spacing: 0.5px; text-transform: uppercase; }
+.dash-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 0.8fr; gap: 0; padding: 11px 16px; border-bottom: 1px solid var(--border); align-items: center; }
+.dash-row:last-child { border-bottom: none; }
+.dash-row:hover { background: rgba(255,255,255,0.02); }
+.dash-td { font-size: 12.5px; color: var(--text2); }
+.dash-td-main { color: var(--text); font-weight: 500; }
+.dash-badge { display: inline-block; padding: 3px 10px; border-radius: 100px; font-size: 11px; font-weight: 600; }
+.badge-done { background: rgba(16,185,129,0.12); color: #34d399; }
+.badge-warn { background: rgba(245,158,11,0.12); color: #fbbf24; }
+
+/* ── 优势对比 ── */
+.compare-section {
+  padding: 100px 60px;
+  background: linear-gradient(180deg, var(--bg2) 0%, var(--bg) 100%);
+}
+.compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 64px; }
+.compare-card {
+  border-radius: 20px; padding: 40px; position: relative;
+}
+.compare-before {
+  background: rgba(239,68,68,0.04); border: 1px solid rgba(239,68,68,0.15);
+}
+.compare-after {
+  background: rgba(79,110,247,0.05); border: 1px solid rgba(79,110,247,0.2);
+  box-shadow: 0 0 60px rgba(79,110,247,0.08);
+}
+.compare-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  padding: 5px 14px; border-radius: 100px; margin-bottom: 28px;
+}
+.label-before { background: rgba(239,68,68,0.1); color: #f87171; border: 1px solid rgba(239,68,68,0.2); }
+.label-after { background: rgba(79,110,247,0.1); color: #818cf8; border: 1px solid rgba(79,110,247,0.2); }
+.compare-item { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 22px; }
+.compare-icon-bad { width: 24px; height: 24px; border-radius: 50%; background: rgba(239,68,68,0.12); color: #f87171; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; margin-top: 2px; }
+.compare-icon-good { width: 24px; height: 24px; border-radius: 50%; background: rgba(16,185,129,0.12); color: #34d399; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; margin-top: 2px; }
+.compare-item-text { font-size: 14.5px; color: var(--text2); line-height: 1.6; }
+.compare-item-text strong { color: var(--text); }
+
+/* ── 定价 ── */
+.pricing-section {
+  padding: 100px 60px;
+  background: var(--bg);
+}
+.pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 64px; max-width: 1000px; margin-left: auto; margin-right: auto; }
+.pricing-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 24px; padding: 36px; position: relative;
+}
+.pricing-card.popular {
+  background: linear-gradient(135deg, rgba(79,110,247,0.08), rgba(124,58,237,0.05));
+  border-color: rgba(79,110,247,0.3);
+  transform: scale(1.04);
+  box-shadow: 0 0 60px rgba(79,110,247,0.15);
+}
+.popular-badge {
+  position: absolute; top: -13px; left: 50%; transform: translateX(-50%);
+  background: linear-gradient(135deg, var(--blue), var(--blue2));
+  color: #fff; font-size: 12px; font-weight: 700; padding: 4px 18px;
+  border-radius: 100px; white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(79,110,247,0.4);
+}
+.pricing-tier { font-size: 13px; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+.pricing-price { font-size: 42px; font-weight: 900; letter-spacing: -1.5px; margin-bottom: 6px; }
+.pricing-price span { font-size: 18px; font-weight: 500; color: var(--text2); margin-left: 4px; }
+.pricing-desc { font-size: 13.5px; color: var(--text3); margin-bottom: 28px; padding-bottom: 28px; border-bottom: 1px solid var(--border); }
+.pricing-feature { display: flex; align-items: center; gap: 10px; margin-bottom: 13px; font-size: 14px; color: var(--text2); }
+.pricing-feature .check { color: var(--green); font-size: 13px; flex-shrink: 0; }
+.pricing-feature .cross { color: var(--text3); font-size: 13px; flex-shrink: 0; }
+.btn-pricing {
+  display: block; width: 100%; padding: 13px; border-radius: 12px;
+  font-size: 14px; font-weight: 600; text-align: center; cursor: pointer;
+  text-decoration: none; margin-top: 28px; transition: all 0.2s;
+}
+.btn-pricing-outline {
+  background: transparent; color: var(--text2);
+  border: 1px solid var(--border);
+}
+.btn-pricing-outline:hover { background: var(--card-hover); color: var(--text); border-color: rgba(255,255,255,0.15); }
+.btn-pricing-filled {
+  background: linear-gradient(135deg, var(--blue), var(--blue2));
+  color: #fff; border: none;
+  box-shadow: 0 0 24px rgba(79,110,247,0.3);
+}
+.btn-pricing-filled:hover { box-shadow: 0 0 40px rgba(79,110,247,0.5); transform: translateY(-1px); }
+
+/* ── CTA ── */
+.cta-section {
+  padding: 120px 60px;
+  background: var(--bg2);
+  text-align: center; position: relative; overflow: hidden;
+}
+.cta-section::before {
+  content: ''; position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+  width: 1000px; height: 600px;
+  background: radial-gradient(ellipse, rgba(79,110,247,0.1) 0%, transparent 65%);
+  pointer-events: none;
+}
+.cta-section h2 { font-size: clamp(32px, 5vw, 56px); font-weight: 800; letter-spacing: -1.5px; margin-bottom: 20px; line-height: 1.15; }
+.cta-section p { font-size: 18px; color: var(--text2); max-width: 500px; margin: 0 auto 44px; }
+.cta-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+
+/* ── FOOTER ── */
+footer {
+  padding: 60px; background: var(--bg); border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 24px;
+}
+.footer-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+.footer-copy { font-size: 13px; color: var(--text3); }
+.footer-links { display: flex; gap: 28px; }
+.footer-links a { font-size: 13px; color: var(--text3); text-decoration: none; transition: color 0.2s; }
+.footer-links a:hover { color: var(--text2); }
+
+/* ── 动画 ── */
+.fade-up { opacity: 0; transform: translateY(30px); transition: opacity 0.6s ease, transform 0.6s ease; }
+.fade-up.visible { opacity: 1; transform: translateY(0); }
+
+/* ── 响应式 ── */
+@media (max-width: 1024px) {
+  nav { padding: 0 30px; }
+  .flow-section, .features-section, .insurers-section, .dashboard-section,
+  .compare-section, .pricing-section, .cta-section, footer { padding-left: 30px; padding-right: 30px; }
+  .features-grid { grid-template-columns: repeat(2, 1fr); }
+  .feature-card.featured { grid-column: span 2; }
+  .flow-steps { grid-template-columns: repeat(2, 1fr); gap: 32px; }
+  .flow-steps::before { display: none; }
+  .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
+  .pricing-card.popular { transform: none; }
+  .dashboard-inner { flex-direction: column; }
+  .dash-sidebar { width: 100%; display: flex; flex-wrap: wrap; gap: 4px; padding: 12px; }
+  .dash-nav-item { margin-bottom: 0; }
+  .compare-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+  /* Nav */
+  nav { padding: 0 20px; }
+  .nav-links { display: none; }
+  .btn-ghost { display: none; }
+  .btn-primary-nav { padding: 8px 16px; font-size: 13px; }
+
+  /* 各区块间距 */
+  .flow-section, .features-section, .insurers-section, .dashboard-section,
+  .compare-section, .pricing-section, .cta-section, footer { padding: 64px 20px; }
+
+  /* Hero */
+  .hero { padding: 100px 20px 60px; }
+  .hero-actions { flex-direction: column; align-items: center; }
+  .btn-hero-primary, .btn-hero-secondary { width: 100%; max-width: 320px; justify-content: center; }
+  .hero-stats { gap: 0; display: grid; grid-template-columns: 1fr 1fr; row-gap: 24px; }
+  .hero-stat-divider { display: none; }
+
+  /* 流程步骤 */
+  .flow-steps { grid-template-columns: 1fr; gap: 28px; }
+  .flow-step { display: flex; align-items: flex-start; gap: 20px; text-align: left; padding: 0; }
+  .flow-step-icon { width: 56px; height: 56px; border-radius: 16px; font-size: 24px; flex-shrink: 0; margin: 0; }
+
+  /* 功能卡片 */
+  .features-grid { grid-template-columns: 1fr; }
+  .feature-card.featured { grid-column: span 1; }
+
+  /* Dashboard 简化 */
+  .dash-sidebar { display: none; }
+  .dash-top-row { grid-template-columns: repeat(2, 1fr); }
+  .dash-table-head, .dash-row { grid-template-columns: 1.5fr 1fr 1fr; }
+  .dash-th:nth-child(n+4), .dash-td:nth-child(n+4) { display: none; }
+
+  /* 对比区 */
+  .compare-grid { grid-template-columns: 1fr; gap: 16px; }
+  .compare-card { padding: 28px 24px; }
+
+  /* 价格 */
+  .pricing-grid { max-width: 100%; }
+
+  /* CTA */
+  .cta-section { padding: 80px 20px; }
+  .cta-actions { flex-direction: column; align-items: center; }
+
+  /* Footer */
+  footer { padding: 40px 20px; flex-direction: column; align-items: flex-start; gap: 20px; }
+  .footer-links { flex-wrap: wrap; gap: 16px; }
+}
+
+@media (max-width: 480px) {
+  /* Hero 超小屏 */
+  .hero { padding: 88px 16px 50px; }
+  .hero-badge { font-size: 12px; padding: 5px 13px; }
+  .hero-stats { grid-template-columns: 1fr 1fr; gap: 16px; }
+  .hero-stat-num { font-size: 28px; }
+
+  /* 各区块间距再缩小 */
+  .flow-section, .features-section, .insurers-section, .dashboard-section,
+  .compare-section, .pricing-section, .cta-section { padding: 52px 16px; }
+  footer { padding: 36px 16px; }
+
+  /* 功能卡片 */
+  .feature-card { padding: 24px; }
+  .feature-card.featured { padding: 24px; }
+
+  /* 流程步骤 */
+  .flow-step-icon { width: 48px; height: 48px; border-radius: 14px; font-size: 20px; }
+
+  /* Dashboard 表格再简化 */
+  .dash-table-head, .dash-row { grid-template-columns: 1.8fr 1fr; }
+  .dash-th:nth-child(n+3), .dash-td:nth-child(n+3) { display: none; }
+  .dash-top-row { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .dash-metric { padding: 12px; }
+  .dash-metric-value { font-size: 20px; }
+
+  /* 价格卡片 */
+  .pricing-card { padding: 28px 22px; }
+
+  /* Nav logo 文字 */
+  .nav-logo-text { font-size: 14px; }
+
+  /* section 标题 */
+  .section-title { font-size: 26px; }
+  .section-desc { font-size: 15px; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="#">
+    <div class="nav-logo-icon">保</div>
+    <span class="nav-logo-text">AI保单台账</span>
+  </a>
+  <div class="nav-links">
+    <a href="#features">功能</a>
+    <a href="#how">工作原理</a>
+    <a href="#insurers">支持保司</a>
+    <a href="#pricing">价格</a>
+  </div>
+  <div class="nav-cta">
+    <a href="/login" class="btn-nav btn-ghost">登录</a>
+    <a href="#pricing" class="btn-nav btn-primary-nav">立即使用 →</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg-glow"></div>
+  <div class="hero-badge">
+    <span class="badge-dot"></span>
+    基于 AI 的新一代保单管理平台
+  </div>
+  <h1>
+    保单发到群里<br>
+    <span class="orange-text">台账自动生成</span>
+  </h1>
+  <p class="hero-desc">
+    接入企业微信，监控指定群聊，PDF 保单自动识别、自动分类、自动入库。
+    告别手动录入，专注核心业务。
+  </p>
+  <div class="hero-actions">
+    <a href="/login" class="btn-hero-primary">
+      免费开始使用
+      <span>→</span>
+    </a>
+    <a href="#how" class="btn-hero-secondary">
+      <span>▶</span>
+      查看演示
+    </a>
+  </div>
+  <div class="hero-stats">
+    <div class="hero-stat">
+      <div class="hero-stat-num" style="background:linear-gradient(135deg,#818cf8,#4f6ef7);-webkit-background-clip:text;-webkit-text-fill-color:transparent">50<span>+</span></div>
+      <div class="hero-stat-label">支持保险公司</div>
+    </div>
+    <div class="hero-stat-divider"></div>
+    <div class="hero-stat">
+      <div class="hero-stat-num" style="background:linear-gradient(135deg,#f97316,#f05a00);-webkit-background-clip:text;-webkit-text-fill-color:transparent">98<span>%</span></div>
+      <div class="hero-stat-label">识别准确率</div>
+    </div>
+    <div class="hero-stat-divider"></div>
+    <div class="hero-stat">
+      <div class="hero-stat-num" style="background:linear-gradient(135deg,#34d399,#10b981);-webkit-background-clip:text;-webkit-text-fill-color:transparent">3<span>秒</span></div>
+      <div class="hero-stat-label">平均识别时间</div>
+    </div>
+    <div class="hero-stat-divider"></div>
+    <div class="hero-stat">
+      <div class="hero-stat-num" style="background:linear-gradient(135deg,#67e8f9,#06b6d4);-webkit-background-clip:text;-webkit-text-fill-color:transparent">0<span>录入</span></div>
+      <div class="hero-stat-label">人工操作</div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="flow-section" id="how">
+  <div class="fade-up">
+    <div class="section-label">工作原理</div>
+    <h2 class="section-title">四步完成，全程自动</h2>
+    <p class="section-desc">从保单发送到台账生成，无需任何人工干预，系统全自动完成所有工作。</p>
+  </div>
+  <div class="flow-steps fade-up" style="transition-delay:0.1s">
+    <div class="flow-step">
+      <div class="flow-step-icon">
+        📱
+        <span class="flow-step-num">1</span>
+      </div>
+      <div class="flow-step-title">发送保单</div>
+      <div class="flow-step-desc">业务员将 PDF 保单转发到企业微信服务群，无需任何额外操作</div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-step-icon">
+        🤖
+        <span class="flow-step-num">2</span>
+      </div>
+      <div class="flow-step-title">AI 自动识别</div>
+      <div class="flow-step-desc">系统实时监控群消息，检测到保单 PDF 后立即启动 AI 识别引擎</div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-step-icon">
+        📊
+        <span class="flow-step-num">3</span>
+      </div>
+      <div class="flow-step-title">生成台账</div>
+      <div class="flow-step-desc">提取保单号、车牌、保费、保期等关键字段，自动写入结构化台账</div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-step-icon">
+        📤
+        <span class="flow-step-num">4</span>
+      </div>
+      <div class="flow-step-title">导出 / 同步</div>
+      <div class="flow-step-desc">一键导出 Excel，或自动同步到钉钉多维表格，实时共享数据</div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features-section" id="features">
+  <div class="fade-up">
+    <div class="section-label">核心功能</div>
+    <h2 class="section-title">专为保险中介设计</h2>
+    <p class="section-desc">从识别到管理，从个人到团队，覆盖保单管理全流程。</p>
+  </div>
+  <div class="features-grid fade-up" style="transition-delay:0.1s">
+
+    <div class="feature-card featured">
+      <div class="feature-icon icon-blue">🧠</div>
+      <div class="feature-title">智能保单识别</div>
+      <div class="feature-desc">
+        基于 AI OCR + 深度正则规则引擎，支持 50+ 家主流保险公司。交强险、商业险、驾意险、非车险全覆盖。
+        遇到 OCR 无法识别的扫描件，自动降级到百度 OCR 引擎兜底，确保每一张保单都能识别。
+      </div>
+      <div class="feature-tags">
+        <span class="tag tag-blue">人保</span>
+        <span class="tag tag-blue">平安</span>
+        <span class="tag tag-blue">太平洋</span>
+        <span class="tag tag-blue">大地</span>
+        <span class="tag tag-blue">阳光</span>
+        <span class="tag tag-blue">50+ 更多</span>
+      </div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon icon-orange">💬</div>
+      <div class="feature-title">企业微信自动监控</div>
+      <div class="feature-desc">绑定企业微信群聊，业务员发送保单后自动入库，全程无感知，无需改变工作习惯。</div>
+      <div class="feature-tags">
+        <span class="tag tag-orange">多群监控</span>
+        <span class="tag tag-orange">自动归属发送人</span>
+      </div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon icon-green">📥</div>
+      <div class="feature-title">灵活导出</div>
+      <div class="feature-desc">支持按需勾选导出列，按车牌合并导出（交强险+商业险+驾意险合一行），批量下载原始 PDF。</div>
+      <div class="feature-tags">
+        <span class="tag tag-green">Excel 导出</span>
+        <span class="tag tag-green">按车牌合并</span>
+      </div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon icon-purple">⚙️</div>
+      <div class="feature-title">强大的字段配置</div>
+      <div class="feature-desc">自定义简称映射、日期格式、计算公式（佣金/利润），配置一次，历史数据全部自动生效。</div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon icon-cyan">🔗</div>
+      <div class="feature-title">钉钉多维表格同步</div>
+      <div class="feature-desc">识别完成后自动推送到指定钉钉多维表格，团队实时查看最新台账数据，无需手动同步。</div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon icon-pink">👥</div>
+      <div class="feature-title">多角色权限管理</div>
+      <div class="feature-desc">超管 / 企业管理员 / 员工三级权限，数据按企业隔离，员工只看自己的保单记录。</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- INSURERS -->
+<section class="insurers-section" id="insurers">
+  <div class="fade-up" style="text-align:center">
+    <div class="section-label" style="justify-content:center;margin-bottom:16px">支持保司</div>
+    <h2 class="section-title">覆盖 50+ 家主流保险公司</h2>
+    <p class="section-desc" style="margin:0 auto">持续更新中，如有未覆盖的保司，联系我们即可快速接入。</p>
+  </div>
+  <div class="insurers-track-wrap">
+    <div class="insurers-track" id="track1">
+      <div class="insurer-chip"><span class="insurer-dot"></span>中国人民财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>中国平安财险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>中国太平洋财险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>中国大地财险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>阳光财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>太平财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>华泰财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>天安财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>大家财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>永安财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>渤海财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>紫金财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>都邦财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>亚太财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>安诚财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>中国人民财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>中国平安财险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>中国太平洋财险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>中国大地财险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>阳光财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>太平财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>华泰财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>天安财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>大家财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>永安财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>渤海财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>紫金财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>都邦财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>亚太财产保险</div>
+      <div class="insurer-chip"><span class="insurer-dot"></span>安诚财产保险</div>
+    </div>
+  </div>
+</section>
+
+<!-- DASHBOARD PREVIEW -->
+<section class="dashboard-section">
+  <div class="fade-up" style="text-align:center">
+    <div class="section-label" style="justify-content:center;margin-bottom:16px">产品预览</div>
+    <h2 class="section-title">清晰直观的管理界面</h2>
+    <p class="section-desc" style="margin:0 auto">专业的台账管理视图，所有数据一目了然，支持多维筛选和在线编辑。</p>
+  </div>
+  <div class="dashboard-wrap fade-up" style="transition-delay:0.1s">
+    <div class="dashboard-bar">
+      <div class="dash-dot"></div>
+      <div class="dash-dot"></div>
+      <div class="dash-dot"></div>
+      <div class="dash-url">🔒 wxbot.wuhuxiche.com/insurance</div>
+    </div>
+    <div class="dashboard-inner">
+      <div class="dash-sidebar">
+        <div class="dash-nav-item active"><span class="dash-nav-dot"></span>识别记录</div>
+        <div class="dash-nav-item"><span class="dash-nav-dot-gray"></span>手动上传</div>
+        <div class="dash-nav-item"><span class="dash-nav-dot-gray"></span>字段设置</div>
+        <div class="dash-nav-item"><span class="dash-nav-dot-gray"></span>监控配置</div>
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)"></div>
+        <div class="dash-nav-item"><span class="dash-nav-dot-gray"></span>账号管理</div>
+        <div class="dash-nav-item"><span class="dash-nav-dot-gray"></span>企业管理</div>
+      </div>
+      <div class="dash-main">
+        <div class="dash-top-row">
+          <div class="dash-metric">
+            <div class="dash-metric-label">本月识别</div>
+            <div class="dash-metric-value" style="color:#818cf8">1,284</div>
+            <div class="dash-metric-sub">↑ 12% 较上月</div>
+          </div>
+          <div class="dash-metric">
+            <div class="dash-metric-label">识别成功率</div>
+            <div class="dash-metric-value" style="color:#34d399">98.3%</div>
+            <div class="dash-metric-sub">↑ 0.4%</div>
+          </div>
+          <div class="dash-metric">
+            <div class="dash-metric-label">待处理异常</div>
+            <div class="dash-metric-value" style="color:#fbbf24">7</div>
+            <div class="dash-metric-sub">需人工复核</div>
+          </div>
+          <div class="dash-metric">
+            <div class="dash-metric-label">今日新增</div>
+            <div class="dash-metric-value" style="color:#67e8f9">43</div>
+            <div class="dash-metric-sub">↑ 实时更新</div>
+          </div>
+        </div>
+        <div class="dash-table">
+          <div class="dash-table-head">
+            <div class="dash-th">文件名</div>
+            <div class="dash-th">保单号</div>
+            <div class="dash-th">车牌</div>
+            <div class="dash-th">保司</div>
+            <div class="dash-th">保费</div>
+            <div class="dash-th">状态</div>
+          </div>
+          <div class="dash-row">
+            <div class="dash-td dash-td-main">张三_商业险_粤B12345.pdf</div>
+            <div class="dash-td">PBAW2024...</div>
+            <div class="dash-td">粤B·12345</div>
+            <div class="dash-td">平安财险</div>
+            <div class="dash-td">¥3,280</div>
+            <div class="dash-td"><span class="dash-badge badge-done">已识别</span></div>
+          </div>
+          <div class="dash-row">
+            <div class="dash-td dash-td-main">李四_交强险_湘A88888.pdf</div>
+            <div class="dash-td">PICC2024...</div>
+            <div class="dash-td">湘A·88888</div>
+            <div class="dash-td">人保财险</div>
+            <div class="dash-td">¥950</div>
+            <div class="dash-td"><span class="dash-badge badge-done">已识别</span></div>
+          </div>
+          <div class="dash-row">
+            <div class="dash-td dash-td-main">王五_驾意险_粤C99999.pdf</div>
+            <div class="dash-td">CPIC2024...</div>
+            <div class="dash-td">粤C·99999</div>
+            <div class="dash-td">太平洋</div>
+            <div class="dash-td">¥168</div>
+            <div class="dash-td"><span class="dash-badge badge-warn">异常</span></div>
+          </div>
+          <div class="dash-row">
+            <div class="dash-td dash-td-main">赵六_商业险_粤D55566.pdf</div>
+            <div class="dash-td">SUNSHINE...</div>
+            <div class="dash-td">粤D·55566</div>
+            <div class="dash-td">阳光财险</div>
+            <div class="dash-td">¥5,640</div>
+            <div class="dash-td"><span class="dash-badge badge-done">已识别</span></div>
+          </div>
+          <div class="dash-row">
+            <div class="dash-td dash-td-main">陈七_商业险_粤E77788.pdf</div>
+            <div class="dash-td">DADI2024...</div>
+            <div class="dash-td">粤E·77788</div>
+            <div class="dash-td">大地财险</div>
+            <div class="dash-td">¥2,890</div>
+            <div class="dash-td"><span class="dash-badge badge-done">已识别</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARE -->
+<section class="compare-section">
+  <div class="fade-up" style="text-align:center">
+    <div class="section-label" style="justify-content:center;margin-bottom:16px">为什么选择我们</div>
+    <h2 class="section-title">告别手动录入时代</h2>
+    <p class="section-desc" style="margin:0 auto">一个系统，彻底改变保单管理方式。</p>
+  </div>
+  <div class="compare-grid fade-up" style="transition-delay:0.1s">
+    <div class="compare-card compare-before">
+      <div class="compare-label label-before">✗ 传统方式</div>
+      <div class="compare-item">
+        <div class="compare-icon-bad">✗</div>
+        <div class="compare-item-text"><strong>手动录入</strong>，每张保单需要10-20分钟人工填写 Excel</div>
+      </div>
+      <div class="compare-item">
+        <div class="compare-icon-bad">✗</div>
+        <div class="compare-item-text"><strong>容易出错</strong>，保单号、车牌、保费手抄容易误录</div>
+      </div>
+      <div class="compare-item">
+        <div class="compare-icon-bad">✗</div>
+        <div class="compare-item-text"><strong>数据分散</strong>，每人维护自己的 Excel，难以汇总统计</div>
+      </div>
+      <div class="compare-item">
+        <div class="compare-icon-bad">✗</div>
+        <div class="compare-item-text"><strong>保单丢失</strong>，原始 PDF 散落在微信/邮件中难以找回</div>
+      </div>
+      <div class="compare-item">
+        <div class="compare-icon-bad">✗</div>
+        <div class="compare-item-text"><strong>统计困难</strong>，月末汇总需要花费大量时间整理数据</div>
+      </div>
+    </div>
+    <div class="compare-card compare-after">
+      <div class="compare-label label-after">✓ AI保单台账</div>
+      <div class="compare-item">
+        <div class="compare-icon-good">✓</div>
+        <div class="compare-item-text"><strong>全自动识别</strong>，发到群里即完成，3秒生成台账</div>
+      </div>
+      <div class="compare-item">
+        <div class="compare-icon-good">✓</div>
+        <div class="compare-item-text"><strong>AI精准提取</strong>，98% 准确率，异常自动标记提醒</div>
+      </div>
+      <div class="compare-item">
+        <div class="compare-icon-good">✓</div>
+        <div class="compare-item-text"><strong>统一数据库</strong>，多人协作，实时同步，权限隔离</div>
+      </div>
+      <div class="compare-item">
+        <div class="compare-icon-good">✓</div>
+        <div class="compare-item-text"><strong>云端存储</strong>，原始 PDF 自动上传，随时可查可下载</div>
+      </div>
+      <div class="compare-item">
+        <div class="compare-icon-good">✓</div>
+        <div class="compare-item-text"><strong>一键导出</strong>，随时导出 Excel，自动计算佣金利润</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing-section" id="pricing">
+  <div class="fade-up" style="text-align:center">
+    <div class="section-label" style="justify-content:center;margin-bottom:16px">价格方案</div>
+    <h2 class="section-title">透明定价，按需选择</h2>
+    <p class="section-desc" style="margin:0 auto">所有方案均含核心识别功能，按团队规模选择合适方案。</p>
+  </div>
+  <div class="pricing-grid fade-up" style="transition-delay:0.1s">
+    <div class="pricing-card">
+      <div class="pricing-tier">基础版</div>
+      <div class="pricing-price">联系报价<span></span></div>
+      <div class="pricing-desc">适合个人或小型团队起步使用</div>
+      <div class="pricing-feature"><span class="check">✓</span>50+ 家保司识别</div>
+      <div class="pricing-feature"><span class="check">✓</span>Excel 导出</div>
+      <div class="pricing-feature"><span class="check">✓</span>1 个监控群</div>
+      <div class="pricing-feature"><span class="check">✓</span>3 个账号</div>
+      <div class="pricing-feature"><span class="cross">—</span>钉钉自动同步</div>
+      <div class="pricing-feature"><span class="cross">—</span>多企业管理</div>
+      <a href="#" class="btn-pricing btn-pricing-outline">联系我们</a>
+    </div>
+    <div class="pricing-card popular">
+      <div class="popular-badge">推荐方案</div>
+      <div class="pricing-tier">专业版</div>
+      <div class="pricing-price">联系报价<span></span></div>
+      <div class="pricing-desc">适合中小型保险中介团队</div>
+      <div class="pricing-feature"><span class="check">✓</span>50+ 家保司识别</div>
+      <div class="pricing-feature"><span class="check">✓</span>Excel 导出 + 合并导出</div>
+      <div class="pricing-feature"><span class="check">✓</span>不限监控群数量</div>
+      <div class="pricing-feature"><span class="check">✓</span>20 个账号</div>
+      <div class="pricing-feature"><span class="check">✓</span>钉钉自动同步</div>
+      <div class="pricing-feature"><span class="cross">—</span>多企业管理</div>
+      <a href="#" class="btn-pricing btn-pricing-filled">立即咨询</a>
+    </div>
+    <div class="pricing-card">
+      <div class="pricing-tier">企业版</div>
+      <div class="pricing-price">联系报价<span></span></div>
+      <div class="pricing-desc">适合大型机构或多门店管理</div>
+      <div class="pricing-feature"><span class="check">✓</span>50+ 家保司识别</div>
+      <div class="pricing-feature"><span class="check">✓</span>全部导出功能</div>
+      <div class="pricing-feature"><span class="check">✓</span>不限监控群 + 私聊</div>
+      <div class="pricing-feature"><span class="check">✓</span>不限账号数量</div>
+      <div class="pricing-feature"><span class="check">✓</span>钉钉自动同步</div>
+      <div class="pricing-feature"><span class="check">✓</span>多企业独立管理</div>
+      <a href="#" class="btn-pricing btn-pricing-outline">联系我们</a>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <h2 class="fade-up">
+    现在开始<br>
+    <span style="background:linear-gradient(135deg,#818cf8,#4f6ef7,#06b6d4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">告别手动录入</span>
+  </h2>
+  <p class="fade-up" style="transition-delay:0.1s">接入简单，当天上线，当天见效。联系我们即可开始免费试用。</p>
+  <div class="cta-actions fade-up" style="transition-delay:0.2s">
+    <a href="/login" class="btn-hero-primary">免费开始使用 →</a>
+    <a href="#" class="btn-hero-secondary">📞 联系我们</a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <a class="footer-brand" href="#">
+    <div class="nav-logo-icon">保</div>
+    <span class="nav-logo-text">AI保单台账</span>
+  </a>
+  <div class="footer-links">
+    <a href="#">功能介绍</a>
+    <a href="#">使用手册</a>
+    <a href="#">联系我们</a>
+  </div>
+  <div class="footer-copy">© 2026 AI保单台账 · 午虎科技</div>
+</footer>
+
+<script>
+// 滚动动画
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add('visible'); }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+// Nav 滚动效果
+window.addEventListener('scroll', () => {
+  const nav = document.querySelector('nav');
+  if (window.scrollY > 50) { nav.style.background = 'rgba(7,9,15,0.95)'; }
+  else { nav.style.background = 'rgba(7,9,15,0.8)'; }
+});
+
+// 数字滚动动画
+function animateCounter(el, target) {
+  let start = 0;
+  const duration = 1500;
+  const step = timestamp => {
+    if (!start) start = timestamp;
+    const progress = Math.min((timestamp - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.floor(eased * target);
+    if (progress < 1) requestAnimationFrame(step);
+    else el.textContent = target;
+  };
+  requestAnimationFrame(step);
+}
+</script>
+</body>
+</html>

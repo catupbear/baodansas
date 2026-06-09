@@ -246,7 +246,7 @@ createApp({
 
         // 已登录则跳转首页
         if (localStorage.getItem('token')) {
-            window.location.href = '/';
+            window.location.href = '/insurance';
         }
 
         // 恢复记住的手机号密码
@@ -281,7 +281,7 @@ createApp({
                     }
                     localStorage.setItem('token', data.data.token);
                     localStorage.setItem('user', JSON.stringify(data.data.user));
-                    window.location.href = '/';
+                    window.location.href = '/insurance';
                 } else {
                     error.value = data.msg || '登录失败';
                 }

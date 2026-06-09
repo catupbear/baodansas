@@ -135,15 +135,20 @@ def create_app(config: dict) -> Flask:
     def login_page():
         return render_template("login.html")
 
-    # 首页 → 保单识别
+    # 首页 → 产品介绍页
     @app.route("/")
     def index():
+        return render_template("landing.html")
+
+    # 保单台账
+    @app.route("/app")
+    def app_page():
         return render_template("insurance.html")
 
     # 保单识别兼容旧路径
     @app.route("/insurance")
     def insurance_page():
-        return redirect("/")
+        return render_template("insurance.html")
 
     # 监控配置管理
     @app.route("/monitor-config")
