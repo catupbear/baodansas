@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI保单台账 — 智能保单管理平台</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>午虎AI保单台账 — 智能保单管理平台</title>
 <style>
 :root {
   --bg: #060810;
@@ -135,7 +138,7 @@ nav {
   font-weight: 900; line-height: 1.08;
   letter-spacing: -2.5px; margin-bottom: 24px;
 }
-.hero-title .line-orange {
+.hero-title .line-orange, .line-orange {
   background: linear-gradient(135deg, var(--orange), var(--orange2), #fbbf24);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -536,6 +539,7 @@ footer {
 /* ── RESPONSIVE ── */
 @media (max-width: 900px) {
   .pricing-grid { grid-template-columns: 1fr; max-width: 400px; }
+  .pricing-2col { grid-template-columns: 1fr; max-width: 480px; }
   .price-card.popular { transform: none; }
   .contact-grid { grid-template-columns: 1fr; }
 
@@ -551,7 +555,14 @@ footer {
 }
 @media (max-width: 640px) {
   nav { padding: 0 16px; }
+  .nav-logo-name { font-size: 13px; }
+  .nav-cta { padding: 6px 12px; font-size: 12px; letter-spacing: 0; }
+  .nav-cta span { display: none; }
   .section { padding: 56px 16px; }
+  .section-title { letter-spacing: -1px; }
+  .hero { padding: 100px 16px 64px; }
+  .hero-title { letter-spacing: -1.5px; }
+  .hero-btn { padding: 14px 28px; font-size: 15px; }
   .features-grid { grid-template-columns: 1fr; }
   .feat-card.wide { grid-column: span 1; }
   .flow-steps { grid-template-columns: 1fr; }
@@ -562,6 +573,10 @@ footer {
   footer { padding: 32px 16px; }
   .pth span:nth-child(n+4), .ptr span:nth-child(n+4) { display: none; }
   .pth, .ptr { grid-template-columns: 2fr 1fr 1fr; }
+  .billing-toggle { width: 100%; justify-content: center; }
+  .billing-btn { flex: 1; text-align: center; }
+  .cmp-2col { grid-template-columns: 1fr !important; }
+  .price-val { font-size: 32px; }
 }
 </style>
 </head>
@@ -571,7 +586,7 @@ footer {
 <nav>
   <a class="nav-logo" href="#">
     <div class="nav-logo-mark">保</div>
-    <span class="nav-logo-name">AI保单台账</span>
+    <span class="nav-logo-name">午虎AI保单台账</span>
   </a>
   <a href="/login" class="nav-cta">立即使用 <span>→</span></a>
 </nav>
@@ -584,15 +599,15 @@ footer {
   <div class="hero-content">
     <div class="hero-badge reveal">
       <span class="hero-badge-pill">AI 驱动</span>
-      下一代保险中介智能管理平台
+      下一代保险业务智能管理平台
     </div>
     <h1 class="hero-title reveal reveal-d1">
       保单发到群里<br>
       <span class="line-orange">台账自动生成</span>
     </h1>
     <p class="hero-desc reveal reveal-d2">
-      接入企业微信，AI 实时监控保单 PDF，自动识别提取、智能分类入库。
-      告别手动录入，专注核心业务。
+      接入微信群聊，AI 实时监控保单 PDF，自动识别提取、智能分类入库。
+      <span class="line-orange">彻底告别手动录入</span>，<span class="line-orange">让员工更加专注核心业务</span>。
     </p>
     <a href="/login" class="hero-btn reveal reveal-d3">
       免费开始使用
@@ -604,7 +619,7 @@ footer {
         <div class="hero-stat-label">支持保险公司</div>
       </div>
       <div class="hero-stat">
-        <div class="hero-stat-num c-orange">98<span style="font-size:20px;font-weight:600">%</span></div>
+        <div class="hero-stat-num c-orange">99<span style="font-size:20px;font-weight:600">%</span></div>
         <div class="hero-stat-label">识别准确率</div>
       </div>
       <div class="hero-stat">
@@ -615,6 +630,75 @@ footer {
         <div class="hero-stat-num">0</div>
         <div class="hero-stat-label">人工录入</div>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- TIME COMPARISON -->
+<section class="section">
+  <div class="section-inner">
+    <div class="reveal" style="text-align:center">
+      <div class="section-eyebrow" style="justify-content:center"><span class="eyebrow-line"></span>效率对比<span class="eyebrow-line"></span></div>
+      <h2 class="section-title">用时间说话</h2>
+      <p class="section-desc" style="margin:0 auto">同样100张保单，手工录入 vs 午虎AI保单台账</p>
+    </div>
+    <div class="reveal reveal-d1" style="margin-top:48px;display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:860px;margin-left:auto;margin-right:auto">
+      <!-- 手工录入 -->
+      <div style="background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.2);border-radius:16px;padding:32px">
+        <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#ef4444;margin-bottom:20px">✗ 手工录入</div>
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.06)">
+            <span style="font-size:13px;color:var(--text2)">⏱ 单张录入时间</span>
+            <span style="font-size:18px;font-weight:800;color:#ef4444">3~5 分钟</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.06)">
+            <span style="font-size:13px;color:var(--text2)">📋 100张保单耗时</span>
+            <span style="font-size:18px;font-weight:800;color:#ef4444">1~2 小时</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.06)">
+            <span style="font-size:13px;color:var(--text2)">👤 所需人力</span>
+            <span style="font-size:18px;font-weight:800;color:#ef4444">1~2 名专职人员</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.06)">
+            <span style="font-size:13px;color:var(--text2)">❌ 出错率</span>
+            <span style="font-size:18px;font-weight:800;color:#ef4444">5%~15%</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:13px;color:var(--text2)">💰 月人力成本</span>
+            <span style="font-size:18px;font-weight:800;color:#ef4444">¥6,000+</span>
+          </div>
+        </div>
+      </div>
+      <!-- 午虎AI -->
+      <div style="background:rgba(79,110,247,0.05);border:1px solid rgba(79,110,247,0.25);border-radius:16px;padding:32px;position:relative">
+        <div style="position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--blue),var(--purple));color:#fff;font-size:12px;font-weight:700;padding:4px 16px;border-radius:100px;white-space:nowrap">推荐方案</div>
+        <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--blue2);margin-bottom:20px">✓ 午虎AI保单台账</div>
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.06)">
+            <span style="font-size:13px;color:var(--text2)">⏱ 单张识别时间</span>
+            <span style="font-size:18px;font-weight:800;color:var(--green)">< 5 秒</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.06)">
+            <span style="font-size:13px;color:var(--text2)">📋 100张保单耗时</span>
+            <span style="font-size:18px;font-weight:800;color:var(--green)">< 5 分钟</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.06)">
+            <span style="font-size:13px;color:var(--text2)">👤 所需人力</span>
+            <span style="font-size:18px;font-weight:800;color:var(--green)">零人工干预</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.06)">
+            <span style="font-size:13px;color:var(--text2)">✅ 识别准确率</span>
+            <span style="font-size:18px;font-weight:800;color:var(--green)">99%</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:13px;color:var(--text2)">💰 月使用成本</span>
+            <span style="font-size:18px;font-weight:800;color:var(--green)">¥249 起</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="reveal reveal-d2" style="margin-top:32px;text-align:center;padding:20px;background:rgba(79,110,247,0.06);border:1px solid rgba(79,110,247,0.15);border-radius:12px;max-width:860px;margin-left:auto;margin-right:auto">
+      <span style="font-size:15px;font-weight:700;color:var(--text)">🚀 效率提升 <span style="color:var(--orange);font-size:22px">20倍</span>，成本降低 <span style="color:var(--orange);font-size:22px">95%</span>，让员工专注真正有价值的工作</span>
     </div>
   </div>
 </section>
@@ -633,7 +717,7 @@ footer {
         <div class="flow-step">
           <div class="flow-icon-wrap fi-1">📱<span class="flow-num">1</span></div>
           <div class="flow-title">发送保单</div>
-          <div class="flow-desc">业务员把 PDF 保单转发到企业微信服务群，无需任何额外操作</div>
+          <div class="flow-desc">业务员把 PDF 保单转发到微信群聊，无需任何额外操作</div>
         </div>
         <div class="flow-step">
           <div class="flow-icon-wrap fi-2">🤖<span class="flow-num">2</span></div>
@@ -647,8 +731,8 @@ footer {
         </div>
         <div class="flow-step">
           <div class="flow-icon-wrap fi-4">📤<span class="flow-num">4</span></div>
-          <div class="flow-title">导出同步</div>
-          <div class="flow-desc">一键导出 Excel，或自动同步到钉钉多维表格实时共享</div>
+          <div class="flow-title">一键导出</div>
+          <div class="flow-desc">一键导出 Excel，随时获取完整台账数据</div>
         </div>
       </div>
     </div>
@@ -660,7 +744,7 @@ footer {
   <div class="section-inner">
     <div class="reveal">
       <div class="section-eyebrow"><span class="eyebrow-line"></span>核心功能</div>
-      <h2 class="section-title">专为保险中介设计</h2>
+      <h2 class="section-title">专为保险业务设计</h2>
       <p class="section-desc">从识别到管理，覆盖保单全流程。</p>
     </div>
     <div class="features-grid">
@@ -675,8 +759,8 @@ footer {
       </div>
       <div class="feat-card reveal reveal-d2">
         <div class="feat-icon fi-orange">💬</div>
-        <div class="feat-title">企业微信自动监控</div>
-        <div class="feat-desc">绑定群聊，保单发送后自动入库，全程无感知，不改变工作习惯。</div>
+        <div class="feat-title">微信群聊自动监控</div>
+        <div class="feat-desc">绑定微信群聊，保单发送后自动入库，全程无感知，不改变工作习惯。</div>
       </div>
       <div class="feat-card reveal reveal-d3">
         <div class="feat-icon fi-green">📥</div>
@@ -689,9 +773,9 @@ footer {
         <div class="feat-desc">自定义简称映射、日期格式、计算公式（佣金/利润），配置一次历史数据全部自动生效。</div>
       </div>
       <div class="feat-card reveal reveal-d2">
-        <div class="feat-icon fi-cyan">🔗</div>
-        <div class="feat-title">钉钉实时同步</div>
-        <div class="feat-desc">识别完成后自动推送到钉钉多维表格，团队实时查看，无需手动同步。</div>
+        <div class="feat-icon fi-blue">👥</div>
+        <div class="feat-title">多账号团队协作</div>
+        <div class="feat-desc">支持多成员同时使用，权限独立隔离，数据统一管理，告别表格传来传去。</div>
       </div>
     </div>
   </div>
@@ -750,37 +834,8 @@ footer {
       <h2 class="section-title">清晰直观的管理界面</h2>
       <p class="section-desc" style="margin:0 auto">专业的台账视图，多维筛选，在线编辑，一键导出。</p>
     </div>
-    <div class="preview-wrap reveal reveal-d1">
-      <div class="preview-bar">
-        <div class="pb-dot" style="background:#ef4444"></div>
-        <div class="pb-dot" style="background:#f59e0b"></div>
-        <div class="pb-dot" style="background:#22c55e"></div>
-        <div class="pb-url">🔒 wxbot.wuhuxiche.com</div>
-      </div>
-      <div class="preview-body">
-        <div class="preview-side">
-          <div class="pnav active"><span class="pnav-dot"></span>识别记录</div>
-          <div class="pnav"><span class="pnav-dot"></span>手动上传</div>
-          <div class="pnav"><span class="pnav-dot"></span>数据看板</div>
-          <div class="pnav"><span class="pnav-dot"></span>系统设置</div>
-          <div class="pnav"><span class="pnav-dot"></span>监控设置</div>
-        </div>
-        <div class="preview-main">
-          <div class="pmetrics">
-            <div class="pm"><div class="pm-label">今日识别</div><div class="pm-val" style="color:var(--blue2)">91</div><div class="pm-sub">↑ 实时更新</div></div>
-            <div class="pm"><div class="pm-label">成功率</div><div class="pm-val" style="color:var(--green)">99.6%</div><div class="pm-sub">↑ 准确稳定</div></div>
-            <div class="pm"><div class="pm-label">本月识别</div><div class="pm-val" style="color:var(--orange)">3,284</div><div class="pm-sub">↑ 持续增长</div></div>
-            <div class="pm"><div class="pm-label">累计总量</div><div class="pm-val" style="color:var(--purple)">7,912</div><div class="pm-sub">持续积累</div></div>
-          </div>
-          <div class="ptable">
-            <div class="pth"><span>文件名</span><span>保单号</span><span>车牌</span><span>保司</span><span>状态</span></div>
-            <div class="ptr"><span class="td-main">张三_商业险_粤B12345.pdf</span><span>PBAW2024...</span><span>粤B·12345</span><span>平安财险</span><span><span class="badge badge-ok">已识别</span></span></div>
-            <div class="ptr"><span class="td-main">李四_交强险_湘A88888.pdf</span><span>PICC2024...</span><span>湘A·88888</span><span>人保财险</span><span><span class="badge badge-ok">已识别</span></span></div>
-            <div class="ptr"><span class="td-main">王五_驾意险_粤C99999.pdf</span><span>CPIC2024...</span><span>粤C·99999</span><span>太平洋</span><span><span class="badge badge-warn">异常</span></span></div>
-            <div class="ptr"><span class="td-main">赵六_商业险_粤D55566.pdf</span><span>SUNS2024...</span><span>粤D·55566</span><span>阳光财险</span><span><span class="badge badge-ok">已识别</span></span></div>
-          </div>
-        </div>
-      </div>
+    <div class="preview-wrap reveal reveal-d1" style="padding:0">
+      <img src="/static/img/app-preview.png" alt="午虎AI保单台账界面" style="width:100%;display:block;border-radius:20px">
     </div>
   </div>
 </section>
@@ -803,9 +858,9 @@ footer {
         <div class="cmp-item"><div class="cmp-ico ico-bad">✗</div><div class="cmp-text"><strong>统计困难</strong>，月末汇总花费大量时间</div></div>
       </div>
       <div class="cmp-card cmp-after reveal reveal-d2">
-        <div class="cmp-label lb-good">✓ AI保单台账</div>
+        <div class="cmp-label lb-good">✓ 午虎AI保单台账</div>
         <div class="cmp-item"><div class="cmp-ico ico-good">✓</div><div class="cmp-text"><strong>全自动识别</strong>，发到群里即完成，3 秒生成台账</div></div>
-        <div class="cmp-item"><div class="cmp-ico ico-good">✓</div><div class="cmp-text"><strong>AI 精准提取</strong>，98% 准确率，异常自动标记提醒</div></div>
+        <div class="cmp-item"><div class="cmp-ico ico-good">✓</div><div class="cmp-text"><strong>AI 精准提取</strong>，99% 准确率，异常自动标记提醒</div></div>
         <div class="cmp-item"><div class="cmp-ico ico-good">✓</div><div class="cmp-text"><strong>统一数据库</strong>，多人协作，实时同步，权限隔离</div></div>
         <div class="cmp-item"><div class="cmp-ico ico-good">✓</div><div class="cmp-text"><strong>云端存储</strong>，原始 PDF 自动上传，随时可查</div></div>
         <div class="cmp-item"><div class="cmp-ico ico-good">✓</div><div class="cmp-text"><strong>一键导出</strong>，随时导出 Excel，自动计算佣金利润</div></div>
@@ -838,7 +893,7 @@ footer {
         <div class="price-row">
           <span id="std-price" class="price-val">¥299</span>
           <span class="price-unit">/月</span>
-          <span style="margin-left:8px;font-size:12px;font-weight:700;color:var(--green);background:rgba(34,197,94,0.1);padding:2px 8px;border-radius:100px">限时优惠</span>
+          <span style="margin-left:8px;font-size:12px;font-weight:700;color:var(--green);background:rgba(34,197,94,0.1);padding:2px 8px;border-radius:100px;white-space:nowrap">限时优惠</span>
         </div>
         <div id="std-origin" class="price-origin"></div>
         <div id="std-sub" class="price-sub">按月付费</div>
@@ -852,6 +907,7 @@ footer {
         <div class="price-feat"><span class="pf-check">✓</span>Excel 导出 + 合并导出</div>
         <div class="price-feat"><span class="pf-check">✓</span>不限监控群数量</div>
         <div class="price-feat"><span class="pf-check">✓</span>字段配置 & 计算公式</div>
+        <div class="price-feat"><span class="pf-check">✓</span>多企业独立管理</div>
         <div class="price-feat"><span class="pf-dash">—</span>支持功能定制开发</div>
         <div style="margin-top:16px;padding:10px 14px;border-radius:8px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);font-size:12.5px;color:#4ade80;text-align:center;font-weight:600">🎁 限时免费试用 2 个月</div>
         <a href="#contact" class="price-btn pb-outline">立即咨询</a>
@@ -864,7 +920,7 @@ footer {
         <div class="price-row">
           <span id="ent-price" class="price-val">¥999</span>
           <span class="price-unit">/月</span>
-          <span style="margin-left:8px;font-size:12px;font-weight:700;color:var(--green);background:rgba(34,197,94,0.1);padding:2px 8px;border-radius:100px">限时优惠</span>
+          <span style="margin-left:8px;font-size:12px;font-weight:700;color:var(--green);background:rgba(34,197,94,0.1);padding:2px 8px;border-radius:100px;white-space:nowrap">限时优惠</span>
         </div>
         <div id="ent-origin" class="price-origin"></div>
         <div id="ent-sub" class="price-sub">按月付费</div>
@@ -880,6 +936,7 @@ footer {
         <div class="price-feat"><span class="pf-check">✓</span>字段配置 & 计算公式</div>
         <div class="price-feat"><span class="pf-check">✓</span>多企业独立管理</div>
         <div class="price-feat"><span class="pf-check">✓</span>支持功能定制开发</div>
+        <div style="margin-top:16px;padding:10px 14px;border-radius:8px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);font-size:12.5px;color:#4ade80;text-align:center;font-weight:600">🎁 限时免费试用 2 个月</div>
         <a href="#contact" class="price-btn pb-fill">立即咨询</a>
       </div>
     </div>
@@ -906,7 +963,7 @@ footer {
             <div class="ci-icon ci-orange">⏰</div>
             <div>
               <div class="ci-label">服务时间</div>
-              <div class="ci-val">周一至周六 9:00 - 18:00</div>
+              <div class="ci-val">周一至周五 9:30 - 18:30</div>
             </div>
           </div>
           <div class="contact-item">
@@ -947,9 +1004,9 @@ footer {
 <footer>
   <a class="nav-logo" href="#">
     <div class="nav-logo-mark">保</div>
-    <span class="nav-logo-name">AI保单台账</span>
+    <span class="nav-logo-name">午虎AI保单台账</span>
   </a>
-  <div class="footer-copy">© 2026 AI保单台账 · 午虎科技</div>
+  <div class="footer-copy">© 2026 午虎AI保单台账 · 午虎科技</div>
 </footer>
 
 <script>
@@ -957,9 +1014,9 @@ footer {
 const pricing = {
   monthly: { std: '¥299',  stdLine: '原价 ¥399/月',  stdSub: '按月付费',
              ent: '¥999',  entLine: '原价 ¥1,399/月', entSub: '按月付费' },
-  annual:  { std: '¥249',  stdLine: '原价 ¥299/月',   stdSub: '年付 ¥2,999',
+  annual:  { std: '¥249',  stdLine: '原价 ¥299/月',   stdSub: '',
              stdOriginTotal: '原总价 ¥3,588/年', stdNowTotal: '现总价 ¥2,999/年',
-             ent: '¥833',  entLine: '原价 ¥999/月',   entSub: '年付 ¥9,999',
+             ent: '¥833',  entLine: '原价 ¥999/月',   entSub: '',
              entOriginTotal: '原总价 ¥11,988/年', entNowTotal: '现总价 ¥9,999/年' }
 };
 function switchBilling(type) {
