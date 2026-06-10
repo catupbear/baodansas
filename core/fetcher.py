@@ -183,7 +183,6 @@ class MessageFetcher:
                     SELECT m.seq, m.roomid, m.sender, m.parsed_content
                     FROM messages m
                     LEFT JOIN insurance_records ir ON ir.msg_seq = m.seq
-                      AND ir.status NOT IN ('failed')
                     WHERE m.msgtime >= %s
                       AND m.msgtype = 'file'
                       AND ({where_source})

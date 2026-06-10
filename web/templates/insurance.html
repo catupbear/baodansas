@@ -316,6 +316,9 @@
                     <button @click="pageTab = 'upload'" :class="pageTab === 'upload' ? 'active' : ''" class="page-tab-btn">
                         手动上传
                     </button>
+                    <button v-if="isSuperAdmin" @click="pageTab = 'dashboard'; loadDashboard()" :class="pageTab === 'dashboard' ? 'active' : ''" class="page-tab-btn">
+                        数据看板
+                    </button>
                 </div>
             </div>
             <div class="flex items-center gap-2 sm:gap-3">
@@ -354,7 +357,7 @@
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
                     </svg>
-                    账号
+                    账号管理
                 </a>
                 <!-- 当前用户 + 退出 -->
                 <span class="text-xs text-white text-opacity-70" v-if="currentUser">{{ currentUser.name || currentUser.phone }}</span>
@@ -862,6 +865,169 @@
         </transition>
     </main>
 
+    <!-- ========== 数据看板 Tab ========== -->
+    <main v-if="pageTab === 'dashboard'" class="mx-auto px-4 sm:px-6 lg:px-10 pt-4 pb-8">
+        <div v-if="dashboardLoading" class="flex items-center justify-center py-24 text-gray-400 text-sm">加载中...</div>
+        <div v-else-if="dashboardData">
+
+            <!-- 时间范围切换 -->
+            <div class="flex items-center gap-2 mb-5">
+                <span class="text-sm text-gray-500">时间范围：</span>
+                <button v-for="opt in periodOptions" :key="opt.value"
+                    @click="dashboardPeriod = opt.value; loadDashboard()"
+                    :class="dashboardPeriod === opt.value ? 'bg-orange-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-orange-300'"
+                    class="px-3 py-1 rounded-full text-xs font-medium transition-all">
+                    {{ opt.label }}
+                </button>
+                <span class="text-gray-300 mx-1">|</span>
+                <span class="text-sm text-gray-500">企业：</span>
+                <select v-model="dashboardEnterprise" @change="loadDashboard()"
+                    class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600 outline-none focus:border-orange-400" style="max-width:130px">
+                    <option value="">全部</option>
+                    <option v-for="e in dashboardEnterprises" :key="e.id" :value="e.id">{{ e.name }}</option>
+                </select>
+                <button v-if="dashboardEnterprise"
+                    @click="dashboardEnterprise=''; loadDashboard()"
+                    class="text-xs text-gray-400 hover:text-orange-500 transition-colors">✕ 清空</button>
+            </div>
+
+            <!-- 总览指标卡片 -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                    <div class="text-xs text-gray-400 mb-1">{{ periodLabel }}识别量</div>
+                    <div class="text-2xl font-bold text-gray-800">{{ dashboardData.overview.period_total || 0 }}</div>
+                    <div class="text-xs text-gray-400 mt-1">今日 +{{ dashboardData.overview.today || 0 }}</div>
+                </div>
+                <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                    <div class="text-xs text-gray-400 mb-1">{{ periodLabel }}成功率</div>
+                    <div class="text-2xl font-bold text-green-500">
+                        {{ dashboardData.overview.period_total > 0 ? ((dashboardData.overview.period_done / dashboardData.overview.period_total) * 100).toFixed(1) : 0 }}%
+                    </div>
+                    <div class="text-xs text-gray-400 mt-1">成功 {{ dashboardData.overview.period_done || 0 }} 条</div>
+                </div>
+                <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                    <div class="text-xs text-gray-400 mb-1">{{ periodLabel }}失败</div>
+                    <div class="text-2xl font-bold text-red-400">{{ dashboardData.overview.period_failed || 0 }}</div>
+                    <div class="text-xs text-gray-400 mt-1">异常 {{ dashboardData.overview.period_abnormal || 0 }} 条</div>
+                </div>
+                <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                    <div class="text-xs text-gray-400 mb-1">累计总量</div>
+                    <div class="text-2xl font-bold text-orange-500">{{ dashboardData.overview.total || 0 }}</div>
+                    <div class="text-xs text-gray-400 mt-1">近7天 {{ dashboardData.overview.week7 || 0 }} 条</div>
+                </div>
+            </div>
+
+            <!-- 趋势图 + 来源分布（有趋势图时3列，无时2列） -->
+            <div :class="['grid grid-cols-1 gap-4 mb-4', dashboardPeriod === 'today' || dashboardPeriod === 'yesterday' ? 'lg:grid-cols-2' : 'lg:grid-cols-3']">
+                <!-- 趋势折线图（今日/昨日不显示） -->
+                <div v-if="dashboardPeriod !== 'today' && dashboardPeriod !== 'yesterday'" class="lg:col-span-2 bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                    <div class="text-sm font-semibold text-gray-700 mb-4">{{ periodLabel }} 识别趋势</div>
+                    <canvas ref="trendCanvas" style="width:100%;height:180px;display:block"></canvas>
+                    <div class="flex gap-4 mt-3 text-xs text-gray-500">
+                        <span class="flex items-center gap-1"><span style="display:inline-block;width:16px;height:2px;background:#f97316"></span>总量</span>
+                        <span class="flex items-center gap-1"><span style="display:inline-block;width:16px;height:2px;background:#22c55e"></span>成功</span>
+                        <span class="flex items-center gap-1"><span style="display:inline-block;width:16px;height:0;border-top:2px dashed #f87171"></span>失败</span>
+                    </div>
+                </div>
+
+                <!-- 今日/昨日：来源分布和OCR各占一列；其他：竖向堆叠在右侧一列 -->
+                <template v-if="dashboardPeriod === 'today' || dashboardPeriod === 'yesterday'">
+                    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                        <div class="text-sm font-semibold text-gray-700 mb-3">来源分布</div>
+                        <div class="space-y-2.5">
+                            <div v-for="item in sourceDist" :key="item.label" class="flex items-center gap-2">
+                                <span class="text-xs text-gray-500 w-16 shrink-0">{{ item.label }}</span>
+                                <div class="flex-1 h-2 rounded-full" :style="{background: `linear-gradient(to right, ${item.color} ${item.pct}%, #e5e7eb ${item.pct}%)`}"></div>
+                                <span class="text-xs font-medium text-gray-700 w-8 text-right">{{ item.val }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                        <div class="text-sm font-semibold text-gray-700 mb-3">OCR 引擎</div>
+                        <div class="space-y-2.5">
+                            <div v-for="item in dashboardData.ocr_dist" :key="item.ocr_engine" class="flex items-center gap-2">
+                                <span class="text-xs text-gray-500 w-20 shrink-0 truncate">{{ item.ocr_engine || '未知' }}</span>
+                                <div class="flex-1 bg-gray-100 rounded-full h-2">
+                                    <div class="h-2 rounded-full" :style="{background: `linear-gradient(to right, #60a5fa ${barPct(dashboardData.ocr_dist, item)}, #e5e7eb ${barPct(dashboardData.ocr_dist, item)})`}"></div>
+                                </div>
+                                <span class="text-xs font-medium text-gray-700 w-8 text-right">{{ item.total }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+                <!-- 其他时间范围：来源 + OCR 堆叠在右侧一列 -->
+                <div v-else class="flex flex-col gap-4">
+                    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 flex-1">
+                        <div class="text-sm font-semibold text-gray-700 mb-3">来源分布</div>
+                        <div class="space-y-2.5">
+                            <div v-for="item in sourceDist" :key="item.label" class="flex items-center gap-2">
+                                <span class="text-xs text-gray-500 w-16 shrink-0">{{ item.label }}</span>
+                                <div class="flex-1 h-2 rounded-full" :style="{background: `linear-gradient(to right, ${item.color} ${item.pct}%, #e5e7eb ${item.pct}%)`}"></div>
+                                <span class="text-xs font-medium text-gray-700 w-8 text-right">{{ item.val }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 flex-1">
+                        <div class="text-sm font-semibold text-gray-700 mb-3">OCR 引擎</div>
+                        <div class="space-y-2.5">
+                            <div v-for="item in dashboardData.ocr_dist" :key="item.ocr_engine" class="flex items-center gap-2">
+                                <span class="text-xs text-gray-500 w-20 shrink-0 truncate">{{ item.ocr_engine || '未知' }}</span>
+                                <div class="flex-1 bg-gray-100 rounded-full h-2">
+                                    <div class="h-2 rounded-full" :style="{background: `linear-gradient(to right, #60a5fa ${barPct(dashboardData.ocr_dist, item)}, #e5e7eb ${barPct(dashboardData.ocr_dist, item)})`}"></div>
+                                </div>
+                                <span class="text-xs font-medium text-gray-700 w-8 text-right">{{ item.total }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 保司排行 + 险种分布 + 企业排行（选定企业时改为2列） -->
+            <div :class="['grid grid-cols-1 gap-4', dashboardEnterprise ? 'lg:grid-cols-2' : 'lg:grid-cols-3']">
+                <!-- 保司识别排行 -->
+                <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                    <div class="text-sm font-semibold text-gray-700 mb-4">保司识别量 Top10</div>
+                    <div class="space-y-2.5">
+                        <div v-for="(item, idx) in dashboardData.company_rank" :key="item.company" class="flex items-center gap-2">
+                            <span class="text-xs font-bold w-5 text-center" :class="idx < 3 ? 'text-orange-500' : 'text-gray-300'">{{ idx+1 }}</span>
+                            <span class="text-xs text-gray-600 flex-1 truncate">{{ item.company }}</span>
+                            <div class="w-20 h-1.5 rounded-full" :style="{background: `linear-gradient(to right, #fb923c ${barPct(dashboardData.company_rank, item)}, #e5e7eb ${barPct(dashboardData.company_rank, item)})`}"></div>
+                            <span class="text-xs font-semibold text-gray-700 w-8 text-right">{{ item.total }}</span>
+                        </div>
+                        <div v-if="!dashboardData.company_rank.length" class="text-xs text-gray-300 text-center py-4">暂无数据</div>
+                    </div>
+                </div>
+
+                <!-- 险种分布 -->
+                <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                    <div class="text-sm font-semibold text-gray-700 mb-4">险种分布</div>
+                    <div class="space-y-2.5">
+                        <div v-for="item in dashboardData.policy_type_dist" :key="item.policy_type" class="flex items-center gap-2">
+                            <span class="text-xs text-gray-600 flex-1 truncate">{{ item.policy_type }}</span>
+                            <div class="w-20 h-1.5 rounded-full" :style="{background: `linear-gradient(to right, #c084fc ${barPct(dashboardData.policy_type_dist, item)}, #e5e7eb ${barPct(dashboardData.policy_type_dist, item)})`}"></div>
+                            <span class="text-xs font-semibold text-gray-700 w-8 text-right">{{ item.total }}</span>
+                        </div>
+                        <div v-if="!dashboardData.policy_type_dist.length" class="text-xs text-gray-300 text-center py-4">暂无数据</div>
+                    </div>
+                </div>
+
+                <!-- 企业使用排行（选定企业时隐藏） -->
+                <div v-if="!dashboardEnterprise" class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                    <div class="text-sm font-semibold text-gray-700 mb-4">企业使用量</div>
+                    <div class="space-y-2.5">
+                        <div v-for="(item, idx) in dashboardData.enterprise_rank" :key="item.enterprise" class="flex items-center gap-2">
+                            <span class="text-xs font-bold w-5 text-center" :class="idx < 3 ? 'text-blue-500' : 'text-gray-300'">{{ idx+1 }}</span>
+                            <span class="text-xs text-gray-600 flex-1 truncate">{{ item.enterprise }}</span>
+                            <div class="w-20 h-1.5 rounded-full" :style="{background: `linear-gradient(to right, #60a5fa ${barPct(dashboardData.enterprise_rank, item)}, #e5e7eb ${barPct(dashboardData.enterprise_rank, item)})`}"></div>
+                            <span class="text-xs font-semibold text-gray-700 w-8 text-right">{{ item.total }}</span>
+                        </div>
+                        <div v-if="!dashboardData.enterprise_rank.length" class="text-xs text-gray-300 text-center py-4">暂无企业数据</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
     <!-- ========== 识别记录 Tab ========== -->
     <main v-if="pageTab === 'records'" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5">
         <!-- 筛选栏 -->
@@ -946,6 +1112,15 @@
                         <option value="交强险">交强险</option>
                         <option value="驾意险">驾意险</option>
                         <option value="非车险">非车险</option>
+                    </select>
+                </div>
+                <!-- 企业筛选（仅超管可见） -->
+                <div v-if="isSuperAdmin" class="flex items-center gap-1.5">
+                    <span class="text-xs text-gray-500 font-medium">企业:</span>
+                    <select v-model="recordEnterpriseFilter" @change="loadRecords()"
+                            class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
+                        <option value="">全部</option>
+                        <option v-for="e in recordEnterpriseList" :key="e.id" :value="e.id">{{ e.name }}</option>
                     </select>
                 </div>
                 <!-- 清空所有筛选 -->
@@ -2582,7 +2757,7 @@ async function authFetch(url, options = {}) {
 // 进入页面检查登录
 if (!checkAuth()) throw new Error('redirect');
 
-const { createApp, ref, computed, reactive, onMounted } = Vue;
+const { createApp, ref, computed, reactive, onMounted, nextTick } = Vue;
 
 const _app = createApp({
     setup() {
@@ -2590,7 +2765,159 @@ const _app = createApp({
         const isSuperAdmin = computed(() => currentUser.value && currentUser.value.role === 'super_admin');
 
         // ========== 页面级 Tab ==========
-        const pageTab = ref('records');  // 'records' | 'upload'
+        const pageTab = ref('records');  // 'records' | 'upload' | 'dashboard'
+
+        // ========== 数据看板 ==========
+        const dashboardData = ref(null);
+        const dashboardLoading = ref(false);
+        const dashboardDays = ref(30);
+        const dashboardPeriod = ref('30');
+        const periodOptions = [
+            { label: '今日',   value: 'today' },
+            { label: '昨天',   value: 'yesterday' },
+            { label: '近7天',  value: '7' },
+            { label: '近30天', value: '30' },
+            { label: '近90天', value: '90' },
+            { label: '全部',   value: 'all' },
+        ];
+        const periodLabel = computed(() => {
+            const opt = periodOptions.find(o => o.value === dashboardPeriod.value);
+            return opt ? opt.label : '近30天';
+        });
+        const dashboardEnterprise = ref('');
+        const dashboardCompany = ref('');
+        const dashboardEnterprises = ref([]);
+        const dashboardCompanies = ref([]);
+        const trendCanvas = ref(null);
+
+        function barPct(items, item) {
+            if (!items || !items.length) return '0%';
+            const max = parseFloat(items[0].total) || 1;
+            const val = parseFloat(item.total) || 0;
+            return Math.min(100, val / max * 100).toFixed(1) + '%';
+        }
+
+        function drawTrendChart(trend) {
+            const canvas = trendCanvas.value;
+            if (!canvas || !trend || !trend.length) return;
+            const dpr = window.devicePixelRatio || 1;
+            const W = canvas.offsetWidth, H = 180;
+            canvas.width = W * dpr; canvas.height = H * dpr;
+            canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            const pad = { top: 10, bottom: 24, left: 6, right: 6 };
+            const chartW = W - pad.left - pad.right;
+            const chartH = H - pad.top - pad.bottom;
+            const maxVal = Math.max(...trend.map(r => Number(r.total) || 0), 1);
+            const stepX = chartW / Math.max(trend.length - 1, 1);
+            const getX = i => pad.left + i * stepX;
+            const getY = v => pad.top + chartH - (Number(v) || 0) / maxVal * chartH;
+
+            // 网格线
+            ctx.strokeStyle = '#f3f4f6'; ctx.lineWidth = 1;
+            for (let i = 1; i <= 4; i++) {
+                const y = pad.top + chartH * (1 - i / 4);
+                ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+            }
+
+            // 成功面积填充
+            ctx.beginPath(); ctx.fillStyle = 'rgba(34,197,94,0.08)';
+            trend.forEach((r, i) => i === 0 ? ctx.moveTo(getX(i), getY(r.done)) : ctx.lineTo(getX(i), getY(r.done)));
+            ctx.lineTo(getX(trend.length-1), pad.top + chartH);
+            ctx.lineTo(getX(0), pad.top + chartH); ctx.closePath(); ctx.fill();
+
+            // 画线函数
+            const drawLine = (key, color, width=2, dash=[]) => {
+                ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = width;
+                ctx.setLineDash(dash); ctx.lineJoin = 'round';
+                trend.forEach((r, i) => i === 0 ? ctx.moveTo(getX(i), getY(r[key])) : ctx.lineTo(getX(i), getY(r[key])));
+                ctx.stroke(); ctx.setLineDash([]);
+            };
+
+            drawLine('total', '#f97316', 2);
+            drawLine('done', '#22c55e', 2);
+            drawLine('failed', '#f87171', 1.5, [4, 3]);
+
+            // X 轴标签
+            ctx.fillStyle = '#9ca3af'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+            const step = Math.max(1, Math.floor(trend.length / 6));
+            trend.forEach((r, i) => {
+                if (i % step === 0 || i === trend.length - 1) {
+                    const label = (r.label || r.day || '').slice(5);
+                    ctx.fillText(label, getX(i), H - 4);
+                }
+            });
+        }
+
+        async function loadDashboard() {
+            dashboardLoading.value = true;
+            // 首次加载时拉取筛选选项
+            if (!dashboardEnterprises.value.length) {
+                try {
+                    const r = await authFetch('/api/auth/enterprises');
+                    const j = await r.json();
+                    if (j.code === 0) dashboardEnterprises.value = j.data || [];
+                } catch(e) {}
+            }
+            if (!dashboardCompanies.value.length) {
+                try {
+                    const r = await authFetch('/api/insurance/record-companies');
+                    const j = await r.json();
+                    if (j.code === 0) dashboardCompanies.value = (j.data?.companies || []).map(c => c.company);
+                } catch(e) {}
+            }
+            try {
+                let url = `/api/insurance/dashboard?period=${dashboardPeriod.value}`;
+                if (dashboardEnterprise.value) url += `&enterprise_id=${dashboardEnterprise.value}`;
+                if (dashboardCompany.value) url += `&company_short=${encodeURIComponent(dashboardCompany.value)}`;
+                const res = await authFetch(url);
+                const json = await res.json();
+                if (json.code === 0) {
+                    dashboardData.value = json.data;
+                    await nextTick();
+                    setTimeout(() => drawTrendChart(json.data.trend), 80);
+                }
+            } catch(e) { console.error(e); }
+            finally { dashboardLoading.value = false; }
+        }
+
+        const sourceDist = computed(() => {
+            if (!dashboardData.value) return [];
+            const s = dashboardData.value.source_dist;
+            const g = Number(s.from_group) || 0;
+            const u = Number(s.from_user)  || 0;
+            const m = Number(s.from_manual)|| 0;
+            const total = g + u + m || 1;
+            return [
+                { label: '群聊',   val: g, pct: (g / total * 100).toFixed(1), color: '#f97316' },
+                { label: '私聊',   val: u, pct: (u / total * 100).toFixed(1), color: '#8b5cf6' },
+                { label: '手动上传', val: m, pct: (m / total * 100).toFixed(1), color: '#06b6d4' },
+            ];
+        });
+
+        function trendPoints(trend, key) {
+            if (!trend.length) return '';
+            const maxVal = Math.max(...trend.map(r => r.total || 0), 1);
+            return trend.map((r, i) => {
+                const x = i * 20 + 10;
+                const y = 150 - ((r[key] || 0) / maxVal * 130);
+                return `${x},${y}`;
+            }).join(' ');
+        }
+
+        function trendAreaPath(trend, key) {
+            if (!trend.length) return '';
+            const maxVal = Math.max(...trend.map(r => r.total || 0), 1);
+            const pts = trend.map((r, i) => {
+                const x = i * 20 + 10;
+                const y = 150 - ((r[key] || 0) / maxVal * 130);
+                return `${x},${y}`;
+            });
+            const first = `${10},150`;
+            const last = `${(trend.length - 1) * 20 + 10},150`;
+            return `M${first} L${pts.join(' L')} L${last} Z`;
+        }
 
         // ========== 配置状态 ==========
         const configStatus = ref({ pdf_extract: true, dingtalk: false });
@@ -4682,6 +5009,7 @@ const _app = createApp({
             if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
             if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
             if (recordPolicyTypeFilter.value) params.set('policy_type', recordPolicyTypeFilter.value);
+            if (recordEnterpriseFilter.value) params.set('enterprise_id', recordEnterpriseFilter.value);
             if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
             _appendDateParams(params);
             if (recordFilter.dedup) params.set('dedup', '1');
@@ -4734,8 +5062,10 @@ const _app = createApp({
         const recordCompanyFilter = ref('');
         const recordPolicyTypeFilter = ref('');  // 险种大类筛选（商业险/交强险/驾意险/非车险）
         const recordDocTypeFilter = ref('');
+        const recordEnterpriseFilter = ref('');
         // 保司筛选下拉：从后端获取全库保司列表（不受当前分页影响）
         const recordCompanyList = ref([]);
+        const recordEnterpriseList = ref([]);
         async function loadRecordCompanies() {
             try {
                 const resp = await authFetch('/api/insurance/record-companies');
@@ -4743,6 +5073,14 @@ const _app = createApp({
                 recordCompanyList.value = (json.data || []);
             } catch (e) {
                 recordCompanyList.value = [];
+            }
+            // 同时加载企业列表（仅超管）
+            if (isSuperAdmin.value && !recordEnterpriseList.value.length) {
+                try {
+                    const r = await authFetch('/api/auth/enterprises');
+                    const j = await r.json();
+                    if (j.code === 0) recordEnterpriseList.value = j.data || [];
+                } catch(e) {}
             }
         }
         const recordDocTypes = computed(() => {
@@ -5395,6 +5733,7 @@ const _app = createApp({
             });
             recordCompanyFilter.value = '';
             recordPolicyTypeFilter.value = '';
+            recordEnterpriseFilter.value = '';
             showAdvancedSearch.value = false;
             loadRecords();
         }
@@ -5494,6 +5833,7 @@ const _app = createApp({
                 // 保司筛选改为服务端
                 if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
                 if (recordPolicyTypeFilter.value) params.set('policy_type', recordPolicyTypeFilter.value);
+                if (recordEnterpriseFilter.value) params.set('enterprise_id', recordEnterpriseFilter.value);
                 // 排序
                 if (recordFilter.sort_by) params.set('sort_by', recordFilter.sort_by);
                 if (recordFilter.sort_order) params.set('sort_order', recordFilter.sort_order);
@@ -5889,6 +6229,9 @@ const _app = createApp({
         return {
             // 页面Tab
             pageTab,
+            // 数据看板
+            dashboardData, dashboardLoading, dashboardDays, dashboardPeriod, periodOptions, periodLabel, loadDashboard, sourceDist, trendCanvas, barPct,
+            dashboardEnterprise, dashboardCompany, dashboardEnterprises, dashboardCompanies,
             // 配置状态
             configStatus,
             // 手动上传
@@ -5934,6 +6277,7 @@ const _app = createApp({
             isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask, collapseDownloadTask, expandDownloadTask, retryDownloadTask, batchFailModal, batchFailRetry, batchFailUpload,
             roomList, monitorRooms, monitorUsers,
             recordFilter, dateTypeSupportsTime, openNativePicker, statusLabel, onSourceTypeChange, clearAllFilters, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
+            recordEnterpriseFilter, recordEnterpriseList,
             recordPagination, visiblePages, recordStats,
             recordActiveTab, recordTabs, recordCompanyFilter, recordPolicyTypeFilter, recordDocTypeFilter,
             recordCompanyList, loadRecordCompanies, recordDocTypes, exportRecordsExcel,

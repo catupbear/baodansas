@@ -312,8 +312,19 @@ def list_records():
     dedup = request.args.get("dedup", "") == "1"
     sort_by = request.args.get("sort_by", "")
     sort_order = request.args.get("sort_order", "desc")
+    # 超管可通过 enterprise_id 参数筛选指定企业，其他角色由权限控制
+    req_enterprise_id = request.args.get("enterprise_id", "").strip()
 
     try:
+        # 超管传了 enterprise_id 参数则用参数值，否则走权限控制
+        from auth.db import ROLE_SUPER_ADMIN
+        if g.current_user.get("role") == ROLE_SUPER_ADMIN and req_enterprise_id:
+            effective_enterprise_id = int(req_enterprise_id)
+            effective_user_ids = None
+        else:
+            effective_enterprise_id = _get_enterprise_id_filter()
+            effective_user_ids = _get_user_ids_filter()
+
         result = query_insurance_records(
             _db,
             page=page,
@@ -333,8 +344,8 @@ def list_records():
             date_end=date_end,
             updated_at_date_start=updated_at_date_start,
             updated_at_date_end=updated_at_date_end,
-            user_ids=_get_user_ids_filter(),
-            enterprise_id=_get_enterprise_id_filter(),
+            user_ids=effective_user_ids,
+            enterprise_id=effective_enterprise_id,
             search_company=search_company,
             search_policy_no=search_policy_no,
             search_plate_no=search_plate_no,
@@ -888,10 +899,21 @@ def get_record_raw_text(record_id):
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
+_stats_cache = {}
+_STATS_TTL = 30  # stats 缓存 30 秒
+
 @insurance_bp.route("/api/insurance/stats", methods=["GET"])
 def get_stats():
     """获取保单识别统计信息，支持与列表相同的筛选参数"""
+    import time as _t
     try:
+        # 简单缓存：以完整 query string 为 key
+        cache_key = request.query_string.decode()
+        now = _t.time()
+        if cache_key in _stats_cache:
+            exp, data = _stats_cache[cache_key]
+            if now < exp:
+                return jsonify({"code": 0, "data": data})
         filters = {}
         for key in ("roomid", "source_type", "source", "sender", "keyword",
                      "company_short", "policy_type", "ocr_engine", "date_start", "date_end",
@@ -906,19 +928,227 @@ def get_stats():
                 filters[key] = val
         if request.args.get("dedup") == "1":
             filters["dedup"] = True
-        # 按账号权限过滤
-        user_ids = _get_user_ids_filter()
-        if user_ids is not None:
-            filters["user_ids"] = user_ids
-        eid = _get_enterprise_id_filter()
-        if eid is not None:
-            filters["enterprise_id"] = eid
+        # 按账号权限过滤（超管可通过参数指定企业）
+        req_eid = request.args.get("enterprise_id", "").strip()
+        from auth.db import ROLE_SUPER_ADMIN
+        if g.current_user.get("role") == ROLE_SUPER_ADMIN and req_eid:
+            filters["enterprise_id"] = int(req_eid)
+        else:
+            user_ids = _get_user_ids_filter()
+            if user_ids is not None:
+                filters["user_ids"] = user_ids
+            eid = _get_enterprise_id_filter()
+            if eid is not None:
+                filters["enterprise_id"] = eid
         stats = get_insurance_stats(_db, filters=filters if filters else None)
+        _stats_cache[cache_key] = (_t.time() + _STATS_TTL, stats)
+        # 防止缓存无限增长
+        if len(_stats_cache) > 200:
+            oldest = sorted(_stats_cache, key=lambda k: _stats_cache[k][0])[:50]
+            for k in oldest: _stats_cache.pop(k, None)
         return jsonify({"code": 0, "data": stats})
     except Exception as e:
         logger.exception("获取保单统计失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
 
+
+_dashboard_cache = {}   # key → (expire_ts, data)
+_DASHBOARD_TTL = 120    # 缓存 2 分钟
+
+@insurance_bp.route("/api/insurance/dashboard", methods=["GET"])
+@login_required
+def get_dashboard():
+    """数据看板（仅超管），返回综合统计数据"""
+    import time as _time_mod
+    from auth.db import ROLE_SUPER_ADMIN
+    if g.current_user.get("role") != ROLE_SUPER_ADMIN:
+        return jsonify({"code": 403, "msg": "无权限"}), 403
+    try:
+        period        = request.args.get("period", "30").strip()
+        enterprise_id = request.args.get("enterprise_id", "").strip()
+        company_short = request.args.get("company_short", "").strip()
+
+        # 命中缓存直接返回
+        cache_key = (period, enterprise_id, company_short)
+        now_ts = _time_mod.time()
+        if cache_key in _dashboard_cache:
+            expire_ts, cached = _dashboard_cache[cache_key]
+            if now_ts < expire_ts:
+                return jsonify({"code": 0, "data": cached, "cached": True})
+
+        # 根据 period 构建时间过滤片段
+        if period == "today":
+            time_filter      = "AND DATE({col}) = CURDATE()"
+            time_filter_p    = []
+            trend_group_hint = 1   # 只有1天，趋势退化为单点
+        elif period == "yesterday":
+            time_filter      = "AND DATE({col}) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)"
+            time_filter_p    = []
+            trend_group_hint = 1
+        elif period == "all":
+            time_filter      = ""
+            time_filter_p    = []
+            trend_group_hint = 365
+        else:
+            days = int(period) if period.isdigit() else 30
+            time_filter      = "AND {col} >= DATE_SUB(CURDATE(), INTERVAL %s DAY)"
+            time_filter_p    = [days]
+            trend_group_hint = days
+
+        def _time(col="created_at"):
+            """返回 (sql片段, params)，col 为字段名（含表前缀）"""
+            return time_filter.format(col=col), list(time_filter_p)
+
+        conn = _db.pool.connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        def _where(prefix="", with_enterprise=True, with_company=True):
+            p = prefix
+            parts = [f"{p}deleted_at IS NULL", f"{p}status != 'duplicate'"]
+            params = []
+            if with_enterprise and enterprise_id:
+                parts.append(f"{p}enterprise_id = %s")
+                params.append(int(enterprise_id))
+            if with_company and company_short:
+                parts.append(f"{p}company_short = %s")
+                params.append(company_short)
+            return " AND ".join(parts), params
+
+        # 1. 总览指标
+        wh, wp = _where()
+        tf, tp = _time()
+        cursor.execute(f"""
+            SELECT COUNT(*) AS total,
+              SUM(status='done') AS done, SUM(status='failed') AS failed,
+              SUM(status='abnormal') AS abnormal, SUM(status='pending') AS pending,
+              SUM(DATE(created_at) = CURDATE()) AS today_count,
+              SUM(DATE(created_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)) AS week7
+            FROM insurance_records WHERE {wh} {tf}
+        """, wp + tp or None)
+        overview = cursor.fetchone() or {}
+        # period_* 直接用 total/done/failed（已按时间过滤）
+        overview["period_total"]    = overview.get("total", 0)
+        overview["period_done"]     = overview.get("done", 0)
+        overview["period_failed"]   = overview.get("failed", 0)
+        overview["period_abnormal"] = overview.get("abnormal", 0)
+        overview["today"]           = overview.pop("today_count", 0)
+
+        # 2. 趋势（今日/昨日按小时，其余按天）
+        wh, wp = _where()
+        tf, tp = _time()
+        trend_type = "hourly" if period in ("today", "yesterday") else "daily"
+        if trend_type == "hourly":
+            cursor.execute(f"""
+                SELECT HOUR(created_at) AS hour, COUNT(*) AS total,
+                       SUM(status='done') AS done, SUM(status='failed') AS failed
+                FROM insurance_records
+                WHERE {wh} {tf}
+                GROUP BY hour ORDER BY hour ASC
+            """, (wp + tp) if (wp or tp) else None)
+            raw_trend = cursor.fetchall() or []
+            # 补全 0-23 小时（没数据的小时补 0）
+            hour_map = {r["hour"]: r for r in raw_trend}
+            trend = []
+            for h in range(24):
+                r = hour_map.get(h, {"hour": h, "total": 0, "done": 0, "failed": 0})
+                r["label"] = f"{h:02d}:00"
+                trend.append(r)
+        else:
+            cursor.execute(f"""
+                SELECT DATE(created_at) AS day, COUNT(*) AS total,
+                       SUM(status='done') AS done, SUM(status='failed') AS failed
+                FROM insurance_records
+                WHERE {wh} {tf}
+                GROUP BY day ORDER BY day ASC
+            """, (wp + tp) if (wp or tp) else None)
+            trend = cursor.fetchall() or []
+            for r in trend:
+                if hasattr(r.get("day"), "strftime"):
+                    r["day"] = r["day"].strftime("%Y-%m-%d")
+                r["label"] = r.get("day", "")
+
+        # 3. 保司排行 Top10
+        wh, wp = _where(with_company=False)
+        tf, tp = _time()
+        cursor.execute(f"""
+            SELECT company_short AS company, COUNT(*) AS total,
+                   SUM(status='done') AS done, SUM(status='failed') AS failed
+            FROM insurance_records
+            WHERE {wh} {tf} AND company_short IS NOT NULL AND company_short != ''
+            GROUP BY company_short ORDER BY total DESC LIMIT 10
+        """, (wp + tp) if (wp or tp) else None)
+        company_rank = cursor.fetchall() or []
+
+        # 4. 险种分布
+        wh, wp = _where(prefix="r.")
+        tf, tp = _time("r.created_at")
+        cursor.execute(f"""
+            SELECT pf.policy_type AS policy_type, COUNT(*) AS total
+            FROM insurance_records r
+            JOIN insurance_policy_fields pf ON pf.record_id = r.id
+            WHERE {wh} {tf} AND pf.policy_type IS NOT NULL AND pf.policy_type != ''
+            GROUP BY pf.policy_type ORDER BY total DESC LIMIT 10
+        """, (wp + tp) if (wp or tp) else None)
+        policy_type_dist = cursor.fetchall() or []
+
+        # 5. OCR 引擎分布
+        wh, wp = _where()
+        tf, tp = _time()
+        cursor.execute(f"""
+            SELECT ocr_engine, COUNT(*) AS total
+            FROM insurance_records
+            WHERE {wh} {tf} AND ocr_engine IS NOT NULL
+            GROUP BY ocr_engine ORDER BY total DESC
+        """, (wp + tp) if (wp or tp) else None)
+        ocr_dist = cursor.fetchall() or []
+
+        # 6. 来源分布
+        wh, wp = _where()
+        tf, tp = _time()
+        cursor.execute(f"""
+            SELECT
+              SUM(source='group' OR (roomid IS NOT NULL AND roomid != '')) AS from_group,
+              SUM(source='user') AS from_user,
+              SUM(source='manual' OR source='') AS from_manual
+            FROM insurance_records WHERE {wh} {tf}
+        """, (wp + tp) if (wp or tp) else None)
+        source_dist = cursor.fetchone() or {}
+
+        # 7. 各企业使用量 Top10
+        wh, wp = _where(prefix="r.", with_enterprise=False)
+        tf, tp = _time("r.created_at")
+        cursor.execute(f"""
+            SELECT e.name AS enterprise, COUNT(*) AS total, SUM(r.status='done') AS done
+            FROM insurance_records r
+            JOIN enterprises e ON e.id = r.enterprise_id
+            WHERE {wh} {tf}
+            GROUP BY r.enterprise_id ORDER BY total DESC LIMIT 10
+        """, (wp + tp) if (wp or tp) else None)
+        enterprise_rank = cursor.fetchall() or []
+
+        conn.close()
+        result = {
+            "overview": overview,
+            "trend": trend,
+            "trend_type": trend_type,
+            "company_rank": company_rank,
+            "policy_type_dist": policy_type_dist,
+            "ocr_dist": ocr_dist,
+            "source_dist": source_dist,
+            "enterprise_rank": enterprise_rank,
+            "period": period,
+        }
+        # 写入缓存（today/yesterday 缓存 30 秒，其他 2 分钟）
+        ttl = 30 if period in ("today", "yesterday") else _DASHBOARD_TTL
+        _dashboard_cache[cache_key] = (_time_mod.time() + ttl, result)
+        return jsonify({"code": 0, "data": result})
+    except Exception as e:
+        logger.exception("获取看板数据失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+_record_companies_cache = {}
+_RECORD_COMPANIES_TTL = 120  # 2分钟
 
 @insurance_bp.route("/api/insurance/record-companies", methods=["GET"])
 def list_record_companies():
@@ -927,12 +1157,18 @@ def list_record_companies():
     与前端「从当前页记录现算」不同，这里返回全库数据，不受分页影响。
     返回: {code:0, data: ["人民财产", "国寿财产", ...]}
     """
+    import time as _t
     try:
-        companies = get_record_company_list(
-            _db,
-            user_ids=_get_user_ids_filter(),
-            enterprise_id=_get_enterprise_id_filter(),
-        )
+        user_ids = _get_user_ids_filter()
+        eid = _get_enterprise_id_filter()
+        ck = (str(user_ids), str(eid))
+        now = _t.time()
+        if ck in _record_companies_cache:
+            exp, data = _record_companies_cache[ck]
+            if now < exp:
+                return jsonify({"code": 0, "data": data})
+        companies = get_record_company_list(_db, user_ids=user_ids, enterprise_id=eid)
+        _record_companies_cache[ck] = (now + _RECORD_COMPANIES_TTL, companies)
         return jsonify({"code": 0, "data": companies})
     except Exception as e:
         logger.exception("获取保司列表失败")

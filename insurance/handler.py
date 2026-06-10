@@ -451,13 +451,39 @@ class InsuranceHandler:
                 })
                 return
 
-            # 4. 上传 COS
+            # 4. 校验文件格式（非 PDF 直接静默失败，不触发 OCR 熔断）
+            if not pdf_bytes.startswith(b'%PDF') and not pdf_bytes.startswith(b'\x25\x50\x44\x46'):
+                # 尝试识别实际格式给出友好提示
+                if pdf_bytes[:5] in (b'<?xml', b'<html', b'<!DOC'):
+                    fmt = 'HTML/XML'
+                elif pdf_bytes[:4] == b'\x89PNG':
+                    fmt = 'PNG'
+                elif pdf_bytes[:3] == b'\xff\xd8\xff':
+                    fmt = 'JPEG'
+                else:
+                    fmt = f'未知({pdf_bytes[:8].hex()})'
+                err_msg = f'文件格式无效（实际为 {fmt}，非 PDF）'
+                logger.warning("文件格式无效，静默跳过, record_id=%d filename=%s: %s", record_id, filename, err_msg)
+                update_insurance_record(self.db, record_id, {
+                    "status": "failed",
+                    "error_message": err_msg,
+                })
+                return
+
+            # 4b. 上传 COS
             cos_url = self._upload_to_cos(pdf_bytes, roomid, sender, filename)
 
             # 5. OCR 识别
             ocr_result = self._do_ocr(pdf_bytes, filename)
             if not ocr_result.get("success"):
-                raise RuntimeError(f"OCR 识别失败: {ocr_result.get('error', '未知错误')}")
+                err_msg = ocr_result.get("error", "未知错误")
+                logger.warning("OCR 未能提取文字，静默标记失败, record_id=%d filename=%s: %s", record_id, filename, err_msg)
+                update_insurance_record(self.db, record_id, {
+                    "status": "failed",
+                    "error_message": err_msg[:500],
+                    "cos_url": cos_url,
+                })
+                return
 
             policies = ocr_result.get("policies", [])
             ocr_engine = ocr_result.get("ocr_engine", "pdfplumber")
