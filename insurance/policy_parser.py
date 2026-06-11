@@ -1241,7 +1241,7 @@ def _extract_policy_no(text: str, fields: dict, company_short: str, policy_type:
 
     # 华农等格式："保单号\n保单号：XXX\n流水号 流水号：YYY"，优先取保单号而非流水号
     # 排除"分项保单号"（组合单子项编号），避免误取
-    for m in re.finditer(r"(分项)?保单号[：:]\s*(\d{15,30})", text):
+    for m in re.finditer(r"(分项)?保单号[：:]\s*([A-Za-z0-9]{15,32})", text):
         if m.group(1):  # "分项保单号" 跳过
             continue
         fields["保单号"] = m.group(2)

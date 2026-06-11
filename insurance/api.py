@@ -401,6 +401,9 @@ def list_records():
             pf_owner = record.pop("_pf_owner", None)
             if pf_owner and not record["display_fields"].get("车主"):
                 record["display_fields"]["车主"] = pf_owner
+            # 历史记录兼容：车牌号→车牌（旧映射配置未包含此规则时遗留）
+            if not record["display_fields"].get("车牌") and record["display_fields"].get("车牌号"):
+                record["display_fields"]["车牌"] = record["display_fields"]["车牌号"]
             # 实时关联跟单人：通过 sender 查找绑定用户姓名，无 sender 时取上传用户姓名
             sender = record.get("sender", "")
             if sender and sender in sender_name_map:
@@ -418,55 +421,113 @@ def list_records():
                 if record.get(ts_field) and not isinstance(record[ts_field], str):
                     record[ts_field] = str(record[ts_field])
 
-        # 保司公司名称 / 保司地址同车牌互补：当前页内互补，不够再查数据库
-        _plate_insurer_pool = {}  # {车牌: {"name": ..., "addr": ...}}
-        _plates_missing_insurer = set()
+        # 同车牌互补：保司信息 + 车主 + 证件号码
+        # pool 结构：{车牌: {"name", "addr", "owner", "id_no"}}
+        _plate_pool = {}
+        _plates_need_db = set()
         for record in result.get("records", []):
             df = record.get("display_fields", {})
             plate = df.get("车牌", "") or df.get("车牌号", "")
             if not plate:
                 continue
-            name_val = df.get("保司公司名称", "")
-            addr_val = df.get("保司地址", "")
-            if plate not in _plate_insurer_pool:
-                _plate_insurer_pool[plate] = {"name": "", "addr": ""}
-            if name_val and not _plate_insurer_pool[plate]["name"]:
-                _plate_insurer_pool[plate]["name"] = name_val
-            if addr_val and not _plate_insurer_pool[plate]["addr"]:
-                _plate_insurer_pool[plate]["addr"] = addr_val
-            if not name_val or not addr_val:
-                _plates_missing_insurer.add(plate)
-        # 当前页互补不够的车牌，从数据库查
-        if _plates_missing_insurer:
-            _still_missing = set()
-            for p in _plates_missing_insurer:
-                pool = _plate_insurer_pool.get(p, {})
-                if not pool.get("name") or not pool.get("addr"):
-                    _still_missing.add(p)
-            if _still_missing:
-                try:
-                    from insurance.db import find_insurer_info_by_plates
-                    _db_insurer = find_insurer_info_by_plates(_db, list(_still_missing))
-                    for p, info in _db_insurer.items():
-                        if p not in _plate_insurer_pool:
-                            _plate_insurer_pool[p] = {"name": "", "addr": ""}
-                        if not _plate_insurer_pool[p]["name"] and info.get("insurer_name"):
-                            _plate_insurer_pool[p]["name"] = info["insurer_name"]
-                        if not _plate_insurer_pool[p]["addr"] and info.get("insurer_address"):
-                            _plate_insurer_pool[p]["addr"] = info["insurer_address"]
-                except Exception:
-                    logger.debug("查询同车牌保司信息失败")
+            if plate not in _plate_pool:
+                _plate_pool[plate] = {"name": "", "addr": "", "owner": "", "id_no": ""}
+            p = _plate_pool[plate]
+            if not p["name"] and df.get("保司公司名称"):
+                p["name"] = df["保司公司名称"]
+            if not p["addr"] and df.get("保司地址"):
+                p["addr"] = df["保司地址"]
+            if not p["owner"] and df.get("车主"):
+                p["owner"] = df["车主"]
+            if not p["id_no"]:
+                p["id_no"] = (df.get("投保人身份证号码") or df.get("证件号码") or
+                              df.get("被保险人身份证号码") or "")
+            if not p["name"] or not p["addr"] or not p["owner"] or not p["id_no"]:
+                _plates_need_db.add(plate)
+        # 当前页不够的，从数据库查
+        _still_missing = {p for p in _plates_need_db
+                          if not all(_plate_pool.get(p, {}).values())}
+        if _still_missing:
+            try:
+                from insurance.db import find_insurer_info_by_plates
+                _db_info = find_insurer_info_by_plates(_db, list(_still_missing))
+                for p, info in _db_info.items():
+                    if p not in _plate_pool:
+                        _plate_pool[p] = {"name": "", "addr": "", "owner": "", "id_no": ""}
+                    ep = _plate_pool[p]
+                    if not ep["name"] and info.get("insurer_name"):
+                        ep["name"] = info["insurer_name"]
+                    if not ep["addr"] and info.get("insurer_address"):
+                        ep["addr"] = info["insurer_address"]
+                    if not ep["owner"] and info.get("owner"):
+                        ep["owner"] = info["owner"]
+                    if not ep["id_no"] and info.get("id_number"):
+                        ep["id_no"] = info["id_number"]
+            except Exception:
+                logger.debug("查询同车牌信息失败")
         # 回填缺失字段
         for record in result.get("records", []):
             df = record.get("display_fields", {})
             plate = df.get("车牌", "") or df.get("车牌号", "")
-            if not plate or plate not in _plate_insurer_pool:
+            if not plate or plate not in _plate_pool:
                 continue
-            pool = _plate_insurer_pool[plate]
+            pool = _plate_pool[plate]
             if not df.get("保司公司名称") and pool["name"]:
                 df["保司公司名称"] = pool["name"]
-            if not df.get("保司地址") and pool["addr"]:
+            _cur_addr = df.get("保司地址", "")
+            if (not _cur_addr or re.match(r'^邮政编码', _cur_addr)) and pool["addr"]:
                 df["保司地址"] = pool["addr"]
+            if not df.get("车主") and pool["owner"]:
+                df["车主"] = pool["owner"]
+            if pool["id_no"]:
+                # 按记录里已有的 key 回填，都没有则写入"投保人身份证号码"
+                filled_id = False
+                for id_key in ("投保人身份证号码", "证件号码", "被保险人身份证号码"):
+                    if id_key in df and not df[id_key]:
+                        df[id_key] = pool["id_no"]
+                        filled_id = True
+                        break
+                if not filled_id and not df.get("投保人身份证号码"):
+                    df["投保人身份证号码"] = pool["id_no"]
+
+        # 车架号互补：车牌为空但有车架号的记录，从同车架号其他记录补车牌和证件号
+        _vin_pool = {}  # {VIN: {"plate": "", "id_no": "", "owner": ""}}
+        for record in result.get("records", []):
+            df = record.get("display_fields", {})
+            vin = df.get("车架号", "")
+            if not vin:
+                continue
+            if vin not in _vin_pool:
+                _vin_pool[vin] = {"plate": "", "id_no": "", "owner": ""}
+            vp = _vin_pool[vin]
+            plate = df.get("车牌", "") or df.get("车牌号", "")
+            if not vp["plate"] and plate:
+                vp["plate"] = plate
+            if not vp["owner"] and df.get("车主"):
+                vp["owner"] = df["车主"]
+            if not vp["id_no"]:
+                vp["id_no"] = (df.get("投保人身份证号码") or df.get("证件号码") or
+                               df.get("被保险人身份证号码") or "")
+        for record in result.get("records", []):
+            df = record.get("display_fields", {})
+            vin = df.get("车架号", "")
+            plate = df.get("车牌", "") or df.get("车牌号", "")
+            if plate or not vin or vin not in _vin_pool:
+                continue
+            vp = _vin_pool[vin]
+            if not df.get("车牌") and vp["plate"]:
+                df["车牌"] = vp["plate"]
+            if not df.get("车主") and vp["owner"]:
+                df["车主"] = vp["owner"]
+            if vp["id_no"]:
+                filled_id = False
+                for id_key in ("投保人身份证号码", "证件号码", "被保险人身份证号码"):
+                    if id_key in df and not df[id_key]:
+                        df[id_key] = vp["id_no"]
+                        filled_id = True
+                        break
+                if not filled_id and not df.get("投保人身份证号码"):
+                    df["投保人身份证号码"] = vp["id_no"]
 
         # 交强到期时间：必须在 apply_user_config（日期格式化）之前，用「原始」终保日期
         # 构建 车牌→交强险终保日期 映射。否则等终保日期被格式化后再读取，若其格式不含年份
@@ -570,6 +631,20 @@ def list_records():
                     _inject_val = _format_date(str(_inject_val), _compulsory_fmt, _compulsory_no_pad)
                 df["交强到期时间"] = _inject_val
 
+        # 互补后重算 is_abnormal：display_fields 补齐了必填字段则视为正常（不写库，仅改返回值）
+        _RUNTIME_RF = {"承保公司", "保单号", "险种", "车牌", "投保人", "被保人", "签单日期", "起保日期", "终保日期", "保费"}
+        for record in result.get("records", []):
+            if not record.get("is_abnormal") or record.get("abnormal_override_reason"):
+                continue
+            df = record.get("display_fields") or {}
+            missing = [f for f in _RUNTIME_RF if not df.get(f)]
+            if not missing:
+                record["is_abnormal"] = 0
+                continue
+            _ptype = df.get("险种", "")
+            if missing == ["投保人"] and ("交强" in _ptype or "交通事故责任强制" in _ptype):
+                record["is_abnormal"] = 0
+
         # 复用已加载的页面列配置
         result["column_config"] = list_col_cfg
 
@@ -604,6 +679,11 @@ def get_record(record_id):
             if record.get(ts_field) and not isinstance(record[ts_field], str):
                 record[ts_field] = str(record[ts_field])
 
+        # 历史记录兼容：车牌号→车牌
+        if isinstance(record.get("display_fields"), dict):
+            if not record["display_fields"].get("车牌") and record["display_fields"].get("车牌号"):
+                record["display_fields"]["车牌"] = record["display_fields"]["车牌号"]
+
         # 实时关联跟单人：通过 sender 查找绑定用户姓名，无 sender 时取上传用户姓名
         tracker_name = ""
         sender = record.get("sender", "")
@@ -637,6 +717,29 @@ def get_record(record_id):
                     pass
             elif isinstance(record.get("display_fields"), dict):
                 record["display_fields"]["跟单人"] = tracker_name
+
+        # 应用用户配置（简称/日期格式等），与列表端点保持一致
+        if isinstance(record.get("display_fields"), str):
+            try:
+                record["display_fields"] = json.loads(record["display_fields"])
+            except (TypeError, json.JSONDecodeError):
+                record["display_fields"] = {}
+        if isinstance(record.get("display_fields"), dict):
+            user = g.current_user
+            user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
+            has_config = user_config and any(user_config.get(k) for k in user_config)
+            if has_config:
+                _mf = record.get("manual_fields")
+                if _mf:
+                    if isinstance(_mf, str):
+                        try:
+                            _mf = json.loads(_mf)
+                        except (TypeError, json.JSONDecodeError):
+                            _mf = []
+                    user_config["_manual_fields"] = set(_mf) if isinstance(_mf, list) else set()
+                else:
+                    user_config.pop("_manual_fields", None)
+                record["display_fields"] = apply_user_config_to_fields(user_config, record["display_fields"])
 
         # 同一 PDF 的兄弟记录摘要（有 file_md5 就查）
         siblings = []

@@ -1124,8 +1124,8 @@ def find_compulsory_end_dates(db, plates: list) -> dict:
 
 def find_insurer_info_by_plates(db, plates: list) -> dict:
     """
-    批量查询车牌对应的保司公司名称和保司地址。
-    返回 {车牌: {"insurer_name": ..., "insurer_address": ...}}，取最新一条有值记录。
+    批量查询车牌对应的保司信息和人员信息。
+    返回 {车牌: {"insurer_name", "insurer_address", "owner", "id_number"}}，取最新一条有值记录互补。
     """
     if not plates:
         return {}
@@ -1134,12 +1134,12 @@ def find_insurer_info_by_plates(db, plates: list) -> dict:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         placeholders = ",".join(["%s"] * len(plates))
         cursor.execute(
-            f"SELECT pf.plate_no, pf.insurer_name, pf.insurer_address "
+            f"SELECT pf.plate_no, pf.insurer_name, pf.insurer_address, "
+            f"pf.owner, pf.id_number "
             f"FROM insurance_policy_fields pf "
             f"JOIN insurance_records r ON r.id = pf.record_id "
             f"WHERE pf.plate_no IN ({placeholders}) "
             f"AND r.status = 'done' "
-            f"AND (pf.insurer_name != '' OR pf.insurer_address != '') "
             f"ORDER BY r.id DESC",
             plates,
         )
@@ -1147,13 +1147,17 @@ def find_insurer_info_by_plates(db, plates: list) -> dict:
         for row in cursor.fetchall():
             plate = row["plate_no"]
             if plate not in result:
-                result[plate] = {"insurer_name": row["insurer_name"] or "", "insurer_address": row["insurer_address"] or ""}
+                result[plate] = {
+                    "insurer_name": row["insurer_name"] or "",
+                    "insurer_address": row["insurer_address"] or "",
+                    "owner": row["owner"] or "",
+                    "id_number": row["id_number"] or "",
+                }
             else:
-                # 互相补充：已有记录缺某个字段时从后续记录补
-                if not result[plate]["insurer_name"] and row["insurer_name"]:
-                    result[plate]["insurer_name"] = row["insurer_name"]
-                if not result[plate]["insurer_address"] and row["insurer_address"]:
-                    result[plate]["insurer_address"] = row["insurer_address"]
+                for k, col in [("insurer_name", "insurer_name"), ("insurer_address", "insurer_address"),
+                                ("owner", "owner"), ("id_number", "id_number")]:
+                    if not result[plate][k] and row[col]:
+                        result[plate][k] = row[col]
         return result
     except Exception:
         return {}
