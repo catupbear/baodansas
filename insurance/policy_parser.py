@@ -273,8 +273,7 @@ def _identify_company(text: str) -> Dict[str, str]:
     if m:
         val = m.group(1).strip()
         if len(val) > 6:
-            # 清理尾部多余内容（保留完整的分公司/支公司/营业部层级名称）
-            val = re.sub(r'(支公司|分公司|营业部|服务部|业务部|公司)(?![一-鿿]).*', r'\1', val)
+            val = re.sub(r'(公司|营业部|服务部|业务部|支公司).*', r'\1', val)
             result["保险公司"] = val
 
     # 方式2：遍历公司基础名称列表匹配
