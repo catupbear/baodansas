@@ -976,9 +976,22 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
             m = re.search(r'(?<!总)公司地址[：:]\s*(.+?)(?:\s+公司网址|\s{2,}|\n|$)', src)
             if m:
                 val = m.group(1).strip()
-                if val and len(val) >= 4 and not re.search(r'^联系电话|^公司名称', val):
+                if val and len(val) >= 4 and not re.search(r'^联系电话|^公司名称|^邮政编码', val):
                     fields["保司地址"] = val
                     break
+
+    # 平安等格式：街道地址在"公司名称:"下方单独一行，"公司地址:"标签只有邮编
+    if "保司地址" not in fields:
+        for i, line in enumerate(lines):
+            if re.search(r'公司名称[：:]', line):
+                for k in range(i + 1, min(i + 3, len(lines))):
+                    next_line = lines[k].strip()
+                    if not next_line or re.search(r'[：:]', next_line[:6]):
+                        continue
+                    if re.search(r'[市区县].{2,}[路街号大厦广场楼栋]', next_line):
+                        fields["保司地址"] = next_line.rstrip('、，,')
+                        break
+                break
 
     # 紫金等格式：地址和联系电话在"公司地址："标签的上方/周围
     # "深圳市龙岗区龙城街道尚景社区龙福路荣超英 95312\n险 公司地址： 联系电话：\n隆大厦A座A2108"
