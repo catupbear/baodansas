@@ -245,6 +245,9 @@ def _get_enterprise_id_filter():
     role = g.current_user["role"]
     if role == ROLE_SUPER_ADMIN:
         return None
+    # 企业管理员的 parent_id=NULL，用自身 user_id 作为企业 ID
+    if role == ROLE_ENTERPRISE:
+        return g.current_user["user_id"]
     return g.current_user.get("parent_id")
 
 
@@ -1491,7 +1494,11 @@ def _save_manual_record(file_name, policy, ocr_engine, file_data_b64=None, uploa
     # 关联当前登录用户和企业
     from flask import g
     current_user_id = g.current_user["user_id"] if hasattr(g, "current_user") else None
-    current_enterprise_id = g.current_user.get("parent_id") if hasattr(g, "current_user") else None
+    if hasattr(g, "current_user"):
+        _cu = g.current_user
+        current_enterprise_id = _cu["user_id"] if _cu.get("role") == ROLE_ENTERPRISE else _cu.get("parent_id")
+    else:
+        current_enterprise_id = None
 
     page_range = policy.get("page_range", "")
     record = {
