@@ -4,6 +4,8 @@
 """
 
 import logging
+import secrets
+import string
 from datetime import datetime
 
 import pymysql
@@ -21,6 +23,9 @@ logger = logging.getLogger(__name__)
 ROLE_SUPER_ADMIN = "super_admin"
 ROLE_ENTERPRISE = "enterprise"
 ROLE_EMPLOYEE = "employee"
+ROLE_SALES = "sales"              # 兼容旧数据
+ROLE_CHANNEL_SALES = "channel_sales"   # 渠道销售
+ROLE_PERSONAL_SALES = "personal_sales" # 个人销售
 
 
 def init_users_table(db):
@@ -89,7 +94,7 @@ def get_user_by_id(db, user_id: int) -> dict | None:
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("SELECT id, phone, role, parent_id, name, enabled, created_at, updated_at FROM users WHERE id = %s", (user_id,))
+        cursor.execute("SELECT id, phone, role, parent_id, name, enabled, is_sales, sales_type, created_at, updated_at FROM users WHERE id = %s", (user_id,))
         return cursor.fetchone()
     finally:
         conn.close()
@@ -100,16 +105,19 @@ def verify_password(user: dict, password: str) -> bool:
     return check_password_hash(user["password_hash"], password)
 
 
-def list_users(db, role: str = "", parent_id: int = None) -> list:
-    """查询用户列表，可按角色/所属企业筛选"""
+def list_users(db, role: str = "", parent_id: int = None, sales_type: str = "") -> list:
+    """查询用户列表，可按角色/所属企业/销售类型筛选"""
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        sql = "SELECT id, phone, role, parent_id, name, enabled, created_at, updated_at FROM users WHERE 1=1"
+        sql = "SELECT id, phone, role, parent_id, name, enabled, is_sales, sales_type, created_at, updated_at FROM users WHERE 1=1"
         params = []
         if role:
             sql += " AND role = %s"
             params.append(role)
+        if sales_type:
+            sql += " AND sales_type = %s"
+            params.append(sales_type)
         if parent_id is not None:
             sql += " AND parent_id = %s"
             params.append(parent_id)
@@ -125,14 +133,28 @@ def list_users(db, role: str = "", parent_id: int = None) -> list:
         conn.close()
 
 
-def create_user(db, phone: str, password: str, role: str, parent_id: int = None, name: str = "") -> int:
+def _generate_referral_code() -> str:
+    """生成8位大写字母+数字邀请码"""
+    chars = string.ascii_uppercase + string.digits
+    return "".join(secrets.choice(chars) for _ in range(8))
+
+
+def create_user(db, phone: str, password: str, role: str, parent_id: int = None, name: str = "", referrer_id: int = None, is_sales: bool = False) -> int:
     """创建用户，返回新用户 ID"""
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        # 生成唯一邀请码
+        referral_code = None
+        for _ in range(10):
+            code = _generate_referral_code()
+            cursor.execute("SELECT id FROM users WHERE referral_code = %s", (code,))
+            if not cursor.fetchone():
+                referral_code = code
+                break
         cursor.execute(
-            "INSERT INTO users (phone, password_hash, role, parent_id, name) VALUES (%s, %s, %s, %s, %s)",
-            (phone, generate_password_hash(password), role, parent_id, name),
+            "INSERT INTO users (phone, password_hash, role, parent_id, name, referral_code, referrer_id, is_sales, sales_type) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (phone, generate_password_hash(password), role, parent_id, name, referral_code, referrer_id, 1 if is_sales else 0, ""),
         )
         conn.commit()
         return cursor.lastrowid
@@ -145,7 +167,7 @@ def update_user(db, user_id: int, data: dict):
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        allowed = {"name", "role", "parent_id", "enabled"}
+        allowed = {"name", "role", "parent_id", "enabled", "is_sales", "sales_type"}
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
             return
@@ -166,6 +188,18 @@ def reset_password(db, user_id: int, new_password: str):
             "UPDATE users SET password_hash = %s WHERE id = %s",
             (generate_password_hash(new_password), user_id),
         )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_user(db, user_id: int):
+    """删除用户（同时清理绑定关系）"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM user_bindings WHERE user_id = %s", (user_id,))
+        cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
         conn.commit()
     finally:
         conn.close()
@@ -211,7 +245,7 @@ def list_enterprises(db, enabled: int = None) -> list:
         cursor.execute(sql, params)
         rows = cursor.fetchall()
         for row in rows:
-            for f in ("created_at", "updated_at"):
+            for f in ("created_at", "updated_at", "plan_start_at", "next_plan_start_at"):
                 if row.get(f) and not isinstance(row[f], str):
                     row[f] = str(row[f])
         return rows
@@ -227,7 +261,7 @@ def get_enterprise_by_id(db, enterprise_id: int) -> dict | None:
         cursor.execute("SELECT * FROM enterprises WHERE id = %s", (enterprise_id,))
         row = cursor.fetchone()
         if row:
-            for f in ("created_at", "updated_at"):
+            for f in ("created_at", "updated_at", "plan_start_at", "next_plan_start_at"):
                 if row.get(f) and not isinstance(row[f], str):
                     row[f] = str(row[f])
         return row
@@ -251,17 +285,28 @@ def create_enterprise(db, name: str, contact_person: str = "", contact_phone: st
 
 
 def update_enterprise(db, enterprise_id: int, data: dict):
-    """更新企业信息（支持 name, contact_person, contact_phone, enabled）"""
+    """更新企业信息"""
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        allowed = {"name", "contact_person", "contact_phone", "enabled"}
+        allowed = {"name", "contact_person", "contact_phone", "enabled", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at"}
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
             return
         set_clause = ", ".join(f"{k} = %s" for k in fields)
         values = list(fields.values()) + [enterprise_id]
         cursor.execute(f"UPDATE enterprises SET {set_clause} WHERE id = %s", values)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_enterprise(db, enterprise_id: int):
+    """删除企业"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM enterprises WHERE id = %s", (enterprise_id,))
         conn.commit()
     finally:
         conn.close()
@@ -485,6 +530,74 @@ def get_last_sms_sent_at(db, phone: str, purpose: str = "register"):
         conn.close()
 
 
+def sms_in_cooldown(db, phone: str, purpose: str, cooldown_seconds: int) -> int:
+    """
+    检查手机号是否仍在冷却期内（时间比较在 MySQL 侧完成，规避时区问题）。
+    返回剩余冷却秒数（>0 表示冷却中，0 表示可发送）。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT GREATEST(0, %s - TIMESTAMPDIFF(SECOND, sent_at, NOW())) AS remaining "
+            "FROM sms_verifications "
+            "WHERE phone = %s AND purpose = %s "
+            "ORDER BY id DESC LIMIT 1",
+            (cooldown_seconds, phone, purpose),
+        )
+        row = cursor.fetchone()
+        return int(row["remaining"]) if row else 0
+    finally:
+        conn.close()
+
+
+def try_insert_sms_record(db, phone: str, code: str, purpose: str,
+                          cooldown_seconds: int, ttl: int) -> int:
+    """
+    原子操作：仅当冷却期已过时才插入验证码记录（在 MySQL 侧完成检查+插入，防并发）。
+    返回 0 表示插入成功（可以发短信），>0 表示剩余冷却秒数（不可发送）。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        # 先检查冷却（同一连接内，避免跨连接竞态）
+        cursor.execute(
+            "SELECT GREATEST(0, %s - TIMESTAMPDIFF(SECOND, sent_at, NOW())) AS remaining "
+            "FROM sms_verifications WHERE phone = %s AND purpose = %s "
+            "ORDER BY id DESC LIMIT 1",
+            (cooldown_seconds, phone, purpose),
+        )
+        row = cursor.fetchone()
+        remaining = int(row["remaining"]) if row else 0
+        if remaining > 0:
+            return remaining
+        # 冷却已过，插入记录（先占位，再发短信，防止并发重复发送）
+        cursor.execute(
+            "INSERT INTO sms_verifications (phone, code, purpose, expires_at) "
+            "VALUES (%s, %s, %s, DATE_ADD(NOW(), INTERVAL %s SECOND))",
+            (phone, code, purpose, ttl),
+        )
+        conn.commit()
+        return 0
+    finally:
+        conn.close()
+
+
+def delete_sms_record(db, phone: str, code: str, purpose: str):
+    """发短信失败时回滚：删除刚才插入的记录，让用户可以重试"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM sms_verifications WHERE phone=%s AND code=%s AND purpose=%s "
+            "ORDER BY id DESC LIMIT 1",
+            (phone, code, purpose),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def verify_sms_code(db, phone: str, code: str, purpose: str = "register") -> bool:
     """
     验证验证码。成功则标记为已用，返回 True；失败返回 False。
@@ -504,6 +617,237 @@ def verify_sms_code(db, phone: str, code: str, purpose: str = "register") -> boo
         cursor.execute("UPDATE sms_verifications SET used = 1 WHERE id = %s", (row["id"],))
         conn.commit()
         return True
+    finally:
+        conn.close()
+
+
+def init_is_sales_column(db):
+    """为 users 表添加 is_sales / sales_type 字段（幂等迁移）"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        for col, definition in [
+            ("is_sales", "TINYINT NOT NULL DEFAULT 0 COMMENT '是否同时拥有销售权限（兼容旧数据）'"),
+            ("sales_type", "VARCHAR(32) NOT NULL DEFAULT '' COMMENT '附加销售类型: channel/personal'"),
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE users ADD COLUMN {col} {definition}")
+                logger.info("users 表添加列 %s 完成", col)
+            except Exception:
+                pass
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def init_enterprise_plan_column(db):
+    """为 enterprises 表添加套餐相关字段（幂等迁移）"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        for col, definition in [
+            ("plan_type", "VARCHAR(32) NOT NULL DEFAULT 'standard' COMMENT '套餐类型: trial/standard/enterprise'"),
+            ("plan_months", "INT NOT NULL DEFAULT 1 COMMENT '套餐时长（月）'"),
+            ("plan_start_at", "DATETIME DEFAULT NULL COMMENT '套餐开始时间'"),
+            ("next_plan_type", "VARCHAR(32) DEFAULT NULL COMMENT '下一个套餐类型'"),
+            ("next_plan_months", "INT DEFAULT NULL COMMENT '下一个套餐时长（月）'"),
+            ("next_plan_start_at", "DATETIME DEFAULT NULL COMMENT '下一个套餐开始时间'"),
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE enterprises ADD COLUMN {col} {definition}")
+                logger.info("enterprises 表添加列 %s 完成", col)
+            except Exception:
+                pass
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def init_referral_columns(db):
+    """为 users 表添加邀请码字段（幂等迁移）"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        for col, definition in [
+            ("referral_code", "VARCHAR(16) NULL UNIQUE COMMENT '邀请码'"),
+            ("referrer_id", "INT NULL COMMENT '邀请人ID'"),
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE users ADD COLUMN {col} {definition}")
+                logger.info("users 表添加列 %s 完成", col)
+            except Exception:
+                pass  # 已存在
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_user_by_referral_code(db, code: str) -> dict | None:
+    """根据邀请码查找用户"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT id, phone, role, name, referral_code FROM users WHERE referral_code = %s AND enabled = 1", (code,))
+        return cursor.fetchone()
+    finally:
+        conn.close()
+
+
+def get_referral_downlines(db, user_id: int) -> list:
+    """获取该用户的直接下线列表"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT id, phone, name, created_at FROM users WHERE referrer_id = %s ORDER BY created_at DESC",
+            (user_id,),
+        )
+        rows = cursor.fetchall()
+        for row in rows:
+            if row.get("created_at") and not isinstance(row["created_at"], str):
+                row["created_at"] = str(row["created_at"])
+            # 手机号脱敏
+            p = row.get("phone", "")
+            if len(p) == 11:
+                row["phone_masked"] = p[:3] + "****" + p[7:]
+            else:
+                row["phone_masked"] = p
+        return rows
+    finally:
+        conn.close()
+
+
+def get_or_create_referral_code(db, user_id: int) -> str:
+    """获取用户邀请码，若不存在则自动生成并写入"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT referral_code FROM users WHERE id = %s", (user_id,))
+        row = cursor.fetchone()
+        if not row:
+            return ""
+        if row.get("referral_code"):
+            return row["referral_code"]
+        # 旧账号没有邀请码，补生成
+        for _ in range(10):
+            code = _generate_referral_code()
+            cursor.execute("SELECT id FROM users WHERE referral_code = %s", (code,))
+            if not cursor.fetchone():
+                cursor.execute("UPDATE users SET referral_code = %s WHERE id = %s", (code, user_id))
+                conn.commit()
+                return code
+        return ""
+    finally:
+        conn.close()
+
+
+def check_enterprise_quota(db, enterprise_id: int) -> dict:
+    """
+    检查企业配额状态，同时检查套餐是否到期。
+    返回字段：exceeded / expired / plan_type / usage / limit / remaining
+    """
+    ent = get_enterprise_by_id(db, enterprise_id)
+    if not ent:
+        return {"exceeded": False, "expired": False, "plan_type": None}
+
+    # 自动激活排队套餐
+    if ent.get("next_plan_type") and ent.get("next_plan_start_at"):
+        conn2 = db.pool.connection()
+        try:
+            cur2 = conn2.cursor(pymysql.cursors.DictCursor)
+            cur2.execute(
+                "SELECT TIMESTAMPDIFF(SECOND, %s, NOW()) AS over_sec",
+                (ent["next_plan_start_at"],),
+            )
+            r2 = cur2.fetchone()
+            if r2 and r2["over_sec"] is not None and r2["over_sec"] >= 0:
+                # 下一个套餐已到开始时间，自动激活
+                cur2.execute(
+                    "UPDATE enterprises SET plan_type=%s, plan_months=%s, plan_start_at=%s, "
+                    "next_plan_type=NULL, next_plan_months=NULL, next_plan_start_at=NULL WHERE id=%s",
+                    (ent["next_plan_type"], ent["next_plan_months"], ent["next_plan_start_at"], enterprise_id),
+                )
+                conn2.commit()
+                # 重新读取企业信息
+                ent = get_enterprise_by_id(db, enterprise_id)
+        finally:
+            conn2.close()
+
+    plan_type = ent.get("plan_type", "standard")
+
+    # 套餐到期检查（在 MySQL 侧完成，规避时区问题）
+    expired = False
+    if ent.get("plan_start_at"):
+        conn = db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor.execute(
+                "SELECT TIMESTAMPDIFF(SECOND, DATE_ADD(%s, INTERVAL %s MONTH), NOW()) AS over_sec",
+                (ent["plan_start_at"], ent.get("plan_months", 1) or 1),
+            )
+            row = cursor.fetchone()
+            if row and row["over_sec"] is not None and row["over_sec"] > 0:
+                expired = True
+        finally:
+            conn.close()
+
+    if expired:
+        return {"exceeded": False, "expired": True, "plan_type": plan_type}
+
+    # 企业版/企业试用：不限额度
+    if plan_type in ("enterprise", "enterprise_trial"):
+        return {"exceeded": False, "expired": False, "plan_type": plan_type}
+
+    # 标准版：检查月度额度
+    usage = get_enterprise_monthly_pdf_usage(db, enterprise_id)
+    remaining = max(0, 3000 - usage)
+    return {
+        "exceeded": usage >= 3000,
+        "expired": False,
+        "plan_type": plan_type,
+        "usage": usage,
+        "limit": 3000,
+        "remaining": remaining,
+    }
+
+
+def get_enterprise_monthly_pdf_usage(db, enterprise_id: int) -> int:
+    """获取指定企业当月PDF识别使用量"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT COUNT(*) as cnt FROM insurance_records "
+            "WHERE enterprise_id = %s "
+            "AND YEAR(created_at) = YEAR(NOW()) "
+            "AND MONTH(created_at) = MONTH(NOW()) "
+            "AND deleted_at IS NULL",
+            (enterprise_id,)
+        )
+        row = cursor.fetchone()
+        return row["cnt"] if row else 0
+    except Exception:
+        return 0
+    finally:
+        conn.close()
+
+
+def get_monthly_pdf_usage_batch(db) -> dict:
+    """批量获取所有企业当月PDF识别使用量，返回 {enterprise_id: count}"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT enterprise_id, COUNT(*) as cnt FROM insurance_records "
+            "WHERE enterprise_id IS NOT NULL "
+            "AND YEAR(created_at) = YEAR(NOW()) "
+            "AND MONTH(created_at) = MONTH(NOW()) "
+            "AND deleted_at IS NULL "
+            "GROUP BY enterprise_id"
+        )
+        return {row["enterprise_id"]: row["cnt"] for row in cursor.fetchall()}
+    except Exception:
+        return {}
     finally:
         conn.close()
 

@@ -80,6 +80,21 @@
         }
         .badge-green { background: #ecfdf5; color: #059669; }
         .badge-gray { background: #f3f4f6; color: #6b7280; }
+        .badge-blue { background: #eff6ff; color: #3b82f6; }
+        .badge-orange { background: #fff7ed; color: #ea580c; }
+        .badge-purple { background: #f5f3ff; color: #7c3aed; }
+
+        .quota-bar-wrap {
+            width: 90px; background: #f3f4f6; border-radius: 4px;
+            height: 5px; overflow: hidden;
+        }
+        .quota-bar-inner {
+            height: 100%; border-radius: 4px;
+            transition: width 0.4s ease;
+        }
+        .quota-label { font-size: 11px; color: #6b7280; margin-bottom: 2px; }
+
+        .data-table td { vertical-align: middle; }
 
         .form-input {
             width: 100%; height: 40px; padding: 0 12px;
@@ -140,34 +155,107 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>企业名称</th>
-                                <th>联系人</th>
-                                <th>联系电话</th>
-                                <th>状态</th>
-                                <th>创建时间</th>
-                                <th>操作</th>
+                                <th style="min-width:140px;">企业名称</th>
+                                <th style="min-width:130px;">套餐</th>
+                                <th style="min-width:160px;">本月识别量</th>
+                                <th style="min-width:80px;">联系人</th>
+                                <th style="min-width:110px;">联系电话</th>
+                                <th style="min-width:60px;">状态</th>
+                                <th style="min-width:100px;">创建时间</th>
+                                <th style="min-width:130px;">操作</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="ent in enterprises" :key="ent.id">
-                                <td class="font-medium text-gray-800">{{ ent.name }}</td>
-                                <td>{{ ent.contact_person || '-' }}</td>
-                                <td>{{ ent.contact_phone || '-' }}</td>
+                                <!-- 企业名称 -->
+                                <td style="font-weight:600;color:#1c1410;">{{ ent.name }}</td>
+
+                                <!-- 套餐（类型 + 时长 + 到期） -->
+                                <td>
+                                    <!-- 当前套餐 -->
+                                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                                        <span class="badge" style="white-space:nowrap;"
+                                            :class="ent.plan_type==='enterprise' ? 'badge-blue' : ent.plan_type==='enterprise_trial' ? 'badge-purple' : 'badge-green'">
+                                            {{ ent.plan_type==='enterprise' ? '企业版' : ent.plan_type==='enterprise_trial' ? '企业试用' : '标准版' }}
+                                        </span>
+                                        <span style="font-size:11px;color:#9ca3af;white-space:nowrap;">{{ ent.plan_months || 1 }}个月</span>
+                                    </div>
+                                    <template v-if="ent.plan_start_at">
+                                        <div style="display:flex;align-items:center;gap:4px;">
+                                            <span style="font-size:11px;white-space:nowrap;padding:1px 6px;border-radius:4px;"
+                                                :style="{
+                                                    background: planDaysLeft(ent) <= 0 ? '#fef2f2' : planDaysLeft(ent) <= 7 ? '#fffbeb' : '#f9fafb',
+                                                    color: planDaysLeft(ent) <= 0 ? '#dc2626' : planDaysLeft(ent) <= 7 ? '#d97706' : '#6b7280'
+                                                }">
+                                                {{ planDaysLeft(ent) <= 0 ? '已到期' : planDaysLeft(ent) + '天后到期' }}
+                                            </span>
+                                        </div>
+                                        <div style="font-size:11px;color:#9ca3af;margin-top:2px;">{{ planExpiryStr(ent) }}</div>
+                                    </template>
+                                    <div v-else style="font-size:11px;color:#d1d5db;margin-top:2px;">未设置到期</div>
+
+                                    <!-- 下一个套餐（叠加续费） -->
+                                    <template v-if="ent.next_plan_type">
+                                        <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #e5e7eb;">
+                                            <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">
+                                                <span style="font-size:10px;color:#9ca3af;">续费:</span>
+                                                <span class="badge" style="font-size:10px;padding:1px 6px;"
+                                                    :class="ent.next_plan_type==='enterprise' ? 'badge-blue' : ent.next_plan_type==='enterprise_trial' ? 'badge-purple' : 'badge-green'">
+                                                    {{ ent.next_plan_type==='enterprise' ? '企业版' : ent.next_plan_type==='enterprise_trial' ? '企业试用' : '标准版' }}
+                                                </span>
+                                                <span style="font-size:10px;color:#9ca3af;">{{ ent.next_plan_months }}个月</span>
+                                            </div>
+                                            <div style="font-size:10px;color:#9ca3af;">{{ nextPlanExpiryStr(ent) }} 起生效</div>
+                                        </div>
+                                    </template>
+                                </td>
+
+                                <!-- 本月识别量 -->
+                                <td>
+                                    <div style="display:flex;align-items:center;gap:8px;">
+                                        <div style="flex:1;max-width:90px;">
+                                            <div style="height:5px;background:#f0f0f0;border-radius:4px;overflow:hidden;">
+                                                <div v-if="ent.plan_type==='enterprise' || ent.plan_type==='enterprise_trial'"
+                                                    style="height:100%;width:30%;background:#3b82f6;opacity:0.4;border-radius:4px;"></div>
+                                                <div v-else
+                                                    :style="{
+                                                        height:'100%', borderRadius:'4px',
+                                                        width: Math.min(ent.monthly_pdf_usage/3000*100,100)+'%',
+                                                        background: ent.monthly_pdf_usage>=2700?'#ef4444':ent.monthly_pdf_usage>=1800?'#f59e0b':'#10b981'
+                                                    }"></div>
+                                            </div>
+                                        </div>
+                                        <span style="font-size:12px;color:#374151;white-space:nowrap;">
+                                            {{ ent.monthly_pdf_usage }} / {{ (ent.plan_type==='enterprise'||ent.plan_type==='enterprise_trial') ? '∞' : '3000' }}
+                                        </span>
+                                    </div>
+                                </td>
+
+                                <!-- 联系人 -->
+                                <td style="color:#57534e;font-size:13px;">{{ ent.contact_person || '-' }}</td>
+                                <!-- 联系电话 -->
+                                <td style="color:#57534e;font-size:13px;">{{ ent.contact_phone || '-' }}</td>
+
+                                <!-- 状态 -->
                                 <td>
                                     <span class="badge" :class="ent.enabled ? 'badge-green' : 'badge-gray'">
                                         {{ ent.enabled ? '启用' : '禁用' }}
                                     </span>
                                 </td>
-                                <td class="text-gray-500">{{ formatTime(ent.created_at) }}</td>
+
+                                <!-- 创建时间 -->
+                                <td style="color:#a8a29e;font-size:12px;">{{ formatTime(ent.created_at) }}</td>
+
+                                <!-- 操作 -->
                                 <td>
-                                    <div class="flex items-center gap-2">
-                                        <button @click="openEditModal(ent)" class="btn btn-sm btn-outline">编辑</button>
-                                        <button @click="toggleEnabled(ent)"
-                                            class="btn btn-sm"
-                                            :class="'btn-outline'"
-                                            :style="ent.enabled ? 'color:#d97706;border-color:#fbbf24' : 'color:#059669;border-color:#6ee7b7'">
+                                    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                                        <button @click="openEditModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;">编辑</button>
+                                        <button @click="openPlanModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#c2410c;border-color:#fed7aa;">开通</button>
+                                        <button @click="toggleEnabled(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;"
+                                            :style="ent.enabled ? 'color:#d97706;border-color:#fde68a;' : 'color:#059669;border-color:#6ee7b7;'">
                                             {{ ent.enabled ? '禁用' : '启用' }}
                                         </button>
+                                        <button @click="confirmDelete(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#dc2626;border-color:#fca5a5;">删除</button>
                                     </div>
                                 </td>
                             </tr>
@@ -177,7 +265,7 @@
             </div>
         </div>
 
-        <!-- 创建/编辑企业弹窗 -->
+        <!-- 创建/编辑企业弹窗（只含名称、联系人、电话） -->
         <transition name="fade">
             <div v-if="showModal" class="modal-mask" @click.self="closeModal">
                 <div class="modal-content">
@@ -209,6 +297,106 @@
             </div>
         </transition>
 
+        <!-- 开通套餐弹窗 -->
+        <transition name="fade">
+            <div v-if="showPlanModal" class="modal-mask" @click.self="closePlanModal">
+                <div class="modal-content">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-1">开通套餐</h3>
+                    <p style="font-size:13px;color:#9ca3af;margin-bottom:20px;">{{ planEditEnt ? planEditEnt.name : '' }}</p>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-1">套餐类型</label>
+                            <select v-model="planForm.plan_type" class="form-select" style="width:100%;height:40px;padding:0 12px;border:1px solid #e7e0d8;border-radius:8px;font-size:14px;outline:none;">
+                                <option value="standard">标准版</option>
+                                <option value="enterprise">企业版</option>
+                                <option value="enterprise_trial">企业试用版</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-1">套餐时长</label>
+                            <template v-if="planForm.plan_type === 'enterprise_trial'">
+                                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+                                    <button v-for="m in [1,2]" :key="m" type="button"
+                                        @click="planForm.plan_months = m"
+                                        :style="{
+                                            padding:'4px 10px', borderRadius:'6px', fontSize:'13px', cursor:'pointer', border:'1px solid',
+                                            background: planForm.plan_months === m ? '#7c3aed' : '#fff',
+                                            color: planForm.plan_months === m ? '#fff' : '#57534e',
+                                            borderColor: planForm.plan_months === m ? '#7c3aed' : '#e7e0d8',
+                                        }">{{ m }}月</button>
+                                </div>
+                            </template>
+                            <template v-else>
+                                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+                                    <button v-for="m in [1,2,3,4,5,6,7,8,9,10,11,12]" :key="m" type="button"
+                                        @click="planForm.plan_months = m"
+                                        :style="{
+                                            padding:'4px 10px', borderRadius:'6px', fontSize:'13px', cursor:'pointer', border:'1px solid',
+                                            background: planForm.plan_months === m ? '#c2410c' : '#fff',
+                                            color: planForm.plan_months === m ? '#fff' : '#57534e',
+                                            borderColor: planForm.plan_months === m ? '#c2410c' : '#e7e0d8',
+                                        }">{{ m }}月</button>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <input type="number" v-model.number="planForm.plan_months" min="1" max="120" class="form-input" style="width:100px;" placeholder="自定义">
+                                    <span style="font-size:13px;color:#9ca3af;">个月</span>
+                                </div>
+                            </template>
+                            <!-- 叠加/覆盖选择 -->
+                            <div v-if="planCurrentExpiry" style="margin-top:10px;background:#f8f8f8;border-radius:8px;padding:10px 12px;">
+                                <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">当前套餐到期日：<span style="font-weight:600;color:#374151;">{{ planCurrentExpiry }}</span></div>
+                                <div style="display:flex;gap:8px;">
+                                    <button type="button" @click="planForm.stack_plan = true"
+                                        :style="{
+                                            flex:1, padding:'6px 0', borderRadius:'6px', fontSize:'12px', cursor:'pointer', border:'1px solid',
+                                            background: planForm.stack_plan ? '#c2410c' : '#fff',
+                                            color: planForm.stack_plan ? '#fff' : '#57534e',
+                                            borderColor: planForm.stack_plan ? '#c2410c' : '#e7e0d8',
+                                        }">叠加续费（从到期日起算）</button>
+                                    <button type="button" @click="planForm.stack_plan = false"
+                                        :style="{
+                                            flex:1, padding:'6px 0', borderRadius:'6px', fontSize:'12px', cursor:'pointer', border:'1px solid',
+                                            background: !planForm.stack_plan ? '#c2410c' : '#fff',
+                                            color: !planForm.stack_plan ? '#fff' : '#57534e',
+                                            borderColor: !planForm.stack_plan ? '#c2410c' : '#e7e0d8',
+                                        }">从今天开始（覆盖）</button>
+                                </div>
+                                <p class="text-xs text-gray-400 mt-2" v-if="planForm.stack_plan">新套餐将从 {{ planCurrentExpiry }} 开始，到期日顺延 {{ planForm.plan_months }} 个月</p>
+                                <p class="text-xs text-gray-400 mt-2" v-else>将丢弃剩余时间，从今天重新计算</p>
+                            </div>
+                            <p v-else class="text-xs text-gray-400 mt-1">套餐将从今天起开始计算</p>
+                        </div>
+                    </div>
+
+                    <div v-if="planFormError" class="mt-4 bg-red-50 text-red-600 text-sm rounded-lg px-4 py-2">{{ planFormError }}</div>
+
+                    <div class="flex justify-end gap-3 mt-6">
+                        <button @click="closePlanModal" class="btn btn-outline">取消</button>
+                        <button @click="submitPlanForm" :disabled="planSubmitting" class="btn btn-primary">
+                            {{ planSubmitting ? '提交中...' : '确定开通' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- 删除确认弹窗 -->
+        <transition name="fade">
+            <div v-if="deleteTarget" class="modal-mask" @click.self="deleteTarget=null">
+                <div class="modal-content" style="width:360px;">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-3">确认删除</h3>
+                    <p style="font-size:14px;color:#555;margin-bottom:6px;">确定删除企业 <strong>{{ deleteTarget.name }}</strong> 吗？</p>
+                    <p style="font-size:12px;color:#dc2626;">此操作不可恢复，该企业下的账号将失去归属。</p>
+                    <div class="flex justify-end gap-3 mt-6">
+                        <button @click="deleteTarget=null" class="btn btn-outline">取消</button>
+                        <button @click="doDelete" :disabled="deleting" class="btn btn-sm" style="background:#dc2626;color:#fff;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;">
+                            {{ deleting ? '删除中...' : '确认删除' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
         <!-- 提示消息 -->
         <transition name="fade">
             <div v-if="toast" class="fixed top-4 right-4 z-50 bg-white shadow-lg rounded-lg px-5 py-3 text-sm flex items-center gap-2 border"
@@ -226,7 +414,7 @@
 </div>
 
 <script>
-const { createApp, ref, reactive, onMounted } = Vue;
+const { createApp, ref, reactive, computed, watch, onMounted } = Vue;
 
 function getToken() { return localStorage.getItem('token'); }
 function getUser() { try { return JSON.parse(localStorage.getItem('user')); } catch { return null; } }
@@ -252,6 +440,44 @@ createApp({
         const form = reactive({ name: '', contact_person: '', contact_phone: '' });
         const formError = ref('');
         const submitting = ref(false);
+
+        // 开通套餐弹窗
+        const showPlanModal = ref(false);
+        const planEditEnt = ref(null);
+        const planForm = reactive({ plan_type: 'standard', plan_months: 1, stack_plan: false });
+        const planFormError = ref('');
+        const planSubmitting = ref(false);
+        const planCurrentExpiry = ref('');
+        const editCurrentExpiry = ref(''); // 保留兼容
+
+
+        // 套餐到期相关计算
+        function planExpiry(ent) {
+            if (!ent.plan_start_at) return null;
+            const start = new Date(String(ent.plan_start_at).replace(' ', 'T'));
+            if (isNaN(start.getTime())) return null;
+            const months = ent.plan_months || (ent.plan_type === 'trial' ? 2 : 1);
+            const d = new Date(start);
+            d.setMonth(d.getMonth() + months);
+            return d;
+        }
+        function planDaysLeft(ent) {
+            const exp = planExpiry(ent);
+            if (!exp) return null;
+            return Math.ceil((exp - Date.now()) / 86400000);
+        }
+        function planExpiryStr(ent) {
+            const exp = planExpiry(ent);
+            if (!exp || isNaN(exp.getTime())) return '';
+            return exp.toISOString().slice(0, 10);
+        }
+        function nextPlanExpiryStr(ent) {
+            if (!ent.next_plan_start_at) return '';
+            return String(ent.next_plan_start_at).slice(0, 10);
+        }
+
+        const deleteTarget = ref(null);
+        const deleting = ref(false);
 
         const toast = ref(null);
         let toastTimer = null;
@@ -320,24 +546,91 @@ createApp({
             showModal.value = false;
         }
 
+        function openPlanModal(ent) {
+            planEditEnt.value = ent;
+            planForm.plan_type = ent.plan_type || 'standard';
+            planForm.plan_months = ent.plan_months || 1;
+            const expStr = planExpiryStr(ent);
+            const daysLeft = planDaysLeft(ent);
+            if (expStr && daysLeft !== null && daysLeft > 0) {
+                planCurrentExpiry.value = expStr;
+                planForm.stack_plan = true;
+            } else {
+                planCurrentExpiry.value = '';
+                planForm.stack_plan = false;
+            }
+            planFormError.value = '';
+            showPlanModal.value = true;
+        }
+
+        function closePlanModal() {
+            showPlanModal.value = false;
+        }
+
+        async function submitPlanForm() {
+            planFormError.value = '';
+            planSubmitting.value = true;
+            try {
+                const body = {
+                    plan_type: planForm.plan_type,
+                    plan_months: Number(planForm.plan_months),
+                    stack_plan: !!planForm.stack_plan,
+                };
+                const resp = await authFetch('/api/auth/enterprises/' + planEditEnt.value.id, {
+                    method: 'PUT',
+                    body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showToast('套餐已更新');
+                    closePlanModal();
+                    fetchEnterprises();
+                } else {
+                    planFormError.value = data.msg || '操作失败';
+                }
+            } catch (e) {
+                planFormError.value = '网络错误';
+            } finally {
+                planSubmitting.value = false;
+            }
+        }
+
+        function confirmDelete(ent) {
+            deleteTarget.value = ent;
+        }
+
+        async function doDelete() {
+            if (!deleteTarget.value) return;
+            deleting.value = true;
+            try {
+                const resp = await authFetch('/api/auth/enterprises/' + deleteTarget.value.id, { method: 'DELETE' });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showToast('企业已删除');
+                    deleteTarget.value = null;
+                    fetchEnterprises();
+                } else {
+                    showToast(data.msg || '删除失败', 'error');
+                }
+            } catch {
+                showToast('网络错误', 'error');
+            } finally {
+                deleting.value = false;
+            }
+        }
+
         async function submitForm() {
             formError.value = '';
             if (!form.name.trim()) { formError.value = '请输入企业名称'; return; }
             submitting.value = true;
             try {
-                let url, method;
                 const body = {
                     name: form.name.trim(),
                     contact_person: form.contact_person.trim(),
                     contact_phone: form.contact_phone.trim(),
                 };
-                if (isEdit.value) {
-                    url = '/api/auth/enterprises/' + editId.value;
-                    method = 'PUT';
-                } else {
-                    url = '/api/auth/enterprises';
-                    method = 'POST';
-                }
+                const url = isEdit.value ? '/api/auth/enterprises/' + editId.value : '/api/auth/enterprises';
+                const method = isEdit.value ? 'PUT' : 'POST';
                 const resp = await authFetch(url, { method, body: JSON.stringify(body) });
                 const data = await resp.json();
                 if (data.code === 0) {
@@ -353,6 +646,13 @@ createApp({
                 submitting.value = false;
             }
         }
+
+        // 切换到企业试用时，月数超过2则自动重置为1
+        watch(() => planForm.plan_type, (val) => {
+            if (val === 'enterprise_trial' && planForm.plan_months > 2) {
+                planForm.plan_months = 1;
+            }
+        });
 
         async function toggleEnabled(ent) {
             const newEnabled = !ent.enabled;
@@ -387,7 +687,11 @@ createApp({
             ready, noPermission, currentUser, loading, enterprises,
             showModal, isEdit, form, formError, submitting,
             openCreateModal, openEditModal, closeModal, submitForm,
+            showPlanModal, planEditEnt, planForm, planFormError, planSubmitting, planCurrentExpiry,
+            openPlanModal, closePlanModal, submitPlanForm,
             toggleEnabled, logout, toast, formatTime,
+            deleteTarget, deleting, confirmDelete, doDelete,
+            planDaysLeft, planExpiryStr, nextPlanExpiryStr,
         };
     }
 }).mount('#app');

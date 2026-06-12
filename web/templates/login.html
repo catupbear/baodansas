@@ -95,6 +95,14 @@
             border-bottom-color: #e8673d;
         }
 
+        .forget-link {
+            font-size: 12px;
+            color: #f07c3e;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .forget-link:hover { text-decoration: underline; }
+
         .input-group {
             position: relative;
             margin-bottom: 14px;
@@ -264,9 +272,65 @@
             <div class="remember-row">
                 <input type="checkbox" id="remember" v-model="remember">
                 <label for="remember">记住密码</label>
+                <a class="forget-link" @click.prevent="switchTab('reset')">忘记密码？</a>
             </div>
             <button type="submit" class="btn-submit" :disabled="loading">{{ loading ? '登录中...' : '登 录' }}</button>
         </form>
+
+        <!-- 忘记密码表单 -->
+        <div v-if="tab==='reset'">
+            <div style="display:flex;align-items:center;margin-bottom:20px;">
+                <a @click.prevent="switchTab('login')" style="cursor:pointer;color:#c0c0c0;margin-right:8px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                </a>
+                <span style="font-size:15px;font-weight:500;color:#333;">找回密码</span>
+            </div>
+            <form @submit.prevent="handleReset">
+                <div class="input-group">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    <input v-model="resetPhone" type="text" placeholder="请输入注册手机号" autofocus>
+                </div>
+                <div class="code-row">
+                    <div class="input-group">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                        <input v-model="resetCode" type="text" placeholder="请输入验证码" maxlength="6">
+                    </div>
+                    <button type="button" class="btn-send-code" :disabled="resetSending || resetCountdown > 0" @click="sendResetCode">
+                        {{ resetCountdown > 0 ? resetCountdown + 's 后重发' : (resetSending ? '发送中...' : '获取验证码') }}
+                    </button>
+                </div>
+                <div class="input-group">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0110 0v4"/>
+                    </svg>
+                    <input v-model="resetPwd" :type="showResetPwd ? 'text' : 'password'" placeholder="设置新密码（至少6位）">
+                    <svg class="toggle-pwd" @click="showResetPwd=!showResetPwd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <template v-if="!showResetPwd">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </template>
+                        <template v-else>
+                            <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+                            <line x1="1" y1="1" x2="23" y2="23"/>
+                        </template>
+                    </svg>
+                </div>
+                <div class="input-group">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0110 0v4"/>
+                    </svg>
+                    <input v-model="resetPwd2" :type="showResetPwd ? 'text' : 'password'" placeholder="再次输入新密码">
+                </div>
+                <button type="submit" class="btn-submit" :disabled="loading" style="margin-top:6px">{{ loading ? '提交中...' : '确认重置' }}</button>
+            </form>
+        </div>
 
         <!-- 注册表单 -->
         <form v-if="tab==='register'" @submit.prevent="handleRegister">
@@ -345,8 +409,26 @@ createApp({
         const countdown = ref(0);
         let countdownTimer = null;
 
+        // 找回密码
+        const resetPhone = ref('');
+        const resetCode = ref('');
+        const resetPwd = ref('');
+        const resetPwd2 = ref('');
+        const showResetPwd = ref(false);
+        const resetSending = ref(false);
+        const resetCountdown = ref(0);
+        let resetCountdownTimer = null;
+
+        // 读取邀请码
+        const urlRef = new URLSearchParams(window.location.search).get('ref') || '';
+
         if (localStorage.getItem('token')) {
             window.location.href = '/insurance';
+        }
+
+        // 带邀请码时自动切换到注册Tab
+        if (urlRef) {
+            tab.value = 'register';
         }
 
         const saved = localStorage.getItem('remembered_login');
@@ -446,7 +528,7 @@ createApp({
                 const resp = await fetch('/api/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone: p, code: regCode.value.trim(), password: regPwd.value }),
+                    body: JSON.stringify({ phone: p, code: regCode.value.trim(), password: regPwd.value, ref: urlRef }),
                 });
                 const data = await resp.json();
                 if (data.code === 0) {
@@ -463,11 +545,65 @@ createApp({
             }
         }
 
+        async function sendResetCode() {
+            msg.value = '';
+            const p = resetPhone.value.trim();
+            if (!/^1[3-9]\d{9}$/.test(p)) { showMsg('请输入有效的11位手机号'); return; }
+            resetSending.value = true;
+            try {
+                const resp = await fetch('/api/auth/sms/send-reset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: p }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showMsg('验证码已发送，请注意查收', 'success');
+                    resetCountdown.value = 60;
+                    resetCountdownTimer = setInterval(() => {
+                        resetCountdown.value--;
+                        if (resetCountdown.value <= 0) { clearInterval(resetCountdownTimer); resetCountdown.value = 0; }
+                    }, 1000);
+                } else {
+                    showMsg(data.msg || '发送失败');
+                }
+            } catch { showMsg('网络错误，请重试'); }
+            finally { resetSending.value = false; }
+        }
+
+        async function handleReset() {
+            msg.value = '';
+            const p = resetPhone.value.trim();
+            if (!/^1[3-9]\d{9}$/.test(p)) { showMsg('请输入有效的11位手机号'); return; }
+            if (!resetCode.value.trim()) { showMsg('请输入验证码'); return; }
+            if (resetPwd.value.length < 6) { showMsg('密码长度不能少于6位'); return; }
+            if (resetPwd.value !== resetPwd2.value) { showMsg('两次密码输入不一致'); return; }
+            loading.value = true;
+            try {
+                const resp = await fetch('/api/auth/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: p, code: resetCode.value.trim(), password: resetPwd.value }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showMsg('密码已重置，请用新密码登录', 'success');
+                    resetPhone.value = ''; resetCode.value = ''; resetPwd.value = ''; resetPwd2.value = '';
+                    setTimeout(() => switchTab('login'), 1500);
+                } else {
+                    showMsg(data.msg || '重置失败');
+                }
+            } catch { showMsg('网络错误，请重试'); }
+            finally { loading.value = false; }
+        }
+
         return {
             tab, msg, msgType, loading,
             phone, password, showPwd, remember, handleLogin,
             regPhone, regCode, regPwd, regPwd2, showRegPwd,
             codeSending, countdown, sendCode, handleRegister,
+            resetPhone, resetCode, resetPwd, resetPwd2, showResetPwd,
+            resetSending, resetCountdown, sendResetCode, handleReset,
             switchTab,
         };
     }

@@ -360,7 +360,7 @@
                     账号管理
                 </a>
                 <!-- 个人中心 -->
-                <button @click="profileVisible = true" class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;" title="个人中心">
+                <button @click="profileVisible = true; loadQuota()" class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;" title="个人中心">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display:inline;vertical-align:middle;margin-right:3px">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                     </svg>
@@ -373,6 +373,50 @@
             </div>
         </div>
     </header>
+
+    <!-- ========== 配额警告弹窗 ========== -->
+    <div v-if="quotaWarn" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:center;justify-content:center;">
+        <div style="background:#fff;border-radius:16px;padding:32px 28px;width:340px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+            <!-- 图标 -->
+            <div style="width:64px;height:64px;border-radius:50%;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;"
+                :style="{background: quotaWarn.level==='critical' ? '#fef2f2' : quotaWarn.level==='very_low' ? '#fff7ed' : '#fefce8'}">
+                <svg width="32" height="32" fill="none" viewBox="0 0 24 24"
+                    :style="{color: quotaWarn.level==='critical' ? '#dc2626' : quotaWarn.level==='very_low' ? '#ea580c' : '#d97706'}">
+                    <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                </svg>
+            </div>
+            <!-- 标题 -->
+            <div style="font-size:18px;font-weight:700;color:#1a1a1a;margin-bottom:8px;">
+                {{ quotaWarn.level==='critical' ? '⚠️ 识别次数即将耗尽' : quotaWarn.level==='very_low' ? '识别次数不足' : '识别次数提醒' }}
+            </div>
+            <!-- 内容 -->
+            <div style="font-size:14px;color:#57534e;line-height:1.7;margin-bottom:8px;">
+                本月 PDF 识别剩余
+                <span style="font-size:22px;font-weight:700;margin:0 4px;"
+                    :style="{color: quotaWarn.level==='critical' ? '#dc2626' : quotaWarn.level==='very_low' ? '#ea580c' : '#d97706'}">
+                    {{ quotaWarn.remaining }}
+                </span>
+                次
+            </div>
+            <div style="font-size:13px;color:#9ca3af;margin-bottom:24px;">
+                {{ quotaWarn.level==='critical' ? '次数即将用完，请联系管理员升级套餐，避免影响业务。' : quotaWarn.level==='very_low' ? '剩余次数较少，请尽快联系管理员处理。' : '本月识别次数已超过一半，请留意使用量。' }}
+            </div>
+            <!-- 进度条 -->
+            <div style="height:6px;background:#f3f4f6;border-radius:6px;overflow:hidden;margin-bottom:24px;">
+                <div :style="{
+                    height:'100%', borderRadius:'6px',
+                    width: Math.min((3000 - quotaWarn.remaining) / 3000 * 100, 100) + '%',
+                    background: quotaWarn.level==='critical' ? '#ef4444' : quotaWarn.level==='very_low' ? '#f97316' : '#eab308'
+                }"></div>
+            </div>
+            <button @click="quotaWarn = null"
+                style="width:100%;height:44px;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;color:#fff;"
+                :style="{background: quotaWarn.level==='critical' ? '#dc2626' : quotaWarn.level==='very_low' ? '#ea580c' : '#d97706'}">
+                我知道了
+            </button>
+        </div>
+    </div>
 
     <!-- ========== 个人中心弹窗 ========== -->
     <div v-if="profileVisible" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;display:flex;align-items:flex-start;justify-content:flex-end;" @click.self="closeProfile">
@@ -391,6 +435,44 @@
                 <button @click="closeProfile" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.2);border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;">
                     <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
+            </div>
+
+            <!-- 用量卡片 -->
+            <div v-if="currentUser && currentUser.role !== 'super_admin'" style="padding:12px 16px 0;flex-shrink:0;">
+                <div style="background:#fafafa;border-radius:12px;padding:14px 16px;border:1px solid #f0f0f0;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                        <span style="font-size:12px;color:#666;font-weight:500;">本月PDF识别用量</span>
+                        <span v-if="quotaInfo.plan_type === 'enterprise'" style="font-size:11px;background:#eff6ff;color:#3b82f6;padding:2px 8px;border-radius:8px;font-weight:500;">企业版·无限量</span>
+                        <span v-else-if="quotaInfo.plan_type === 'enterprise_trial'" style="font-size:11px;background:#f5f3ff;color:#7c3aed;padding:2px 8px;border-radius:8px;font-weight:500;">企业试用·无限量</span>
+                        <span v-else style="font-size:11px;background:#f0fdf4;color:#16a34a;padding:2px 8px;border-radius:8px;font-weight:500;">标准版·3000次</span>
+                    </div>
+                    <div v-if="quotaLoading" style="font-size:12px;color:#bbb;text-align:center;padding:4px 0;">加载中...</div>
+                    <template v-else>
+                        <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:6px;">
+                            <span style="font-size:22px;font-weight:700;color:#1a1a1a;">{{ quotaInfo.monthly_usage }}</span>
+                            <span style="font-size:12px;color:#999;">/ {{ (quotaInfo.plan_type === 'enterprise' || quotaInfo.plan_type === 'enterprise_trial') ? '无限量' : '3000' }}</span>
+                        </div>
+                        <div style="height:6px;background:#f0f0f0;border-radius:6px;overflow:hidden;">
+                            <div v-if="quotaInfo.plan_type === 'enterprise' || quotaInfo.plan_type === 'enterprise_trial'" style="height:100%;width:100%;background:#3b82f6;opacity:0.3;border-radius:6px;"></div>
+                            <div v-else :style="{
+                                height: '100%',
+                                width: Math.min(quotaInfo.monthly_usage / 3000 * 100, 100) + '%',
+                                borderRadius: '6px',
+                                background: quotaInfo.monthly_usage >= 2700 ? '#ef4444' : quotaInfo.monthly_usage >= 1800 ? '#f59e0b' : '#10b981',
+                                transition: 'width 0.4s ease'
+                            }"></div>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;">
+                            <div v-if="quotaPlanExpiry" :style="{fontSize:'11px', color: quotaDaysLeft <= 0 ? '#dc2626' : quotaDaysLeft <= 7 ? '#d97706' : '#9ca3af'}">
+                                {{ quotaDaysLeft <= 0 ? '套餐已到期' : quotaDaysLeft + ' 天后到期（' + quotaPlanExpiry + '）' }}
+                            </div>
+                            <div v-else style="font-size:11px;color:#d1d5db;">未设置到期时间</div>
+                            <div v-if="quotaInfo.plan_type !== 'enterprise' && quotaInfo.plan_type !== 'enterprise_trial'" style="font-size:11px;color:#bbb;">
+                                剩余 {{ Math.max(3000 - quotaInfo.monthly_usage, 0) }} 次
+                            </div>
+                        </div>
+                    </template>
+                </div>
             </div>
 
             <!-- 功能列表 -->
@@ -455,31 +537,50 @@
                             <div style="font-size:32px;font-weight:700;color:#f07c3e;">0.00</div>
                             <div style="font-size:11px;color:#bbb;margin-top:8px;">充值功能即将上线</div>
                         </div>
+                        <button v-if="isChannelSales"
+                            @click="showWithdrawModal = true"
+                            style="width:100%;margin-top:12px;padding:10px 0;border-radius:8px;background:#f07c3e;color:#fff;font-size:14px;font-weight:500;border:none;cursor:pointer;"
+                            onmouseover="this.style.background='#e06b2e'" onmouseout="this.style.background='#f07c3e'">
+                            申请提现
+                        </button>
                     </div>
                 </div>
 
+
                 <!-- 邀请有礼 -->
                 <div>
-                    <div @click="profileTab = profileTab==='share' ? '' : 'share'" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;cursor:pointer;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+                    <div @click="profileTab = profileTab==='share' ? '' : 'share'; if(profileTab==='share') loadInviteInfo()" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;cursor:pointer;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
                         <div style="display:flex;align-items:center;gap:10px;">
                             <div style="width:32px;height:32px;border-radius:8px;background:#fff7ed;display:flex;align-items:center;justify-content:center;">
                                 <svg width="16" height="16" fill="none" stroke="#f07c3e" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
                             </div>
                             <span style="font-size:14px;color:#1a1a1a;font-weight:500;">邀请有礼</span>
+                            <span v-if="inviteInfo.downline_count > 0" style="background:#f07c3e;color:#fff;font-size:11px;padding:1px 7px;border-radius:10px;">{{ inviteInfo.downline_count }}</span>
                         </div>
                         <svg :style="{transform: profileTab==='share' ? 'rotate(90deg)' : ''}" style="transition:transform 0.2s;width:16px;height:16px;color:#bbb" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                     </div>
                     <div v-if="profileTab==='share'" style="padding:0 20px 16px;">
                         <div style="background:#fff7ed;border-radius:10px;padding:14px;margin-bottom:10px;">
-                            <div style="font-size:12px;color:#92400e;font-weight:600;margin-bottom:6px;">🎁 邀请好友，双方均享优惠</div>
-                            <div style="font-size:11px;color:#b45309;line-height:1.6;">每成功邀请1位新用户注册，您将获得额外使用时长奖励。</div>
+                            <div style="font-size:12px;color:#92400e;font-weight:600;margin-bottom:6px;">🎁 邀请好友，赚取佣金</div>
+                            <div style="font-size:11px;color:#b45309;line-height:1.6;">每成功邀请一位用户并购买付费套餐，可获得套餐费的 20% 佣金奖励。</div>
                         </div>
-                        <div style="background:#fafafa;border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                            <span style="font-size:12px;color:#666;word-break:break-all;flex:1;">{{ shareLink }}</span>
-                            <button @click="copyShareLink" style="flex-shrink:0;border:1px solid #f07c3e;background:#fff;color:#f07c3e;font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;">
-                                {{ shareCopied ? '已复制' : '复制' }}
-                            </button>
-                        </div>
+                        <div v-if="inviteLoading" style="text-align:center;color:#aaa;font-size:12px;padding:8px 0;">加载中...</div>
+                        <template v-else>
+                            <div style="background:#fafafa;border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;">
+                                <span style="font-size:12px;color:#666;word-break:break-all;flex:1;">{{ shareLink || '加载中...' }}</span>
+                                <button @click="copyShareLink" :disabled="!shareLink" style="flex-shrink:0;border:1px solid #f07c3e;background:#fff;color:#f07c3e;font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;">
+                                    {{ shareCopied ? '已复制' : '复制' }}
+                                </button>
+                            </div>
+                            <div v-if="inviteInfo.downlines.length > 0">
+                                <div style="font-size:12px;color:#666;font-weight:500;margin-bottom:6px;">已邀请 {{ inviteInfo.downline_count }} 人</div>
+                                <div v-for="dl in inviteInfo.downlines" :key="dl.id" style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f5f5f5;">
+                                    <span style="font-size:13px;color:#333;">{{ dl.name || dl.phone_masked }}</span>
+                                    <span style="font-size:11px;color:#aaa;">{{ (dl.created_at || '').slice(0, 10) }}</span>
+                                </div>
+                            </div>
+                            <div v-else style="text-align:center;color:#bbb;font-size:12px;padding:6px 0;">暂无下线，快去邀请好友吧</div>
+                        </template>
                     </div>
                 </div>
 
@@ -581,6 +682,30 @@
 
         <!-- 上传区域 -->
         <div class="card p-6">
+            <!-- 未绑定企业提示 -->
+            <div v-if="quotaInfo.no_enterprise" style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+                <svg style="width:18px;height:18px;color:#d97706;flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                </svg>
+                <span style="font-size:13px;color:#92400e;">您的账号尚未绑定企业，无法上传保单，请联系管理员分配企业</span>
+            </div>
+            <!-- 套餐已到期提示 -->
+            <div v-else-if="quotaInfo.plan_type && quotaDaysLeft !== null && quotaDaysLeft <= 0"
+                style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+                <svg style="width:18px;height:18px;color:#dc2626;flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                </svg>
+                <span style="font-size:13px;color:#991b1b;">套餐已到期（{{ quotaPlanExpiry }}），无法上传保单，请联系管理员续费</span>
+            </div>
+            <!-- 标准版额度耗尽提示 -->
+            <div v-else-if="quotaInfo.plan_type === 'standard' && quotaInfo.monthly_usage >= 3000"
+                style="background:#fff7ed;border:1px solid #fb923c;border-radius:10px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+                <svg style="width:18px;height:18px;color:#ea580c;flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                </svg>
+                <span style="font-size:13px;color:#9a3412;">本月PDF识别额度已用完（{{ quotaInfo.monthly_usage }}/3000），无法上传，请联系管理员升级套餐</span>
+            </div>
+
             <div class="drop-zone rounded-xl p-10 text-center cursor-pointer"
                  :class="{ dragover: isDragging }"
                  @click="$refs.fileInput.click()"
@@ -2854,6 +2979,58 @@
       </div>
     </div>
 
+    <!-- 提现客服弹窗：Teleport 到 body 避免 fixed 定位失效 -->
+    <teleport to="body">
+        <div v-if="showWithdrawModal" @click.self="showWithdrawModal = false"
+            style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;">
+            <div style="background:#fff;border-radius:16px;padding:28px 24px;width:280px;text-align:center;position:relative;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+                <button @click="showWithdrawModal = false"
+                    style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:20px;color:#bbb;cursor:pointer;line-height:1;">&#x2715;</button>
+                <div style="font-size:16px;font-weight:600;color:#1a1a1a;margin-bottom:6px;">申请提现</div>
+                <div style="font-size:13px;color:#999;margin-bottom:16px;">请联系客服进行提现</div>
+                <img src="/static/img/wechat_qr.png" alt="客服二维码"
+                    style="width:180px;height:180px;object-fit:contain;border-radius:8px;border:1px solid #f0f0f0;">
+                <div style="font-size:12px;color:#bbb;margin-top:10px;">扫码添加客服微信</div>
+            </div>
+        </div>
+    </teleport>
+
+    <!-- 激活企业版套餐提醒弹窗 -->
+    <teleport to="body">
+        <div v-if="showActivateModal" @click.self="showActivateModal = false"
+            style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;">
+            <div style="background:#fff;border-radius:20px;padding:32px 28px 28px;width:300px;text-align:center;position:relative;box-shadow:0 24px 64px rgba(0,0,0,0.25);">
+                <button @click="showActivateModal = false"
+                    style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:20px;color:#ccc;cursor:pointer;line-height:1;">&#x2715;</button>
+                <!-- 礼物图标 -->
+                <div style="width:56px;height:56px;background:linear-gradient(135deg,#f5a623,#e8673d);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;box-shadow:0 6px 20px rgba(232,103,61,0.3);">
+                    <svg width="28" height="28" fill="none" stroke="#fff" stroke-width="2" viewBox="0 0 24 24">
+                        <polyline points="20 12 20 22 4 22 4 12"/>
+                        <rect x="2" y="7" width="20" height="5"/>
+                        <line x1="12" y1="22" x2="12" y2="7"/>
+                        <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
+                        <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+                    </svg>
+                </div>
+                <div style="font-size:17px;font-weight:700;color:#1a1a1a;margin-bottom:6px;">免费激活企业版套餐</div>
+                <div style="font-size:13px;color:#6b7280;line-height:1.7;margin-bottom:18px;">
+                    添加客服微信<br>
+                    <span style="color:#e8673d;font-weight:600;">免费激活 2 个月企业版套餐</span><br>
+                    无限量 PDF 识别，立即体验
+                </div>
+                <div style="background:#f9fafb;border-radius:12px;padding:14px;margin-bottom:14px;display:inline-block;">
+                    <img src="/static/img/wechat_qr.png" alt="客服二维码"
+                        style="width:160px;height:160px;object-fit:contain;display:block;">
+                </div>
+                <div style="font-size:12px;color:#9ca3af;">扫码添加客服微信</div>
+                <button @click="showActivateModal = false"
+                    style="width:100%;margin-top:16px;padding:11px 0;border-radius:10px;background:linear-gradient(135deg,#f5a623,#e8673d);color:#fff;font-size:14px;font-weight:500;border:none;cursor:pointer;box-shadow:0 4px 14px rgba(232,103,61,0.3);">
+                    我知道了
+                </button>
+            </div>
+        </div>
+    </teleport>
+
 </div>
 
 <script>
@@ -2882,6 +3059,11 @@ const _app = createApp({
     setup() {
         const currentUser = ref(getUser());
         const isSuperAdmin = computed(() => currentUser.value && currentUser.value.role === 'super_admin');
+        const isChannelSales = computed(() => {
+            const u = currentUser.value;
+            if (!u) return false;
+            return u.role === 'channel_sales' || u.sales_type === 'channel';
+        });
 
         // ========== 个人中心 ==========
         const profileVisible = ref(false);
@@ -2889,11 +3071,72 @@ const _app = createApp({
         const profileForm = ref({ name: '', oldPwd: '', newPwd: '', newPwd2: '' });
         const profileMsg = ref({ name: '', nameOk: false, pwd: '', pwdOk: false });
         const profileLoading = ref({ name: false, pwd: false });
+        const showWithdrawModal = ref(false);
+        const showActivateModal = ref(false);
         const shareCopied = ref(false);
-        const shareLink = computed(() => {
-            const uid = currentUser.value ? currentUser.value.id : '';
-            return `https://wxbot.wuhuxiche.com?ref=${uid}`;
+        const inviteInfo = ref({ invite_link: '', downline_count: 0, downlines: [] });
+        const inviteLoading = ref(false);
+        const quotaInfo = ref({ plan_type: 'standard', monthly_usage: 0, monthly_limit: 3000, plan_months: 1, plan_start_at: null });
+        const quotaLoading = ref(false);
+        const quotaWarn = ref(null); // { remaining, level: 'low'|'very_low'|'critical' }
+
+        async function loadQuota() {
+            quotaLoading.value = true;
+            try {
+                const resp = await authFetch('/api/auth/my-quota');
+                const data = await resp.json();
+                if (data.code === 0) {
+                    quotaInfo.value = data.data;
+                    checkQuotaWarn(data.data);
+                    // 未绑定企业 或 已绑定企业但没有套餐 → 弹激活提醒（每次登录只弹一次）
+                    const needActivate = data.data.no_enterprise || !data.data.plan_type;
+                    if (needActivate && !sessionStorage.getItem('activate_reminded')) {
+                        sessionStorage.setItem('activate_reminded', '1');
+                        showActivateModal.value = true;
+                    }
+                }
+            } catch (e) {}
+            finally { quotaLoading.value = false; }
+        }
+
+        function checkQuotaWarn(q) {
+            if (!q || q.plan_type !== 'standard') return;
+            const remaining = Math.max(0, 3000 - (q.monthly_usage || 0));
+            let level = null;
+            if (remaining < 100) level = 'critical';
+            else if (remaining < 500) level = 'very_low';
+            else if (remaining < 1000) level = 'low';
+            if (!level) return;
+            // 同月同阈值只弹一次（sessionStorage）
+            const now = new Date();
+            const key = `quota_warn_${now.getFullYear()}_${now.getMonth()}_${level}`;
+            if (sessionStorage.getItem(key)) return;
+            sessionStorage.setItem(key, '1');
+            quotaWarn.value = { remaining, level };
+        }
+        const quotaPlanExpiry = computed(() => {
+            const q = quotaInfo.value;
+            if (!q.plan_start_at) return null;
+            const d = new Date(q.plan_start_at.replace(' ', 'T'));
+            d.setMonth(d.getMonth() + (q.plan_months || 1));
+            return d.toISOString().slice(0, 10);
         });
+        const quotaDaysLeft = computed(() => {
+            if (!quotaPlanExpiry.value) return null;
+            return Math.ceil((new Date(quotaPlanExpiry.value) - Date.now()) / 86400000);
+        });
+        const shareLink = computed(() => inviteInfo.value.invite_link);
+
+        async function loadInviteInfo() {
+            if (inviteLoading.value || inviteInfo.value.invite_link) return;
+            inviteLoading.value = true;
+            try {
+                const resp = await authFetch('/api/auth/invite-info');
+                const data = await resp.json();
+                if (data.code === 0) inviteInfo.value = data.data;
+            } catch {}
+            finally { inviteLoading.value = false; }
+        }
 
         function closeProfile() {
             profileVisible.value = false;
@@ -4555,7 +4798,19 @@ const _app = createApp({
                     body: JSON.stringify({ file_data: file.base64, file_type: file.type, file_name: file.name, pdf_page: 0, upload_cos: uploadCos.value }),
                 });
                 const data = await resp.json();
-                return resp.ok ? data : { success: false, file_name: file.name, error: data.detail || '请求失败' };
+                if (resp.status === 429 || data.quota_exceeded) {
+                    return { success: false, file_name: file.name, error: data.msg || '本月PDF识别额度已用完', quota_exceeded: true };
+                }
+                if (resp.status === 403 && data.no_enterprise) {
+                    return { success: false, file_name: file.name, error: data.msg || '账号未绑定企业，无法上传', no_enterprise: true };
+                }
+                if (resp.status === 403 && data.no_plan) {
+                    return { success: false, file_name: file.name, error: data.msg || '企业尚未开通套餐，无法上传', no_plan: true };
+                }
+                if (resp.status === 403 && data.plan_expired) {
+                    return { success: false, file_name: file.name, error: data.msg || '套餐已到期，无法上传', plan_expired: true };
+                }
+                return resp.ok ? data : { success: false, file_name: file.name, error: data.detail || data.msg || '请求失败' };
             });
         }
 
@@ -4577,6 +4832,24 @@ const _app = createApp({
 
         // ========== 批量识别 ==========
         async function startRecognize() {
+            // 前置检查：未绑定企业 / 未配置套餐 / 套餐到期 / 额度耗尽
+            if (quotaInfo.value.no_enterprise) {
+                showMessage('您的账号尚未绑定企业，请联系管理员分配企业后再上传', false);
+                return;
+            }
+            if (!quotaInfo.value.plan_type) {
+                showMessage('您所属的企业尚未开通套餐，请联系管理员配置套餐后再上传', false);
+                return;
+            }
+            if (quotaDaysLeft.value !== null && quotaDaysLeft.value <= 0) {
+                showMessage(`套餐已到期（${quotaPlanExpiry.value}），请联系管理员续费后再上传`, false);
+                return;
+            }
+            if (quotaInfo.value.plan_type === 'standard' && quotaInfo.value.monthly_usage >= 3000) {
+                showMessage(`本月PDF识别额度已用完（${quotaInfo.value.monthly_usage}/3000），请联系管理员升级套餐`, false);
+                return;
+            }
+
             isRecognizing.value = true; recognizedCount.value = 0; results.value = [];
             currentFileName.value = '识别中...';
 
@@ -6389,6 +6662,15 @@ const _app = createApp({
 
         // ========== 初始化 ==========
         onMounted(async () => {
+            // 拉取完整用户信息（含 is_sales / sales_type）
+            try {
+                const meResp = await authFetch('/api/auth/me');
+                const meData = await meResp.json();
+                if (meData.code === 0 && meData.data) {
+                    currentUser.value = { ...currentUser.value, ...meData.data };
+                    localStorage.setItem('user', JSON.stringify(currentUser.value));
+                }
+            } catch (e) {}
             // 加载配置状态
             try {
                 const resp = await authFetch('/api/insurance/config/status');
@@ -6411,6 +6693,8 @@ const _app = createApp({
             loadRecordCompanies();
             // 加载备注快捷选择配置
             loadRemarkSelectorConfig();
+            // 检查配额警告（仅标准版）
+            await loadQuota();
         });
 
         return {
@@ -6480,9 +6764,12 @@ const _app = createApp({
             contactEditVisible, contactEditSaving, contactEditForm, contactNameInput,
             openContactEdit, saveContactEdit,
             // 鉴权
-            currentUser, isSuperAdmin, doLogout,
+            currentUser, isSuperAdmin, isChannelSales, doLogout,
             profileVisible, profileTab, profileForm, profileMsg, profileLoading,
-            shareLink, shareCopied, closeProfile, saveName, savePwd, copyShareLink,
+            showWithdrawModal, showActivateModal,
+            shareLink, shareCopied, inviteInfo, inviteLoading, loadInviteInfo,
+            quotaInfo, quotaLoading, loadQuota, quotaPlanExpiry, quotaDaysLeft, quotaWarn,
+            closeProfile, saveName, savePwd, copyShareLink,
             // 设置已迁移到 /monitor-config 页面
         };
     },

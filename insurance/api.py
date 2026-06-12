@@ -64,7 +64,7 @@ from .policy_parser import get_extraction_rules, parse_policy_text, parse_policy
 from .ocr_service import extract_text_from_pdf
 from . import remark_options_db
 from auth.decorators import login_required
-from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, get_sender_user_name_map
+from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, ROLE_EMPLOYEE, ROLE_SALES, get_sender_user_name_map
 from core.notify import notify_error
 
 logger = logging.getLogger(__name__)
@@ -240,15 +240,14 @@ def _get_user_ids_filter():
 
 
 def _get_enterprise_id_filter():
-    """返回当前用户的 enterprise_id，超管返回 None（不过滤），企业管理员和员工按企业过滤"""
+    """返回当前用户的 enterprise_id，超管返回 None（不过滤），其他角色按企业过滤"""
     from flask import g
     role = g.current_user["role"]
     if role == ROLE_SUPER_ADMIN:
         return None
-    # 企业管理员的 parent_id=NULL，用自身 user_id 作为企业 ID
-    if role == ROLE_ENTERPRISE:
-        return g.current_user["user_id"]
-    return g.current_user.get("parent_id")
+    # 企业管理员和员工：parent_id 指向 enterprises 表，优先使用；无 parent_id 则用自身 user_id 兜底
+    parent_id = g.current_user.get("parent_id")
+    return parent_id if parent_id else g.current_user["user_id"]
 
 
 def _get_user_scope():
@@ -1496,7 +1495,7 @@ def _save_manual_record(file_name, policy, ocr_engine, file_data_b64=None, uploa
     current_user_id = g.current_user["user_id"] if hasattr(g, "current_user") else None
     if hasattr(g, "current_user"):
         _cu = g.current_user
-        current_enterprise_id = _cu["user_id"] if _cu.get("role") == ROLE_ENTERPRISE else _cu.get("parent_id")
+        current_enterprise_id = _cu.get("parent_id") or _cu["user_id"]
     else:
         current_enterprise_id = None
 
@@ -1603,6 +1602,42 @@ def manual_ocr():
     请求体: {file_data(base64), file_type, file_name, pdf_page, upload_cos}
     """
     try:
+        _cu = g.current_user if hasattr(g, "current_user") else None
+        if _cu and _cu.get("role") != ROLE_SUPER_ADMIN:
+            # 未绑定企业：不允许上传
+            if not _cu.get("parent_id"):
+                return jsonify({
+                    "code": 403,
+                    "msg": "您的账号尚未绑定企业，请联系管理员分配企业后再上传",
+                    "no_enterprise": True,
+                }), 403
+
+            # 检查企业月度配额（标准版限 3000 次/月）
+            from auth.db import check_enterprise_quota, get_enterprise_by_id
+            _eid = _cu.get("parent_id")
+            # 企业未设置套餐（理论上不应出现，但做兜底）
+            _ent = get_enterprise_by_id(_db, _eid)
+            if not _ent or not _ent.get("plan_type"):
+                return jsonify({
+                    "code": 403,
+                    "msg": "您所属的企业尚未开通套餐，请联系管理员配置套餐后再上传",
+                    "no_plan": True,
+                }), 403
+
+            _quota = check_enterprise_quota(_db, _eid)
+            if _quota.get("expired"):
+                return jsonify({
+                    "code": 403,
+                    "msg": "套餐已到期，请联系管理员续费后再上传",
+                    "plan_expired": True,
+                }), 403
+            if _quota.get("exceeded"):
+                return jsonify({
+                    "code": 429,
+                    "msg": f"本月PDF识别额度已用完（{_quota['usage']}/{_quota['limit']}次），请联系管理员升级套餐",
+                    "quota_exceeded": True,
+                }), 429
+
         body = request.get_json(force=True) or {}
         file_data_b64 = body.get("file_data", "")
         file_type = body.get("file_type", "pdf")

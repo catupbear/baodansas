@@ -148,6 +148,8 @@
                         <option value="super_admin">超级管理员</option>
                         <option value="enterprise">企业账号</option>
                         <option value="employee">员工账号</option>
+                        <option value="channel_sales">渠道销售</option>
+                        <option value="personal_sales">个人销售</option>
                     </select>
                 </div>
                 <button @click="openCreateModal" class="btn btn-primary">
@@ -158,78 +160,95 @@
                 </button>
             </div>
 
-            <!-- 用户列表 -->
+            <!-- 用户列表（按企业折叠分组） -->
             <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-                <!-- 加载状态 -->
                 <div v-if="loading" class="py-16 text-center text-gray-400 text-sm">加载中...</div>
-
-                <!-- 空状态 -->
                 <div v-else-if="users.length === 0" class="py-16 text-center text-gray-400 text-sm">暂无用户数据</div>
-
-                <!-- 表格 -->
-                <div v-else class="overflow-x-auto">
-                    <table class="data-table">
-                        <colgroup>
-                            <col style="width:11%;"><!-- 手机号 -->
-                            <col style="width:7%;"><!-- 姓名 -->
-                            <col style="width:7%;"><!-- 角色 -->
-                            <col style="width:16%;"><!-- 所属企业 -->
-                            <col style="width:16%;"><!-- 绑定发送人 -->
-                            <col style="width:6%;"><!-- 状态 -->
-                            <col style="width:14%;"><!-- 创建时间 -->
-                            <col style="width:23%;"><!-- 操作 -->
-                        </colgroup>
-                        <thead>
-                            <tr>
-                                <th>手机号</th>
-                                <th>姓名</th>
-                                <th>角色</th>
-                                <th>所属企业</th>
-                                <th>绑定发送人</th>
-                                <th>状态</th>
-                                <th>创建时间</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="user in users" :key="user.id">
-                                <td class="font-medium text-gray-800">{{ user.phone }}</td>
-                                <td>{{ user.name || '-' }}</td>
-                                <td>
-                                    <span class="badge" :class="roleBadgeClass(user.role)">{{ roleLabel(user.role) }}</span>
-                                </td>
-                                <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" :title="user.parent_name || ''">{{ user.parent_name || '-' }}</td>
-                                <td>
-                                    <div style="display:flex;flex-wrap:wrap;gap:3px;">
-                                        <span v-for="s in (user.bound_senders || [])" :key="s.sender"
-                                            class="badge badge-blue" style="font-size:11px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                                            :title="(s.sender_name || '') + ' (' + s.sender + ')'">
-                                            {{ s.sender_name || s.sender }}
-                                        </span>
-                                        <span v-if="!user.bound_senders || user.bound_senders.length === 0" style="color:#9ca3af;">-</span>
-                                    </div>
-                                </td>
-                                <td>
-                                    <span class="badge" :class="user.enabled ? 'badge-green' : 'badge-gray'">
-                                        {{ user.enabled ? '启用' : '禁用' }}
-                                    </span>
-                                </td>
-                                <td class="text-gray-500">{{ formatTime(user.created_at) }}</td>
-                                <td>
-                                    <div class="flex items-center gap-2">
-                                        <button @click="openEditModal(user)" class="btn btn-sm btn-outline">编辑</button>
-                                        <button @click="openResetPwdModal(user)" class="btn btn-sm btn-outline">重置密码</button>
-                                        <button @click="toggleEnabled(user)"
-                                            class="btn btn-sm"
-                                            :class="user.enabled ? 'btn-outline' : 'btn-outline'"
-                                            :style="user.enabled ? 'color:#d97706;border-color:#fbbf24' : 'color:#059669;border-color:#6ee7b7'">
-                                            {{ user.enabled ? '禁用' : '启用' }}
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div v-else>
+                    <!-- 企业分组 -->
+                    <div v-for="group in groupedUsers" :key="group.key" style="border-bottom:1px solid #f3f4f6;">
+                        <!-- 企业行（可点击折叠） -->
+                        <div @click="toggleGroup(group.key)"
+                            style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;cursor:pointer;background:#fafafa;user-select:none;"
+                            onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background='#fafafa'">
+                            <div style="display:flex;align-items:center;gap:10px;">
+                                <svg :style="{transform: expandedGroups.has(group.key) ? 'rotate(90deg)' : ''}"
+                                    style="transition:transform 0.2s;width:14px;height:14px;color:#9ca3af;flex-shrink:0;"
+                                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                </svg>
+                                <span style="font-size:14px;font-weight:600;color:#374151;">{{ group.name }}</span>
+                            </div>
+                            <span style="font-size:12px;color:#9ca3af;">{{ group.users.filter(u=>u.enabled).length }}/{{ group.users.length }}</span>
+                        </div>
+                        <!-- 展开的用户表格 -->
+                        <div v-if="expandedGroups.has(group.key)" class="overflow-x-auto">
+                            <table class="data-table">
+                                <colgroup>
+                                    <col style="width:13%;">
+                                    <col style="width:9%;">
+                                    <col style="width:10%;">
+                                    <col style="width:18%;">
+                                    <col style="width:6%;">
+                                    <col style="width:14%;">
+                                    <col style="width:30%;">
+                                </colgroup>
+                                <thead>
+                                    <tr>
+                                        <th>手机号</th>
+                                        <th>姓名</th>
+                                        <th>角色</th>
+                                        <th>绑定发送人</th>
+                                        <th>状态</th>
+                                        <th>创建时间</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="user in group.users" :key="user.id">
+                                        <td class="font-medium text-gray-800">{{ user.phone }}</td>
+                                        <td>{{ user.name || '-' }}</td>
+                                        <td>
+                                            <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;">
+                                                <span class="badge" :class="roleBadgeClass(user.role)">{{ roleLabel(user.role) }}</span>
+                                                <span v-if="user.sales_type" style="font-size:11px;color:#9ca3af;">▸ {{ salesTypeLabel(user.sales_type) }}</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div style="display:flex;flex-wrap:wrap;gap:3px;">
+                                                <span v-for="s in (user.bound_senders || [])" :key="s.sender"
+                                                    class="badge badge-blue" style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                                                    :title="(s.sender_name || '') + ' (' + s.sender + ')'">
+                                                    {{ s.sender_name || s.sender }}
+                                                </span>
+                                                <span v-if="!user.bound_senders || user.bound_senders.length === 0" style="color:#9ca3af;">-</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="badge" :class="user.enabled ? 'badge-green' : 'badge-gray'">
+                                                {{ user.enabled ? '启用' : '禁用' }}
+                                            </span>
+                                        </td>
+                                        <td class="text-gray-500">{{ formatTime(user.created_at) }}</td>
+                                        <td>
+                                            <div class="flex items-center gap-2">
+                                                <button @click="openEditModal(user)" class="btn btn-sm btn-outline">编辑</button>
+                                                <button @click="openResetPwdModal(user)" class="btn btn-sm btn-outline">重置密码</button>
+                                                <button @click="toggleEnabled(user)"
+                                                    :style="user.enabled ? 'color:#d97706;border-color:#fbbf24' : 'color:#059669;border-color:#6ee7b7'"
+                                                    class="btn btn-sm btn-outline">
+                                                    {{ user.enabled ? '禁用' : '启用' }}
+                                                </button>
+                                                <button @click="openDeleteModal(user)"
+                                                    style="color:#dc2626;border-color:#fca5a5;"
+                                                    class="btn btn-sm btn-outline">删除</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -267,11 +286,21 @@
                                 <option value="super_admin">超级管理员</option>
                                 <option value="enterprise">企业管理员</option>
                                 <option value="employee">员工账号</option>
+                                <option value="channel_sales">渠道销售</option>
+                                <option value="personal_sales">个人销售</option>
                             </select>
+                            <div v-if="form.role === 'enterprise' || form.role === 'employee'" style="margin-top:8px;">
+                                <label class="block text-sm text-gray-500 mb-1">附加销售权限</label>
+                                <select v-model="form.sales_type" class="form-select">
+                                    <option value="">无</option>
+                                    <option value="channel">渠道销售</option>
+                                    <option value="personal">个人销售</option>
+                                </select>
+                            </div>
                         </div>
 
-                        <!-- 所属企业（企业管理员和员工） -->
-                        <div v-if="form.role === 'employee' || form.role === 'enterprise'">
+                        <!-- 所属企业（非超管） -->
+                        <div v-if="form.role !== 'super_admin'">
                             <label class="block text-sm text-gray-500 mb-1">所属企业</label>
                             <select v-model="form.parent_id" class="form-select">
                                 <option :value="null">请选择企业</option>
@@ -351,6 +380,31 @@
             </div>
         </transition>
 
+        <!-- 删除确认弹窗 -->
+        <transition name="fade">
+            <div v-if="showDeleteModal" class="modal-mask" @click.self="closeDeleteModal">
+                <div class="modal-content" style="width:380px;">
+                    <div style="text-align:center;margin-bottom:16px;">
+                        <div style="width:48px;height:48px;background:#fef2f2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
+                            <svg style="width:24px;height:24px;color:#dc2626;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                        </div>
+                        <h3 style="font-size:16px;font-weight:600;color:#111827;margin-bottom:6px;">确认删除账号</h3>
+                        <p style="font-size:13px;color:#6b7280;">即将删除账号 <span style="font-weight:600;color:#374151;">{{ deleteUser?.phone }}</span><span v-if="deleteUser?.name">（{{ deleteUser?.name }}）</span></p>
+                        <p style="font-size:12px;color:#ef4444;margin-top:6px;">删除后该账号将无法登录，且无法恢复</p>
+                    </div>
+                    <div class="flex justify-end gap-3 mt-4">
+                        <button @click="closeDeleteModal" class="btn btn-outline">取消</button>
+                        <button @click="confirmDelete" :disabled="submitting"
+                            style="background:#dc2626;color:#fff;" class="btn">
+                            {{ submitting ? '删除中...' : '确认删除' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
         <!-- 提示消息 -->
         <transition name="fade">
             <div v-if="toast" class="fixed top-4 right-4 z-50 bg-white shadow-lg rounded-lg px-5 py-3 text-sm flex items-center gap-2 border"
@@ -368,7 +422,7 @@
 </div>
 
 <script>
-const { createApp, ref, reactive, onMounted } = Vue;
+const { createApp, ref, reactive, computed, onMounted } = Vue;
 
 /* 鉴权工具函数 */
 function getToken() { return localStorage.getItem('token'); }
@@ -390,13 +444,40 @@ createApp({
         const loading = ref(false);
         const users = ref([]);
         const enterprises = ref([]);
+        const expandedGroups = ref(new Set());
+
+        // 按企业分组
+        const groupedUsers = computed(() => {
+            const map = new Map();
+            for (const u of users.value) {
+                const key = u.parent_id ? String(u.parent_id) : '__none__';
+                const name = u.parent_name || (u.parent_id ? `企业${u.parent_id}` : '未分组');
+                if (!map.has(key)) map.set(key, { key, name, users: [] });
+                map.get(key).users.push(u);
+            }
+            // 超管单独一组
+            const result = [];
+            for (const [, g] of map) result.push(g);
+            result.sort((a, b) => {
+                if (a.key === '__none__') return 1;
+                if (b.key === '__none__') return -1;
+                return a.name.localeCompare(b.name, 'zh');
+            });
+            return result;
+        });
+
+        function toggleGroup(key) {
+            const s = new Set(expandedGroups.value);
+            s.has(key) ? s.delete(key) : s.add(key);
+            expandedGroups.value = s;
+        }
         const filterRole = ref('');
 
         /* 弹窗状态 */
         const showUserModal = ref(false);
         const isEdit = ref(false);
         const editUserId = ref(null);
-        const form = reactive({ phone: '', password: '', name: '', role: 'employee', parent_id: null, bound_senders: [] });
+        const form = reactive({ phone: '', password: '', name: '', role: 'employee', parent_id: null, bound_senders: [], is_sales: false, sales_type: '' });
         const formError = ref('');
         const submitting = ref(false);
 
@@ -404,6 +485,9 @@ createApp({
         const resetPwdUser = ref(null);
         const resetPwdForm = reactive({ password: '' });
         const resetPwdError = ref('');
+
+        const showDeleteModal = ref(false);
+        const deleteUser = ref(null);
 
         /* 提示消息 */
         const toast = ref(null);
@@ -430,12 +514,15 @@ createApp({
 
         /* 角色相关 */
         function roleLabel(role) {
-            const map = { super_admin: '超级管理员', enterprise: '企业管理员', employee: '员工账号' };
+            const map = { super_admin: '超级管理员', enterprise: '企业管理员', employee: '员工账号', sales: '销售', channel_sales: '渠道销售', personal_sales: '个人销售' };
             return map[role] || role;
         }
         function roleBadgeClass(role) {
-            const map = { super_admin: 'badge-red', enterprise: 'badge-blue', employee: 'badge-green' };
+            const map = { super_admin: 'badge-red', enterprise: 'badge-blue', employee: 'badge-green', sales: 'badge-orange', channel_sales: 'badge-orange', personal_sales: 'badge-orange' };
             return map[role] || 'badge-gray';
+        }
+        function salesTypeLabel(t) {
+            return t === 'channel' ? '渠道销售' : t === 'personal' ? '个人销售' : '';
         }
 
         /* 时间格式化 */
@@ -454,6 +541,10 @@ createApp({
                 const data = await resp.json();
                 if (data.code === 0) {
                     users.value = data.data || [];
+                    // 默认全部展开
+                    const keys = new Set();
+                    for (const u of users.value) keys.add(u.parent_id ? String(u.parent_id) : '__none__');
+                    expandedGroups.value = keys;
                 } else {
                     showToast(data.msg || '获取用户列表失败', 'error');
                 }
@@ -540,6 +631,8 @@ createApp({
             form.role = 'employee';
             form.parent_id = null;
             form.bound_senders = [];
+            form.is_sales = false;
+            form.sales_type = '';
             formError.value = '';
             showUserModal.value = true;
             fetchEnterprises();
@@ -559,6 +652,8 @@ createApp({
                 sender: s.sender,
                 sender_name: s.sender_name || '',
             }));
+            form.is_sales = !!user.is_sales;
+            form.sales_type = user.sales_type || '';
             formError.value = '';
             showUserModal.value = true;
             fetchEnterprises();
@@ -585,7 +680,9 @@ createApp({
                     body = {
                         name: form.name,
                         role: form.role,
-                        parent_id: (form.role === 'employee' || form.role === 'enterprise') ? form.parent_id : null,
+                        parent_id: form.role !== 'super_admin' ? form.parent_id : null,
+                        is_sales: !!form.sales_type,
+                        sales_type: form.sales_type || '',
                         bound_senders: form.bound_senders,
                     };
                 } else {
@@ -596,7 +693,9 @@ createApp({
                         password: form.password,
                         name: form.name,
                         role: form.role,
-                        parent_id: (form.role === 'employee' || form.role === 'enterprise') ? form.parent_id : null,
+                        parent_id: form.role !== 'super_admin' ? form.parent_id : null,
+                        is_sales: !!form.sales_type,
+                        sales_type: form.sales_type || '',
                         bound_senders: form.bound_senders,
                     };
                 }
@@ -649,6 +748,35 @@ createApp({
             }
         }
 
+        /* 删除用户 */
+        function openDeleteModal(user) {
+            deleteUser.value = user;
+            showDeleteModal.value = true;
+        }
+        function closeDeleteModal() {
+            showDeleteModal.value = false;
+            deleteUser.value = null;
+        }
+        async function confirmDelete() {
+            if (!deleteUser.value) return;
+            submitting.value = true;
+            try {
+                const resp = await authFetch('/api/auth/users/' + deleteUser.value.id, { method: 'DELETE' });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showToast('账号 ' + deleteUser.value.phone + ' 已删除');
+                    closeDeleteModal();
+                    fetchUsers();
+                } else {
+                    showToast(data.msg || '删除失败', 'error');
+                }
+            } catch (e) {
+                showToast('网络错误', 'error');
+            } finally {
+                submitting.value = false;
+            }
+        }
+
         /* 启用/禁用切换 */
         async function toggleEnabled(user) {
             const newEnabled = !user.enabled;
@@ -687,8 +815,10 @@ createApp({
             openCreateModal, openEditModal, closeUserModal, submitUser,
             showResetPwdModal, resetPwdUser, resetPwdForm, resetPwdError,
             openResetPwdModal, closeResetPwdModal, submitResetPwd,
+            showDeleteModal, deleteUser, openDeleteModal, closeDeleteModal, confirmDelete,
             toggleEnabled, logout, toast,
-            roleLabel, roleBadgeClass, formatTime,
+            groupedUsers, expandedGroups, toggleGroup,
+            roleLabel, roleBadgeClass, salesTypeLabel, formatTime,
             allSenders, availableSenders, addSender, removeSender, customSenderId, addCustomSender,
         };
     }

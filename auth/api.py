@@ -14,6 +14,9 @@ from .db import (
     ROLE_SUPER_ADMIN,
     ROLE_ENTERPRISE,
     ROLE_EMPLOYEE,
+    ROLE_SALES,
+    ROLE_CHANNEL_SALES,
+    ROLE_PERSONAL_SALES,
     get_user_by_phone,
     get_user_by_id,
     verify_password,
@@ -21,16 +24,26 @@ from .db import (
     create_user,
     update_user,
     reset_password,
+    delete_user,
     list_enterprises,
     get_enterprise_by_id,
     create_enterprise,
     update_enterprise,
+    delete_enterprise,
     get_bindings_by_user,
     set_user_bindings,
     list_all_bindings,
     save_verification_code,
     get_last_sms_sent_at,
+    sms_in_cooldown,
+    try_insert_sms_record,
+    delete_sms_record,
     verify_sms_code,
+    get_user_by_referral_code,
+    get_referral_downlines,
+    get_or_create_referral_code,
+    get_monthly_pdf_usage_batch,
+    get_enterprise_monthly_pdf_usage,
 )
 from .jwt_utils import generate_token
 from .decorators import login_required, admin_required
@@ -112,6 +125,44 @@ def get_me():
     return jsonify({"code": 0, "data": user})
 
 
+@auth_bp.route("/api/auth/my-quota", methods=["GET"])
+@login_required
+def get_my_quota():
+    """获取当前用户所属企业的套餐和本月PDF识别用量"""
+    role = g.current_user.get("role", "")
+    user_id = g.current_user["user_id"]
+
+    # 确定企业ID
+    if role == ROLE_SUPER_ADMIN:
+        return jsonify({"code": 0, "data": {"plan_type": None, "monthly_usage": 0, "monthly_limit": None}})
+
+    user = get_user_by_id(_db, user_id)
+    enterprise_id = user.get("parent_id") if user else None
+
+    if not enterprise_id:
+        return jsonify({"code": 0, "data": {
+            "no_enterprise": True,
+            "plan_type": None,
+            "monthly_usage": 0,
+            "monthly_limit": None,
+        }})
+
+    ent = get_enterprise_by_id(_db, enterprise_id)
+    plan_type = ent.get("plan_type", "standard") if ent else "standard"
+    plan_months = ent.get("plan_months", 1) if ent else 1
+    plan_start_at = str(ent["plan_start_at"]) if ent and ent.get("plan_start_at") else None
+    monthly_usage = get_enterprise_monthly_pdf_usage(_db, enterprise_id)
+    monthly_limit = None if plan_type in ("enterprise", "enterprise_trial") else 3000
+
+    return jsonify({"code": 0, "data": {
+        "plan_type": plan_type,
+        "plan_months": plan_months,
+        "plan_start_at": plan_start_at,
+        "monthly_usage": monthly_usage,
+        "monthly_limit": monthly_limit,
+    }})
+
+
 # ============================================================
 # 账号管理（超管专属）
 # ============================================================
@@ -128,7 +179,16 @@ def api_list_users():
         except (TypeError, ValueError):
             parent_id = None
 
-    users = list_users(_db, role=role, parent_id=parent_id)
+    # channel_sales / personal_sales 是附加销售类型，存在 sales_type 字段而非 role
+    sales_type = ""
+    if role == "channel_sales":
+        sales_type = "channel"
+        role = ""
+    elif role == "personal_sales":
+        sales_type = "personal"
+        role = ""
+
+    users = list_users(_db, role=role, parent_id=parent_id, sales_type=sales_type)
     # 填充所属企业名称
     ent_cache = {}
     for u in users:
@@ -172,13 +232,17 @@ def api_create_user():
     role = data.get("role", ROLE_EMPLOYEE)
     parent_id = data.get("parent_id")
     name = data.get("name", "")
+    is_sales = bool(data.get("is_sales", False))
+    sales_type = data.get("sales_type", "")
 
     if not phone or not password:
         return jsonify({"code": 400, "msg": "手机号和密码不能为空"}), 400
 
-    if role not in (ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, ROLE_EMPLOYEE):
+    _SALES_ROLES = (ROLE_SALES, ROLE_CHANNEL_SALES, ROLE_PERSONAL_SALES)
+    if role not in (ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, ROLE_EMPLOYEE) + _SALES_ROLES:
         return jsonify({"code": 400, "msg": f"无效角色: {role}"}), 400
 
+    # 企业管理员和员工必须指定企业；销售角色可以不挂企业（独立销售）
     if role in (ROLE_ENTERPRISE, ROLE_EMPLOYEE) and not parent_id:
         return jsonify({"code": 400, "msg": "企业管理员和员工必须指定所属企业"}), 400
 
@@ -194,7 +258,7 @@ def api_create_user():
             return jsonify({"code": 400, "msg": "所属企业不存在"}), 400
 
     try:
-        user_id = create_user(_db, phone, password, role, parent_id, name)
+        user_id = create_user(_db, phone, password, role, parent_id, name, is_sales=is_sales)
 
         # 处理发送人绑定
         bound_senders = data.get("bound_senders", [])
@@ -213,8 +277,12 @@ def api_create_user():
 @auth_bp.route("/api/auth/users/<int:user_id>", methods=["PUT"])
 @admin_required
 def api_update_user(user_id):
-    """更新用户信息（name, role, parent_id, enabled, bound_senders）"""
+    """更新用户信息（name, role, parent_id, enabled, is_sales, bound_senders）"""
     data = request.get_json(silent=True) or {}
+    if "is_sales" in data:
+        data["is_sales"] = 1 if data["is_sales"] else 0
+    if "sales_type" in data:
+        data["sales_type"] = data["sales_type"] or ""
     try:
         update_user(_db, user_id, data)
 
@@ -233,6 +301,23 @@ def api_update_user(user_id):
         return jsonify({"code": 0})
     except Exception as e:
         logger.exception("更新用户 %d 失败", user_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@auth_bp.route("/api/auth/users/<int:user_id>", methods=["DELETE"])
+@admin_required
+def api_delete_user(user_id):
+    """删除用户"""
+    cur = get_user_by_id(_db, user_id)
+    if not cur:
+        return jsonify({"code": 404, "msg": "用户不存在"}), 404
+    if cur.get("role") == ROLE_SUPER_ADMIN:
+        return jsonify({"code": 403, "msg": "不允许删除超级管理员"}), 403
+    try:
+        delete_user(_db, user_id)
+        return jsonify({"code": 0})
+    except Exception as e:
+        logger.exception("删除用户 %d 失败", user_id)
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
@@ -350,28 +435,35 @@ def _backfill_records_by_senders(user_id: int, senders: list, enterprise_id: int
 @auth_bp.route("/api/auth/enterprises", methods=["GET"])
 @admin_required
 def api_list_enterprises():
-    """查询企业列表"""
+    """查询企业列表（附带当月PDF识别使用量）"""
     enterprises = list_enterprises(_db)
+    usage_map = get_monthly_pdf_usage_batch(_db)
+    for ent in enterprises:
+        ent["monthly_pdf_usage"] = usage_map.get(ent["id"], 0)
     return jsonify({"code": 0, "data": enterprises})
 
 
 @auth_bp.route("/api/auth/enterprises", methods=["POST"])
 @admin_required
 def api_create_enterprise():
-    """
-    创建企业。
-    请求体: {"name", "contact_person"(可选), "contact_phone"(可选)}
-    """
+    """创建企业"""
     data = request.get_json(silent=True) or {}
     name = data.get("name", "").strip()
     contact_person = data.get("contact_person", "").strip()
     contact_phone = data.get("contact_phone", "").strip()
+    plan_type = data.get("plan_type", "standard")
+    plan_months = int(data.get("plan_months", 1))
 
     if not name:
         return jsonify({"code": 400, "msg": "企业名称不能为空"}), 400
 
     try:
         eid = create_enterprise(_db, name, contact_person, contact_phone)
+        update_enterprise(_db, eid, {
+            "plan_type": plan_type,
+            "plan_months": plan_months,
+            "plan_start_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        })
         return jsonify({"code": 0, "data": {"id": eid}})
     except Exception as e:
         logger.exception("创建企业失败")
@@ -381,13 +473,52 @@ def api_create_enterprise():
 @auth_bp.route("/api/auth/enterprises/<int:eid>", methods=["PUT"])
 @admin_required
 def api_update_enterprise(eid):
-    """更新企业信息（name, contact_person, contact_phone, enabled）"""
+    """更新企业信息"""
     data = request.get_json(silent=True) or {}
     try:
+        if "plan_type" in data or "plan_months" in data:
+            stack = data.pop("stack_plan", False)
+            new_type = data.get("plan_type")
+            new_months = int(data.get("plan_months", 1))
+            if stack:
+                cur = get_enterprise_by_id(_db, eid)
+                if cur and cur.get("plan_start_at"):
+                    cur_start = cur["plan_start_at"]
+                    if isinstance(cur_start, str):
+                        cur_start = datetime.fromisoformat(cur_start.replace(" ", "T"))
+                    cur_months = int(cur.get("plan_months") or 1)
+                    m = cur_start.month - 1 + cur_months
+                    expiry = cur_start.replace(year=cur_start.year + m // 12, month=m % 12 + 1)
+                    if expiry > datetime.now():
+                        # 当前套餐未到期：将新套餐存为 next_plan，不改当前套餐
+                        data.pop("plan_type", None)
+                        data.pop("plan_months", None)
+                        data["next_plan_type"] = new_type
+                        data["next_plan_months"] = new_months
+                        data["next_plan_start_at"] = expiry.strftime("%Y-%m-%d %H:%M:%S")
+                        update_enterprise(_db, eid, data)
+                        return jsonify({"code": 0})
+            # 覆盖模式 or 已到期：清除 next_plan，重置开始时间
+            data["plan_start_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            data["next_plan_type"] = None
+            data["next_plan_months"] = None
+            data["next_plan_start_at"] = None
         update_enterprise(_db, eid, data)
         return jsonify({"code": 0})
     except Exception as e:
         logger.exception("更新企业 %d 失败", eid)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@auth_bp.route("/api/auth/enterprises/<int:eid>", methods=["DELETE"])
+@admin_required
+def api_delete_enterprise(eid):
+    """删除企业"""
+    try:
+        delete_enterprise(_db, eid)
+        return jsonify({"code": 0})
+    except Exception as e:
+        logger.exception("删除企业 %d 失败", eid)
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
@@ -437,27 +568,72 @@ def api_send_sms():
     if not _PHONE_RE.match(phone):
         return jsonify({"code": 400, "msg": "请输入有效的11位手机号"}), 400
 
-    # 防刷：60秒冷却
-    last_sent = get_last_sms_sent_at(_db, phone, "register")
-    if last_sent:
-        if isinstance(last_sent, str):
-            try:
-                last_sent = datetime.fromisoformat(last_sent)
-            except ValueError:
-                last_sent = None
-        if last_sent:
-            elapsed = (datetime.now() - last_sent.replace(tzinfo=None)).total_seconds()
-            if elapsed < _SMS_COOLDOWN:
-                wait = int(_SMS_COOLDOWN - elapsed) + 1
-                return jsonify({"code": 429, "msg": f"发送过于频繁，请 {wait} 秒后重试"}), 429
-
     code = generate_code(6)
+    # 原子操作：冷却检查 + 插入记录一步完成，防并发重复发送
+    remaining = try_insert_sms_record(_db, phone, code, "register", _SMS_COOLDOWN, _SMS_TTL)
+    if remaining > 0:
+        return jsonify({"code": 429, "msg": f"发送过于频繁，请 {remaining} 秒后重试"}), 429
+
+    # 记录已入库，再发短信；发送失败则删除记录让用户可重试
     ok, err = send_sms_code(phone, code)
     if not ok:
+        delete_sms_record(_db, phone, code, "register")
         return jsonify({"code": 500, "msg": f"短信发送失败：{err}"}), 500
 
-    save_verification_code(_db, phone, code, "register", _SMS_TTL)
     return jsonify({"code": 0, "msg": "验证码已发送"})
+
+
+@auth_bp.route("/api/auth/sms/send-reset", methods=["POST"])
+def api_send_sms_reset():
+    """发送找回密码验证码"""
+    data = request.get_json(silent=True) or {}
+    phone = (data.get("phone") or "").strip()
+
+    if not _PHONE_RE.match(phone):
+        return jsonify({"code": 400, "msg": "请输入有效的11位手机号"}), 400
+
+    # 检查手机号是否注册
+    user = get_user_by_phone(_db, phone)
+    if not user:
+        return jsonify({"code": 404, "msg": "该手机号未注册"}), 404
+
+    code = generate_code(6)
+    remaining = try_insert_sms_record(_db, phone, code, "reset", _SMS_COOLDOWN, _SMS_TTL)
+    if remaining > 0:
+        return jsonify({"code": 429, "msg": f"发送过于频繁，请 {remaining} 秒后重试"}), 429
+
+    ok, err = send_sms_code(phone, code)
+    if not ok:
+        delete_sms_record(_db, phone, code, "reset")
+        return jsonify({"code": 500, "msg": f"短信发送失败：{err}"}), 500
+
+    return jsonify({"code": 0, "msg": "验证码已发送"})
+
+
+@auth_bp.route("/api/auth/forgot-password", methods=["POST"])
+def api_forgot_password():
+    """通过短信验证码重置密码"""
+    data = request.get_json(silent=True) or {}
+    phone = (data.get("phone") or "").strip()
+    code = (data.get("code") or "").strip()
+    new_password = data.get("password") or ""
+
+    if not _PHONE_RE.match(phone):
+        return jsonify({"code": 400, "msg": "请输入有效的11位手机号"}), 400
+    if not code:
+        return jsonify({"code": 400, "msg": "请输入验证码"}), 400
+    if len(new_password) < 6:
+        return jsonify({"code": 400, "msg": "密码长度不能少于6位"}), 400
+
+    if not verify_sms_code(_db, phone, code, "reset"):
+        return jsonify({"code": 400, "msg": "验证码错误或已过期"}), 400
+
+    user = get_user_by_phone(_db, phone)
+    if not user:
+        return jsonify({"code": 404, "msg": "用户不存在"}), 404
+
+    reset_password(_db, user["id"], new_password)
+    return jsonify({"code": 0, "msg": "密码已重置"})
 
 
 @auth_bp.route("/api/auth/register", methods=["POST"])
@@ -468,6 +644,7 @@ def api_register():
     code = (data.get("code") or "").strip()
     password = data.get("password", "")
     name = (data.get("name") or "").strip()
+    ref = (data.get("ref") or "").strip()
 
     if not _PHONE_RE.match(phone):
         return jsonify({"code": 400, "msg": "请输入有效的11位手机号"}), 400
@@ -484,8 +661,15 @@ def api_register():
     if get_user_by_phone(_db, phone):
         return jsonify({"code": 400, "msg": "该手机号已注册，请直接登录"}), 400
 
+    # 解析邀请码
+    referrer_id = None
+    if ref:
+        referrer = get_user_by_referral_code(_db, ref)
+        if referrer:
+            referrer_id = referrer["id"]
+
     try:
-        user_id = create_user(_db, phone, password, ROLE_ENTERPRISE, None, name or phone)
+        user_id = create_user(_db, phone, password, ROLE_EMPLOYEE, None, name or phone, referrer_id=referrer_id)
         user = get_user_by_id(_db, user_id)
         token = generate_token(user["id"], user["phone"], user["role"])
         return jsonify({
@@ -503,3 +687,24 @@ def api_register():
     except Exception as e:
         logger.exception("注册失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@auth_bp.route("/api/auth/invite-info", methods=["GET"])
+@login_required
+def api_invite_info():
+    """获取当前用户的邀请码、邀请链接、下线列表"""
+    user_id = g.current_user["user_id"]
+    referral_code = get_or_create_referral_code(_db, user_id)
+    downlines = get_referral_downlines(_db, user_id)
+    from flask import request as _req
+    base = _req.host_url.rstrip("/")
+    invite_link = f"{base}/login?ref={referral_code}" if referral_code else ""
+    return jsonify({
+        "code": 0,
+        "data": {
+            "referral_code": referral_code,
+            "invite_link": invite_link,
+            "downline_count": len(downlines),
+            "downlines": downlines,
+        },
+    })

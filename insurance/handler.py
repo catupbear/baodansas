@@ -395,7 +395,27 @@ class InsuranceHandler:
         except Exception as e:
             logger.warning("查找 sender 绑定用户失败: %s", e)
 
-        # 3. 创建初始记录（状态: processing）
+        # 3. 检查企业月度配额（标准版限 3000 次/月）
+        if config_enterprise_id:
+            try:
+                from auth.db import check_enterprise_quota
+                _quota = check_enterprise_quota(self.db, config_enterprise_id)
+                if _quota.get("expired"):
+                    logger.warning(
+                        "企业 %s 套餐已到期，跳过 seq=%s filename=%s",
+                        config_enterprise_id, seq, filename,
+                    )
+                    return
+                if _quota.get("exceeded"):
+                    logger.warning(
+                        "企业 %s 本月识别额度已用完（%s/%s），跳过 seq=%s filename=%s",
+                        config_enterprise_id, _quota.get("usage"), _quota.get("limit"), seq, filename,
+                    )
+                    return
+            except Exception as e:
+                logger.warning("配额检查失败，继续处理: %s", e)
+
+        # 4. 创建初始记录（状态: processing）
         initial_record = {
             "msg_seq": seq,
             "roomid": roomid,
