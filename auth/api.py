@@ -391,6 +391,21 @@ def api_update_enterprise(eid):
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
+@auth_bp.route("/api/auth/profile", methods=["PUT"])
+@login_required
+def api_update_profile():
+    """当前用户更新自己的姓名"""
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"code": 400, "msg": "姓名不能为空"}), 400
+    try:
+        update_user(_db, g.current_user["user_id"], {"name": name})
+        return jsonify({"code": 0, "msg": "用户名已更新"})
+    except Exception as e:
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
 @auth_bp.route("/api/auth/change-password", methods=["POST"])
 @login_required
 def api_change_password():
