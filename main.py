@@ -24,7 +24,7 @@ from insurance.monitor_config_db import init_monitor_config_table, migrate_from_
 from insurance.handler import InsuranceHandler
 from insurance.api import insurance_bp, init_insurance_api
 from quote.handler import QuoteHandler
-from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table
+from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table, init_sms_verification_table
 from auth.jwt_utils import init_jwt
 from auth.decorators import init_auth_decorators
 from auth.api import auth_bp, init_auth_api
@@ -94,6 +94,11 @@ def create_app(config: dict) -> Flask:
     init_users_table(db)
     init_enterprises_table(db)
     init_sender_binding_table(db)
+    init_sms_verification_table(db)
+
+    # 初始化短信模块
+    from auth.sms import init_sms
+    init_sms(config.get("sms", {}))
     # JWT 密钥：优先 config.yaml，否则从数据库读取/自动生成持久化随机密钥
     jwt_secret = config.get("jwt_secret", "")
     if not jwt_secret:
@@ -135,15 +140,16 @@ def create_app(config: dict) -> Flask:
     def login_page():
         return render_template("login.html")
 
-    # 首页 → 保单台账
+    # 首页 → 客户展示落地页
     @app.route("/")
     def index():
-        return render_template("insurance.html")
+        return render_template("landing.html")
 
-    # 产品介绍落地页
+    # 兼容旧路径 /home
     @app.route("/home")
     def home_page():
-        return render_template("landing.html")
+        from flask import redirect
+        return redirect("/", code=301)
 
     # 保单识别兼容旧路径
     @app.route("/insurance")

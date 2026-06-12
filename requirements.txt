@@ -10,3 +10,4 @@ requests>=2.31.0
 jieba>=0.42
 pypdf>=4.0
 PyJWT>=2.8
+alibabacloud-dysmsapi20170525>=2.0

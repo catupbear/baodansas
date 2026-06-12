@@ -17,7 +17,6 @@
             position: relative;
             overflow: hidden;
         }
-        /* 装饰圆 */
         body::before {
             content: '';
             position: absolute;
@@ -46,7 +45,6 @@
             z-index: 1;
         }
 
-        /* 顶部图标 */
         .logo-icon {
             width: 56px; height: 56px;
             background: linear-gradient(135deg, #f5a623, #e8673d);
@@ -70,14 +68,36 @@
             font-size: 12px;
             color: #b0b0b0;
             text-align: center;
-            margin-bottom: 32px;
+            margin-bottom: 24px;
             letter-spacing: 1px;
         }
 
-        /* 输入框 */
+        /* 登录/注册切换 Tab */
+        .auth-tabs {
+            display: flex;
+            border-bottom: 1px solid #f0f0f0;
+            margin-bottom: 24px;
+        }
+        .auth-tab {
+            flex: 1;
+            text-align: center;
+            padding: 8px 0;
+            font-size: 15px;
+            font-weight: 500;
+            color: #999;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            margin-bottom: -1px;
+        }
+        .auth-tab.active {
+            color: #e8673d;
+            border-bottom-color: #e8673d;
+        }
+
         .input-group {
             position: relative;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
         }
         .input-group .icon {
             position: absolute;
@@ -117,11 +137,36 @@
         }
         .input-group .toggle-pwd:hover { color: #999; }
 
-        /* 记住密码 */
+        /* 验证码输入行 */
+        .code-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .code-row .input-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
+        .btn-send-code {
+            flex-shrink: 0;
+            width: 112px;
+            height: 48px;
+            border: 1px solid #f07c3e;
+            border-radius: 8px;
+            background: #fff;
+            color: #f07c3e;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .btn-send-code:hover:not(:disabled) { background: #fff5ee; }
+        .btn-send-code:disabled { border-color: #ddd; color: #bbb; cursor: not-allowed; }
+
         .remember-row {
             display: flex;
             align-items: center;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
             user-select: none;
         }
         .remember-row input[type=checkbox] {
@@ -136,8 +181,7 @@
             cursor: pointer;
         }
 
-        /* 登录按钮 */
-        .btn-login {
+        .btn-submit {
             width: 100%;
             height: 48px;
             border: none;
@@ -151,25 +195,23 @@
             transition: opacity 0.2s, transform 0.1s;
             box-shadow: 0 4px 16px rgba(232,103,61,0.3);
         }
-        .btn-login:hover { opacity: 0.92; }
-        .btn-login:active { transform: scale(0.99); }
-        .btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-submit:hover { opacity: 0.92; }
+        .btn-submit:active { transform: scale(0.99); }
+        .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
 
-        /* 错误提示 */
-        .error-msg {
-            background: #fff2f0;
-            color: #e05535;
+        .msg-box {
             font-size: 13px;
             padding: 8px 14px;
             border-radius: 6px;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
             text-align: center;
         }
+        .msg-error { background: #fff2f0; color: #e05535; }
+        .msg-success { background: #f0fff4; color: #16a34a; }
 
-        /* 底部版权 */
         .footer {
             text-align: center;
-            margin-top: 24px;
+            margin-top: 22px;
             font-size: 11px;
             color: #ccc;
         }
@@ -178,18 +220,23 @@
 <body>
 <div id="app" v-cloak>
     <div class="login-card">
-        <!-- 图标 -->
         <div class="logo-icon">
             <svg viewBox="0 0 24 24"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
         </div>
         <div class="title">午虎AI保单台账</div>
         <div class="subtitle">Insurance Policy Recognition System</div>
 
-        <!-- 错误提示 -->
-        <div v-if="error" class="error-msg">{{ error }}</div>
+        <!-- 登录 / 注册 Tab -->
+        <div class="auth-tabs">
+            <div class="auth-tab" :class="{active: tab==='login'}" @click="switchTab('login')">登 录</div>
+            <div class="auth-tab" :class="{active: tab==='register'}" @click="switchTab('register')">注 册</div>
+        </div>
 
-        <form @submit.prevent="handleLogin">
-            <!-- 用户名 -->
+        <!-- 消息提示 -->
+        <div v-if="msg" :class="['msg-box', msgType === 'success' ? 'msg-success' : 'msg-error']">{{ msg }}</div>
+
+        <!-- 登录表单 -->
+        <form v-if="tab==='login'" @submit.prevent="handleLogin">
             <div class="input-group">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
@@ -197,15 +244,13 @@
                 </svg>
                 <input v-model="phone" type="text" placeholder="请输入手机号" autofocus required>
             </div>
-
-            <!-- 密码 -->
             <div class="input-group">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                     <path d="M7 11V7a5 5 0 0110 0v4"/>
                 </svg>
                 <input v-model="password" :type="showPwd ? 'text' : 'password'" placeholder="请输入密码" required>
-                <svg class="toggle-pwd" @click="showPwd = !showPwd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg class="toggle-pwd" @click="showPwd=!showPwd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <template v-if="!showPwd">
                         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                         <circle cx="12" cy="12" r="3"/>
@@ -216,17 +261,59 @@
                     </template>
                 </svg>
             </div>
-
-            <!-- 记住密码 -->
             <div class="remember-row">
                 <input type="checkbox" id="remember" v-model="remember">
                 <label for="remember">记住密码</label>
             </div>
+            <button type="submit" class="btn-submit" :disabled="loading">{{ loading ? '登录中...' : '登 录' }}</button>
+        </form>
 
-            <!-- 登录按钮 -->
-            <button type="submit" class="btn-login" :disabled="loading">
-                {{ loading ? '登录中...' : '登 录' }}
-            </button>
+        <!-- 注册表单 -->
+        <form v-if="tab==='register'" @submit.prevent="handleRegister">
+            <div class="input-group">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <input v-model="regPhone" type="text" placeholder="请输入手机号" autofocus>
+            </div>
+            <!-- 验证码行 -->
+            <div class="code-row">
+                <div class="input-group">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    <input v-model="regCode" type="text" placeholder="请输入验证码" maxlength="6">
+                </div>
+                <button type="button" class="btn-send-code" :disabled="codeSending || countdown > 0" @click="sendCode">
+                    {{ countdown > 0 ? countdown + 's 后重发' : (codeSending ? '发送中...' : '获取验证码') }}
+                </button>
+            </div>
+            <div class="input-group">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0110 0v4"/>
+                </svg>
+                <input v-model="regPwd" :type="showRegPwd ? 'text' : 'password'" placeholder="设置密码（至少6位）">
+                <svg class="toggle-pwd" @click="showRegPwd=!showRegPwd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <template v-if="!showRegPwd">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                    </template>
+                    <template v-else>
+                        <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+                        <line x1="1" y1="1" x2="23" y2="23"/>
+                    </template>
+                </svg>
+            </div>
+            <div class="input-group">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0110 0v4"/>
+                </svg>
+                <input v-model="regPwd2" :type="showRegPwd ? 'text' : 'password'" placeholder="再次输入密码">
+            </div>
+            <button type="submit" class="btn-submit" :disabled="loading" style="margin-top:6px">{{ loading ? '注册中...' : '注 册' }}</button>
         </form>
 
         <div class="footer">&copy; 2025 午虎AI保单台账 All Rights Reserved</div>
@@ -237,31 +324,53 @@
 const { createApp, ref } = Vue;
 createApp({
     setup() {
+        const tab = ref('login');
+        const msg = ref('');
+        const msgType = ref('error');
+        const loading = ref(false);
+
+        // 登录
         const phone = ref('');
         const password = ref('');
-        const error = ref('');
-        const loading = ref(false);
         const showPwd = ref(false);
         const remember = ref(false);
 
-        // 已登录则跳转首页
+        // 注册
+        const regPhone = ref('');
+        const regCode = ref('');
+        const regPwd = ref('');
+        const regPwd2 = ref('');
+        const showRegPwd = ref(false);
+        const codeSending = ref(false);
+        const countdown = ref(0);
+        let countdownTimer = null;
+
         if (localStorage.getItem('token')) {
             window.location.href = '/insurance';
         }
 
-        // 恢复记住的手机号密码
         const saved = localStorage.getItem('remembered_login');
         if (saved) {
             try {
-                const data = JSON.parse(saved);
-                phone.value = data.phone || '';
-                password.value = data.password || '';
+                const d = JSON.parse(saved);
+                phone.value = d.phone || '';
+                password.value = d.password || '';
                 remember.value = true;
             } catch {}
         }
 
+        function showMsg(text, type = 'error') {
+            msg.value = text;
+            msgType.value = type;
+        }
+
+        function switchTab(t) {
+            tab.value = t;
+            msg.value = '';
+        }
+
         async function handleLogin() {
-            error.value = '';
+            msg.value = '';
             loading.value = true;
             try {
                 const resp = await fetch('/api/auth/login', {
@@ -271,11 +380,8 @@ createApp({
                 });
                 const data = await resp.json();
                 if (data.code === 0) {
-                    // 记住密码
                     if (remember.value) {
-                        localStorage.setItem('remembered_login', JSON.stringify({
-                            phone: phone.value, password: password.value
-                        }));
+                        localStorage.setItem('remembered_login', JSON.stringify({ phone: phone.value, password: password.value }));
                     } else {
                         localStorage.removeItem('remembered_login');
                     }
@@ -283,16 +389,87 @@ createApp({
                     localStorage.setItem('user', JSON.stringify(data.data.user));
                     window.location.href = '/insurance';
                 } else {
-                    error.value = data.msg || '登录失败';
+                    showMsg(data.msg || '登录失败');
                 }
-            } catch (e) {
-                error.value = '网络错误，请重试';
+            } catch {
+                showMsg('网络错误，请重试');
             } finally {
                 loading.value = false;
             }
         }
 
-        return { phone, password, error, loading, showPwd, remember, handleLogin };
+        async function sendCode() {
+            msg.value = '';
+            const p = regPhone.value.trim();
+            if (!/^1[3-9]\d{9}$/.test(p)) {
+                showMsg('请输入有效的11位手机号');
+                return;
+            }
+            codeSending.value = true;
+            try {
+                const resp = await fetch('/api/auth/sms/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: p }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showMsg('验证码已发送，请注意查收', 'success');
+                    countdown.value = 60;
+                    countdownTimer = setInterval(() => {
+                        countdown.value--;
+                        if (countdown.value <= 0) {
+                            clearInterval(countdownTimer);
+                            countdown.value = 0;
+                        }
+                    }, 1000);
+                } else {
+                    showMsg(data.msg || '发送失败');
+                }
+            } catch {
+                showMsg('网络错误，请重试');
+            } finally {
+                codeSending.value = false;
+            }
+        }
+
+        async function handleRegister() {
+            msg.value = '';
+            const p = regPhone.value.trim();
+            if (!/^1[3-9]\d{9}$/.test(p)) { showMsg('请输入有效的11位手机号'); return; }
+            if (!regCode.value.trim()) { showMsg('请输入验证码'); return; }
+            if (regPwd.value.length < 6) { showMsg('密码长度不能少于6位'); return; }
+            if (regPwd.value !== regPwd2.value) { showMsg('两次密码输入不一致'); return; }
+
+            loading.value = true;
+            try {
+                const resp = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: p, code: regCode.value.trim(), password: regPwd.value }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    localStorage.setItem('token', data.data.token);
+                    localStorage.setItem('user', JSON.stringify(data.data.user));
+                    window.location.href = '/insurance';
+                } else {
+                    showMsg(data.msg || '注册失败');
+                }
+            } catch {
+                showMsg('网络错误，请重试');
+            } finally {
+                loading.value = false;
+            }
+        }
+
+        return {
+            tab, msg, msgType, loading,
+            phone, password, showPwd, remember, handleLogin,
+            regPhone, regCode, regPwd, regPwd2, showRegPwd,
+            codeSending, countdown, sendCode, handleRegister,
+            switchTab,
+        };
     }
 }).mount('#app');
 </script>

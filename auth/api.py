@@ -7,6 +7,9 @@ import logging
 
 from flask import Blueprint, jsonify, request, g
 
+import re
+from datetime import datetime, timezone
+
 from .db import (
     ROLE_SUPER_ADMIN,
     ROLE_ENTERPRISE,
@@ -25,9 +28,17 @@ from .db import (
     get_bindings_by_user,
     set_user_bindings,
     list_all_bindings,
+    save_verification_code,
+    get_last_sms_sent_at,
+    verify_sms_code,
 )
 from .jwt_utils import generate_token
 from .decorators import login_required, admin_required
+from .sms import generate_code, send_sms_code
+
+_PHONE_RE = re.compile(r"^1[3-9]\d{9}$")
+_SMS_COOLDOWN = 60   # 同一手机号发送间隔（秒）
+_SMS_TTL = 300       # 验证码有效期（秒）
 
 logger = logging.getLogger(__name__)
 
@@ -396,3 +407,84 @@ def api_change_password():
 
     reset_password(_db, g.current_user["user_id"], new_password)
     return jsonify({"code": 0, "msg": "密码修改成功"})
+
+
+# ============================================================
+# 注册：发送验证码 + 完成注册
+# ============================================================
+
+@auth_bp.route("/api/auth/sms/send", methods=["POST"])
+def api_send_sms():
+    """发送注册验证码"""
+    data = request.get_json(silent=True) or {}
+    phone = (data.get("phone") or "").strip()
+
+    if not _PHONE_RE.match(phone):
+        return jsonify({"code": 400, "msg": "请输入有效的11位手机号"}), 400
+
+    # 防刷：60秒冷却
+    last_sent = get_last_sms_sent_at(_db, phone, "register")
+    if last_sent:
+        if isinstance(last_sent, str):
+            try:
+                last_sent = datetime.fromisoformat(last_sent)
+            except ValueError:
+                last_sent = None
+        if last_sent:
+            elapsed = (datetime.now() - last_sent.replace(tzinfo=None)).total_seconds()
+            if elapsed < _SMS_COOLDOWN:
+                wait = int(_SMS_COOLDOWN - elapsed) + 1
+                return jsonify({"code": 429, "msg": f"发送过于频繁，请 {wait} 秒后重试"}), 429
+
+    code = generate_code(6)
+    ok, err = send_sms_code(phone, code)
+    if not ok:
+        return jsonify({"code": 500, "msg": f"短信发送失败：{err}"}), 500
+
+    save_verification_code(_db, phone, code, "register", _SMS_TTL)
+    return jsonify({"code": 0, "msg": "验证码已发送"})
+
+
+@auth_bp.route("/api/auth/register", methods=["POST"])
+def api_register():
+    """用验证码完成注册（注册后自动登录）"""
+    data = request.get_json(silent=True) or {}
+    phone = (data.get("phone") or "").strip()
+    code = (data.get("code") or "").strip()
+    password = data.get("password", "")
+    name = (data.get("name") or "").strip()
+
+    if not _PHONE_RE.match(phone):
+        return jsonify({"code": 400, "msg": "请输入有效的11位手机号"}), 400
+    if not code:
+        return jsonify({"code": 400, "msg": "请输入验证码"}), 400
+    if len(password) < 6:
+        return jsonify({"code": 400, "msg": "密码长度不能少于6位"}), 400
+
+    # 校验验证码
+    if not verify_sms_code(_db, phone, code, "register"):
+        return jsonify({"code": 400, "msg": "验证码错误或已过期"}), 400
+
+    # 手机号唯一检查
+    if get_user_by_phone(_db, phone):
+        return jsonify({"code": 400, "msg": "该手机号已注册，请直接登录"}), 400
+
+    try:
+        user_id = create_user(_db, phone, password, ROLE_ENTERPRISE, None, name or phone)
+        user = get_user_by_id(_db, user_id)
+        token = generate_token(user["id"], user["phone"], user["role"])
+        return jsonify({
+            "code": 0,
+            "data": {
+                "token": token,
+                "user": {
+                    "id": user["id"],
+                    "phone": user["phone"],
+                    "role": user["role"],
+                    "name": user.get("name", ""),
+                },
+            },
+        })
+    except Exception as e:
+        logger.exception("注册失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500

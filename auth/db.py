@@ -427,6 +427,87 @@ def get_sender_user_name_map(db, enterprise_id: int = None) -> dict:
         conn.close()
 
 
+# ============================================================
+# 短信验证码（sms_verifications）
+# ============================================================
+
+def init_sms_verification_table(db):
+    """创建短信验证码表（幂等）"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sms_verifications (
+                id         INT PRIMARY KEY AUTO_INCREMENT,
+                phone      VARCHAR(20) NOT NULL,
+                code       VARCHAR(10) NOT NULL,
+                purpose    VARCHAR(32) NOT NULL DEFAULT 'register',
+                used       TINYINT NOT NULL DEFAULT 0,
+                expires_at DATETIME NOT NULL,
+                sent_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_sms_phone_purpose (phone, purpose)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        conn.commit()
+        logger.info("sms_verifications 表初始化完成")
+    finally:
+        conn.close()
+
+
+def save_verification_code(db, phone: str, code: str, purpose: str = "register", ttl: int = 300):
+    """保存验证码，ttl 秒后过期"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO sms_verifications (phone, code, purpose, expires_at) "
+            "VALUES (%s, %s, %s, DATE_ADD(NOW(), INTERVAL %s SECOND))",
+            (phone, code, purpose, ttl),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_last_sms_sent_at(db, phone: str, purpose: str = "register"):
+    """返回该手机号最近一次发送时间（datetime 或 None）"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT sent_at FROM sms_verifications WHERE phone = %s AND purpose = %s "
+            "ORDER BY id DESC LIMIT 1",
+            (phone, purpose),
+        )
+        row = cursor.fetchone()
+        return row["sent_at"] if row else None
+    finally:
+        conn.close()
+
+
+def verify_sms_code(db, phone: str, code: str, purpose: str = "register") -> bool:
+    """
+    验证验证码。成功则标记为已用，返回 True；失败返回 False。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT id FROM sms_verifications "
+            "WHERE phone = %s AND code = %s AND purpose = %s AND used = 0 AND expires_at > NOW() "
+            "ORDER BY id DESC LIMIT 1",
+            (phone, code, purpose),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return False
+        cursor.execute("UPDATE sms_verifications SET used = 1 WHERE id = %s", (row["id"],))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
 def list_all_bindings(db, enterprise_id: int = None) -> list:
     """列出所有绑定记录（前端用户列表展示用）"""
     conn = db.pool.connection()
