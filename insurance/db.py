@@ -412,6 +412,24 @@ def init_insurance_tables(db):
         except Exception:
             pass
 
+        # 报错反馈表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS error_reports (
+                id          INT PRIMARY KEY AUTO_INCREMENT,
+                record_id   INT,
+                user_id     INT,
+                user_name   VARCHAR(128),
+                enterprise  VARCHAR(128),
+                filename    VARCHAR(256),
+                policy_no   VARCHAR(128),
+                description TEXT,
+                status      VARCHAR(16) DEFAULT 'unread',
+                created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_er_status (status),
+                KEY idx_er_created (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户报错反馈'
+        """)
+
         conn.commit()
         logger.info("保单识别数据库表初始化完成（DDL）")
     finally:
@@ -1533,7 +1551,7 @@ def query_insurance_records(
                 "r2.filename, r2.cos_url, r2.ocr_engine, r2.doc_category, r2.confidence, "
                 "r2.dingtalk_synced, r2.status, r2.source, r2.created_at, r2.updated_at, "
                 "r2.company_short, r2.is_abnormal, r2.hint, r2.display_fields, r2.manual_fields, "
-                "r2.abnormal_override_reason, r2.user_id, "
+                "r2.abnormal_override_reason, r2.user_id, r2.file_md5, "
                 "pf3.owner AS _pf_owner"
             )
             cursor.execute(

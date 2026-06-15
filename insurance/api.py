@@ -531,6 +531,56 @@ def list_records():
                 if not filled_id and not df.get("投保人身份证号码"):
                     df["投保人身份证号码"] = vp["id_no"]
 
+        # 同 PDF 车牌互补：同一 file_md5 中有车牌的记录 → 补给无车牌的兄弟记录
+        # 适用于：意外险/驾乘险与交强险/商业险来自同一 PDF，意外险本身无车牌字段
+        _md5_plate_pool = {}
+        for record in result.get("records", []):
+            md5 = record.get("file_md5", "")
+            if not md5:
+                continue
+            df = record.get("display_fields", {})
+            plate = df.get("车牌", "") or df.get("车牌号", "")
+            if plate:
+                _md5_plate_pool[md5] = plate
+        for record in result.get("records", []):
+            md5 = record.get("file_md5", "")
+            if not md5 or md5 not in _md5_plate_pool:
+                continue
+            df = record.get("display_fields", {})
+            if not df.get("车牌") and not df.get("车牌号"):
+                df["车牌"] = _md5_plate_pool[md5]
+
+        # 文件名兜底：车牌仍为空时，从文件名中提取
+        _PLATE_RE = re.compile(
+            r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁夏]'
+            r'[A-Z]-?[A-Z0-9]{4,6}'
+        )
+        for record in result.get("records", []):
+            df = record.get("display_fields", {})
+            if df.get("车牌") or df.get("车牌号"):
+                continue
+            filename = record.get("filename", "") or ""
+            m = _PLATE_RE.search(filename)
+            if m:
+                df["车牌"] = m.group(0).replace("-", "")
+
+        # 车牌→车架号互补：有车牌无车架号的记录，从同车牌其他记录补车架号
+        # 必须在文件名兜底填完车牌之后执行，否则兜底车牌的记录无法获益
+        _plate_vin_pool = {}
+        for record in result.get("records", []):
+            df = record.get("display_fields", {})
+            plate = df.get("车牌", "") or df.get("车牌号", "")
+            vin = df.get("车架号", "")
+            if plate and vin and plate not in _plate_vin_pool:
+                _plate_vin_pool[plate] = vin
+        for record in result.get("records", []):
+            df = record.get("display_fields", {})
+            if df.get("车架号"):
+                continue
+            plate = df.get("车牌", "") or df.get("车牌号", "")
+            if plate and plate in _plate_vin_pool:
+                df["车架号"] = _plate_vin_pool[plate]
+
         # 交强到期时间：必须在 apply_user_config（日期格式化）之前，用「原始」终保日期
         # 构建 车牌→交强险终保日期 映射。否则等终保日期被格式化后再读取，若其格式不含年份
         # （如 MM月DD日），年份信息已丢失，交强到期时间将无法按自身配置的格式正确显示。
@@ -742,6 +792,37 @@ def get_record(record_id):
                 else:
                     user_config.pop("_manual_fields", None)
                 record["display_fields"] = apply_user_config_to_fields(user_config, record["display_fields"])
+
+        # 详情页互补：与列表端保持一致
+        df = record.get("display_fields") if isinstance(record.get("display_fields"), dict) else {}
+        if isinstance(df, dict):
+            # 文件名兜底：车牌为空时从文件名中提取
+            if not df.get("车牌") and not df.get("车牌号"):
+                _fn = record.get("filename", "") or ""
+                _pm = re.search(
+                    r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁夏]'
+                    r'[A-Z]-?[A-Z0-9]{4,6}', _fn
+                )
+                if _pm:
+                    df["车牌"] = _pm.group(0).replace("-", "")
+            # 车牌→车架号：有车牌无车架号时从 DB 同车牌记录补
+            _plate = df.get("车牌") or df.get("车牌号")
+            if _plate and not df.get("车架号"):
+                try:
+                    from insurance.db import find_records_by_plate
+                    for _pr in find_records_by_plate(_db, _plate, exclude_id=record_id):
+                        _pf = _pr.get("parsed_fields") or {}
+                        if isinstance(_pf, str):
+                            try:
+                                _pf = json.loads(_pf)
+                            except Exception:
+                                _pf = {}
+                        _vin = _pf.get("车架号VIN") or _pf.get("车架号")
+                        if _vin:
+                            df["车架号"] = _vin
+                            break
+                except Exception:
+                    pass
 
         # 同一 PDF 的兄弟记录摘要（有 file_md5 就查）
         siblings = []
@@ -3672,7 +3753,7 @@ def export_excel():
                         max_len = max(max_len, cell_len)
                 except Exception:
                     pass
-            adjusted_width = min(max_len + 2, 50)
+            adjusted_width = max_len + 2
             ws.column_dimensions[col_letter].width = adjusted_width
 
         # 保存到内存流
@@ -4735,3 +4816,157 @@ def get_field_config_defaults():
     except Exception as e:
         logger.exception("获取默认值失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+# ==================== 报错反馈 ====================
+
+@insurance_bp.route("/api/insurance/error-report", methods=["POST"])
+@login_required
+def api_submit_error_report():
+    """用户提交报错"""
+    from auth.jwt_utils import verify_token
+    from auth.db import get_user_by_id
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    payload = verify_token(token)
+    if not payload:
+        return jsonify({"code": 401, "msg": "未授权"}), 401
+    user = get_user_by_id(_db, payload["user_id"])
+    if not user:
+        return jsonify({"code": 401, "msg": "未授权"}), 401
+
+    data = request.get_json() or {}
+    record_id = data.get("record_id")
+    description = (data.get("description") or "").strip()
+    filename = data.get("filename", "")
+    policy_no = data.get("policy_no", "")
+    enterprise = data.get("enterprise", "")
+    if not description:
+        return jsonify({"code": 400, "msg": "请描述问题"}), 400
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO error_reports (record_id, user_id, user_name, enterprise, filename, policy_no, description, status) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, 'unread')",
+            (record_id, user["id"], user.get("name") or user.get("phone"), enterprise, filename, policy_no, description)
+        )
+        conn.commit()
+        return jsonify({"code": 0, "msg": "已提交"})
+    except Exception as e:
+        logger.exception("提交报错失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@insurance_bp.route("/api/insurance/error-reports", methods=["GET"])
+@login_required
+def api_get_error_reports():
+    """超级管理员获取报错列表"""
+    from auth.jwt_utils import verify_token
+    from auth.db import get_user_by_id
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    payload = verify_token(token)
+    if not payload:
+        return jsonify({"code": 401, "msg": "未授权"}), 401
+    user = get_user_by_id(_db, payload["user_id"])
+    if not user or user.get("role") != "super_admin":
+        return jsonify({"code": 403, "msg": "无权限"}), 403
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT * FROM error_reports ORDER BY created_at DESC LIMIT 200"
+        )
+        rows = cursor.fetchall()
+        for r in rows:
+            if r.get("created_at"):
+                r["created_at"] = r["created_at"].strftime("%Y-%m-%d %H:%M")
+        cursor.execute("SELECT COUNT(*) as cnt FROM error_reports WHERE status='unread'")
+        unread = cursor.fetchone()["cnt"]
+        return jsonify({"code": 0, "data": {"list": rows, "unread": unread}})
+    except Exception as e:
+        logger.exception("获取报错列表失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@insurance_bp.route("/api/insurance/error-reports/unread-count", methods=["GET"])
+@login_required
+def api_error_reports_unread_count():
+    """超级管理员轮询未读数"""
+    from auth.jwt_utils import verify_token
+    from auth.db import get_user_by_id
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    payload = verify_token(token)
+    if not payload:
+        return jsonify({"code": 401, "msg": "未授权"}), 401
+    user = get_user_by_id(_db, payload["user_id"])
+    if not user or user.get("role") != "super_admin":
+        return jsonify({"code": 0, "data": {"unread": 0}})
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT COUNT(*) as cnt FROM error_reports WHERE status='unread'")
+        unread = cursor.fetchone()["cnt"]
+        return jsonify({"code": 0, "data": {"unread": unread}})
+    except Exception as e:
+        return jsonify({"code": 500, "msg": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@insurance_bp.route("/api/insurance/error-reports/<int:report_id>/read", methods=["POST"])
+@login_required
+def api_mark_error_report_read(report_id):
+    """超级管理员标记已读"""
+    from auth.jwt_utils import verify_token
+    from auth.db import get_user_by_id
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    payload = verify_token(token)
+    if not payload:
+        return jsonify({"code": 401, "msg": "未授权"}), 401
+    user = get_user_by_id(_db, payload["user_id"])
+    if not user or user.get("role") != "super_admin":
+        return jsonify({"code": 403, "msg": "无权限"}), 403
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE error_reports SET status='read' WHERE id=%s", (report_id,))
+        conn.commit()
+        return jsonify({"code": 0, "msg": "ok"})
+    except Exception as e:
+        return jsonify({"code": 500, "msg": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@insurance_bp.route("/api/insurance/error-reports/read-all", methods=["POST"])
+@login_required
+def api_mark_all_error_reports_read():
+    """超级管理员全部标记已读"""
+    from auth.jwt_utils import verify_token
+    from auth.db import get_user_by_id
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    payload = verify_token(token)
+    if not payload:
+        return jsonify({"code": 401, "msg": "未授权"}), 401
+    user = get_user_by_id(_db, payload["user_id"])
+    if not user or user.get("role") != "super_admin":
+        return jsonify({"code": 403, "msg": "无权限"}), 403
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE error_reports SET status='read' WHERE status='unread'")
+        conn.commit()
+        return jsonify({"code": 0, "msg": "ok"})
+    except Exception as e:
+        return jsonify({"code": 500, "msg": str(e)}), 500
+    finally:
+        conn.close()

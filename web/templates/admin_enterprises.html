@@ -103,6 +103,16 @@
             transition: border-color 0.2s;
         }
         .form-input:focus { border-color: var(--primary-light); }
+
+        /* 移动端适配 */
+        @media (max-width: 640px) {
+            .mobile-bar { flex-wrap: wrap !important; gap: 8px !important; }
+            .mobile-bar > * { flex-shrink: 0; }
+            .mobile-search { width: 100% !important; }
+            .mobile-search input { width: 100% !important; }
+            .modal-mask { align-items: flex-start; padding-top: 20px; }
+            .modal-content { width: min(420px, calc(100vw - 32px)) !important; }
+        }
     </style>
 </head>
 <body class="min-h-screen">
@@ -123,22 +133,53 @@
         <nav class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
             <div class="flex items-center space-x-6">
                 <span class="font-semibold text-gray-800">午虎AI保单台账</span>
-                <a href="/insurance" class="text-sm text-gray-500 hover:text-orange-600">保单台账</a>
-                <a href="/monitor-config" class="text-sm text-gray-500 hover:text-orange-600">监控配置</a>
-                <a href="/admin/enterprises" class="text-sm text-orange-600 font-medium">企业管理</a>
-                <a href="/admin/users" class="text-sm text-gray-500 hover:text-orange-600">账号管理</a>
+                <a href="/insurance" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">保单台账</a>
+                <a href="/monitor-config" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">监控配置</a>
+                <a href="/admin/enterprises" class="hidden sm:inline text-sm text-orange-600 font-medium">企业管理</a>
+                <a href="/admin/users" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">账号管理</a>
             </div>
             <div class="flex items-center space-x-4">
-                <span class="text-sm text-gray-500">{{ currentUser.name || currentUser.phone }}</span>
-                <button @click="logout" class="text-sm text-gray-400 hover:text-red-500">退出</button>
+                <div class="hidden sm:flex items-center space-x-4">
+                    <span class="text-sm text-gray-500">{{ currentUser.name || currentUser.phone }}</span>
+                    <button @click="logout" class="text-sm text-gray-400 hover:text-red-500">退出</button>
+                </div>
+                <!-- 汉堡菜单按钮（仅移动端） -->
+                <button @click="mobileMenuOpen = !mobileMenuOpen" class="sm:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path v-if="!mobileMenuOpen" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
             </div>
         </nav>
+        <!-- 移动端菜单面板 -->
+        <div v-if="mobileMenuOpen" class="sm:hidden bg-white border-b border-gray-200 px-4 py-3 space-y-2">
+            <a href="/insurance" class="block text-sm text-gray-600 py-2">保单台账</a>
+            <a href="/monitor-config" class="block text-sm text-gray-600 py-2">监控配置</a>
+            <a href="/admin/enterprises" class="block text-sm text-gray-600 py-2">企业管理</a>
+            <a href="/admin/users" class="block text-sm text-gray-600 py-2">账号管理</a>
+            <hr class="border-gray-100">
+            <div class="flex items-center justify-between py-2">
+                <span class="text-sm text-gray-500">{{ currentUser.name || currentUser.phone }}</span>
+                <button @click="logout" class="text-sm text-red-500">退出</button>
+            </div>
+        </div>
 
         <!-- 页面内容 -->
-        <div class="max-w-6xl mx-auto px-6 py-6">
+        <div class="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
             <!-- 操作栏 -->
-            <div class="flex items-center justify-between mb-5">
-                <h1 class="text-lg font-semibold text-gray-800">企业管理</h1>
+            <div class="mobile-bar flex items-center justify-between mb-5">
+                <div class="flex items-center gap-3" style="flex-wrap:wrap;">
+                    <h1 class="text-lg font-semibold text-gray-800">企业管理</h1>
+                    <div class="mobile-search" style="position:relative;">
+                        <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:#9ca3af;pointer-events:none;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"/>
+                        </svg>
+                        <input v-model="entSearch" type="text" placeholder="搜索企业名称…"
+                            style="height:34px;padding:0 10px 0 32px;border:1px solid #e7e0d8;border-radius:8px;font-size:13px;outline:none;width:200px;transition:border-color 0.2s;"
+                            @focus="$event.target.style.borderColor='#ea580c'" @blur="$event.target.style.borderColor='#e7e0d8'">
+                    </div>
+                </div>
                 <button @click="openCreateModal" class="btn btn-primary">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
@@ -150,7 +191,7 @@
             <!-- 企业列表 -->
             <div class="bg-white rounded-xl shadow-sm overflow-hidden">
                 <div v-if="loading" class="py-16 text-center text-gray-400 text-sm">加载中...</div>
-                <div v-else-if="enterprises.length === 0" class="py-16 text-center text-gray-400 text-sm">暂无企业数据</div>
+                <div v-else-if="filteredEnterprises.length === 0" class="py-16 text-center text-gray-400 text-sm">{{ entSearch ? '无匹配结果' : '暂无企业数据' }}</div>
                 <div v-else class="overflow-x-auto">
                     <table class="data-table">
                         <thead>
@@ -160,13 +201,14 @@
                                 <th style="min-width:160px;">本月识别量</th>
                                 <th style="min-width:80px;">联系人</th>
                                 <th style="min-width:110px;">联系电话</th>
+                                <th style="min-width:80px;">推荐人</th>
                                 <th style="min-width:60px;">状态</th>
                                 <th style="min-width:100px;">创建时间</th>
                                 <th style="min-width:130px;">操作</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="ent in enterprises" :key="ent.id">
+                            <tr v-for="ent in filteredEnterprises" :key="ent.id">
                                 <!-- 企业名称 -->
                                 <td style="font-weight:600;color:#1c1410;">{{ ent.name }}</td>
 
@@ -211,30 +253,37 @@
                                 </td>
 
                                 <!-- 本月识别量 -->
-                                <td>
-                                    <div style="display:flex;align-items:center;gap:8px;">
-                                        <div style="flex:1;max-width:90px;">
-                                            <div style="height:5px;background:#f0f0f0;border-radius:4px;overflow:hidden;">
-                                                <div v-if="ent.plan_type==='enterprise' || ent.plan_type==='enterprise_trial'"
-                                                    style="height:100%;width:30%;background:#3b82f6;opacity:0.4;border-radius:4px;"></div>
-                                                <div v-else
-                                                    :style="{
+                                <td style="text-align:center;vertical-align:middle;">
+                                    <template v-if="ent.plan_type==='enterprise' || ent.plan_type==='enterprise_trial'">
+                                        <span style="font-size:12px;color:#374151;">本月 {{ ent.monthly_pdf_usage }} 次</span>
+                                    </template>
+                                    <template v-else>
+                                        <div style="display:flex;align-items:center;gap:8px;justify-content:center;">
+                                            <div style="width:90px;">
+                                                <div style="height:5px;background:#f0f0f0;border-radius:4px;overflow:hidden;">
+                                                    <div :style="{
                                                         height:'100%', borderRadius:'4px',
                                                         width: Math.min(ent.monthly_pdf_usage/3000*100,100)+'%',
                                                         background: ent.monthly_pdf_usage>=2700?'#ef4444':ent.monthly_pdf_usage>=1800?'#f59e0b':'#10b981'
                                                     }"></div>
+                                                </div>
                                             </div>
+                                            <span style="font-size:12px;color:#374151;white-space:nowrap;">{{ ent.monthly_pdf_usage }} / 3000</span>
                                         </div>
-                                        <span style="font-size:12px;color:#374151;white-space:nowrap;">
-                                            {{ ent.monthly_pdf_usage }} / {{ (ent.plan_type==='enterprise'||ent.plan_type==='enterprise_trial') ? '∞' : '3000' }}
-                                        </span>
-                                    </div>
+                                    </template>
                                 </td>
 
                                 <!-- 联系人 -->
                                 <td style="color:#57534e;font-size:13px;">{{ ent.contact_person || '-' }}</td>
                                 <!-- 联系电话 -->
                                 <td style="color:#57534e;font-size:13px;">{{ ent.contact_phone || '-' }}</td>
+
+                                <!-- 推荐人 -->
+                                <td style="font-size:12px;color:#57534e;">
+                                    <span v-if="ent.referrer_name">{{ ent.referrer_name }}</span>
+                                    <button v-else @click="openSetReferrer(ent)" style="font-size:11px;color:#f97316;background:none;border:1px dashed #fed7aa;border-radius:4px;padding:2px 6px;cursor:pointer;">设置</button>
+                                    <button v-if="ent.referrer_name" @click="openSetReferrer(ent)" style="margin-left:4px;font-size:11px;color:#9ca3af;background:none;border:none;cursor:pointer;">改</button>
+                                </td>
 
                                 <!-- 状态 -->
                                 <td>
@@ -383,7 +432,7 @@
         <!-- 删除确认弹窗 -->
         <transition name="fade">
             <div v-if="deleteTarget" class="modal-mask" @click.self="deleteTarget=null">
-                <div class="modal-content" style="width:360px;">
+                <div class="modal-content" style="width:min(360px, calc(100vw - 32px));">
                     <h3 class="text-lg font-semibold text-gray-800 mb-3">确认删除</h3>
                     <p style="font-size:14px;color:#555;margin-bottom:6px;">确定删除企业 <strong>{{ deleteTarget.name }}</strong> 吗？</p>
                     <p style="font-size:12px;color:#dc2626;">此操作不可恢复，该企业下的账号将失去归属。</p>
@@ -410,6 +459,43 @@
                 {{ toast.msg }}
             </div>
         </transition>
+
+        <!-- 设置推荐人弹窗 -->
+        <transition name="fade">
+            <div v-if="showReferrerModal" class="modal-mask" @click.self="showReferrerModal=false">
+                <div class="modal-content" style="width:min(380px, calc(100vw - 32px));">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-1">设置推荐人</h3>
+                    <p style="font-size:13px;color:#9ca3af;margin-bottom:16px;">{{ referrerEnt ? referrerEnt.name : '' }}</p>
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-1">选择推荐人（输入姓名/手机号搜索）</label>
+                        <input v-model="referrerSearch" @input="searchReferrerUsers" placeholder="输入姓名或手机号..."
+                               class="form-input" style="width:100%;margin-bottom:8px;">
+                        <div v-if="referrerUserList.length" style="border:1px solid #e7e0d8;border-radius:8px;max-height:180px;overflow-y:auto;">
+                            <div v-for="u in referrerUserList" :key="u.id"
+                                 @click="selectReferrer(u)"
+                                 :style="{
+                                   padding:'8px 12px', cursor:'pointer', fontSize:'13px',
+                                   display:'flex', justifyContent:'space-between', alignItems:'center',
+                                   background: referrerSelected && referrerSelected.id===u.id ? '#fff7ed' : ''
+                                 }"
+                                 @mouseenter="e => { if(!(referrerSelected && referrerSelected.id===u.id)) e.currentTarget.style.background='#fafafa' }"
+                                 @mouseleave="e => { e.currentTarget.style.background = (referrerSelected && referrerSelected.id===u.id) ? '#fff7ed' : '' }">
+                                <span>{{ u.name || u.phone }}</span>
+                                <span style="font-size:11px;color:#9ca3af;">{{ u.phone }}</span>
+                            </div>
+                        </div>
+                        <div v-if="referrerSelected" style="margin-top:8px;padding:8px 12px;background:#fff7ed;border-radius:8px;font-size:13px;color:#92400e;">
+                            已选：{{ referrerSelected.name || referrerSelected.phone }}
+                            <button @click="referrerSelected=null" style="margin-left:8px;color:#9ca3af;background:none;border:none;cursor:pointer;">✕ 清除</button>
+                        </div>
+                    </div>
+                    <div class="flex justify-end gap-3 mt-6">
+                        <button @click="showReferrerModal=false" class="btn btn-outline">取消</button>
+                        <button @click="saveReferrer" :disabled="referrerSaving" class="btn btn-primary">{{ referrerSaving ? '保存中…' : '确定' }}</button>
+                    </div>
+                </div>
+            </div>
+        </transition>
     </template>
 </div>
 
@@ -433,6 +519,17 @@ createApp({
         const currentUser = ref({});
         const loading = ref(false);
         const enterprises = ref([]);
+        const entSearch = ref('');
+        const mobileMenuOpen = ref(false);
+        const filteredEnterprises = Vue.computed(() => {
+            const q = entSearch.value.trim().toLowerCase();
+            if (!q) return enterprises.value;
+            return enterprises.value.filter(e =>
+                (e.name || '').toLowerCase().includes(q) ||
+                (e.contact_person || '').toLowerCase().includes(q) ||
+                (e.contact_phone || '').includes(q)
+            );
+        });
 
         const showModal = ref(false);
         const isEdit = ref(false);
@@ -478,6 +575,55 @@ createApp({
 
         const deleteTarget = ref(null);
         const deleting = ref(false);
+
+        // 设置推荐人
+        const showReferrerModal = ref(false);
+        const referrerEnt = ref(null);
+        const referrerSearch = ref('');
+        const referrerUserList = ref([]);
+        const referrerSelected = ref(null);
+        const referrerSaving = ref(false);
+        let referrerSearchTimer = null;
+
+        function openSetReferrer(ent) {
+            referrerEnt.value = ent;
+            referrerSearch.value = '';
+            referrerUserList.value = [];
+            referrerSelected.value = ent.referrer_id ? { id: ent.referrer_id, name: ent.referrer_name, phone: '' } : null;
+            showReferrerModal.value = true;
+        }
+
+        function searchReferrerUsers() {
+            clearTimeout(referrerSearchTimer);
+            const q = referrerSearch.value.trim();
+            if (!q) { referrerUserList.value = []; return; }
+            referrerSearchTimer = setTimeout(async () => {
+                try {
+                    const res = await authFetch(`/api/auth/users?q=${encodeURIComponent(q)}&limit=10`);
+                    const json = await res.json();
+                    if (json.code === 0) referrerUserList.value = json.data || [];
+                } catch(e) {}
+            }, 300);
+        }
+
+        function selectReferrer(u) { referrerSelected.value = u; }
+
+        async function saveReferrer() {
+            referrerSaving.value = true;
+            try {
+                const res = await authFetch(`/api/auth/enterprises/${referrerEnt.value.id}/referrer`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ referrer_id: referrerSelected.value ? referrerSelected.value.id : null })
+                });
+                const json = await res.json();
+                if (json.code === 0) {
+                    showToast('推荐人已设置');
+                    showReferrerModal.value = false;
+                    fetchEnterprises();
+                } else { showToast(json.msg || '设置失败', 'error'); }
+            } catch(e) { showToast('网络错误', 'error'); }
+            finally { referrerSaving.value = false; }
+        }
 
         const toast = ref(null);
         let toastTimer = null;
@@ -684,7 +830,7 @@ createApp({
         });
 
         return {
-            ready, noPermission, currentUser, loading, enterprises,
+            ready, noPermission, currentUser, loading, enterprises, entSearch, filteredEnterprises,
             showModal, isEdit, form, formError, submitting,
             openCreateModal, openEditModal, closeModal, submitForm,
             showPlanModal, planEditEnt, planForm, planFormError, planSubmitting, planCurrentExpiry,
@@ -692,6 +838,9 @@ createApp({
             toggleEnabled, logout, toast, formatTime,
             deleteTarget, deleting, confirmDelete, doDelete,
             planDaysLeft, planExpiryStr, nextPlanExpiryStr,
+            showReferrerModal, referrerEnt, referrerSearch, referrerUserList, referrerSelected, referrerSaving,
+            openSetReferrer, searchReferrerUsers, selectReferrer, saveReferrer,
+            mobileMenuOpen,
         };
     }
 }).mount('#app');

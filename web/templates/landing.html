@@ -602,7 +602,8 @@ footer {
       下一代保险业务智能管理平台
     </div>
     <h1 class="hero-title reveal reveal-d1">
-      保单发到群里<br>
+      午虎AI保单识别大模型<br>
+      你只需保单发到群内<br>
       <span class="line-orange">台账自动生成</span>
     </h1>
     <p class="hero-desc reveal reveal-d2">
@@ -692,7 +693,7 @@ footer {
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between">
             <span style="font-size:13px;color:var(--text2)">💰 月使用成本</span>
-            <span style="font-size:18px;font-weight:800;color:var(--green)">¥249 起</span>
+            <span style="font-size:18px;font-weight:800;color:var(--green)">¥299 起</span>
           </div>
         </div>
       </div>
@@ -880,8 +881,8 @@ footer {
     <!-- 计费切换 -->
     <div class="billing-toggle-wrap reveal">
       <div class="billing-toggle">
-        <button id="btn-monthly" class="billing-btn active" onclick="switchBilling('monthly')">按月</button>
-        <button id="btn-annual" class="billing-btn" onclick="switchBilling('annual')">按年<em>省25%</em></button>
+        <button id="btn-monthly" class="billing-btn" onclick="switchBilling('monthly')">按月</button>
+        <button id="btn-annual" class="billing-btn active" onclick="switchBilling('annual')">按年<em>省25%</em></button>
       </div>
     </div>
 
@@ -897,6 +898,7 @@ footer {
         </div>
         <div id="std-origin" class="price-origin"></div>
         <div id="std-sub" class="price-sub">按月付费</div>
+        <div id="std-per-day" style="font-size:12px;color:var(--green);margin-top:2px;margin-bottom:4px;opacity:0.85;">平均每天约 ¥8.22</div>
         <div id="std-annual-total" style="display:none;margin-bottom:16px">
           <div id="std-origin-total" style="font-size:12px;color:var(--text3);text-decoration:line-through;margin-bottom:2px"></div>
           <div id="std-now-total" style="font-size:13px;font-weight:700;color:var(--text)"></div>
@@ -924,6 +926,7 @@ footer {
         </div>
         <div id="ent-origin" class="price-origin"></div>
         <div id="ent-sub" class="price-sub">按月付费</div>
+        <div id="ent-per-day" style="font-size:12px;color:var(--green);margin-top:2px;margin-bottom:4px;opacity:0.85;">平均每天约 ¥27.4</div>
         <div id="ent-annual-total" style="display:none;margin-bottom:16px">
           <div id="ent-origin-total" style="font-size:12px;color:var(--text3);text-decoration:line-through;margin-bottom:2px"></div>
           <div id="ent-now-total" style="font-size:13px;font-weight:700;color:var(--text)"></div>
@@ -1013,20 +1016,26 @@ footer {
 // 计费切换
 const pricing = {
   monthly: { std: '¥299',  stdLine: '原价 ¥399/月',  stdSub: '按月付费',
-             ent: '¥999',  entLine: '原价 ¥1,399/月', entSub: '按月付费' },
+             stdPerDay: '平均每天约 ¥9.97',
+             ent: '¥999',  entLine: '原价 ¥1,399/月', entSub: '按月付费',
+             entPerDay: '平均每天约 ¥33.3' },
   annual:  { std: '¥249',  stdLine: '原价 ¥299/月',   stdSub: '',
              stdOriginTotal: '原总价 ¥3,588/年', stdNowTotal: '现总价 ¥2,999/年',
+             stdPerDay: '平均每天约 ¥8.22',
              ent: '¥833',  entLine: '原价 ¥999/月',   entSub: '',
-             entOriginTotal: '原总价 ¥11,988/年', entNowTotal: '现总价 ¥9,999/年' }
+             entOriginTotal: '原总价 ¥11,988/年', entNowTotal: '现总价 ¥9,999/年',
+             entPerDay: '平均每天约 ¥27.4' }
 };
 function switchBilling(type) {
   const p = pricing[type];
   document.getElementById('std-price').textContent = p.std;
   document.getElementById('std-origin-line').textContent = p.stdLine;
   document.getElementById('std-sub').textContent = p.stdSub;
+  document.getElementById('std-per-day').textContent = p.stdPerDay;
   document.getElementById('ent-price').textContent = p.ent;
   document.getElementById('ent-origin-line').textContent = p.entLine;
   document.getElementById('ent-sub').textContent = p.entSub;
+  document.getElementById('ent-per-day').textContent = p.entPerDay;
   const showAnnual = type === 'annual';
   document.getElementById('std-annual-total').style.display = showAnnual ? '' : 'none';
   document.getElementById('ent-annual-total').style.display = showAnnual ? '' : 'none';
@@ -1039,6 +1048,7 @@ function switchBilling(type) {
   document.querySelectorAll('.billing-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('btn-' + type).classList.add('active');
 }
+switchBilling('annual');
 
 // 滚动动画
 const io = new IntersectionObserver(entries => {

@@ -106,6 +106,16 @@
             transition: border-color 0.2s;
         }
         .form-select:focus { border-color: var(--primary-light); }
+
+        /* 移动端适配 */
+        @media (max-width: 640px) {
+            .mobile-bar { flex-wrap: wrap !important; gap: 8px !important; }
+            .mobile-bar > * { flex-shrink: 0; }
+            .mobile-search { width: 100% !important; }
+            .mobile-search input { width: 100% !important; }
+            .modal-mask { align-items: flex-start; padding-top: 20px; }
+            .modal-content { width: min(420px, calc(100vw - 32px)) !important; }
+        }
     </style>
 </head>
 <body class="min-h-screen">
@@ -126,24 +136,45 @@
         <nav class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
             <div class="flex items-center space-x-6">
                 <span class="font-semibold text-gray-800">午虎AI保单台账</span>
-                <a href="/insurance" class="text-sm text-gray-500 hover:text-orange-600">保单台账</a>
-                <a href="/monitor-config" class="text-sm text-gray-500 hover:text-orange-600">监控配置</a>
-                <a href="/admin/enterprises" class="text-sm text-gray-500 hover:text-orange-600">企业管理</a>
-                <a href="/admin/users" class="text-sm text-orange-600 font-medium">账号管理</a>
+                <a href="/insurance" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">保单台账</a>
+                <a href="/monitor-config" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">监控配置</a>
+                <a href="/admin/enterprises" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">企业管理</a>
+                <a href="/admin/users" class="hidden sm:inline text-sm text-orange-600 font-medium">账号管理</a>
             </div>
             <div class="flex items-center space-x-4">
-                <span class="text-sm text-gray-500">{{ currentUser.name || currentUser.phone }}</span>
-                <button @click="logout" class="text-sm text-gray-400 hover:text-red-500">退出</button>
+                <div class="hidden sm:flex items-center space-x-4">
+                    <span class="text-sm text-gray-500">{{ currentUser.name || currentUser.phone }}</span>
+                    <button @click="logout" class="text-sm text-gray-400 hover:text-red-500">退出</button>
+                </div>
+                <!-- 汉堡菜单按钮（仅移动端） -->
+                <button @click="mobileMenuOpen = !mobileMenuOpen" class="sm:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path v-if="!mobileMenuOpen" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
             </div>
         </nav>
+        <!-- 移动端菜单面板 -->
+        <div v-if="mobileMenuOpen" class="sm:hidden bg-white border-b border-gray-200 px-4 py-3 space-y-2">
+            <a href="/insurance" class="block text-sm text-gray-600 py-2">保单台账</a>
+            <a href="/monitor-config" class="block text-sm text-gray-600 py-2">监控配置</a>
+            <a href="/admin/enterprises" class="block text-sm text-gray-600 py-2">企业管理</a>
+            <a href="/admin/users" class="block text-sm text-gray-600 py-2">账号管理</a>
+            <hr class="border-gray-100">
+            <div class="flex items-center justify-between py-2">
+                <span class="text-sm text-gray-500">{{ currentUser.name || currentUser.phone }}</span>
+                <button @click="logout" class="text-sm text-red-500">退出</button>
+            </div>
+        </div>
 
         <!-- 页面内容 -->
-        <div class="max-w-6xl mx-auto px-6 py-6">
+        <div class="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
             <!-- 操作栏 -->
-            <div class="flex items-center justify-between mb-5">
-                <div class="flex items-center gap-3">
+            <div class="mobile-bar flex items-center justify-between mb-5">
+                <div class="flex items-center gap-3" style="flex-wrap:wrap;">
                     <h1 class="text-lg font-semibold text-gray-800">账号管理</h1>
-                    <select v-model="filterRole" @change="fetchUsers" class="form-select" style="width:140px;height:34px;font-size:13px;">
+                    <select v-model="filterRole" @change="fetchUsers" class="form-select" style="width:130px;height:34px;font-size:13px;">
                         <option value="">全部角色</option>
                         <option value="super_admin">超级管理员</option>
                         <option value="enterprise">企业账号</option>
@@ -151,6 +182,14 @@
                         <option value="channel_sales">渠道销售</option>
                         <option value="personal_sales">个人销售</option>
                     </select>
+                    <div class="mobile-search" style="position:relative;">
+                        <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:#9ca3af;pointer-events:none;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"/>
+                        </svg>
+                        <input v-model="searchKeyword" type="text" placeholder="搜索姓名/手机号…"
+                            style="height:34px;padding:0 10px 0 32px;border:1px solid #e7e0d8;border-radius:8px;font-size:13px;outline:none;width:190px;transition:border-color 0.2s;"
+                            @focus="$event.target.style.borderColor='#ea580c'" @blur="$event.target.style.borderColor='#e7e0d8'">
+                    </div>
                 </div>
                 <button @click="openCreateModal" class="btn btn-primary">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -163,7 +202,7 @@
             <!-- 用户列表（按企业折叠分组） -->
             <div class="bg-white rounded-xl shadow-sm overflow-hidden">
                 <div v-if="loading" class="py-16 text-center text-gray-400 text-sm">加载中...</div>
-                <div v-else-if="users.length === 0" class="py-16 text-center text-gray-400 text-sm">暂无用户数据</div>
+                <div v-else-if="groupedUsers.length === 0" class="py-16 text-center text-gray-400 text-sm">{{ searchKeyword ? '无匹配结果' : '暂无用户数据' }}</div>
                 <div v-else>
                     <!-- 企业分组 -->
                     <div v-for="group in groupedUsers" :key="group.key" style="border-bottom:1px solid #f3f4f6;">
@@ -181,73 +220,104 @@
                             </div>
                             <span style="font-size:12px;color:#9ca3af;">{{ group.users.filter(u=>u.enabled).length }}/{{ group.users.length }}</span>
                         </div>
-                        <!-- 展开的用户表格 -->
-                        <div v-if="expandedGroups.has(group.key)" class="overflow-x-auto">
-                            <table class="data-table">
-                                <colgroup>
-                                    <col style="width:13%;">
-                                    <col style="width:9%;">
-                                    <col style="width:10%;">
-                                    <col style="width:18%;">
-                                    <col style="width:6%;">
-                                    <col style="width:14%;">
-                                    <col style="width:30%;">
-                                </colgroup>
-                                <thead>
-                                    <tr>
-                                        <th>手机号</th>
-                                        <th>姓名</th>
-                                        <th>角色</th>
-                                        <th>绑定发送人</th>
-                                        <th>状态</th>
-                                        <th>创建时间</th>
-                                        <th>操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="user in group.users" :key="user.id">
-                                        <td class="font-medium text-gray-800">{{ user.phone }}</td>
-                                        <td>{{ user.name || '-' }}</td>
-                                        <td>
-                                            <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;">
-                                                <span class="badge" :class="roleBadgeClass(user.role)">{{ roleLabel(user.role) }}</span>
-                                                <span v-if="user.sales_type" style="font-size:11px;color:#9ca3af;">▸ {{ salesTypeLabel(user.sales_type) }}</span>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <div style="display:flex;flex-wrap:wrap;gap:3px;">
-                                                <span v-for="s in (user.bound_senders || [])" :key="s.sender"
-                                                    class="badge badge-blue" style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                                                    :title="(s.sender_name || '') + ' (' + s.sender + ')'">
-                                                    {{ s.sender_name || s.sender }}
+                        <!-- 展开的用户列表 -->
+                        <template v-if="expandedGroups.has(group.key)">
+                            <!-- 桌面端表格 -->
+                            <div class="hidden sm:block overflow-x-auto">
+                                <table class="data-table">
+                                    <colgroup>
+                                        <col style="width:13%;">
+                                        <col style="width:9%;">
+                                        <col style="width:10%;">
+                                        <col style="width:18%;">
+                                        <col style="width:6%;">
+                                        <col style="width:14%;">
+                                        <col style="width:30%;">
+                                    </colgroup>
+                                    <thead>
+                                        <tr>
+                                            <th>手机号</th>
+                                            <th>姓名</th>
+                                            <th>角色</th>
+                                            <th>绑定发送人</th>
+                                            <th>状态</th>
+                                            <th>创建时间</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="user in group.users" :key="user.id">
+                                            <td class="font-medium text-gray-800">{{ user.phone }}</td>
+                                            <td>{{ user.name || '-' }}</td>
+                                            <td>
+                                                <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;">
+                                                    <span class="badge" :class="roleBadgeClass(user.role)">{{ roleLabel(user.role) }}</span>
+                                                    <span v-if="user.sales_type" style="font-size:11px;color:#9ca3af;">▸ {{ salesTypeLabel(user.sales_type) }}</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div style="display:flex;flex-wrap:wrap;gap:3px;">
+                                                    <span v-for="s in (user.bound_senders || [])" :key="s.sender"
+                                                        class="badge badge-blue" style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                                                        :title="(s.sender_name || '') + ' (' + s.sender + ')'">
+                                                        {{ s.sender_name || s.sender }}
+                                                    </span>
+                                                    <span v-if="!user.bound_senders || user.bound_senders.length === 0" style="color:#9ca3af;">-</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="badge" :class="user.enabled ? 'badge-green' : 'badge-gray'">
+                                                    {{ user.enabled ? '启用' : '禁用' }}
                                                 </span>
-                                                <span v-if="!user.bound_senders || user.bound_senders.length === 0" style="color:#9ca3af;">-</span>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <span class="badge" :class="user.enabled ? 'badge-green' : 'badge-gray'">
-                                                {{ user.enabled ? '启用' : '禁用' }}
-                                            </span>
-                                        </td>
-                                        <td class="text-gray-500">{{ formatTime(user.created_at) }}</td>
-                                        <td>
-                                            <div class="flex items-center gap-2">
-                                                <button @click="openEditModal(user)" class="btn btn-sm btn-outline">编辑</button>
-                                                <button @click="openResetPwdModal(user)" class="btn btn-sm btn-outline">重置密码</button>
-                                                <button @click="toggleEnabled(user)"
-                                                    :style="user.enabled ? 'color:#d97706;border-color:#fbbf24' : 'color:#059669;border-color:#6ee7b7'"
-                                                    class="btn btn-sm btn-outline">
-                                                    {{ user.enabled ? '禁用' : '启用' }}
-                                                </button>
-                                                <button @click="openDeleteModal(user)"
-                                                    style="color:#dc2626;border-color:#fca5a5;"
-                                                    class="btn btn-sm btn-outline">删除</button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
+                                            </td>
+                                            <td class="text-gray-500">{{ formatTime(user.created_at) }}</td>
+                                            <td>
+                                                <div class="flex items-center gap-2">
+                                                    <button @click="openEditModal(user)" class="btn btn-sm btn-outline">编辑</button>
+                                                    <button @click="openResetPwdModal(user)" class="btn btn-sm btn-outline">重置密码</button>
+                                                    <button @click="toggleEnabled(user)"
+                                                        :style="user.enabled ? 'color:#d97706;border-color:#fbbf24' : 'color:#059669;border-color:#6ee7b7'"
+                                                        class="btn btn-sm btn-outline">
+                                                        {{ user.enabled ? '禁用' : '启用' }}
+                                                    </button>
+                                                    <button @click="openDeleteModal(user)"
+                                                        style="color:#dc2626;border-color:#fca5a5;"
+                                                        class="btn btn-sm btn-outline">删除</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <!-- 移动端卡片 -->
+                            <div class="sm:hidden">
+                                <div v-for="user in group.users" :key="'m'+user.id"
+                                     style="border-bottom:1px solid #f5f0eb;padding:12px 4px;">
+                                    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
+                                        <div>
+                                            <div style="font-size:14px;font-weight:600;color:#1c1410;">{{ user.phone }}</div>
+                                            <div style="font-size:12px;color:#9ca3af;margin-top:2px;">{{ user.name || '未设置姓名' }}</div>
+                                        </div>
+                                        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+                                            <span class="badge" :class="roleBadgeClass(user.role)">{{ roleLabel(user.role) }}</span>
+                                            <span class="badge" :class="user.enabled ? 'badge-green' : 'badge-gray'" style="font-size:11px;">{{ user.enabled ? '启用' : '禁用' }}</span>
+                                        </div>
+                                    </div>
+                                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                                        <button @click="openEditModal(user)" class="btn btn-sm btn-outline">编辑</button>
+                                        <button @click="openResetPwdModal(user)" class="btn btn-sm btn-outline">重置密码</button>
+                                        <button @click="toggleEnabled(user)"
+                                            :style="user.enabled ? 'color:#d97706;border-color:#fbbf24' : 'color:#059669;border-color:#6ee7b7'"
+                                            class="btn btn-sm btn-outline">
+                                            {{ user.enabled ? '禁用' : '启用' }}
+                                        </button>
+                                        <button @click="openDeleteModal(user)"
+                                            style="color:#dc2626;border-color:#fca5a5;"
+                                            class="btn btn-sm btn-outline">删除</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
                     </div>
                 </div>
             </div>
@@ -383,7 +453,7 @@
         <!-- 删除确认弹窗 -->
         <transition name="fade">
             <div v-if="showDeleteModal" class="modal-mask" @click.self="closeDeleteModal">
-                <div class="modal-content" style="width:380px;">
+                <div class="modal-content" style="width:min(380px, calc(100vw - 32px));">
                     <div style="text-align:center;margin-bottom:16px;">
                         <div style="width:48px;height:48px;background:#fef2f2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
                             <svg style="width:24px;height:24px;color:#dc2626;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -445,17 +515,24 @@ createApp({
         const users = ref([]);
         const enterprises = ref([]);
         const expandedGroups = ref(new Set());
+        const searchKeyword = ref('');
+        const mobileMenuOpen = ref(false);
 
-        // 按企业分组
+        // 按企业分组（含关键词过滤）
         const groupedUsers = computed(() => {
+            const q = searchKeyword.value.trim().toLowerCase();
+            const source = q
+                ? users.value.filter(u =>
+                    (u.name || '').toLowerCase().includes(q) ||
+                    (u.phone || '').includes(q))
+                : users.value;
             const map = new Map();
-            for (const u of users.value) {
+            for (const u of source) {
                 const key = u.parent_id ? String(u.parent_id) : '__none__';
                 const name = u.parent_name || (u.parent_id ? `企业${u.parent_id}` : '未分组');
                 if (!map.has(key)) map.set(key, { key, name, users: [] });
                 map.get(key).users.push(u);
             }
-            // 超管单独一组
             const result = [];
             for (const [, g] of map) result.push(g);
             result.sort((a, b) => {
@@ -464,6 +541,14 @@ createApp({
                 return a.name.localeCompare(b.name, 'zh');
             });
             return result;
+        });
+
+        // 有搜索词时自动展开所有匹配分组
+        Vue.watch(searchKeyword, () => {
+            if (searchKeyword.value.trim()) {
+                const keys = new Set(groupedUsers.value.map(g => g.key));
+                expandedGroups.value = keys;
+            }
         });
 
         function toggleGroup(key) {
@@ -810,7 +895,7 @@ createApp({
 
         return {
             ready, noPermission, currentUser, loading, users, enterprises,
-            filterRole, fetchUsers,
+            filterRole, fetchUsers, searchKeyword,
             showUserModal, isEdit, form, formError, submitting,
             openCreateModal, openEditModal, closeUserModal, submitUser,
             showResetPwdModal, resetPwdUser, resetPwdForm, resetPwdError,
@@ -820,6 +905,7 @@ createApp({
             groupedUsers, expandedGroups, toggleGroup,
             roleLabel, roleBadgeClass, salesTypeLabel, formatTime,
             allSenders, availableSenders, addSender, removeSender, customSenderId, addCustomSender,
+            mobileMenuOpen,
         };
     }
 }).mount('#app');

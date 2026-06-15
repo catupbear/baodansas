@@ -794,6 +794,72 @@
         }
 
         .nav-links a:hover { color: #1a73e8; }
+
+        /* 移动端侧边栏切换按钮 */
+        .sidebar-toggle {
+            display: none;
+            background: none;
+            border: 1px solid #d0d0d0;
+            border-radius: 6px;
+            width: 32px;
+            height: 32px;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #555;
+            font-size: 18px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        /* 移动端适配 */
+        @media (max-width: 640px) {
+            /* 工具栏 */
+            .toolbar { padding: 0 12px; gap: 8px; flex-wrap: nowrap; }
+            .toolbar-left h1 { font-size: 14px; }
+            .toolbar-stats { display: none; }
+            .toolbar-right { gap: 6px; flex-shrink: 0; }
+            /* 隐藏次要按钮，只保留主操作 */
+            #syncContactsBtn,
+            button[onclick="openRescanModal()"],
+            button[onclick="openQuoteRescanModal()"],
+            .auto-refresh-label,
+            .nav-links { display: none !important; }
+            /* 企业选择下拉缩短 */
+            #corpSelect { max-width: 90px; font-size: 11px; }
+            /* 显示侧边栏切换按钮 */
+            .sidebar-toggle { display: inline-flex; }
+
+            /* 侧边栏：小屏下覆盖在内容上方，默认隐藏 */
+            .sidebar {
+                position: fixed;
+                top: 48px;
+                left: -280px;
+                height: calc(100vh - 48px);
+                z-index: 200;
+                transition: left 0.25s ease;
+                box-shadow: 2px 0 12px rgba(0,0,0,0.15);
+            }
+            .sidebar.open { left: 0; }
+
+            /* 遮罩 */
+            .sidebar-mask {
+                display: none;
+                position: fixed;
+                inset: 0;
+                top: 48px;
+                z-index: 199;
+                background: rgba(0,0,0,0.3);
+            }
+            .sidebar-mask.show { display: block; }
+
+            /* 聊天区占满全宽 */
+            .app-body { position: relative; }
+
+            /* 弹窗宽度 */
+            .contact-modal { width: min(380px, calc(100vw - 32px)) !important; }
+            .rescan-modal { width: min(420px, calc(100vw - 32px)) !important; }
+        }
     </style>
 </head>
 <body>
@@ -801,6 +867,8 @@
 <!-- 顶部工具栏 -->
 <div class="toolbar">
     <div class="toolbar-left">
+        <!-- 移动端侧边栏切换按钮 -->
+        <button class="sidebar-toggle" id="sidebarToggleBtn" onclick="toggleSidebar()">☰</button>
         <h1>企业微信消息监控</h1>
         <div class="toolbar-stats">
             <span>消息 <b class="stat-val" id="statTotal">-</b></span>
@@ -826,10 +894,13 @@
     </div>
 </div>
 
+<!-- 侧边栏遮罩（移动端） -->
+<div class="sidebar-mask" id="sidebarMask" onclick="closeSidebar()"></div>
+
 <!-- 主体 -->
 <div class="app-body">
     <!-- 左侧会话列表 -->
-    <div class="sidebar">
+    <div class="sidebar" id="sidebar">
         <div class="sidebar-search">
             <input type="text" id="convSearch" placeholder="搜索会话..." oninput="debounceSearchConv()">
         </div>
@@ -962,6 +1033,22 @@
 </div>
 
 <script>
+// ===== 移动端侧边栏 =====
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const mask = document.getElementById('sidebarMask');
+    if (sidebar.classList.contains('open')) {
+        closeSidebar();
+    } else {
+        sidebar.classList.add('open');
+        mask.classList.add('show');
+    }
+}
+function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebarMask').classList.remove('show');
+}
+
 // ===== 鉴权工具 =====
 function getToken() { return localStorage.getItem('token'); }
 function checkAuth() { if (!getToken()) { window.location.href = '/login'; return false; } return true; }
@@ -1123,6 +1210,8 @@ function selectConv(convId, roomId, displayName) {
     currentConv = convId;
     currentConvName = displayName;
     currentRoomId = roomId;
+    // 移动端点击会话后收起侧边栏
+    closeSidebar();
     chatMessages = [];
     chatPage = 0;
     lightboxImages = [];

@@ -317,6 +317,45 @@
             animation: spin 0.8s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* 移动端适配 */
+        @media (max-width: 640px) {
+            /* 导航区域 */
+            .nav-header > div { padding: 12px 16px !important; }
+            .nav-header .nav-desktop-items { display: none !important; }
+
+            /* 主内容 */
+            .main-content { padding: 12px !important; }
+
+            /* Tab 导航横向滚动 */
+            .tab-nav { overflow-x: auto; padding-bottom: 0; }
+            .tab-nav::-webkit-scrollbar { height: 0; }
+
+            /* 表格横向滚动 */
+            .alias-table-wrap { overflow-x: auto; }
+            .rule-table-wrap { overflow-x: auto; }
+            .rule-table { min-width: 520px; }
+            .alias-table { min-width: 400px; }
+
+            /* 批量操作栏换行 */
+            .alias-batch-bar { flex-wrap: wrap; gap: 8px; }
+
+            /* 弹窗宽度 */
+            .modal-body { width: min(560px, calc(100vw - 32px)) !important; margin: 0 auto; }
+
+            /* 恢复默认弹窗 */
+            .reset-modal { width: min(340px, calc(100vw - 32px)) !important; }
+
+            /* 日期格式行 */
+            .date-row { grid-template-columns: 1fr !important; gap: 6px !important; }
+            .date-preview { display: none !important; }
+
+            /* 公式弹窗中的双列网格 */
+            .formula-grid { grid-template-columns: 1fr !important; }
+
+            /* 备注 Tab 的双列网格 */
+            .remark-grid { grid-template-columns: 1fr !important; }
+        }
     </style>
 </head>
 <body>
@@ -327,12 +366,12 @@
     <!-- 顶部导航 -->
     <div class="nav-header">
         <div style="max-width:1200px; margin:0 auto; padding:16px 24px;">
-            <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
                 <div style="display:flex; align-items:center; gap:16px;">
                     <a href="/insurance" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:13px;">← 返回保单台账</a>
                     <h1 style="font-size:18px; font-weight:700;">⚙ 系统设置</h1>
                 </div>
-                <div style="display:flex; align-items:center; gap:10px;">
+                <div class="nav-desktop-items" style="display:flex; align-items:center; gap:10px;">
                     <!-- 模板选择下拉 -->
                     <div ref="templateDropdownRef" style="position:relative;">
                         <button class="btn-sync" @click="showTemplateDropdown = !showTemplateDropdown" style="min-width:160px; justify-content:space-between;">
@@ -445,7 +484,7 @@
     </div>
 
     <!-- 主内容区 -->
-    <div style="max-width:1200px; margin:0 auto; padding:24px;">
+    <div class="main-content" style="max-width:1200px; margin:0 auto; padding:24px;">
         <div class="card" style="position:relative;">
             <!-- 加载遮罩 -->
             <div v-if="loading" class="loading-overlay">
@@ -453,7 +492,7 @@
             </div>
 
             <!-- Tab 导航 -->
-            <div style="display:flex; border-bottom:1px solid var(--border-light); padding:0 24px;">
+            <div class="tab-nav" style="display:flex; border-bottom:1px solid var(--border-light); padding:0 24px; white-space:nowrap;">
                 <button class="tab-btn" :class="{active: activeTab==='alias'}" @click="activeTab='alias'">别名设置</button>
                 <button class="tab-btn" :class="{active: activeTab==='date'}" @click="activeTab='date'">日期格式</button>
                 <button class="tab-btn" :class="{active: activeTab==='formula'}" @click="activeTab='formula'">自动计算公式</button>
@@ -587,7 +626,8 @@
                 </div>
 
                 <!-- 规则列表（扁平展示所有字段） -->
-                <table class="rule-table">
+                <div class="rule-table-wrap" style="overflow-x:auto;">
+                <table class="rule-table" style="min-width:520px;">
                     <thead>
                         <tr>
                             <th style="width:120px;">计算字段</th>
@@ -615,6 +655,7 @@
                         </tr>
                     </tbody>
                 </table>
+                </div><!-- /.rule-table-wrap -->
             </div>
 
             <!-- Tab 4: 页面列配置 -->
@@ -792,7 +833,7 @@
                    :style="{cursor: activeSource==='enterprise' ? 'not-allowed' : 'pointer', opacity: activeSource==='enterprise' ? 0.6 : 1}">
                 <input type="checkbox" v-model="remarkCfg.enabled" :disabled="activeSource==='enterprise'"> 启用备注快捷选择
             </label>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; font-size:13px;">
+            <div class="remark-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; font-size:13px;">
                 <label>备注目标字段
                     <select v-model="remarkCfg.target_key" :disabled="activeSource==='enterprise'" style="width:100%; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-top:4px;">
                         <option v-for="k in remarkFieldKeys" :key="k" :value="k">{{ k }}</option>
@@ -896,7 +937,7 @@
                     </select>
                 </div>
                 <!-- 承保公司 + 险种 -->
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
+                <div class="formula-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
                     <div>
                         <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">承保公司</label>
                         <select v-model="formulaForm.company" style="width:100%; padding:8px 12px;">
@@ -956,7 +997,7 @@
 
     <!-- 恢复默认选择弹窗 -->
     <div v-if="resetPending" class="fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,0.3);" @click.self="resetPending=null">
-        <div style="background:#fff; border-radius:12px; padding:24px; width:340px; box-shadow:0 8px 30px rgba(0,0,0,0.15);">
+        <div class="reset-modal" style="background:#fff; border-radius:12px; padding:24px; width:340px; box-shadow:0 8px 30px rgba(0,0,0,0.15);">
             <div style="font-size:15px; font-weight:600; margin-bottom:16px;">恢复列配置</div>
             <div style="font-size:13px; color:#666; margin-bottom:20px;">当前配置将自动备份到新模板，可随时恢复。</div>
             <div style="display:flex; flex-direction:column; gap:10px;">

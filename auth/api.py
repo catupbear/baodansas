@@ -189,6 +189,14 @@ def api_list_users():
         role = ""
 
     users = list_users(_db, role=role, parent_id=parent_id, sales_type=sales_type)
+    # 关键词搜索（姓名/手机号）
+    q = request.args.get("q", "").strip()
+    limit = request.args.get("limit", 0)
+    if q:
+        users = [u for u in users if q in (u.get("name") or "") or q in (u.get("phone") or "")]
+    if limit:
+        try: users = users[:int(limit)]
+        except: pass
     # 填充所属企业名称
     ent_cache = {}
     for u in users:
@@ -435,11 +443,21 @@ def _backfill_records_by_senders(user_id: int, senders: list, enterprise_id: int
 @auth_bp.route("/api/auth/enterprises", methods=["GET"])
 @admin_required
 def api_list_enterprises():
-    """查询企业列表（附带当月PDF识别使用量）"""
+    """查询企业列表（附带当月PDF识别使用量 + 推荐人名称）"""
     enterprises = list_enterprises(_db)
     usage_map = get_monthly_pdf_usage_batch(_db)
+    # 批量查推荐人名称
+    referrer_ids = list({e["referrer_id"] for e in enterprises if e.get("referrer_id")})
+    referrer_map = {}
+    if referrer_ids:
+        from auth.db import get_user_by_id
+        for rid in referrer_ids:
+            u = get_user_by_id(_db, rid)
+            if u:
+                referrer_map[rid] = u.get("name") or u.get("phone", "")
     for ent in enterprises:
         ent["monthly_pdf_usage"] = usage_map.get(ent["id"], 0)
+        ent["referrer_name"] = referrer_map.get(ent.get("referrer_id"), "")
     return jsonify({"code": 0, "data": enterprises})
 
 
@@ -474,8 +492,13 @@ def api_create_enterprise():
 @admin_required
 def api_update_enterprise(eid):
     """更新企业信息"""
+    from auth.db import PLAN_PRICES, add_wallet_commission, get_user_by_id
     data = request.get_json(silent=True) or {}
     try:
+        commission_triggered = False
+        commission_type = None
+        commission_months = 1
+
         if "plan_type" in data or "plan_months" in data:
             stack = data.pop("stack_plan", False)
             new_type = data.get("plan_type")
@@ -490,24 +513,70 @@ def api_update_enterprise(eid):
                     m = cur_start.month - 1 + cur_months
                     expiry = cur_start.replace(year=cur_start.year + m // 12, month=m % 12 + 1)
                     if expiry > datetime.now():
-                        # 当前套餐未到期：将新套餐存为 next_plan，不改当前套餐
                         data.pop("plan_type", None)
                         data.pop("plan_months", None)
                         data["next_plan_type"] = new_type
                         data["next_plan_months"] = new_months
                         data["next_plan_start_at"] = expiry.strftime("%Y-%m-%d %H:%M:%S")
                         update_enterprise(_db, eid, data)
+                        # 叠加续费也触发佣金
+                        commission_triggered = True
+                        commission_type = new_type
+                        commission_months = new_months
+                        _try_pay_commission(eid, commission_type, commission_months, add_wallet_commission, get_enterprise_by_id, get_user_by_id)
                         return jsonify({"code": 0})
-            # 覆盖模式 or 已到期：清除 next_plan，重置开始时间
             data["plan_start_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             data["next_plan_type"] = None
             data["next_plan_months"] = None
             data["next_plan_start_at"] = None
+            commission_triggered = True
+            commission_type = new_type
+            commission_months = new_months
+
         update_enterprise(_db, eid, data)
+        if commission_triggered:
+            _try_pay_commission(eid, commission_type, commission_months, add_wallet_commission, get_enterprise_by_id, get_user_by_id)
         return jsonify({"code": 0})
     except Exception as e:
         logger.exception("更新企业 %d 失败", eid)
         return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+def _try_pay_commission(eid, plan_type, plan_months, add_wallet_commission, get_enterprise_by_id, get_user_by_id):
+    """查找企业推荐人并结算佣金"""
+    from auth.db import PLAN_PRICES
+    try:
+        if not plan_type or plan_type == "enterprise_trial":
+            return
+        unit_price = PLAN_PRICES.get(plan_type, 0)
+        if unit_price <= 0:
+            return
+        ent = get_enterprise_by_id(_db, eid)
+        if not ent:
+            return
+        referrer_id = ent.get("referrer_id")
+        if not referrer_id:
+            return
+        referrer = get_user_by_id(_db, referrer_id)
+        if not referrer:
+            return
+        # 12 的整数倍按年费计算
+        ANNUAL_PRICES = {"standard": 2999, "enterprise": 9999}
+        if plan_months % 12 == 0:
+            years = plan_months // 12
+            total_price = ANNUAL_PRICES.get(plan_type, unit_price * 12) * years
+            billing = f"{years}年（年费）"
+        else:
+            total_price = unit_price * plan_months
+            billing = f"{plan_months}个月"
+        commission = round(total_price * 0.2, 2)
+        plan_label = "企业版" if plan_type == "enterprise" else "标准版"
+        ent_name = ent.get("name", f"企业#{eid}")
+        desc = f"推荐佣金：{ent_name} 开通{plan_label} {billing}"
+        add_wallet_commission(_db, referrer_id, commission, desc, eid)
+        logger.info("佣金结算：推荐人 %d 获得 %.2f 元（%s）", referrer_id, commission, desc)
+    except Exception:
+        logger.exception("佣金结算失败 enterprise=%d", eid)
 
 
 @auth_bp.route("/api/auth/enterprises/<int:eid>", methods=["DELETE"])
@@ -708,3 +777,73 @@ def api_invite_info():
             "downlines": downlines,
         },
     })
+
+
+# ==================== 钱包 ====================
+
+@auth_bp.route("/api/auth/wallet", methods=["GET"])
+@login_required
+def api_get_wallet():
+    """获取当前用户钱包余额和流水"""
+    from auth.db import get_wallet_balance, get_wallet_transactions
+    user_id = g.current_user["user_id"]
+    balance = get_wallet_balance(_db, user_id)
+    transactions = get_wallet_transactions(_db, user_id=user_id, limit=50)
+    return jsonify({"code": 0, "data": {"balance": balance, "transactions": transactions}})
+
+
+@auth_bp.route("/api/auth/wallet/withdraw", methods=["POST"])
+@login_required
+def api_wallet_withdraw():
+    """申请提现"""
+    from auth.db import request_withdrawal
+    user_id = g.current_user["user_id"]
+    data = request.get_json() or {}
+    amount = float(data.get("amount", 0))
+    if amount <= 0:
+        return jsonify({"code": 400, "msg": "提现金额必须大于0"}), 400
+    try:
+        request_withdrawal(_db, user_id, amount)
+        return jsonify({"code": 0, "msg": "提现申请已提交"})
+    except ValueError as e:
+        return jsonify({"code": 400, "msg": str(e)}), 400
+    except Exception as e:
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@auth_bp.route("/api/auth/wallet/all", methods=["GET"])
+@admin_required
+def api_get_all_wallet_transactions():
+    """超管查看所有钱包流水"""
+    from auth.db import get_wallet_transactions
+    txns = get_wallet_transactions(_db, user_id=None, limit=200)
+    return jsonify({"code": 0, "data": txns})
+
+
+@auth_bp.route("/api/auth/wallet/withdraw/<int:txn_id>/approve", methods=["POST"])
+@admin_required
+def api_approve_withdrawal(txn_id):
+    """超管批准提现"""
+    from auth.db import approve_withdrawal
+    approve_withdrawal(_db, txn_id)
+    return jsonify({"code": 0, "msg": "已批准"})
+
+
+@auth_bp.route("/api/auth/wallet/withdraw/<int:txn_id>/reject", methods=["POST"])
+@admin_required
+def api_reject_withdrawal(txn_id):
+    """超管拒绝提现（退回余额）"""
+    from auth.db import reject_withdrawal
+    reject_withdrawal(_db, txn_id)
+    return jsonify({"code": 0, "msg": "已拒绝"})
+
+
+@auth_bp.route("/api/auth/enterprises/<int:eid>/referrer", methods=["PUT"])
+@admin_required
+def api_set_enterprise_referrer(eid):
+    """超管设置企业推荐人"""
+    from auth.db import update_enterprise
+    data = request.get_json() or {}
+    referrer_id = data.get("referrer_id")  # None 表示清除
+    update_enterprise(_db, eid, {"referrer_id": referrer_id})
+    return jsonify({"code": 0, "msg": "ok"})

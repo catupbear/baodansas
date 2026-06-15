@@ -289,7 +289,7 @@ def update_enterprise(db, enterprise_id: int, data: dict):
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        allowed = {"name", "contact_person", "contact_phone", "enabled", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at"}
+        allowed = {"name", "contact_person", "contact_phone", "enabled", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at", "referrer_id"}
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
             return
@@ -652,6 +652,7 @@ def init_enterprise_plan_column(db):
             ("next_plan_type", "VARCHAR(32) DEFAULT NULL COMMENT '下一个套餐类型'"),
             ("next_plan_months", "INT DEFAULT NULL COMMENT '下一个套餐时长（月）'"),
             ("next_plan_start_at", "DATETIME DEFAULT NULL COMMENT '下一个套餐开始时间'"),
+            ("referrer_id", "INT DEFAULT NULL COMMENT '推荐人用户ID'"),
         ]:
             try:
                 cursor.execute(f"ALTER TABLE enterprises ADD COLUMN {col} {definition}")
@@ -874,5 +875,152 @@ def list_all_bindings(db, enterprise_id: int = None) -> list:
             logger.warning("user_sender_binding 表不存在，请重启服务自动建表")
             return []
         raise
+    finally:
+        conn.close()
+
+
+# ==================== 钱包 ====================
+
+PLAN_PRICES = {
+    "standard": 299,
+    "enterprise": 999,
+    "enterprise_trial": 0,
+}
+
+
+def init_wallet_tables(db):
+    """创建钱包和流水表（幂等）"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS wallets (
+                user_id     INT PRIMARY KEY,
+                balance     DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+                updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS wallet_transactions (
+                id              INT PRIMARY KEY AUTO_INCREMENT,
+                user_id         INT NOT NULL,
+                amount          DECIMAL(10,2) NOT NULL,
+                type            VARCHAR(32) NOT NULL COMMENT 'commission/withdraw',
+                description     VARCHAR(256),
+                enterprise_id   INT,
+                status          VARCHAR(16) DEFAULT 'done' COMMENT 'done/pending/rejected',
+                created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_wt_user (user_id),
+                KEY idx_wt_created (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        conn.commit()
+        logger.info("钱包表初始化完成")
+    finally:
+        conn.close()
+
+
+def get_wallet_balance(db, user_id: int) -> float:
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT balance FROM wallets WHERE user_id=%s", (user_id,))
+        row = cursor.fetchone()
+        return float(row["balance"]) if row else 0.0
+    finally:
+        conn.close()
+
+
+def add_wallet_commission(db, user_id: int, amount: float, description: str, enterprise_id: int = None):
+    """给用户钱包加佣金（原子操作）"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO wallets (user_id, balance) VALUES (%s, %s) "
+            "ON DUPLICATE KEY UPDATE balance = balance + %s",
+            (user_id, amount, amount)
+        )
+        cursor.execute(
+            "INSERT INTO wallet_transactions (user_id, amount, type, description, enterprise_id, status) "
+            "VALUES (%s, %s, 'commission', %s, %s, 'done')",
+            (user_id, amount, description, enterprise_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_wallet_transactions(db, user_id: int = None, limit: int = 100) -> list:
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        if user_id:
+            cursor.execute(
+                "SELECT * FROM wallet_transactions WHERE user_id=%s ORDER BY created_at DESC LIMIT %s",
+                (user_id, limit)
+            )
+        else:
+            cursor.execute(
+                "SELECT wt.*, u.name as user_name, u.phone FROM wallet_transactions wt "
+                "LEFT JOIN users u ON u.id = wt.user_id "
+                "ORDER BY wt.created_at DESC LIMIT %s",
+                (limit,)
+            )
+        rows = cursor.fetchall()
+        for r in rows:
+            if r.get("created_at"):
+                r["created_at"] = r["created_at"].strftime("%Y-%m-%d %H:%M")
+            r["amount"] = float(r["amount"])
+        return rows
+    finally:
+        conn.close()
+
+
+def request_withdrawal(db, user_id: int, amount: float) -> int:
+    """申请提现（冻结余额，状态 pending）"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT balance FROM wallets WHERE user_id=%s FOR UPDATE", (user_id,))
+        row = cursor.fetchone()
+        balance = float(row["balance"]) if row else 0.0
+        if amount > balance:
+            raise ValueError("余额不足")
+        cursor.execute("UPDATE wallets SET balance = balance - %s WHERE user_id=%s", (amount, user_id))
+        cursor.execute(
+            "INSERT INTO wallet_transactions (user_id, amount, type, description, status) "
+            "VALUES (%s, %s, 'withdraw', '申请提现', 'pending')",
+            (user_id, amount)
+        )
+        conn.commit()
+        cursor.execute("SELECT LAST_INSERT_ID() as id")
+        return cursor.fetchone()["id"]
+    finally:
+        conn.close()
+
+
+def approve_withdrawal(db, txn_id: int):
+    """超管批准提现"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE wallet_transactions SET status='done' WHERE id=%s AND type='withdraw'", (txn_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def reject_withdrawal(db, txn_id: int):
+    """超管拒绝提现，退回余额"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT user_id, amount FROM wallet_transactions WHERE id=%s AND type='withdraw' AND status='pending'", (txn_id,))
+        row = cursor.fetchone()
+        if row:
+            cursor.execute("UPDATE wallets SET balance = balance + %s WHERE user_id=%s", (row["amount"], row["user_id"]))
+            cursor.execute("UPDATE wallet_transactions SET status='rejected' WHERE id=%s", (txn_id,))
+            conn.commit()
     finally:
         conn.close()

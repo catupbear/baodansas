@@ -290,6 +290,21 @@
             background: var(--primary-bg); border: 1px solid rgba(234,88,12,0.12);
             font-size: 13px;
         }
+
+        /* 移动端适配 */
+        @media (max-width: 640px) {
+            body { padding-bottom: 60px; overflow-x: hidden; }
+            #app { overflow-x: hidden; max-width: 100vw; }
+            .mobile-bottom-nav { display: flex !important; }
+            /* 状态Tab行在移动端换行 */
+            .record-tab-row { flex-wrap: wrap !important; gap: 0 !important; }
+            .record-tab-row .record-actions { width: 100%; border-top: 1px solid #f3f4f6; padding: 8px 12px; justify-content: flex-end; }
+            /* 操作按钮文字隐藏，只留图标 */
+            .record-actions .btn-label { display: none; }
+            /* 表格卡不撑宽页面 */
+            .table-card { overflow-x: hidden !important; }
+            .table-scroll-wrapper { overflow-x: auto !important; }
+        }
     </style>
 </head>
 <body class="min-h-screen" style="background:#faf5f0;">
@@ -308,8 +323,8 @@
                     </div>
                     <h1 class="text-lg font-bold text-white tracking-tight">午虎AI保单台账</h1>
                 </div>
-                <!-- 页面级 Tab 切换 -->
-                <div class="flex items-center gap-1 ml-4">
+                <!-- 页面级 Tab 切换（桌面端显示） -->
+                <div class="hidden sm:flex items-center gap-1 ml-4">
                     <button @click="pageTab = 'records'; loadRecords(); loadRecordStats(); loadRecordCompanies()" :class="pageTab === 'records' ? 'active' : ''" class="page-tab-btn">
                         识别记录
                     </button>
@@ -321,7 +336,8 @@
                     </button>
                 </div>
             </div>
-            <div class="flex items-center gap-2 sm:gap-3">
+            <!-- 右侧功能按钮（桌面端显示） -->
+            <div class="hidden sm:flex items-center gap-2 sm:gap-3">
                 <!-- 字段映射按钮（仅超管 + 手动上传页显示） -->
                 <button v-if="pageTab === 'upload' && currentUser && currentUser.role === 'super_admin'" @click="openMappingModal"
                         class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 12px;font-size:12px;">
@@ -366,13 +382,146 @@
                     </svg>
                     {{ currentUser ? (currentUser.name || currentUser.phone) : '' }}
                 </button>
+                <!-- 通知铃（仅超管） -->
+                <button v-if="isSuperAdmin" @click="openNotifications"
+                        class="btn btn-outline" style="position:relative;background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display:inline;vertical-align:middle;">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 00-5-5.917V5a1 1 0 10-2 0v.083A6 6 0 006 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                    </svg>
+                    通知
+                    <span v-if="notifyUnread > 0"
+                          style="position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;border-radius:999px;font-size:10px;min-width:16px;height:16px;line-height:16px;text-align:center;padding:0 3px;">
+                        {{ notifyUnread > 99 ? '99+' : notifyUnread }}
+                    </span>
+                </button>
                 <!-- 退出 -->
-                <button @click="doLogout()" class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;">
+                <button onclick="localStorage.removeItem('token');localStorage.removeItem('user');sessionStorage.clear();window.location.href='/'" class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;">
                     退出
                 </button>
             </div>
+            <!-- 汉堡按钮（仅移动端） -->
+            <button @click="mobileMenuOpen = !mobileMenuOpen" class="sm:hidden" style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.25);cursor:pointer;flex-shrink:0;">
+                <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+            </button>
         </div>
     </header>
+
+    <!-- ========== 移动端侧滑菜单 ========== -->
+    <div v-if="mobileMenuOpen" class="sm:hidden" style="position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.4);" @click.self="mobileMenuOpen=false">
+        <div style="position:absolute;top:0;right:0;bottom:0;width:260px;background:#fff;overflow-y:auto;box-shadow:-4px 0 24px rgba(0,0,0,0.2);">
+            <!-- 菜单顶部 -->
+            <div style="padding:16px 20px 14px;background:linear-gradient(135deg,#7c2d12,#ea580c);display:flex;align-items:center;justify-content:space-between;">
+                <span style="font-size:15px;font-weight:700;color:#fff;">午虎AI保单台账</span>
+                <button @click="mobileMenuOpen=false" style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:16px;line-height:1;">✕</button>
+            </div>
+            <!-- Tab 切换 -->
+            <div style="padding:12px 16px;border-bottom:1px solid #f3f4f6;">
+                <div style="font-size:11px;color:#9ca3af;font-weight:600;margin-bottom:8px;letter-spacing:.05em;">页面</div>
+                <button @click="pageTab='records';loadRecords();loadRecordStats();loadRecordCompanies();mobileMenuOpen=false"
+                        style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;margin-bottom:3px;"
+                        :style="pageTab==='records'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
+                    识别记录
+                </button>
+                <button @click="pageTab='upload';mobileMenuOpen=false"
+                        style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;margin-bottom:3px;"
+                        :style="pageTab==='upload'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
+                    手动上传
+                </button>
+                <button v-if="isSuperAdmin" @click="pageTab='dashboard';loadDashboard();mobileMenuOpen=false"
+                        style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
+                        :style="pageTab==='dashboard'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
+                    数据看板
+                </button>
+            </div>
+            <!-- 功能链接 -->
+            <div style="padding:12px 16px;border-bottom:1px solid #f3f4f6;">
+                <div style="font-size:11px;color:#9ca3af;font-weight:600;margin-bottom:8px;letter-spacing:.05em;">功能</div>
+                <button v-if="pageTab==='upload' && currentUser && currentUser.role==='super_admin'" @click="openMappingModal();mobileMenuOpen=false"
+                        style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;border:none;background:none;cursor:pointer;margin-bottom:3px;">
+                    字段映射
+                </button>
+                <a href="/insurance/settings" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">系统设置</a>
+                <a v-if="currentUser && currentUser.role==='super_admin'" href="/monitor-config" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">监控设置</a>
+                <a v-if="currentUser && currentUser.role==='super_admin'" href="/admin/users" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">账号管理</a>
+                <button @click="profileVisible=true;loadQuota();mobileMenuOpen=false"
+                        style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;border:none;background:none;cursor:pointer;margin-bottom:3px;">
+                    个人中心 · {{ currentUser ? (currentUser.name || currentUser.phone) : '' }}
+                </button>
+                <button v-if="isSuperAdmin" @click="openNotifications();mobileMenuOpen=false"
+                        style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;border:none;background:none;cursor:pointer;">
+                    通知
+                    <span v-if="notifyUnread>0" style="display:inline-block;background:#ef4444;color:#fff;border-radius:999px;font-size:10px;min-width:16px;height:16px;line-height:16px;text-align:center;padding:0 3px;margin-left:4px;">{{ notifyUnread > 99 ? '99+' : notifyUnread }}</span>
+                </button>
+            </div>
+            <!-- 退出 -->
+            <div style="padding:12px 16px;">
+                <button onclick="localStorage.removeItem('token');localStorage.removeItem('user');sessionStorage.clear();window.location.href='/'"
+                        style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;color:#dc2626;border:none;background:none;cursor:pointer;">
+                    退出登录
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 报错弹窗 ========== -->
+    <teleport to="body">
+      <div v-if="showErrorReportModal" @click.self="showErrorReportModal=false"
+           style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9000;display:flex;align-items:center;justify-content:center;">
+        <div style="background:#fff;border-radius:16px;padding:28px 24px;width:420px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+          <div style="font-size:16px;font-weight:700;color:#1f2937;margin-bottom:4px;">报告问题</div>
+          <div v-if="errorReportRecord" style="font-size:12px;color:#6b7280;margin-bottom:16px;">
+            {{ errorReportRecord.filename }} · {{ (errorReportRecord.display_fields||{})['保单号'] || errorReportRecord.policy_no || '' }}
+          </div>
+          <textarea v-model="errorReportDesc" rows="4" placeholder="请描述识别错误或问题，例如：保单号识别有误、险种填写不对等……"
+                    style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:8px;padding:10px 12px;font-size:13px;resize:vertical;outline:none;color:#374151;"></textarea>
+          <div v-if="errorReportMsg" style="font-size:12px;margin-top:6px;" :style="{color: errorReportOk ? '#16a34a' : '#dc2626'}">{{ errorReportMsg }}</div>
+          <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end;">
+            <button @click="showErrorReportModal=false" class="btn btn-outline" style="padding:7px 18px;font-size:13px;">取消</button>
+            <button @click="submitErrorReport" :disabled="errorReportSubmitting"
+                    class="btn" style="padding:7px 18px;font-size:13px;background:#f59e0b;color:#fff;border:none;">
+              {{ errorReportSubmitting ? '提交中…' : '提交' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <!-- ========== 通知面板（超管） ========== -->
+    <teleport to="body">
+      <div v-if="showNotifyPanel" @click.self="showNotifyPanel=false"
+           style="position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9000;display:flex;align-items:flex-start;justify-content:flex-end;padding:64px 16px 0 0;">
+        <div style="background:#fff;border-radius:16px;width:480px;max-width:95vw;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.2);overflow:hidden;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #f3f4f6;flex-shrink:0;">
+            <div style="font-size:15px;font-weight:700;color:#1f2937;">用户反馈
+              <span v-if="notifyUnread>0" style="margin-left:6px;background:#ef4444;color:#fff;border-radius:999px;font-size:11px;padding:1px 7px;">{{ notifyUnread }}</span>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button v-if="notifyUnread>0" @click="markAllRead" style="font-size:12px;color:#f97316;background:none;border:none;cursor:pointer;padding:0;">全部标为已读</button>
+              <button @click="showNotifyPanel=false" style="background:none;border:none;cursor:pointer;color:#9ca3af;font-size:18px;line-height:1;">&times;</button>
+            </div>
+          </div>
+          <div style="overflow-y:auto;flex:1;">
+            <div v-if="notifyLoading" style="text-align:center;padding:32px;color:#9ca3af;">加载中…</div>
+            <div v-else-if="!notifyList.length" style="text-align:center;padding:40px;color:#9ca3af;">暂无反馈</div>
+            <div v-for="item in notifyList" :key="item.id"
+                 style="padding:14px 20px;border-bottom:1px solid #f9fafb;cursor:pointer;"
+                 :style="{background: item.status==='unread' ? '#fffbeb' : '#fff'}"
+                 @click="markRead(item)">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                <span v-if="item.status==='unread'" style="width:6px;height:6px;border-radius:50%;background:#f97316;flex-shrink:0;"></span>
+                <span style="font-size:13px;font-weight:600;color:#1f2937;">{{ item.user_name }}</span>
+                <span style="font-size:11px;color:#9ca3af;">{{ item.enterprise }}</span>
+                <span style="font-size:11px;color:#9ca3af;margin-left:auto;">{{ item.created_at }}</span>
+              </div>
+              <div v-if="item.filename" style="font-size:11px;color:#6b7280;margin-bottom:4px;">{{ item.filename }}</div>
+              <div style="font-size:13px;color:#374151;white-space:pre-wrap;">{{ item.description }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </teleport>
 
     <!-- ========== 配额警告弹窗 ========== -->
     <div v-if="quotaWarn" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:center;justify-content:center;">
@@ -522,7 +671,7 @@
 
                 <!-- 我的钱包 -->
                 <div style="border-bottom:1px solid #f5f5f5;">
-                    <div @click="profileTab = profileTab==='wallet' ? '' : 'wallet'" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;cursor:pointer;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+                    <div @click="profileTab = profileTab==='wallet' ? '' : 'wallet'; if(profileTab==='wallet') loadWallet()" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;cursor:pointer;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
                         <div style="display:flex;align-items:center;gap:10px;">
                             <div style="width:32px;height:32px;border-radius:8px;background:#fff7ed;display:flex;align-items:center;justify-content:center;">
                                 <svg width="16" height="16" fill="none" stroke="#f07c3e" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
@@ -532,17 +681,32 @@
                         <svg :style="{transform: profileTab==='wallet' ? 'rotate(90deg)' : ''}" style="transition:transform 0.2s;width:16px;height:16px;color:#bbb" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                     </div>
                     <div v-if="profileTab==='wallet'" style="padding:0 20px 16px;">
-                        <div style="background:#fafafa;border-radius:10px;padding:16px;text-align:center;">
-                            <div style="font-size:12px;color:#999;margin-bottom:6px;">账户余额（元）</div>
-                            <div style="font-size:32px;font-weight:700;color:#f07c3e;">0.00</div>
-                            <div style="font-size:11px;color:#bbb;margin-top:8px;">充值功能即将上线</div>
-                        </div>
-                        <button v-if="isChannelSales"
-                            @click="showWithdrawModal = true"
-                            style="width:100%;margin-top:12px;padding:10px 0;border-radius:8px;background:#f07c3e;color:#fff;font-size:14px;font-weight:500;border:none;cursor:pointer;"
-                            onmouseover="this.style.background='#e06b2e'" onmouseout="this.style.background='#f07c3e'">
-                            申请提现
-                        </button>
+                        <div v-if="walletLoading" style="text-align:center;color:#aaa;padding:12px 0;font-size:12px;">加载中…</div>
+                        <template v-else>
+                            <div style="background:linear-gradient(135deg,#f97316,#f59e0b);border-radius:12px;padding:20px;text-align:center;color:#fff;margin-bottom:12px;">
+                                <div style="font-size:12px;opacity:0.85;margin-bottom:4px;">账户余额（元）</div>
+                                <div style="font-size:36px;font-weight:800;letter-spacing:-1px;">{{ walletBalance.toFixed(2) }}</div>
+                            </div>
+                            <!-- 提现按钮 -->
+                            <button v-if="walletBalance > 0" @click="showWithdrawModal = true"
+                                style="width:100%;margin-bottom:12px;padding:10px 0;border-radius:8px;background:#f07c3e;color:#fff;font-size:14px;font-weight:500;border:none;cursor:pointer;">
+                                申请提现
+                            </button>
+                            <!-- 流水记录 -->
+                            <div style="font-size:12px;color:#6b7280;font-weight:500;margin-bottom:6px;">佣金流水</div>
+                            <div v-if="!walletTransactions.length" style="font-size:12px;color:#bbb;text-align:center;padding:8px 0;">暂无记录</div>
+                            <div v-for="tx in walletTransactions" :key="tx.id"
+                                 style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f5f5f5;font-size:12px;">
+                                <div>
+                                    <div style="color:#374151;">{{ tx.description }}</div>
+                                    <div style="color:#9ca3af;font-size:11px;">{{ tx.created_at }}</div>
+                                </div>
+                                <div :style="{color: tx.type==='commission' ? '#16a34a' : '#f97316', fontWeight:600}">
+                                    {{ tx.type==='commission' ? '+' : '-' }}¥{{ tx.amount.toFixed(2) }}
+                                    <span v-if="tx.status==='pending'" style="font-size:10px;color:#9ca3af;">审核中</span>
+                                </div>
+                            </div>
+                        </template>
                     </div>
                 </div>
 
@@ -1115,24 +1279,29 @@
         <div v-else-if="dashboardData">
 
             <!-- 时间范围切换 -->
-            <div class="flex items-center gap-2 mb-5">
-                <span class="text-sm text-gray-500">时间范围：</span>
-                <button v-for="opt in periodOptions" :key="opt.value"
-                    @click="dashboardPeriod = opt.value; loadDashboard()"
-                    :class="dashboardPeriod === opt.value ? 'bg-orange-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-orange-300'"
-                    class="px-3 py-1 rounded-full text-xs font-medium transition-all">
-                    {{ opt.label }}
-                </button>
-                <span class="text-gray-300 mx-1">|</span>
-                <span class="text-sm text-gray-500">企业：</span>
-                <select v-model="dashboardEnterprise" @change="loadDashboard()"
-                    class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600 outline-none focus:border-orange-400" style="max-width:130px">
-                    <option value="">全部</option>
-                    <option v-for="e in dashboardEnterprises" :key="e.id" :value="e.id">{{ e.name }}</option>
-                </select>
-                <button v-if="dashboardEnterprise"
-                    @click="dashboardEnterprise=''; loadDashboard()"
-                    class="text-xs text-gray-400 hover:text-orange-500 transition-colors">✕ 清空</button>
+            <div class="mb-4">
+                <!-- 时间按钮行（可横向滚动） -->
+                <div class="flex items-center gap-2 mb-2" style="overflow-x:auto;overflow-y:visible;padding-bottom:2px;">
+                    <span class="text-sm text-gray-500 whitespace-nowrap flex-shrink-0">时间范围：</span>
+                    <button v-for="opt in periodOptions" :key="opt.value"
+                        @click="dashboardPeriod = opt.value; loadDashboard()"
+                        :class="dashboardPeriod === opt.value ? 'bg-orange-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-orange-300'"
+                        class="px-3 py-1 rounded-full text-xs font-medium transition-all flex-shrink-0">
+                        {{ opt.label }}
+                    </button>
+                </div>
+                <!-- 企业筛选行 -->
+                <div v-if="isSuperAdmin" class="flex items-center gap-2">
+                    <span class="text-sm text-gray-500 whitespace-nowrap">企业：</span>
+                    <select v-model="dashboardEnterprise" @change="loadDashboard()"
+                        class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600 outline-none focus:border-orange-400" style="max-width:160px">
+                        <option value="">全部</option>
+                        <option v-for="e in dashboardEnterprises" :key="e.id" :value="e.id">{{ e.name }}</option>
+                    </select>
+                    <button v-if="dashboardEnterprise"
+                        @click="dashboardEnterprise=''; loadDashboard()"
+                        class="text-xs text-gray-400 hover:text-orange-500 transition-colors">✕ 清空</button>
+                </div>
             </div>
 
             <!-- 总览指标卡片 -->
@@ -1166,7 +1335,10 @@
                 <!-- 趋势折线图（今日/昨日不显示） -->
                 <div v-if="dashboardPeriod !== 'today' && dashboardPeriod !== 'yesterday'" class="lg:col-span-2 bg-white rounded-xl p-5 shadow-sm border border-gray-100">
                     <div class="text-sm font-semibold text-gray-700 mb-4">{{ periodLabel }} 识别趋势</div>
-                    <canvas ref="trendCanvas" style="width:100%;height:180px;display:block"></canvas>
+                    <div style="position:relative">
+                      <canvas ref="trendCanvas" style="width:100%;height:180px;display:block" @mousemove="onChartMouseMove" @mouseleave="onChartMouseLeave"></canvas>
+                      <div ref="trendTooltip" style="display:none;position:absolute;background:rgba(30,30,30,0.88);color:#fff;padding:8px 12px;border-radius:8px;font-size:12px;pointer-events:none;white-space:nowrap;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,0.18);line-height:1.8"></div>
+                    </div>
                     <div class="flex gap-4 mt-3 text-xs text-gray-500">
                         <span class="flex items-center gap-1"><span style="display:inline-block;width:16px;height:2px;background:#f97316"></span>总量</span>
                         <span class="flex items-center gap-1"><span style="display:inline-block;width:16px;height:2px;background:#22c55e"></span>成功</span>
@@ -1535,7 +1707,7 @@
         <!-- 状态 Tab + 操作按钮 + 筛选 -->
         <div class="card">
             <!-- 状态 Tab 栏 + 操作按钮 -->
-            <div class="flex items-center px-4" style="gap:0;min-height:48px;">
+            <div class="flex items-center px-4 record-tab-row" style="gap:0;min-height:48px;">
                 <button v-for="tab in recordTabs" :key="tab.key"
                         @click="recordActiveTab = tab.key; loadRecords()"
                         class="px-4 py-3 text-sm font-medium transition-colors relative flex-shrink-0"
@@ -1550,24 +1722,24 @@
                     </span>
                 </button>
                 <!-- 操作按钮 -->
-                <div class="ml-auto flex items-center gap-2">
-                    <button @click="exportRecordsExcel" class="btn btn-success" style="padding:6px 14px;font-size:13px;">
+                <div class="ml-auto flex items-center gap-2 record-actions">
+                    <button @click="exportRecordsExcel" class="btn btn-success" style="padding:6px 14px;font-size:13px;" title="导出Excel">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
-                        导出Excel
+                        <span class="btn-label">导出Excel</span>
                     </button>
-                    <button @click="batchDownload" class="btn" style="padding:6px 14px;font-size:13px;background:#f0fdf4;border:1px solid #86efac;color:#16a34a;">
+                    <button @click="batchDownload" class="btn" style="padding:6px 14px;font-size:13px;background:#f0fdf4;border:1px solid #86efac;color:#16a34a;" title="批量导出保单">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                         </svg>
-                        批量导出保单{{ selectedRecordIds.length ? ` (${selectedRecordIds.length})` : '' }}
+                        <span class="btn-label">批量导出保单{{ selectedRecordIds.length ? ` (${selectedRecordIds.length})` : '' }}</span>
                     </button>
-                    <button @click="batchReocrSync" :disabled="batchProcessing" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">
+                    <button @click="batchReocrSync" :disabled="batchProcessing" class="btn btn-primary" style="padding:6px 14px;font-size:13px;" title="批量重新识别">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                         </svg>
-                        {{ batchProcessing ? '处理中...' : '批量重新识别' }}{{ !batchProcessing && selectedRecordIds.length ? ` (${selectedRecordIds.length})` : '' }}
+                        <span class="btn-label">{{ batchProcessing ? '处理中...' : '批量重新识别' }}{{ !batchProcessing && selectedRecordIds.length ? ` (${selectedRecordIds.length})` : '' }}</span>
                     </button>
                 </div>
             </div>
@@ -1590,7 +1762,7 @@
         </div>
 
         <!-- 记录表格 -->
-        <div class="card" style="display:flex;flex-direction:column;max-height:calc(100vh - 280px);">
+        <div class="card table-card" style="display:flex;flex-direction:column;max-height:calc(100vh - 280px);">
             <!-- 加载中 / 空数据提示（独立于表格，不受列宽影响） -->
             <div v-if="isLoadingRecords" class="text-center py-12 text-gray-400">
                 <svg class="w-6 h-6 animate-spin mx-auto mb-2 text-orange-400" fill="none" viewBox="0 0 24 24">
@@ -1807,6 +1979,11 @@
                                             @click="openDeleteRecord(record)"
                                             class="btn" style="padding:3px 8px;font-size:11px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;">
                                         删除
+                                    </button>
+                                    <!-- 报错 -->
+                                    <button @click="openErrorReport(record)"
+                                            class="btn" style="padding:3px 8px;font-size:11px;background:#fef9c3;border:1px solid #fde047;color:#854d0e;">
+                                        报错
                                     </button>
                                 </div>
                             </td>
@@ -3031,6 +3208,41 @@
         </div>
     </teleport>
 
+    <!-- ========== 移动端底部 Tab 栏 ========== -->
+    <div class="sm:hidden mobile-bottom-nav" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:99;background:#fff;border-top:1px solid #e7e0d8;height:56px;box-shadow:0 -2px 10px rgba(0,0,0,0.07);">
+        <button @click="pageTab='records';loadRecords();loadRecordStats();loadRecordCompanies()"
+                style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;"
+                :style="pageTab==='records'?'color:#ea580c;':'color:#9ca3af;'">
+            <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <span style="font-size:10px;font-weight:500;">识别记录</span>
+        </button>
+        <button @click="pageTab='upload'"
+                style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;"
+                :style="pageTab==='upload'?'color:#ea580c;':'color:#9ca3af;'">
+            <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+            </svg>
+            <span style="font-size:10px;font-weight:500;">手动上传</span>
+        </button>
+        <button v-if="isSuperAdmin" @click="pageTab='dashboard';loadDashboard()"
+                style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;"
+                :style="pageTab==='dashboard'?'color:#ea580c;':'color:#9ca3af;'">
+            <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+            <span style="font-size:10px;font-weight:500;">数据看板</span>
+        </button>
+        <button @click="mobileMenuOpen=true"
+                style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;color:#9ca3af;">
+            <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+            <span style="font-size:10px;font-weight:500;">更多</span>
+        </button>
+    </div>
+
 </div>
 
 <script>
@@ -3038,7 +3250,7 @@
 function getToken() { return localStorage.getItem('token'); }
 function getUser() { try { return JSON.parse(localStorage.getItem('user')); } catch { return null; } }
 function checkAuth() { if (!getToken()) { window.location.href = '/login'; return false; } return true; }
-function doLogout() { localStorage.removeItem('token'); localStorage.removeItem('user'); window.location.href = '/login'; }
+function doLogout() { localStorage.removeItem('token'); localStorage.removeItem('user'); window.location.href = '/'; }
 function authHeaders() { return { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' }; }
 async function authFetch(url, options = {}) {
     if (!options.headers) options.headers = {};
@@ -3080,6 +3292,112 @@ const _app = createApp({
         const quotaLoading = ref(false);
         const quotaWarn = ref(null); // { remaining, level: 'low'|'very_low'|'critical' }
 
+        // ---- 钱包 ----
+        const walletBalance = ref(0);
+        const walletTransactions = ref([]);
+        const walletLoading = ref(false);
+        async function loadWallet() {
+            walletLoading.value = true;
+            try {
+                const res = await authFetch('/api/auth/wallet');
+                const json = await res.json();
+                if (json.code === 0) {
+                    walletBalance.value = json.data.balance;
+                    walletTransactions.value = json.data.transactions;
+                }
+            } catch(e) {}
+            finally { walletLoading.value = false; }
+        }
+
+
+        // ---- 报错反馈 ----
+        const showErrorReportModal = ref(false);
+        const errorReportRecord = ref(null);
+        const errorReportDesc = ref('');
+        const errorReportSubmitting = ref(false);
+        const errorReportMsg = ref('');
+        const errorReportOk = ref(false);
+
+        function openErrorReport(record) {
+            errorReportRecord.value = record;
+            errorReportDesc.value = '';
+            errorReportMsg.value = '';
+            errorReportOk.value = false;
+            showErrorReportModal.value = true;
+        }
+
+        async function submitErrorReport() {
+            if (!errorReportDesc.value.trim()) { errorReportMsg.value = '请描述问题'; errorReportOk.value = false; return; }
+            errorReportSubmitting.value = true;
+            try {
+                const r = errorReportRecord.value || {};
+                const fields = r.display_fields || {};
+                const res = await authFetch('/api/insurance/error-report', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        record_id: r.id,
+                        filename: r.filename || '',
+                        policy_no: fields['保单号'] || r.policy_no || '',
+                        enterprise: r.enterprise_name || r.enterprise || '',
+                        description: errorReportDesc.value.trim()
+                    })
+                });
+                const json = await res.json();
+                if (json.code === 0) {
+                    errorReportMsg.value = '已提交，感谢反馈！';
+                    errorReportOk.value = true;
+                    setTimeout(() => { showErrorReportModal.value = false; }, 1200);
+                } else {
+                    errorReportMsg.value = json.msg || '提交失败';
+                    errorReportOk.value = false;
+                }
+            } catch(e) { errorReportMsg.value = '网络错误'; errorReportOk.value = false; }
+            finally { errorReportSubmitting.value = false; }
+        }
+
+        // ---- 通知面板（超管） ----
+        const showNotifyPanel = ref(false);
+        const notifyList = ref([]);
+        const notifyUnread = ref(0);
+        const notifyLoading = ref(false);
+
+        async function pollNotifyUnread() {
+            if (!isSuperAdmin.value) return;
+            try {
+                const res = await authFetch('/api/insurance/error-reports/unread-count');
+                const json = await res.json();
+                if (json.code === 0) notifyUnread.value = json.data.unread;
+            } catch(e) {}
+        }
+
+        async function openNotifications() {
+            showNotifyPanel.value = true;
+            notifyLoading.value = true;
+            try {
+                const res = await authFetch('/api/insurance/error-reports');
+                const json = await res.json();
+                if (json.code === 0) {
+                    notifyList.value = json.data.list;
+                    notifyUnread.value = json.data.unread;
+                }
+            } catch(e) {}
+            finally { notifyLoading.value = false; }
+        }
+
+        async function markRead(item) {
+            if (item.status === 'unread') {
+                item.status = 'read';
+                notifyUnread.value = Math.max(0, notifyUnread.value - 1);
+                authFetch(`/api/insurance/error-reports/${item.id}/read`, { method: 'POST' }).catch(()=>{});
+            }
+        }
+
+        async function markAllRead() {
+            notifyList.value.forEach(i => { i.status = 'read'; });
+            notifyUnread.value = 0;
+            authFetch('/api/insurance/error-reports/read-all', { method: 'POST' }).catch(()=>{});
+        }
+
         async function loadQuota() {
             quotaLoading.value = true;
             try {
@@ -3088,8 +3406,10 @@ const _app = createApp({
                 if (data.code === 0) {
                     quotaInfo.value = data.data;
                     checkQuotaWarn(data.data);
-                    // 未绑定企业 或 已绑定企业但没有套餐 → 弹激活提醒（每次登录只弹一次）
-                    const needActivate = data.data.no_enterprise || !data.data.plan_type;
+                    // 仅对普通用户（非超管、非企业管理员）弹激活提醒
+                    const role = currentUser.value && currentUser.value.role;
+                    const isAdminRole = role === 'super_admin' || role === 'enterprise';
+                    const needActivate = !isAdminRole && (data.data.no_enterprise || !data.data.plan_type);
                     if (needActivate && !sessionStorage.getItem('activate_reminded')) {
                         sessionStorage.setItem('activate_reminded', '1');
                         showActivateModal.value = true;
@@ -3194,6 +3514,9 @@ const _app = createApp({
             });
         }
 
+        // ========== 移动端菜单 ==========
+        const mobileMenuOpen = ref(false);
+
         // ========== 页面级 Tab ==========
         const pageTab = ref('records');  // 'records' | 'upload' | 'dashboard'
 
@@ -3227,6 +3550,36 @@ const _app = createApp({
             return Math.min(100, val / max * 100).toFixed(1) + '%';
         }
 
+        const trendTooltip = Vue.ref(null);
+        let _trendData = [], _trendPad = { top:10, bottom:24, left:6, right:6 }, _trendStepX = 0, _trendW = 0;
+
+        function onChartMouseMove(e) {
+            const canvas = trendCanvas.value;
+            const tooltip = trendTooltip.value;
+            if (!canvas || !tooltip || !_trendData.length) return;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const idx = Math.min(Math.max(Math.round((mouseX - _trendPad.left) / _trendStepX), 0), _trendData.length - 1);
+            const r = _trendData[idx];
+            if (!r) return;
+            const label = r.label || r.day || '';
+            tooltip.innerHTML = `<div style="margin-bottom:2px;font-weight:600;color:#e5e7eb">${label}</div>`
+                + `<div><span style="color:#f97316">●</span> 总量：<b>${r.total || 0}</b></div>`
+                + `<div><span style="color:#22c55e">●</span> 成功：<b>${r.done || 0}</b></div>`
+                + `<div><span style="color:#f87171">●</span> 失败：<b>${r.failed || 0}</b></div>`;
+            const tipW = 130;
+            let left = _trendPad.left + idx * _trendStepX + 14;
+            if (left + tipW > _trendW) left = _trendPad.left + idx * _trendStepX - tipW - 6;
+            tooltip.style.left = left + 'px';
+            tooltip.style.top = '8px';
+            tooltip.style.display = 'block';
+        }
+
+        function onChartMouseLeave() {
+            const t = trendTooltip.value;
+            if (t) t.style.display = 'none';
+        }
+
         function drawTrendChart(trend) {
             const canvas = trendCanvas.value;
             if (!canvas || !trend || !trend.length) return;
@@ -3239,6 +3592,7 @@ const _app = createApp({
             const pad = { top: 10, bottom: 24, left: 6, right: 6 };
             const chartW = W - pad.left - pad.right;
             const chartH = H - pad.top - pad.bottom;
+            _trendData = trend; _trendPad = pad; _trendStepX = chartW / Math.max(trend.length - 1, 1); _trendW = W;
             const maxVal = Math.max(...trend.map(r => Number(r.total) || 0), 1);
             const stepX = chartW / Math.max(trend.length - 1, 1);
             const getX = i => pad.left + i * stepX;
@@ -3540,6 +3894,10 @@ const _app = createApp({
                         for (const [ocrField, outCol] of Object.entries(mapping)) {
                             if (outCol === col.key && fields[ocrField]) { value = fields[ocrField]; break; }
                         }
+                    }
+                    // 互补数据兜底：parsed_fields 里没有时从 display_fields 取（如从文件名提取的车牌、跨保单补充的车架号）
+                    if (!value && rec.display_fields) {
+                        value = rec.display_fields[col.key] || '';
                     }
                     return { label: col.display_name, value, key: col.key };
                 });
@@ -4621,6 +4979,8 @@ const _app = createApp({
         function isDateField(fieldName) {
             return /日期|时间|到期/.test(fieldName || '');
         }
+
+
 
         // 将各种中文日期格式转为 YYYY-MM-DD（date input 需要）
         function normalizeDateForInput(val) {
@@ -6396,6 +6756,10 @@ const _app = createApp({
             previewShowRules.value = false;
             try {
                 const resp = await authFetch(`/api/insurance/reocr/${record.id}`, { method: 'POST' });
+                const ct = resp.headers.get('content-type') || '';
+                if (!ct.includes('application/json')) {
+                    throw new Error(`服务器繁忙或超时（${resp.status}），请稍后重试`);
+                }
                 const data = await resp.json();
                 if (data.code === 0) {
                     showMessage(data.msg || '重新识别完成', true);
@@ -6695,13 +7059,18 @@ const _app = createApp({
             loadRemarkSelectorConfig();
             // 检查配额警告（仅标准版）
             await loadQuota();
+            // 超管轮询未读通知数
+            if (isSuperAdmin.value) {
+                pollNotifyUnread();
+                setInterval(pollNotifyUnread, 30000);
+            }
         });
 
         return {
             // 页面Tab
             pageTab,
             // 数据看板
-            dashboardData, dashboardLoading, dashboardDays, dashboardPeriod, periodOptions, periodLabel, loadDashboard, sourceDist, trendCanvas, barPct,
+            dashboardData, dashboardLoading, dashboardDays, dashboardPeriod, periodOptions, periodLabel, loadDashboard, sourceDist, trendCanvas, trendTooltip, onChartMouseMove, onChartMouseLeave, barPct,
             dashboardEnterprise, dashboardCompany, dashboardEnterprises, dashboardCompanies,
             // 配置状态
             configStatus,
@@ -6770,6 +7139,16 @@ const _app = createApp({
             shareLink, shareCopied, inviteInfo, inviteLoading, loadInviteInfo,
             quotaInfo, quotaLoading, loadQuota, quotaPlanExpiry, quotaDaysLeft, quotaWarn,
             closeProfile, saveName, savePwd, copyShareLink,
+            // 钱包
+            walletBalance, walletTransactions, walletLoading, loadWallet,
+            // 报错反馈
+            showErrorReportModal, errorReportRecord, errorReportDesc, errorReportSubmitting,
+            errorReportMsg, errorReportOk, openErrorReport, submitErrorReport,
+            // 通知面板
+            showNotifyPanel, notifyList, notifyUnread, notifyLoading,
+            openNotifications, markRead, markAllRead,
+            // 移动端菜单
+            mobileMenuOpen,
             // 设置已迁移到 /monitor-config 页面
         };
     },

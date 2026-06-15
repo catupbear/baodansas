@@ -176,7 +176,7 @@ def _is_valid_person(val: str) -> bool:
     if re.search(r'公司|集团|合伙|工厂|商行|商贸|车行(?!驶)|车队|事务所|经营部|经营店|经销商|专营店|服务部|加工厂|养殖场|合作社|研究院|研究所|设计院|分院|医院|学院|中心|个体工商户|协会|商会|学会|联合会|促进会|基金会', val) or val_no_paren.endswith('店') or has_location_paren:
         # 公司名允许长一些，但不能超过 30 字
         # 排除含动词/条款用语/保险术语的句子片段（如"向本公司提出的申请"）
-        if re.search(r'提出|提供|负责|承担|向.*公司|本公司.*的|申请|告知|声明|附加.*险|附加.*费|损失费|保险费', val):
+        if re.search(r'提出|提供|负责|承担|向.*公司|本公司.*的|申请|告知|声明|附加.*险|附加.*费|损失费|保险费|约定|载明', val):
             return False
         # 排除含服务提示/通知类用语的句子（如"若对查询结果有异议,请通过以上三种渠道联系本公司"）
         if re.search(r'查询|异议|渠道|联系|客服|拨打|核对|办理|满意|反映|投诉|若|请|通过', val):
@@ -369,6 +369,7 @@ def _identify_policy_type(text: str) -> Optional[str]:
         r"(特种车商业保险)",               # 太平/京东安联特种车格式
         r"(新能源汽车交通事故责任强制保险)",
         r"(机动车交通事故责任强制保险)",
+        r"(机动车交通事故强制保险)",          # 紫金等标题无"责任"字的交强险格式
         r"(非?家庭自用车?驾乘人员人身意外伤害保险)",
         r"(驾乘综合保险)",
         r"(驾乘人员人身意外伤害保险)",
@@ -473,7 +474,7 @@ def get_policy_type_code(policy_type: str) -> tuple:
         return "commercial", "商业险"
     if "驾意" in policy_type:
         return "accident", "驾乘/意外险"
-    if "交通事故责任强制" in policy_type:
+    if "交通事故责任强制" in policy_type or "交通事故强制保险" in policy_type:
         return "compulsory", "交强险"
     if "商业保险" in policy_type or "机动车辆保险" in policy_type or "机动车辆综合险" in policy_type:
         return "commercial", "商业险"
@@ -1183,6 +1184,12 @@ def _extract_policy_no(text: str, fields: dict, company_short: str, policy_type:
                 # 顺便存投保确认时间
                 fields["收费确认时间"] = m.group(2)
                 return
+        # 紫金交通意外等格式："保单号码：20736244010726O002XX"
+        # pdfplumber 可能在号码后直接跟时间戳，如 "保单号码：20736244010726O002XX2014 11:38:27"
+        m = re.search(r"保单号码[：:]\s*([A-Za-z0-9]{10,})", text)
+        if m:
+            fields["保单号"] = m.group(1)
+            return
 
     # 太平洋格式：pdfplumber 提取时保单号出现在"保险单号："标签的上一行，
     # 标签下方是 DZCC 条码号，通用正则会误取 DZCC
@@ -2577,6 +2584,14 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
         if _is_valid_person(val):
             fields["车主"] = val
     if "车主" not in fields:
+        # 紫金等表格格式："行驶证车主  行驶区域\n（况）叶宇轩"——车主名在下一行
+        # 侧栏"情况"被拆成两行，"况"字可能出现在值行前面
+        m = re.search(r"行驶证车主\s+行驶区域\s*\n+(?:[一-鿿]\s+)?([一-鿿]{2,5})", text)
+        if m:
+            val = m.group(1).strip()
+            if _is_valid_person(val):
+                fields["车主"] = val
+    if "车主" not in fields:
         for p in [
             r"(?:行驶证)?车主(?:\s*名称)?[：:\s]+(\S+?)(?:\s|$|投保人)",
             r"车主\s+(\S+?)(?:\s|$)",
@@ -2584,6 +2599,8 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
             m = re.search(p, text)
             if m:
                 val = m.group(1)
+                if "区域" in val or "地址" in val or "号码" in val:
+                    continue  # 跳过列标题误匹配
                 if _is_valid_person(val):
                     fields["车主"] = val
                     break
@@ -3632,6 +3649,8 @@ def parse_policy_text(text: str) -> Dict[str, Any]:
 _POLICY_HEADER_PATTERNS = [
     # 交强险标题行："机动车交通事故责任强制保险单" 或 "...强制保险 保险单（电子保单）"
     (r"交通事故责任强制保险[^，。,;；\n]{0,20}?(?:电子保险单|电子保单|保\s*单|单)", "compulsory"),
+    # 紫金等无"责任"字的交强险标题："机动车交通事故强制保险单（电子保单）"
+    (r"交通事故强制保险[^，。,;；\n]{0,20}?(?:电子保险单|电子保单|保\s*单|单)", "compulsory"),
     # 商业险标题行："机动车商业保险保险单（电子保单）"
     (r"(?:新能源汽车|机动车|特种车)(?:辆)?(?:商业保险|综合险)[^，。,;；\n]{0,20}?(?:电子保险单|电子保单|保险单|保\s*单)", "commercial"),
     # 驾乘/意外险标题行："机动车驾乘人员人身意外伤害保险（2022 版）电子保险单"

@@ -24,7 +24,7 @@ from insurance.monitor_config_db import init_monitor_config_table, migrate_from_
 from insurance.handler import InsuranceHandler
 from insurance.api import insurance_bp, init_insurance_api
 from quote.handler import QuoteHandler
-from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table, init_sms_verification_table, init_referral_columns, init_is_sales_column, init_enterprise_plan_column
+from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table, init_sms_verification_table, init_referral_columns, init_is_sales_column, init_enterprise_plan_column, init_wallet_tables
 from auth.jwt_utils import init_jwt
 from auth.decorators import init_auth_decorators
 from auth.api import auth_bp, init_auth_api
@@ -98,6 +98,7 @@ def create_app(config: dict) -> Flask:
     init_referral_columns(db)
     init_is_sales_column(db)
     init_enterprise_plan_column(db)
+    init_wallet_tables(db)
 
     # 初始化短信模块
     from auth.sms import init_sms
