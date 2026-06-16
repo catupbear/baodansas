@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>午虎AI保单台账</title>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="/static/vue.global.prod.js"></script>
+    <script src="/static/qrcode.min.js"></script>
     <script>window.pdfjsLib = null;</script>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://wxbotcdn.wuhuxiche.com/tailwind.min.css" rel="stylesheet">
     <style>
         :root {
             --primary: #c2410c;
@@ -143,6 +143,13 @@
         .nav-header {
             background: linear-gradient(135deg, #7c2d12 0%, #c2410c 50%, #ea580c 100%);
             color: #fff;
+        }
+        .nav-inner { display:flex; align-items:center; }
+        .nav-right-btns { display:flex; align-items:center; gap:8px; margin-left:auto; flex-shrink:0; }
+        .nav-hamburger { display:none; align-items:center; justify-content:center; flex-shrink:0; }
+        @media (max-width:639px) {
+            .nav-right-btns { display:none; }
+            .nav-hamburger { display:inline-flex; }
         }
 
         /* 字段说明「?」图标 */
@@ -305,13 +312,58 @@
             .table-card { overflow-x: hidden !important; }
             .table-scroll-wrapper { overflow-x: auto !important; }
         }
+    /* ========== 购买套餐弹窗（系统橙色主题） ========== */
+    .pm-overlay{position:fixed;inset:0;z-index:300;background:rgba(17,24,39,0.5);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 16px;
+      --pm-orange:#ea580c;--pm-orange2:#fb923c;--pm-green:#16a34a;--pm-text:#111827;--pm-text2:#6b7280;--pm-text3:#9ca3af;--pm-surface2:#f9fafb;--pm-border:#eceef1;--pm-border2:#e5e7eb;}
+    .pm-box{background:#ffffff;border:1px solid #f1f1f1;border-radius:24px;max-width:860px;width:100%;padding:40px 36px 36px;position:relative;color:var(--pm-text);box-shadow:0 32px 80px rgba(0,0,0,0.25);}
+    .pm-close{position:absolute;top:18px;right:20px;width:34px;height:34px;border-radius:8px;background:#f3f4f6;border:1px solid var(--pm-border2);color:var(--pm-text2);font-size:18px;cursor:pointer;line-height:1;}
+    .pm-close:hover{background:#e5e7eb;color:#374151;}
+    .pm-title{font-size:26px;font-weight:800;text-align:center;letter-spacing:-0.5px;margin:0 0 8px;color:var(--pm-text);}
+    .pm-desc{font-size:14px;color:var(--pm-text2);text-align:center;margin:0;}
+    .pm-toggle-wrap{display:flex;justify-content:center;margin:28px 0 8px;}
+    .pm-toggle{display:inline-flex;align-items:center;gap:4px;background:#f3f4f6;border:1px solid var(--pm-border2);border-radius:10px;padding:4px;}
+    .pm-btn{padding:9px 28px;border-radius:7px;border:none;cursor:pointer;font-size:13.5px;font-weight:600;transition:all .2s;background:transparent;color:var(--pm-text2);white-space:nowrap;}
+    .pm-btn em{font-style:normal;color:var(--pm-orange);font-size:12px;margin-left:4px;}
+    .pm-btn.active{background:linear-gradient(135deg,var(--pm-orange2),var(--pm-orange));color:#fff;box-shadow:0 4px 14px rgba(234,88,12,0.35);}
+    .pm-btn.active em{color:rgba(255,255,255,0.92);}
+    .pm-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:28px;}
+    .pm-card{background:var(--pm-surface2);border:1px solid var(--pm-border);border-radius:18px;padding:28px;position:relative;}
+    .pm-card.popular{background:linear-gradient(160deg,#fff7ed,#fffbf5);border-color:rgba(234,88,12,0.35);box-shadow:0 0 0 1px rgba(234,88,12,0.06);}
+    .pm-pop-tag{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--pm-orange2),var(--pm-orange));color:#fff;font-size:11px;font-weight:700;padding:4px 16px;border-radius:100px;white-space:nowrap;box-shadow:0 4px 12px rgba(234,88,12,0.4);}
+    .pm-tier{font-size:12px;font-weight:700;color:var(--pm-text3);letter-spacing:1px;margin-bottom:10px;}
+    .pm-strike{font-size:13px;color:var(--pm-text3);text-decoration:line-through;margin-bottom:4px;}
+    .pm-price-row{display:flex;align-items:baseline;gap:4px;margin-bottom:4px;flex-wrap:wrap;}
+    .pm-val{font-size:38px;font-weight:900;letter-spacing:-1.5px;line-height:1;color:var(--pm-text);}
+    .pm-unit{font-size:15px;font-weight:500;color:var(--pm-text2);}
+    .pm-tag-green{font-size:12px;font-weight:700;color:var(--pm-green);background:rgba(22,163,74,0.1);padding:2px 8px;border-radius:100px;white-space:nowrap;}
+    .pm-perday{font-size:12px;color:var(--pm-green);margin-top:6px;}
+    .pm-total{margin-top:8px;}
+    .pm-total-orig{font-size:12px;color:var(--pm-text3);text-decoration:line-through;}
+    .pm-total-now{font-size:13px;font-weight:700;color:var(--pm-text);}
+    .pm-quota{font-size:14px;color:var(--pm-text2);margin-top:14px;}
+    .pm-quota strong{color:var(--pm-text);font-weight:700;}
+    .pm-divider{height:1px;background:var(--pm-border);margin:16px 0;}
+    .pm-feat{display:flex;align-items:center;gap:10px;margin-bottom:11px;font-size:13.5px;color:#4b5563;}
+    .pm-ck{color:var(--pm-green);flex-shrink:0;}
+    .pm-dash{color:var(--pm-text3);flex-shrink:0;}
+    .pm-gift{margin-top:16px;padding:10px 14px;border-radius:8px;background:#fff7ed;border:1px solid rgba(234,88,12,0.2);font-size:12.5px;color:#c2410c;text-align:center;font-weight:600;}
+    .pm-cta{display:block;width:100%;padding:12px;border-radius:10px;font-size:14px;font-weight:600;text-align:center;cursor:pointer;margin-top:16px;border:none;transition:all .2s;}
+    .pm-cta-outline{background:#fff;color:var(--pm-orange);border:1px solid #fdba74;}
+    .pm-cta-outline:hover{background:#fff7ed;}
+    .pm-cta-fill{background:linear-gradient(135deg,var(--pm-orange2),var(--pm-orange));color:#fff;box-shadow:0 4px 16px rgba(234,88,12,0.35);}
+    .pm-cta-fill:hover{box-shadow:0 6px 22px rgba(234,88,12,0.5);}
+    .pm-qr-overlay{position:fixed;inset:0;z-index:310;background:rgba(17,24,39,0.6);display:flex;align-items:center;justify-content:center;padding:20px;}
+    .pm-qr-modal{background:#fff;border-radius:20px;padding:32px 36px;position:relative;text-align:center;box-shadow:0 32px 80px rgba(0,0,0,0.35);}
+    .pm-qr-close{position:absolute;top:14px;right:16px;width:30px;height:30px;border-radius:8px;background:#f3f4f6;border:1px solid #e5e7eb;color:#6b7280;font-size:16px;cursor:pointer;line-height:1;}
+    .pm-qr-close:hover{background:#e5e7eb;color:#374151;}
+    @media (max-width:680px){.pm-grid{grid-template-columns:1fr;}.pm-box{padding:32px 20px 24px;}.pm-val{font-size:32px;}}
     </style>
 </head>
 <body class="min-h-screen" style="background:#faf5f0;">
 <div id="app" v-cloak>
     <!-- 顶部导航 -->
     <header class="nav-header shadow-lg">
-        <div class="mx-auto px-4 sm:px-6 lg:px-10 py-3 flex items-center justify-between">
+        <div class="mx-auto px-4 sm:px-6 lg:px-10 py-3 nav-inner">
             <div class="flex items-center gap-4">
                 <!-- 图标 + 标题 -->
                 <div class="flex items-center gap-3">
@@ -337,7 +389,7 @@
                 </div>
             </div>
             <!-- 右侧功能按钮（桌面端显示） -->
-            <div class="hidden sm:flex items-center gap-2 sm:gap-3">
+            <div class="nav-right-btns">
                 <!-- 字段映射按钮（仅超管 + 手动上传页显示） -->
                 <button v-if="pageTab === 'upload' && currentUser && currentUser.role === 'super_admin'" @click="openMappingModal"
                         class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 12px;font-size:12px;">
@@ -346,6 +398,12 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                     </svg>
                     字段映射
+                </button>
+                <!-- 购买套餐 -->
+                <button @click="pricingVisible = true; showPricingQr = false" class="btn"
+                        style="background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#7c2d12;border:none;padding:6px 14px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(245,158,11,0.4);"
+                        title="购买套餐">
+                    💎 购买套餐
                 </button>
                 <!-- 系统设置 -->
                 <a href="/insurance/settings"
@@ -400,13 +458,91 @@
                 </button>
             </div>
             <!-- 汉堡按钮（仅移动端） -->
-            <button @click="mobileMenuOpen = !mobileMenuOpen" class="sm:hidden" style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.25);cursor:pointer;flex-shrink:0;">
+            <button @click="mobileMenuOpen = !mobileMenuOpen" class="nav-hamburger" style="width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.25);cursor:pointer;">
                 <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
                 </svg>
             </button>
         </div>
     </header>
+
+    <!-- ========== 购买套餐弹窗 ========== -->
+    <div v-if="pricingVisible" class="pm-overlay" @click.self="pricingVisible=false; showPricingQr=false">
+        <div class="pm-box">
+            <button class="pm-close" @click="pricingVisible=false; showPricingQr=false">✕</button>
+            <h2 class="pm-title">透明定价，按需选择</h2>
+            <p class="pm-desc">所有套餐均含核心 AI 识别功能，按团队规模选择合适方案。</p>
+            <div class="pm-toggle-wrap">
+                <div class="pm-toggle">
+                    <button class="pm-btn" :class="{active: billingType==='monthly'}" @click="billingType='monthly'">按月</button>
+                    <button class="pm-btn" :class="{active: billingType==='annual'}" @click="billingType='annual'">按年<em>省25%</em></button>
+                </div>
+            </div>
+            <div class="pm-grid">
+                <!-- 标准版 -->
+                <div class="pm-card">
+                    <div class="pm-tier">标准版套餐</div>
+                    <div class="pm-strike">{{ pricingData[billingType].std.line }}</div>
+                    <div class="pm-price-row">
+                        <span class="pm-val">{{ pricingData[billingType].std.price }}</span>
+                        <span class="pm-unit">/月</span>
+                        <span class="pm-tag-green">限时优惠</span>
+                    </div>
+                    <div class="pm-perday">{{ pricingData[billingType].std.perDay }}</div>
+                    <div v-if="billingType==='annual'" class="pm-total">
+                        <div class="pm-total-orig">{{ pricingData.annual.std.originTotal }}</div>
+                        <div class="pm-total-now">{{ pricingData.annual.std.nowTotal }}</div>
+                    </div>
+                    <div class="pm-quota">月识别额度 <strong>3,000 条</strong></div>
+                    <div class="pm-divider"></div>
+                    <div class="pm-feat"><span class="pm-ck">✓</span>50+ 家保司识别</div>
+                    <div class="pm-feat"><span class="pm-ck">✓</span>Excel 导出 + 合并导出</div>
+                    <div class="pm-feat"><span class="pm-ck">✓</span>不限监控群数量</div>
+                    <div class="pm-feat"><span class="pm-ck">✓</span>字段配置 &amp; 计算公式</div>
+                    <div class="pm-feat"><span class="pm-ck">✓</span>多企业独立管理</div>
+                    <div class="pm-feat"><span class="pm-dash">—</span>支持功能定制开发</div>
+                    <div class="pm-gift">🎁 限时免费试用 2 个月</div>
+                    <button class="pm-cta pm-cta-outline" @click="showPricingQr=true">立即咨询开通</button>
+                </div>
+                <!-- 企业版 -->
+                <div class="pm-card popular">
+                    <div class="pm-pop-tag">推荐方案</div>
+                    <div class="pm-tier">企业版套餐</div>
+                    <div class="pm-strike">{{ pricingData[billingType].ent.line }}</div>
+                    <div class="pm-price-row">
+                        <span class="pm-val">{{ pricingData[billingType].ent.price }}</span>
+                        <span class="pm-unit">/月</span>
+                        <span class="pm-tag-green">限时优惠</span>
+                    </div>
+                    <div class="pm-perday">{{ pricingData[billingType].ent.perDay }}</div>
+                    <div v-if="billingType==='annual'" class="pm-total">
+                        <div class="pm-total-orig">{{ pricingData.annual.ent.originTotal }}</div>
+                        <div class="pm-total-now">{{ pricingData.annual.ent.nowTotal }}</div>
+                    </div>
+                    <div class="pm-quota">月识别额度 <strong>无限条</strong></div>
+                    <div class="pm-divider"></div>
+                    <div class="pm-feat"><span class="pm-ck">✓</span>50+ 家保司识别</div>
+                    <div class="pm-feat"><span class="pm-ck">✓</span>Excel 导出 + 合并导出</div>
+                    <div class="pm-feat"><span class="pm-ck">✓</span>不限监控群 + 私聊</div>
+                    <div class="pm-feat"><span class="pm-ck">✓</span>字段配置 &amp; 计算公式</div>
+                    <div class="pm-feat"><span class="pm-ck">✓</span>多企业独立管理</div>
+                    <div class="pm-feat"><span class="pm-ck">✓</span>支持功能定制开发</div>
+                    <div class="pm-gift">🎁 限时免费试用 2 个月</div>
+                    <button class="pm-cta pm-cta-fill" @click="showPricingQr=true">立即咨询开通</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 客服二维码弹窗（二级，叠在套餐弹窗之上） ========== -->
+    <div v-if="showPricingQr" class="pm-qr-overlay" @click.self="showPricingQr=false">
+        <div class="pm-qr-modal">
+            <button class="pm-qr-close" @click="showPricingQr=false">✕</button>
+            <div style="font-size:17px;font-weight:700;color:#111827;margin-bottom:6px;">扫码添加客服微信</div>
+            <div style="font-size:13px;color:#6b7280;margin-bottom:18px;">添加客服开通套餐 / 咨询详情</div>
+            <img src="/static/img/wechat_qr.png" alt="客服二维码" style="width:200px;height:200px;border-radius:14px;background:#fff;padding:6px;border:1px solid #eceef1;display:block;margin:0 auto;">
+        </div>
+    </div>
 
     <!-- ========== 移动端侧滑菜单 ========== -->
     <div v-if="mobileMenuOpen" class="sm:hidden" style="position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.4);" @click.self="mobileMenuOpen=false">
@@ -441,6 +577,10 @@
                 <button v-if="pageTab==='upload' && currentUser && currentUser.role==='super_admin'" @click="openMappingModal();mobileMenuOpen=false"
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;border:none;background:none;cursor:pointer;margin-bottom:3px;">
                     字段映射
+                </button>
+                <button @click="pricingVisible=true;showPricingQr=false;mobileMenuOpen=false"
+                        style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;color:#b45309;font-weight:700;border:none;background:#fffbeb;cursor:pointer;margin-bottom:3px;">
+                    💎 购买套餐
                 </button>
                 <a href="/insurance/settings" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">系统设置</a>
                 <a v-if="currentUser && currentUser.role==='super_admin'" href="/monitor-config" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">监控设置</a>
@@ -713,7 +853,7 @@
 
                 <!-- 邀请有礼 -->
                 <div>
-                    <div @click="profileTab = profileTab==='share' ? '' : 'share'; if(profileTab==='share') loadInviteInfo()" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;cursor:pointer;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+                    <div @click="toggleShareTab()" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;cursor:pointer;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
                         <div style="display:flex;align-items:center;gap:10px;">
                             <div style="width:32px;height:32px;border-radius:8px;background:#fff7ed;display:flex;align-items:center;justify-content:center;">
                                 <svg width="16" height="16" fill="none" stroke="#f07c3e" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
@@ -735,6 +875,10 @@
                                 <button @click="copyShareLink" :disabled="!shareLink" style="flex-shrink:0;border:1px solid #f07c3e;background:#fff;color:#f07c3e;font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;">
                                     {{ shareCopied ? '已复制' : '复制' }}
                                 </button>
+                            </div>
+                            <div v-if="shareLink" style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:14px;">
+                                <div id="invite-qrcode" style="padding:10px;background:#fff;border:1px solid #f0f0f0;border-radius:10px;line-height:0;"></div>
+                                <div style="font-size:11px;color:#999;">扫码注册，成为我的下线</div>
                             </div>
                             <div v-if="inviteInfo.downlines.length > 0">
                                 <div style="font-size:12px;color:#666;font-weight:500;margin-bottom:6px;">已邀请 {{ inviteInfo.downline_count }} 人</div>
@@ -3453,9 +3597,33 @@ const _app = createApp({
             try {
                 const resp = await authFetch('/api/auth/invite-info');
                 const data = await resp.json();
-                if (data.code === 0) inviteInfo.value = data.data;
+                if (data.code === 0) {
+                    inviteInfo.value = data.data;
+                    renderInviteQr();
+                }
             } catch {}
             finally { inviteLoading.value = false; }
+        }
+
+        function renderInviteQr() {
+            nextTick(() => {
+                const box = document.getElementById('invite-qrcode');
+                if (!box || !window.QRCode || !shareLink.value) return;
+                box.innerHTML = '';
+                new QRCode(box, {
+                    text: shareLink.value, width: 140, height: 140,
+                    colorDark: '#1a1a1a', colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.M,
+                });
+            });
+        }
+
+        function toggleShareTab() {
+            profileTab.value = profileTab.value === 'share' ? '' : 'share';
+            if (profileTab.value === 'share') {
+                loadInviteInfo();
+                renderInviteQr();
+            }
         }
 
         function closeProfile() {
@@ -3516,6 +3684,21 @@ const _app = createApp({
 
         // ========== 移动端菜单 ==========
         const mobileMenuOpen = ref(false);
+
+        // ========== 购买套餐弹窗 ==========
+        const pricingVisible = ref(false);
+        const billingType = ref('annual');   // 'monthly' | 'annual'
+        const showPricingQr = ref(false);
+        const pricingData = {
+            monthly: {
+                std: { price: '¥299', line: '原价 ¥399/月', perDay: '平均每天约 ¥9.97' },
+                ent: { price: '¥999', line: '原价 ¥1,399/月', perDay: '平均每天约 ¥33.3' },
+            },
+            annual: {
+                std: { price: '¥249', line: '原价 ¥299/月', perDay: '平均每天约 ¥8.22', originTotal: '原总价 ¥3,588/年', nowTotal: '现总价 ¥2,999/年' },
+                ent: { price: '¥833', line: '原价 ¥999/月', perDay: '平均每天约 ¥27.4', originTotal: '原总价 ¥11,988/年', nowTotal: '现总价 ¥9,999/年' },
+            },
+        };
 
         // ========== 页面级 Tab ==========
         const pageTab = ref('records');  // 'records' | 'upload' | 'dashboard'
@@ -7026,7 +7209,7 @@ const _app = createApp({
 
         // ========== 初始化 ==========
         onMounted(async () => {
-            // 拉取完整用户信息（含 is_sales / sales_type）
+            // 先获取用户信息（isSuperAdmin 等 computed 依赖此）
             try {
                 const meResp = await authFetch('/api/auth/me');
                 const meData = await meResp.json();
@@ -7035,30 +7218,22 @@ const _app = createApp({
                     localStorage.setItem('user', JSON.stringify(currentUser.value));
                 }
             } catch (e) {}
-            // 加载配置状态
-            try {
-                const resp = await authFetch('/api/insurance/config/status');
-                configStatus.value = await resp.json();
-            } catch (e) {}
-            // 加载钉钉目标
-            await loadTargets();
-            // 加载字段映射配置
-            await loadMappingConfig();
-            // 加载支持保司列表
-            await loadSupportedCompanies();
-            // 加载群列表
-            await loadRoomList();
-            // 初始化 IndexedDB
-            try { await openDB(); } catch (e) {}
-            // 默认筛选今天
+            // 默认筛选今天（同步，无 IO）+ 同步触发统计数（与 loadRecords 并行）
             setDateShortcut('today');
             loadRecordStats();
-            // 加载保司筛选下拉（全库去重列表）
+            // 并行加载所有初始化数据（任一失败不影响其他）
+            await Promise.allSettled([
+                authFetch('/api/insurance/config/status').then(r => r.json()).then(d => { configStatus.value = d; }),
+                loadTargets(),
+                loadMappingConfig(),
+                loadSupportedCompanies(),
+                loadRoomList(),
+                openDB(),
+                loadQuota(),
+            ]);
+            // 不阻塞页面显示的后台任务
             loadRecordCompanies();
-            // 加载备注快捷选择配置
             loadRemarkSelectorConfig();
-            // 检查配额警告（仅标准版）
-            await loadQuota();
             // 超管轮询未读通知数
             if (isSuperAdmin.value) {
                 pollNotifyUnread();
@@ -7136,7 +7311,7 @@ const _app = createApp({
             currentUser, isSuperAdmin, isChannelSales, doLogout,
             profileVisible, profileTab, profileForm, profileMsg, profileLoading,
             showWithdrawModal, showActivateModal,
-            shareLink, shareCopied, inviteInfo, inviteLoading, loadInviteInfo,
+            shareLink, shareCopied, inviteInfo, inviteLoading, loadInviteInfo, toggleShareTab,
             quotaInfo, quotaLoading, loadQuota, quotaPlanExpiry, quotaDaysLeft, quotaWarn,
             closeProfile, saveName, savePwd, copyShareLink,
             // 钱包
@@ -7149,6 +7324,8 @@ const _app = createApp({
             openNotifications, markRead, markAllRead,
             // 移动端菜单
             mobileMenuOpen,
+            // 购买套餐弹窗
+            pricingVisible, billingType, showPricingQr, pricingData,
             // 设置已迁移到 /monitor-config 页面
         };
     },

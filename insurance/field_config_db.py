@@ -9,12 +9,17 @@
 import json
 import logging
 import re
+import time
 from datetime import datetime
 
 import pymysql
 import pymysql.cursors
 
 logger = logging.getLogger(__name__)
+
+# get_active_template 结果缓存（用户很少切换模板，60秒 TTL 安全）
+_active_tpl_cache: dict = {}
+_ACTIVE_TPL_TTL = 60
 
 # 支持的 config_type 类型
 CONFIG_TYPES = ["company_alias", "policy_type_alias", "date_format", "fee_formula",
@@ -615,7 +620,12 @@ def get_active_template(db, user_id: int) -> dict:
     """
     获取用户当前启用的模板信息。
     无记录时返回默认值 {"source": "own", "template_name": "默认模板"}
+    结果 TTL 缓存 60 秒，避免 get_effective_config 调用链内多次重复查 DB。
     """
+    cache_key = user_id
+    entry = _active_tpl_cache.get(cache_key)
+    if entry and time.time() < entry[1]:
+        return entry[0]
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -624,9 +634,11 @@ def get_active_template(db, user_id: int) -> dict:
             (user_id,)
         )
         row = cursor.fetchone()
-        if row is None:
-            return {"source": "own", "template_name": DEFAULT_TEMPLATE_NAME}
-        return {"source": row["active_source"], "template_name": row["template_name"]}
+        result = ({"source": "own", "template_name": DEFAULT_TEMPLATE_NAME}
+                  if row is None
+                  else {"source": row["active_source"], "template_name": row["template_name"]})
+        _active_tpl_cache[cache_key] = (result, time.time() + _ACTIVE_TPL_TTL)
+        return result
     finally:
         conn.close()
 
@@ -646,6 +658,7 @@ def set_active_template(db, user_id: int, source: str, template_name: str):
             (user_id, source, template_name)
         )
         conn.commit()
+        _active_tpl_cache.pop(user_id, None)  # 写入后清缓存
         logger.debug("用户启用模板已更新: user_id=%s source=%s template=%s",
                      user_id, source, template_name)
     finally:

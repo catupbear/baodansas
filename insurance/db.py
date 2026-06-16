@@ -366,6 +366,9 @@ def init_insurance_tables(db):
             "CREATE INDEX idx_insurance_file_md5 ON insurance_records(file_md5)",
             "CREATE INDEX idx_insurance_user_id ON insurance_records(user_id)",
             "CREATE INDEX idx_insurance_enterprise_id ON insurance_records(enterprise_id)",
+            # 复合索引：加速按企业/用户权限过滤 + 时间排序的常见查询
+            "CREATE INDEX idx_insurance_eid_del_created ON insurance_records(enterprise_id, deleted_at, created_at)",
+            "CREATE INDEX idx_insurance_uid_del_created ON insurance_records(user_id, deleted_at, created_at)",
         ]:
             try:
                 cursor.execute(idx_sql)
@@ -1072,6 +1075,23 @@ def update_insurance_record(db, record_id: int, updates: dict):
         conn.close()
 
 
+def update_records_abnormal_flag(db, record_ids: list, is_abnormal: int) -> None:
+    """批量更新 is_abnormal 字段，保持统计与列表一致。"""
+    if not record_ids:
+        return
+    placeholders = ",".join(["%s"] * len(record_ids))
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"UPDATE insurance_records SET is_abnormal=%s WHERE id IN ({placeholders})",
+            [is_abnormal] + list(record_ids),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def find_records_by_plate(db, plate: str, exclude_id: int = None) -> list:
     """
     查找同车牌的已完成保单记录，用于跨保单字段互补。
@@ -1088,6 +1108,44 @@ def find_records_by_plate(db, plate: str, exclude_id: int = None) -> list:
             "AND JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.车牌号')) = %s"
         )
         params = [plate]
+        if exclude_id:
+            sql += " AND id != %s"
+            params.append(exclude_id)
+        sql += " ORDER BY id DESC LIMIT 10"
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        for row in rows:
+            if isinstance(row.get("parsed_fields"), str):
+                try:
+                    row["parsed_fields"] = json.loads(row["parsed_fields"])
+                except (TypeError, json.JSONDecodeError):
+                    row["parsed_fields"] = {}
+        return rows
+    except Exception:
+        return []
+    finally:
+        conn.close()
+
+
+def find_records_by_vin(db, vin: str, exclude_id: int = None) -> list:
+    """
+    查找同车架号(VIN)的已完成保单记录，用于跨保单字段互补。
+    车架号是车辆唯一标识，比车牌可靠（适用于"暂未上牌"等无车牌保单）。
+    返回 parsed_fields 非空且 status=done 的记录列表（按时间倒序）。
+    """
+    # VIN 至少 10 位才可靠，避免空值/OCR 残片误匹配
+    if not vin or len(vin.strip()) < 10:
+        return []
+    vin = vin.strip()
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        sql = (
+            "SELECT id, parsed_fields FROM insurance_records "
+            "WHERE status = 'done' AND parsed_fields IS NOT NULL "
+            "AND JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.车架号VIN')) = %s"
+        )
+        params = [vin]
         if exclude_id:
             sql += " AND id != %s"
             params.append(exclude_id)
@@ -1176,6 +1234,49 @@ def find_insurer_info_by_plates(db, plates: list) -> dict:
                                 ("owner", "owner"), ("id_number", "id_number")]:
                     if not result[plate][k] and row[col]:
                         result[plate][k] = row[col]
+        return result
+    except Exception:
+        return {}
+    finally:
+        conn.close()
+
+
+def find_sign_info_by_plates(db, plates: list) -> dict:
+    """
+    批量查询车牌对应的签单日期和业务员（从 display_fields）。
+    返回 {车牌: {"sign_date": ..., "salesperson": ...}}，取最新有值记录。
+    """
+    if not plates:
+        return {}
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        placeholders = ",".join(["%s"] * len(plates))
+        cursor.execute(
+            f"SELECT id, display_fields FROM insurance_records "
+            f"WHERE status = 'done' AND display_fields IS NOT NULL "
+            f"AND JSON_UNQUOTE(JSON_EXTRACT(display_fields, '$.车牌')) IN ({placeholders}) "
+            f"ORDER BY id DESC LIMIT %s",
+            plates + [len(plates) * 20],
+        )
+        result = {}
+        for row in cursor.fetchall():
+            try:
+                df = json.loads(row["display_fields"]) if isinstance(row["display_fields"], str) else (row["display_fields"] or {})
+            except Exception:
+                continue
+            plate = df.get("车牌") or df.get("车牌号") or ""
+            if not plate or plate not in plates:
+                continue
+            if plate not in result:
+                result[plate] = {"sign_date": "", "salesperson": ""}
+            p = result[plate]
+            if not p["sign_date"] and df.get("签单日期"):
+                p["sign_date"] = df["签单日期"]
+            if not p["salesperson"] and df.get("业务员"):
+                p["salesperson"] = df["业务员"]
+            if p["sign_date"] and p["salesperson"]:
+                pass  # 继续遍历其余车牌记录
         return result
     except Exception:
         return {}
@@ -1318,8 +1419,18 @@ def query_insurance_records(
     """
     conditions = []
     params = []
-    # 是否需要 JOIN 关联表（排序始终需要 JOIN）
-    need_join = True
+    # 动态判断是否需要 JOIN 关联表：
+    # dedup 始终需要（按 pf.policy_no 分组）；有关联表搜索/日期/险种/排序字段时才 JOIN
+    _JOIN_SORT_FIELDS = {"plate_no", "sign_date", "start_date", "end_date", "policy_no"}
+    need_join = dedup or bool(
+        policy_type or
+        search_company or search_policy_no or search_plate_no or
+        search_applicant or search_insured or search_salesperson or
+        sign_date_start or sign_date_end or
+        start_date_start or start_date_end or
+        end_date_start or end_date_end or
+        sort_by in _JOIN_SORT_FIELDS
+    )
     # 主表别名前缀
     col_prefix = "r."
 
@@ -1447,8 +1558,9 @@ def query_insurance_records(
 
     where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
-    # 构建 FROM 子句（始终 JOIN 关联表，用于排序和搜索）
-    from_clause = "insurance_records r LEFT JOIN insurance_policy_fields pf ON r.id = pf.record_id"
+    # 构建 FROM 子句（仅在需要时 JOIN 关联表）
+    _join = " LEFT JOIN insurance_policy_fields pf ON r.id = pf.record_id"
+    from_clause = f"insurance_records r{_join if need_join else ''}"
 
     conn = db.pool.connection()
     try:

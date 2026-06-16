@@ -59,6 +59,7 @@ COMPANY_BASES = [
     "安华农业保险股份有限公司",
     "中国大地财产保险股份有限公司",
     "北部湾财产保险股份有限公司",
+    "现代财产保险（中国）有限公司",
 ]
 
 # 保司简称映射
@@ -97,6 +98,7 @@ COMPANY_SHORT_MAP = {
     "安华农业": "安华农业",
     "大地财产": "大地",
     "北部湾财产": "北部湾",
+    "现代财产": "现代财产",
 }
 
 # 通过特征关键词辅助识别保司（当公司名未直接出现时的兜底）
@@ -125,6 +127,7 @@ COMPANY_FALLBACK_SIGNALS = [
     (r"956030|guorenpcic|国任财产|国任保险", "国任财产保险股份有限公司"),
     (r"95522|tkol\.com|泰康在线|泰康财产", "泰康在线财产保险股份有限公司"),
     (r"95502|yaic\.com|永安保险|永安财产", "永安财产保险股份有限公司"),
+    (r"4006080808|hi-ins\.com|现代财产保险|现代保险", "现代财产保险（中国）有限公司"),
 ]
 
 
@@ -173,7 +176,7 @@ def _is_valid_person(val: str) -> bool:
     val_no_paren = re.sub(r'[（(][^）)]*[）)]$', '', val)
     # 含"(地名)"的企业名（如"中设(深圳)设备检验检测"）也视为公司名
     has_location_paren = bool(re.search(r'[\u4e00-\u9fff][（(][\u4e00-\u9fff]{2,4}[）)][\u4e00-\u9fff]', val))
-    if re.search(r'公司|集团|合伙|工厂|商行|商贸|车行(?!驶)|车队|事务所|经营部|经营店|经销商|专营店|服务部|加工厂|养殖场|合作社|研究院|研究所|设计院|分院|医院|学院|中心|个体工商户|协会|商会|学会|联合会|促进会|基金会', val) or val_no_paren.endswith('店') or has_location_paren:
+    if re.search(r'公司|集团|合伙|工厂|商行|商贸|车行(?!驶)|车队|事务所|经营部|经营店|经销商|专营店|服务部|加工厂|养殖场|合作社|研究院|研究所|设计院|分院|医院|学院|中心|个体工商户|协会|商会|学会|联合会|促进会|基金会', val) or val_no_paren.endswith(('店', '厂', '铺')) or has_location_paren:
         # 公司名允许长一些，但不能超过 30 字
         # 排除含动词/条款用语/保险术语的句子片段（如"向本公司提出的申请"）
         if re.search(r'提出|提供|负责|承担|向.*公司|本公司.*的|申请|告知|声明|附加.*险|附加.*费|损失费|保险费|约定|载明', val):
@@ -400,6 +403,7 @@ def _identify_policy_type(text: str) -> Optional[str]:
         r"(家财守护(?:[（(]\S+?[)）])?)",  # 家财守护（单交经济版）等家财险产品
         r"(司乘人员\S*意外伤害保险)",       # 安华农业等司乘团体险
         r"(雇主责任保险(?:[（(]\S+?[)）])?)",  # 华安等雇主责任险
+        r"(道路客运承运人(?:方案|责任险)[^\s”]*)",  # 现代财产等道路客运承运人方案
     ]:
         m = re.search(p, text)
         if m:
@@ -722,6 +726,10 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
 # 身份证号码正则：18位，首位非0，中间含合法出生日期，末位可为X
 _ID_PATTERN = r'([1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx])'
 
+# 统一社会信用代码正则：18位，"登记部门+机构类别"(2位数字/字母) + 行政区划(6位数字) + 主体标识码(9位) + 校验码(1位)
+# 如企业被保险人 92441303L69443363R（含字母，_ID_PATTERN 无法匹配）
+_USCC_PATTERN = r'([0-9A-Z]{2}\d{6}[0-9A-Z]{10})'
+
 
 def _extract_id_numbers(text: str, text_merged: str, fields: dict):
     """提取投保人和被保险人的身份证号码"""
@@ -746,6 +754,16 @@ def _extract_id_numbers(text: str, text_merged: str, fields: dict):
     )
     if m:
         fields["被保险人身份证号码"] = m.group(1)
+
+    # 太平洋等企业被保险人：证件类型为统一社会信用代码/组织机构代码（含字母，_ID_PATTERN 无法匹配）
+    # "被保险人：XX厂 ... 证件类型：统一社会信用代码 证件号：92441303L69443363R"
+    if "被保险人身份证号码" not in fields:
+        m = re.search(
+            r'被保险人[：:\s][\s\S]{0,150}?(?:统一社会信用代码|组织机构代码)[\s\S]{0,20}?证件号[码]?[：:\s]*' + _USCC_PATTERN,
+            text
+        )
+        if m:
+            fields["被保险人身份证号码"] = m.group(1)
 
     # 众诚/申能/国寿：被保险人证件号码
     if "被保险人身份证号码" not in fields:
@@ -901,6 +919,16 @@ def _extract_id_numbers(text: str, text_merged: str, fields: dict):
         if m:
             fields["投保人身份证号码"] = m.group(1)
 
+    # 申能等同行格式："投保人： 黄锴纯 证件类型： 居民身份证 证件号码： XXX"
+    # 投保人后直接跟姓名，证件号码在同行50字内（与被保险人同行格式对应）
+    if "投保人身份证号码" not in fields:
+        m = re.search(
+            r'投保人[名称\s]*[：:]*\s*[一-鿿][一-鿿\w]*[\s\S]{0,50}?证件号码[：:\s]*' + _ID_PATTERN,
+            text
+        )
+        if m:
+            fields["投保人身份证号码"] = m.group(1)
+
 
 # ============================================================
 # 保司公司名称 / 保司地址提取
@@ -941,6 +969,8 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
                 if (val and len(val) >= 4
                         and re.search(r'公司|分公司', val)
                         and not re.search(r'[市区].*[街路号]', val)):
+                    # 去掉"（保险人签章）"等签章后缀
+                    val = re.sub(r'\s*[（(][^（(）)]*(?:签章|盖章|印章)[^（(）)]*[）)].*', '', val).strip()
                     fields["保司公司名称"] = val
                     break
 
@@ -977,7 +1007,10 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
             m = re.search(r'(?<!总)公司地址[：:]\s*(.+?)(?:\s+公司网址|\s{2,}|\n|$)', src)
             if m:
                 val = m.group(1).strip()
-                if val and len(val) >= 4 and not re.search(r'^联系电话|^公司名称|^邮政编码', val):
+                # 排除竖排版式下跨行误抓到的"邮政编码/签单日期/公司主页"行（如华安）
+                if (val and len(val) >= 4
+                        and not re.search(r'^联系电话|^公司名称|^邮政编码', val)
+                        and not re.search(r'邮政编码|签单日期|公司主页|公司网址', val)):
                     fields["保司地址"] = val
                     break
 
@@ -1022,6 +1055,17 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
                 if addr_parts:
                     fields["保司地址"] = ''.join(addr_parts)
                 break
+
+    # 清理保司地址尾部粘连的服务热线/电话/邮编/主页等干扰文本
+    # 如华安："深圳市龙岗区...5栋B座1209 全国统一服务及投诉维权电话：95556"
+    if fields.get("保司地址"):
+        addr = fields["保司地址"]
+        addr = re.sub(r'\s*[（(][^（(）)]*(?:签章|盖章|印章)[^（(）)]*[）)].*$', '', addr)
+        addr = re.sub(r'\s*\S*(?:电话|热线)[：:]\s*\S+.*$', '', addr)
+        addr = re.sub(r'\s*(?:全国统一|客服|投诉|邮政编码|签单日期|公司主页|公司网址)[^\n]*$', '', addr)
+        addr = addr.strip().rstrip('、，,')
+        if addr and len(addr) >= 4:
+            fields["保司地址"] = addr
 
     # 联系电话：从"联系电话："标签附近提取（如95312）
     if "保司联系电话" not in fields:
@@ -1092,6 +1136,18 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
             if val and len(val) >= 4:
                 fields["保司公司名称"] = val
 
+    # 补充模式F：签单机构（现代财产承运人险等）"签单机构：现代财产保险(中国) 有限公司广东分公司"
+    if "保司公司名称" not in fields:
+        for src in [text, text_merged]:
+            m = re.search(r'签单机构[：:]\s*(.+?)(?:\s{2,}|\n|$)', src)
+            if m:
+                # 去掉OCR在公司名中夹的空格，半角括号统一为全角
+                val = re.sub(r'\s+', '', m.group(1).strip())
+                val = val.replace('(', '（').replace(')', '）')
+                if val and len(val) >= 4 and re.search(r'保险', val) and re.search(r'公司$', val):
+                    fields["保司公司名称"] = val
+                    break
+
     # 补充地址模式A：签单公司地址（申能驾意险、平安小微等）
     if "保司地址" not in fields:
         for src in [text, text_merged]:
@@ -1111,6 +1167,16 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
                 if val and len(val) >= 4:
                     fields["保司地址"] = val
                     break
+
+    # 清理保司公司名称尾部粘连的邮政编码/邮编/签单日期/电话/网址等
+    # 如现代财产："现代财产保险（中国）有限公司广东分公司 邮政编码：510000"（整行误抓）
+    if fields.get("保司公司名称"):
+        name = fields["保司公司名称"]
+        name = re.sub(r'\s*(?:邮政编码|邮编|邮\s*编)[：:\s]*\d+.*$', '', name)
+        name = re.sub(r'\s*(?:签单日期|服务热线|联系电话|电话|公司网址|公司主页|网址)[：:].*$', '', name)
+        name = name.strip().rstrip('、，,')
+        if name and len(name) >= 4:
+            fields["保司公司名称"] = name
 
     # 保司带地区：从保司地址提取城市 + 承保公司，如"深圳平安"
     _build_insurer_with_region(fields)
@@ -1459,8 +1525,13 @@ def _extract_insured(text: str, text_merged: str, fields: dict, company_short: s
         lines = text.split('\n')
         for i, line in enumerate(lines):
             stripped = line.strip()
-            # "被保险人  温扬敏"（同一行，空格分隔）
+            # "被保险人  温扬敏"（同一行，空格分隔，个人姓名）
             m = re.match(r'被\s*保\s*险\s*人\s+([一-鿿]{2,6})\s*$', stripped)
+            if m and _is_valid_person(m.group(1)):
+                fields["被保险人"] = m.group(1)
+                return
+            # "被保险人 主力实业（深圳）有限公司"（同一行，公司名，含括号/较长）
+            m = re.match(r'被\s*保\s*险\s*人\s+([一-鿿（()）][一-鿿（()）\w]{2,28})\s*$', stripped)
             if m and _is_valid_person(m.group(1)):
                 fields["被保险人"] = m.group(1)
                 return
@@ -1647,10 +1718,24 @@ def _extract_insured_yongcheng(text: str, text_merged: str, fields: dict):
 
 def _extract_insured_taiping(text: str, text_merged: str, fields: dict):
     """太平保单被保险人提取"""
-    # 太平格式特殊：先找"被保险人名称"或特别约定中的人名
+    # 太平新能源/车险表头格式（优先）：
+    # "被保险人 前易出行（深圳）有限公司 行驶证车主 ..."
+    # 公司名含全角括号，止于下一个已知字段名
+    m = re.search(
+        r"被保险人\s+([\u4e00-\u9fff（）()·\w]+(?:\s*[\u4e00-\u9fff（）()·\w]+)*?)\s+"
+        r"(?:行驶证车主|地\s*址|被保险人证件|联系电话)",
+        text,
+    )
+    if m:
+        val = _clean_person_name(m.group(1))
+        if _is_valid_person(val):
+            fields["被保险人"] = val
+            return
+
+    # 太平格式：被保险人名称 / 被保险人：XXX（无括号公司名或个人）
     for p in [
         r"被保险人名称[：:\s]*(\S+)",
-        r"被保险人[：:\s]*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:\s|$)",
+        r"被保险人[：:\s]*([\u4e00-\u9fff][\u4e00-\u9fff（）·\w]+?)(?:\s|$)",
     ]:
         m = re.search(p, text)
         if m:
@@ -1658,12 +1743,6 @@ def _extract_insured_taiping(text: str, text_merged: str, fields: dict):
             if _is_valid_person(val):
                 fields["被保险人"] = val
                 return
-
-    # 太平特别约定中"被保险人为XXX"
-    m = re.search(r"被保险人为([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:[，,。\s]|$)", text)
-    if m and _is_valid_person(m.group(1)):
-        fields["被保险人"] = m.group(1)
-        return
 
     # 太平驾乘险可能在表格中
     lines = text.split('\n')
@@ -2013,6 +2092,22 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
 
 def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: str):
     """提取投保人"""
+
+    # 紫金驾乘险等：标签"投保人名称"竖排被OCR拆成"投保人名\n<值>\n称："，值夹在标签中间
+    if "投保人" not in fields:
+        m = re.search(r'投保人名\s*\n\s*([一-鿿·（()）\w]{2,20})\s*\n\s*称\s*[：:]', text)
+        if m:
+            val = _clean_person_name(m.group(1))
+            if _is_valid_person(val):
+                fields["投保人"] = val
+
+    # 众诚等OCR带字间空格格式："投 保 人 陈豪金"（要求字间有空格，避免误匹配正文"投保人已向"）
+    if "投保人" not in fields:
+        m = re.search(r'投\s+保\s+人\s+([一-鿿·]{2,6})(?=\s|$)', text)
+        if m:
+            val = _clean_person_name(m.group(1))
+            if _is_valid_person(val):
+                fields["投保人"] = val
 
     # 国寿人意险表格格式："投保人 名称/姓名 曹桂举 ..."
     # 在投保人区域（被保险人标记之前）查找"名称/姓名"
@@ -2592,6 +2687,16 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
             if _is_valid_person(val):
                 fields["车主"] = val
     if "车主" not in fields:
+        # 众诚等OCR带字间空格格式："行 驶 证 车 主 陈豪金 号 牌 号 码 ..."
+        m = re.search(r"行\s*驶\s*证\s*车\s*主\s+([一-鿿·]{2,6})(?=\s|号|$)", text)
+        if m and _is_valid_person(m.group(1).strip()):
+            fields["车主"] = m.group(1).strip()
+    if "车主" not in fields:
+        # 太平出行无忧等格式："车主姓名： 倪浩彬 牌照号码：..."（车主姓名而非车主名称）
+        m = re.search(r"车主姓名[：:\s]+(\S+?)(?:\s|牌照|车牌|$)", text)
+        if m and _is_valid_person(m.group(1)):
+            fields["车主"] = m.group(1)
+    if "车主" not in fields:
         for p in [
             r"(?:行驶证)?车主(?:\s*名称)?[：:\s]+(\S+?)(?:\s|$|投保人)",
             r"车主\s+(\S+?)(?:\s|$)",
@@ -2744,6 +2849,11 @@ def _extract_premium(text: str, fields: dict, company_short: str):
     # 国寿驾乘险："保险费合计 人民币（大写） XXX ￥CNY299.00元"
     if company_short == "国寿财产":
         patterns.insert(0, r"保险费合计.*?[￥¥]?CNY([\d,]+\.\d{2})(?:元)?")
+
+    # 华安等格式："保险费合计（人民币大写）：玖佰...\n（¥：929.01 元，其中：不含税保费..."
+    # 保险费合计行与（¥：金额）可能跨行，且金额后跟"，其中"而非闭括号，故不强制闭括号
+    if company_short == "华安":
+        patterns.insert(0, r"保险费合计[\s\S]{0,100}?[（(][￥¥][：:\s]*([\d,]+\.?\d{0,2})")
 
     # 京东安联驾乘："总保费 Total Premium: RMB 198.00"
     if company_short == "京东安联":
@@ -2908,12 +3018,13 @@ def _extract_premium(text: str, fields: dict, company_short: str):
 
     # 保障方案表兜底：表头含"保险费"列，数据行中保额与保费粘连
     # 华安车主尊享等格式："乘坐客运轮船意外医疗 300000.0300.0"
-    # 其中300000.0是保额，300.0是保费，PDF提取时粘连在一起
+    # 华安乘客险等格式："意外伤害住院津贴责任(免税) 5400.0298.0"（保额4位整数）
+    # 表头格式1："保险费（人民币：元）" 表头格式2："保险金额 保险费"（两列并排）
     if "保费合计" not in fields:
-        if re.search(r'保险费[（(]人民币', text):
+        if re.search(r'保险费[（(]人民币|保险金额\s*保险费', text):
             for line in text.split('\n'):
-                # 保额（≥5位整数部分）后紧跟保费（≤4位整数部分）
-                m = re.search(r'(\d{5,}\.\d)(\d{1,4}\.\d+)', line)
+                # 保额（≥4位整数部分）后紧跟保费（≤4位整数部分）
+                m = re.search(r'(\d{4,}\.\d)(\d{1,4}\.\d+)', line)
                 if m:
                     fields["保费合计"] = m.group(2)
                     break
@@ -3552,7 +3663,10 @@ def _dedup_doubled_text(text: str) -> str:
         if any(_is_doubled_token(t) for t in re.findall(r'\S{4,}', line)):
             line = re.sub(r'\S+', lambda m: m.group(0)[::2] if _is_doubled_token(m.group(0)) else m.group(0), line)
         result.append(line)
-    return '\n'.join(result)
+    text = '\n'.join(result)
+    # 繁体省份字标准化（阳光等OCR有时识别出繁体"粵"）
+    text = text.replace('粵', '粤')
+    return text
 
 
 # ============================================================

@@ -36,6 +36,9 @@ logger = logging.getLogger(__name__)
 # 超过该大小（20MB）的文件走临时文件下载
 MAX_MEMORY_SIZE = 20 * 1024 * 1024
 
+# 保单识别队列容量上限：单日峰值约 700 份，1000 留足突发缓冲，满载才丢弃新消息
+QUEUE_MAXSIZE = 1000
+
 
 def _ocr_early_stop_check(combined_text: str) -> bool:
     """检查已扫描文本是否已包含所有导出所需字段，用于提前终止 OCR 扫描。
@@ -111,8 +114,8 @@ class InsuranceHandler:
         self.contacts = contacts
         self.app_config = app_config or {}
 
-        # 内部消息队列（最多 100 条）
-        self._queue: queue.Queue = queue.Queue(maxsize=100)
+        # 内部消息队列（最多 QUEUE_MAXSIZE 条）
+        self._queue: queue.Queue = queue.Queue(maxsize=QUEUE_MAXSIZE)
 
         # OCR 客户端初始化
         self._baidu_ocr = None
@@ -308,7 +311,8 @@ class InsuranceHandler:
             )
         except queue.Full:
             logger.warning(
-                "保单识别队列已满（maxsize=100），丢弃消息 seq=%s filename=%s",
+                "保单识别队列已满（maxsize=%d），丢弃消息 seq=%s filename=%s",
+                QUEUE_MAXSIZE,
                 msg.get("seq"),
                 msg.get("filename"),
             )
@@ -585,8 +589,9 @@ class InsuranceHandler:
                     doc_category = "投保单"
                     parsed_fields["文档类型"] = "投保单"
 
-                # 6. 保单字段互补（有车牌按车牌，按人名始终执行以回填无车牌记录）
+                # 6. 保单字段互补（车牌→车架号→人名，逐级回填无车牌记录）
                 self._cross_fill_by_plate(parsed_fields, cur_record_id)
+                self._cross_fill_by_vin(parsed_fields, cur_record_id)
                 self._cross_fill_by_person(parsed_fields, cur_record_id)
 
                 # 7. 字段映射
@@ -872,26 +877,48 @@ class InsuranceHandler:
         return type_code in ("accident", "non_vehicle")
 
     def _cross_fill_by_plate(self, parsed_fields: dict, record_id: int = None):
+        """同车牌保单双向字段互补（核心逻辑见 _apply_cross_fill）。"""
+        plate = parsed_fields.get("车牌号", "")
+        if not plate:
+            return
+        from insurance.db import find_records_by_plate
+        history = find_records_by_plate(self.db, plate, exclude_id=record_id)
+        if not history:
+            return
+        self._apply_cross_fill(parsed_fields, history, record_id,
+                               self.CROSS_FILL_FIELDS, "同车牌", plate)
+
+    # 可从同车架号历史保单互补的字段（用车架号匹配，故补车牌号，不补车架号本身）
+    VIN_CROSS_FILL_FIELDS = ["车牌号", "投保人", "被保险人", "车主",
+                             "被保险人身份证号码", "投保人身份证号码", "保司公司名称", "保司地址"]
+
+    def _cross_fill_by_vin(self, parsed_fields: dict, record_id: int = None):
+        """同车架号(VIN)保单双向互补：适用于"暂未上牌"等无车牌保单与同车车险互补。"""
+        vin = (parsed_fields.get("车架号VIN", "") or "").strip()
+        if len(vin) < 10:
+            return
+        from insurance.db import find_records_by_vin
+        history = find_records_by_vin(self.db, vin, exclude_id=record_id)
+        if not history:
+            return
+        self._apply_cross_fill(parsed_fields, history, record_id,
+                               self.VIN_CROSS_FILL_FIELDS, "同车架号", vin)
+
+    def _apply_cross_fill(self, parsed_fields: dict, history: list, record_id,
+                          fill_fields: list, match_desc: str, match_value: str):
         """
-        同车牌保单双向字段互补：
+        双向字段互补核心逻辑（车牌/车架号共用）：
         1. 正向：从历史记录补充当前保单的缺失字段
         2. 非车险被保人覆盖：非车险的被保人以交强险/商业险为准
         3. 反向：用当前保单的字段回填历史记录的缺失字段
         仅补充空值字段，不覆盖已有值（非车险被保人除外）。
         """
-        plate = parsed_fields.get("车牌号", "")
-        if not plate:
-            return
-
-        from insurance.db import find_records_by_plate, update_insurance_record
+        from insurance.db import update_insurance_record
         from insurance.field_mapping import apply_mapping
-        history = find_records_by_plate(self.db, plate, exclude_id=record_id)
-        if not history:
-            return
+        from insurance.policy_parser import _is_valid_person
 
         # --- 正向互补：历史 → 当前 ---
-        from insurance.policy_parser import _is_valid_person
-        missing = [f for f in self.CROSS_FILL_FIELDS if not parsed_fields.get(f)]
+        missing = [f for f in fill_fields if not parsed_fields.get(f)]
         filled = []
         for field in missing:
             need_person_check = field in self._PERSON_VALIDATE_FIELDS
@@ -970,12 +997,12 @@ class InsuranceHandler:
 
         if filled:
             logger.info(
-                "同车牌互补(正向): plate=%s, record_id=%s, 补充=%s",
-                plate, record_id, ", ".join(filled),
+                "%s互补(正向): %s, record_id=%s, 补充=%s",
+                match_desc, match_value, record_id, ", ".join(filled),
             )
 
         # --- 反向互补：当前 → 历史缺失记录 ---
-        current_vals = {f: parsed_fields.get(f, "") for f in self.CROSS_FILL_FIELDS}
+        current_vals = {f: parsed_fields.get(f, "") for f in fill_fields}
         # 当前记录至少要有一个可供回填的字段
         if not any(current_vals.values()):
             return
@@ -987,7 +1014,7 @@ class InsuranceHandler:
             if not hist_fields:
                 continue
             back_filled = []
-            for field in self.CROSS_FILL_FIELDS:
+            for field in fill_fields:
                 need_person_check = field in self._PERSON_VALIDATE_FIELDS
                 if not hist_fields.get(field) and current_vals.get(field):
                     if not need_person_check or _is_valid_person(current_vals[field]):
@@ -1024,13 +1051,13 @@ class InsuranceHandler:
                         "mapped_fields": mapped,
                     })
                     logger.info(
-                        "同车牌互补(反向): plate=%s, 回填record_id=%s, 补充=%s",
-                        plate, rec["id"], ", ".join(back_filled),
+                        "%s互补(反向): %s, 回填record_id=%s, 补充=%s",
+                        match_desc, match_value, rec["id"], ", ".join(back_filled),
                     )
                     # 如果历史记录已同步过钉钉，重新同步更新的字段
                     self._resync_record_to_dingtalk(rec["id"], mapped, hist_fields)
                 except Exception as e:
-                    logger.warning("同车牌反向互补失败: record_id=%s, %s", rec["id"], e)
+                    logger.warning("%s反向互补失败: record_id=%s, %s", match_desc, rec["id"], e)
 
     # 无车牌时按人名互补的字段
     PERSON_FILL_FIELDS = ["车牌号", "投保人", "被保险人", "车主", "车架号VIN", "被保险人身份证号码", "投保人身份证号码"]
@@ -1068,11 +1095,11 @@ class InsuranceHandler:
             for field in missing:
                 for rec in history:
                     hist_fields = rec.get("parsed_fields") or {}
-                if isinstance(hist_fields, str):
-                    try:
-                        hist_fields = json.loads(hist_fields) or {}
-                    except (TypeError, json.JSONDecodeError, ValueError):
-                        hist_fields = {}
+                    if isinstance(hist_fields, str):
+                        try:
+                            hist_fields = json.loads(hist_fields) or {}
+                        except (TypeError, json.JSONDecodeError, ValueError):
+                            hist_fields = {}
                     val = hist_fields.get(field, "")
                     if val:
                         parsed_fields[field] = val

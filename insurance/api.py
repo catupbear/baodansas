@@ -11,6 +11,7 @@ import io
 import json
 import logging
 import re
+import time
 
 import pymysql
 import pymysql.cursors
@@ -29,6 +30,7 @@ from .db import (
     set_insurance_config,
     soft_delete_record,
     update_insurance_record,
+    update_records_abnormal_flag,
     upsert_insurance_record_by_policy,
 )
 from .field_config_db import (
@@ -68,6 +70,24 @@ from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, ROLE_EMPLOYEE, ROLE_SALES
 from core.notify import notify_error
 
 logger = logging.getLogger(__name__)
+
+# ------------------------------------------------------------------ #
+# 轻量 TTL 内存缓存：减少每次列表请求都重复读 DB 的用户配置查询
+# ------------------------------------------------------------------ #
+_cfg_cache: dict = {}
+_CFG_TTL = 60  # 秒
+
+
+def _cache_get(key):
+    entry = _cfg_cache.get(key)
+    if entry and time.time() < entry[1]:
+        return entry[0], True
+    return None, False
+
+
+def _cache_set(key, value, ttl=_CFG_TTL):
+    _cfg_cache[key] = (value, time.time() + ttl)
+    return value
 
 
 def _norm_plate(plate) -> str:
@@ -365,25 +385,58 @@ def list_records():
             sort_order=sort_order,
         )
         # 列表返回 display_fields（轻量映射字段）替代 parsed_fields
-        # 获取用户字段配置，应用简称/日期格式/公式计算
+        # 获取用户字段配置，应用简称/日期格式/公式计算（结果 TTL 缓存 60 秒）
         user = g.current_user
-        user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
+        _uid, _role, _pid = user["user_id"], user["role"], user.get("parent_id")
+        _eff_key = ("eff_cfg", _uid, _role, _pid)
+        user_config, _hit = _cache_get(_eff_key)
+        if not _hit:
+            user_config = _cache_set(_eff_key, get_effective_config(_db, _uid, _role, _pid))
         # 注入用户个人的自定义字段固定值（独立于模板）
-        list_col_cfg = get_column_config(_db, "list_columns", user["user_id"], user["role"], user.get("parent_id"))
-        fixed_vals = get_user_fixed_values(_db, user["user_id"])
+        _col_key = ("col_cfg", "list_columns", _uid, _role, _pid)
+        list_col_cfg, _hit = _cache_get(_col_key)
+        if not _hit:
+            list_col_cfg = _cache_set(_col_key, get_column_config(_db, "list_columns", _uid, _role, _pid))
+        _fv_key = ("fixed_vals", _uid)
+        fixed_vals, _hit = _cache_get(_fv_key)
+        if not _hit:
+            fixed_vals = _cache_set(_fv_key, get_user_fixed_values(_db, _uid))
         if fixed_vals:
             if user_config is None:
                 user_config = {}
+            user_config = dict(user_config)
             user_config["fixed_values"] = fixed_vals
         has_config = user_config and any(user_config.get(k) for k in user_config)
 
-        # 构建 sender → 用户姓名映射，用于实时关联"跟单人"
+        # 构建 sender → 用户姓名映射（TTL 缓存 30 秒）
         sender_name_map = {}
         try:
             ent_id = _get_enterprise_id_filter()
-            sender_name_map = get_sender_user_name_map(_db, ent_id)
+            _sm_key = ("sender_map", ent_id)
+            sender_name_map, _hit = _cache_get(_sm_key)
+            if not _hit:
+                sender_name_map = _cache_set(_sm_key, get_sender_user_name_map(_db, ent_id), ttl=30)
         except Exception:
             logger.debug("获取 sender→用户姓名映射失败，跟单人字段将为空")
+
+        # 批量查询无 sender 记录的上传用户姓名（避免每条都单独查 DB）
+        _upload_user_ids = {r["user_id"] for r in result.get("records", [])
+                            if not r.get("sender") and r.get("user_id")}
+        _upload_user_name_map: dict = {}
+        if _upload_user_ids:
+            try:
+                _conn = _db.pool.connection()
+                try:
+                    _cur = _conn.cursor(pymysql.cursors.DictCursor)
+                    _ph = ",".join(["%s"] * len(_upload_user_ids))
+                    _cur.execute(f"SELECT id, name FROM users WHERE id IN ({_ph})", list(_upload_user_ids))
+                    for _row in _cur.fetchall():
+                        if _row.get("name"):
+                            _upload_user_name_map[_row["id"]] = _row["name"]
+                finally:
+                    _conn.close()
+            except Exception:
+                logger.debug("批量查询上传用户姓名失败")
 
         for record in result.get("records", []):
             # 反序列化 display_fields
@@ -398,7 +451,7 @@ def list_records():
             # DEBUG：记录从DB读取后的交强到期时间
             _df_debug = record.get("display_fields", {})
             if _df_debug.get("交强到期时间"):
-                logger.info("[DEBUG-列表] record_id=%s DB读取后 交强到期时间=%s, manual_fields=%s",
+                logger.debug("[DEBUG-列表] record_id=%s DB读取后 交强到期时间=%s, manual_fields=%s",
                             record.get("id"), _df_debug.get("交强到期时间"), record.get("manual_fields"))
             pf_owner = record.pop("_pf_owner", None)
             if pf_owner and not record["display_fields"].get("车主"):
@@ -411,29 +464,26 @@ def list_records():
             if sender and sender in sender_name_map:
                 record["display_fields"]["跟单人"] = sender_name_map[sender]
             elif not sender and record.get("user_id"):
-                try:
-                    from auth.db import get_user_by_id
-                    upload_user = get_user_by_id(_db, record["user_id"])
-                    if upload_user and upload_user.get("name"):
-                        record["display_fields"]["跟单人"] = upload_user["name"]
-                except Exception:
-                    pass
+                _uname = _upload_user_name_map.get(record["user_id"], "")
+                if _uname:
+                    record["display_fields"]["跟单人"] = _uname
             # 时间戳转字符串（避免 Flask jsonify 将 datetime 序列化为 GMT 格式导致前端时区偏移）
             for ts_field in ("created_at", "updated_at"):
                 if record.get(ts_field) and not isinstance(record[ts_field], str):
                     record[ts_field] = str(record[ts_field])
 
-        # 同车牌互补：保司信息 + 车主 + 证件号码
-        # pool 结构：{车牌: {"name", "addr", "owner", "id_no"}}
+        # 同车牌互补：保司信息 + 车主 + 证件号码 + 签单日期 + 业务员
+        # pool 结构：{车牌: {"name", "addr", "owner", "id_no", "sign_date", "salesperson"}}
         _plate_pool = {}
         _plates_need_db = set()
+        _plates_need_sign_db = set()
         for record in result.get("records", []):
             df = record.get("display_fields", {})
             plate = df.get("车牌", "") or df.get("车牌号", "")
             if not plate:
                 continue
             if plate not in _plate_pool:
-                _plate_pool[plate] = {"name": "", "addr": "", "owner": "", "id_no": ""}
+                _plate_pool[plate] = {"name": "", "addr": "", "owner": "", "id_no": "", "sign_date": "", "salesperson": ""}
             p = _plate_pool[plate]
             if not p["name"] and df.get("保司公司名称"):
                 p["name"] = df["保司公司名称"]
@@ -444,18 +494,24 @@ def list_records():
             if not p["id_no"]:
                 p["id_no"] = (df.get("投保人身份证号码") or df.get("证件号码") or
                               df.get("被保险人身份证号码") or "")
+            if not p["sign_date"] and df.get("签单日期"):
+                p["sign_date"] = df["签单日期"]
+            if not p["salesperson"] and df.get("业务员"):
+                p["salesperson"] = df["业务员"]
             if not p["name"] or not p["addr"] or not p["owner"] or not p["id_no"]:
                 _plates_need_db.add(plate)
-        # 当前页不够的，从数据库查
+            if not p["sign_date"] or not p["salesperson"]:
+                _plates_need_sign_db.add(plate)
+        # 当前页不够的，从数据库查保司/车主/证件
         _still_missing = {p for p in _plates_need_db
-                          if not all(_plate_pool.get(p, {}).values())}
+                          if not all([_plate_pool.get(p, {}).get(k) for k in ("name", "addr", "owner", "id_no")])}
         if _still_missing:
             try:
                 from insurance.db import find_insurer_info_by_plates
                 _db_info = find_insurer_info_by_plates(_db, list(_still_missing))
                 for p, info in _db_info.items():
                     if p not in _plate_pool:
-                        _plate_pool[p] = {"name": "", "addr": "", "owner": "", "id_no": ""}
+                        _plate_pool[p] = {"name": "", "addr": "", "owner": "", "id_no": "", "sign_date": "", "salesperson": ""}
                     ep = _plate_pool[p]
                     if not ep["name"] and info.get("insurer_name"):
                         ep["name"] = info["insurer_name"]
@@ -467,6 +523,23 @@ def list_records():
                         ep["id_no"] = info["id_number"]
             except Exception:
                 logger.debug("查询同车牌信息失败")
+        # 当前页不够的，从数据库查签单日期/业务员
+        _still_sign_missing = {p for p in _plates_need_sign_db
+                                if not _plate_pool.get(p, {}).get("sign_date") or not _plate_pool.get(p, {}).get("salesperson")}
+        if _still_sign_missing:
+            try:
+                from insurance.db import find_sign_info_by_plates
+                _sign_info = find_sign_info_by_plates(_db, list(_still_sign_missing))
+                for p, info in _sign_info.items():
+                    if p not in _plate_pool:
+                        _plate_pool[p] = {"name": "", "addr": "", "owner": "", "id_no": "", "sign_date": "", "salesperson": ""}
+                    ep = _plate_pool[p]
+                    if not ep["sign_date"] and info.get("sign_date"):
+                        ep["sign_date"] = info["sign_date"]
+                    if not ep["salesperson"] and info.get("salesperson"):
+                        ep["salesperson"] = info["salesperson"]
+            except Exception:
+                logger.debug("查询同车牌签单信息失败")
         # 回填缺失字段
         for record in result.get("records", []):
             df = record.get("display_fields", {})
@@ -491,6 +564,10 @@ def list_records():
                         break
                 if not filled_id and not df.get("投保人身份证号码"):
                     df["投保人身份证号码"] = pool["id_no"]
+            if not df.get("签单日期") and pool["sign_date"]:
+                df["签单日期"] = pool["sign_date"]
+            if not df.get("业务员") and pool["salesperson"]:
+                df["业务员"] = pool["salesperson"]
 
         # 车架号互补：车牌为空但有车架号的记录，从同车架号其他记录补车牌和证件号
         _vin_pool = {}  # {VIN: {"plate": "", "id_no": "", "owner": ""}}
@@ -531,24 +608,35 @@ def list_records():
                 if not filled_id and not df.get("投保人身份证号码"):
                     df["投保人身份证号码"] = vp["id_no"]
 
-        # 同 PDF 车牌互补：同一 file_md5 中有车牌的记录 → 补给无车牌的兄弟记录
-        # 适用于：意外险/驾乘险与交强险/商业险来自同一 PDF，意外险本身无车牌字段
-        _md5_plate_pool = {}
+        # 同 PDF 互补：同一 file_md5 中互补车牌、签单日期、业务员
+        # 适用于：意外险/驾乘险与交强险/商业险来自同一 PDF，驾乘险本身无车牌/签单日期等字段
+        _md5_pool = {}  # {md5: {"plate": "", "sign_date": "", "salesperson": ""}}
         for record in result.get("records", []):
             md5 = record.get("file_md5", "")
             if not md5:
                 continue
+            if md5 not in _md5_pool:
+                _md5_pool[md5] = {"plate": "", "sign_date": "", "salesperson": ""}
+            p = _md5_pool[md5]
             df = record.get("display_fields", {})
-            plate = df.get("车牌", "") or df.get("车牌号", "")
-            if plate:
-                _md5_plate_pool[md5] = plate
+            if not p["plate"]:
+                p["plate"] = df.get("车牌", "") or df.get("车牌号", "")
+            if not p["sign_date"]:
+                p["sign_date"] = df.get("签单日期", "")
+            if not p["salesperson"]:
+                p["salesperson"] = df.get("业务员", "")
         for record in result.get("records", []):
             md5 = record.get("file_md5", "")
-            if not md5 or md5 not in _md5_plate_pool:
+            if not md5 or md5 not in _md5_pool:
                 continue
             df = record.get("display_fields", {})
-            if not df.get("车牌") and not df.get("车牌号"):
-                df["车牌"] = _md5_plate_pool[md5]
+            p = _md5_pool[md5]
+            if not df.get("车牌") and not df.get("车牌号") and p["plate"]:
+                df["车牌"] = p["plate"]
+            if not df.get("签单日期") and p["sign_date"]:
+                df["签单日期"] = p["sign_date"]
+            if not df.get("业务员") and p["salesperson"]:
+                df["业务员"] = p["salesperson"]
 
         # 文件名兜底：车牌仍为空时，从文件名中提取
         _PLATE_RE = re.compile(
@@ -634,7 +722,7 @@ def list_records():
                 record["display_fields"] = apply_user_config_to_fields(user_config, record["display_fields"])
                 _after_val = record["display_fields"].get("交强到期时间", "<不存在>")
                 if _before_val != _after_val:
-                    logger.info("[DEBUG-列表] record_id=%s apply_user_config前后交强到期时间变化: %s → %s",
+                    logger.debug("[DEBUG-列表] record_id=%s apply_user_config前后交强到期时间变化: %s → %s",
                                 record.get("id"), _before_val, _after_val)
 
         # 注入交强到期时间（使用格式化前构建的原始终保日期映射，并按其配置格式格式化）
@@ -683,19 +771,29 @@ def list_records():
                     _inject_val = _format_date(str(_inject_val), _compulsory_fmt, _compulsory_no_pad)
                 df["交强到期时间"] = _inject_val
 
-        # 互补后重算 is_abnormal：display_fields 补齐了必填字段则视为正常（不写库，仅改返回值）
+        # 互补后重算 is_abnormal：display_fields 补齐了必填字段则视为正常，并同步写库保持统计一致
         _RUNTIME_RF = {"承保公司", "保单号", "险种", "车牌", "投保人", "被保人", "签单日期", "起保日期", "终保日期", "保费"}
+        _fix_ids = []
         for record in result.get("records", []):
             if not record.get("is_abnormal") or record.get("abnormal_override_reason"):
                 continue
             df = record.get("display_fields") or {}
             missing = [f for f in _RUNTIME_RF if not df.get(f)]
+            _should_fix = False
             if not missing:
+                _should_fix = True
+            else:
+                _ptype = df.get("险种", "")
+                if missing == ["投保人"] and ("交强" in _ptype or "交通事故责任强制" in _ptype):
+                    _should_fix = True
+            if _should_fix:
                 record["is_abnormal"] = 0
-                continue
-            _ptype = df.get("险种", "")
-            if missing == ["投保人"] and ("交强" in _ptype or "交通事故责任强制" in _ptype):
-                record["is_abnormal"] = 0
+                _fix_ids.append(record["id"])
+        if _fix_ids:
+            try:
+                update_records_abnormal_flag(_db, _fix_ids, is_abnormal=0)
+            except Exception:
+                pass
 
         # 复用已加载的页面列配置
         result["column_config"] = list_col_cfg
@@ -793,21 +891,77 @@ def get_record(record_id):
                     user_config.pop("_manual_fields", None)
                 record["display_fields"] = apply_user_config_to_fields(user_config, record["display_fields"])
 
-        # 详情页互补：与列表端保持一致
-        df = record.get("display_fields") if isinstance(record.get("display_fields"), dict) else {}
-        if isinstance(df, dict):
-            # 文件名兜底：车牌为空时从文件名中提取
-            if not df.get("车牌") and not df.get("车牌号"):
-                _fn = record.get("filename", "") or ""
-                _pm = re.search(
-                    r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁夏]'
-                    r'[A-Z]-?[A-Z0-9]{4,6}', _fn
-                )
-                if _pm:
-                    df["车牌"] = _pm.group(0).replace("-", "")
-            # 车牌→车架号：有车牌无车架号时从 DB 同车牌记录补
-            _plate = df.get("车牌") or df.get("车牌号")
-            if _plate and not df.get("车架号"):
+        # 同一 PDF 的兄弟记录摘要（互补前先拿到，兄弟记录也用于互补）
+        siblings = []
+        if record.get("file_md5"):
+            siblings = _get_sibling_records(_db, record["file_md5"], record_id)
+
+        # 详情页互补：与列表端保持一致，覆盖所有运行时互补字段
+        df = record.get("display_fields")
+        if not isinstance(df, dict):
+            df = {}
+            record["display_fields"] = df
+
+        # 1. 同 PDF 兄弟记录互补：车牌、签单日期、业务员
+        _need_from_sib = (not df.get("车牌") and not df.get("车牌号"),
+                          not df.get("签单日期"), not df.get("业务员"))
+        if any(_need_from_sib):
+            for _sib in siblings:
+                _sib_df = _sib.get("display_fields") or {}
+                if isinstance(_sib_df, str):
+                    try:
+                        _sib_df = json.loads(_sib_df)
+                    except Exception:
+                        _sib_df = {}
+                if not df.get("车牌") and not df.get("车牌号"):
+                    _sp = _sib_df.get("车牌") or _sib_df.get("车牌号")
+                    if _sp:
+                        df["车牌"] = _sp
+                if not df.get("签单日期") and _sib_df.get("签单日期"):
+                    df["签单日期"] = _sib_df["签单日期"]
+                if not df.get("业务员") and _sib_df.get("业务员"):
+                    df["业务员"] = _sib_df["业务员"]
+                if df.get("车牌") and df.get("签单日期") and df.get("业务员"):
+                    break
+
+        # 2. 文件名兜底：车牌仍为空时从文件名提取
+        if not df.get("车牌") and not df.get("车牌号"):
+            _fn = record.get("filename", "") or ""
+            _pm = re.search(
+                r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁夏]'
+                r'[A-Z]-?[A-Z0-9]{4,6}', _fn
+            )
+            if _pm:
+                df["车牌"] = _pm.group(0).replace("-", "")
+
+        # 3. 同车牌互补：车主、车架号、保司公司名称、保司地址、证件号码、签单日期、业务员
+        _plate = df.get("车牌") or df.get("车牌号")
+        if _plate:
+            _need = (not df.get("车主") or not df.get("车架号") or
+                     not df.get("保司公司名称") or not df.get("保司地址") or
+                     not df.get("投保人身份证号码"))
+            if _need:
+                try:
+                    from insurance.db import find_insurer_info_by_plates
+                    _info_map = find_insurer_info_by_plates(_db, [_plate])
+                    _info = _info_map.get(_plate, {})
+                    if not df.get("车主") and _info.get("owner"):
+                        df["车主"] = _info["owner"]
+                    if not df.get("保司公司名称") and _info.get("insurer_name"):
+                        df["保司公司名称"] = _info["insurer_name"]
+                    if not df.get("保司地址") and _info.get("insurer_address"):
+                        df["保司地址"] = _info["insurer_address"]
+                    if _info.get("id_number"):
+                        for _id_key in ("投保人身份证号码", "证件号码", "被保险人身份证号码"):
+                            if _id_key in df and not df[_id_key]:
+                                df[_id_key] = _info["id_number"]
+                                break
+                        if not df.get("投保人身份证号码"):
+                            df["投保人身份证号码"] = _info["id_number"]
+                except Exception:
+                    pass
+            # 补车架号（关联表里没有，从同车牌记录查）
+            if not df.get("车架号"):
                 try:
                     from insurance.db import find_records_by_plate
                     for _pr in find_records_by_plate(_db, _plate, exclude_id=record_id):
@@ -823,11 +977,19 @@ def get_record(record_id):
                             break
                 except Exception:
                     pass
+            # 补签单日期/业务员（从同车牌其他记录查）
+            if not df.get("签单日期") or not df.get("业务员"):
+                try:
+                    from insurance.db import find_sign_info_by_plates
+                    _sign_map = find_sign_info_by_plates(_db, [_plate])
+                    _sign = _sign_map.get(_plate, {})
+                    if not df.get("签单日期") and _sign.get("sign_date"):
+                        df["签单日期"] = _sign["sign_date"]
+                    if not df.get("业务员") and _sign.get("salesperson"):
+                        df["业务员"] = _sign["salesperson"]
+                except Exception:
+                    pass
 
-        # 同一 PDF 的兄弟记录摘要（有 file_md5 就查）
-        siblings = []
-        if record.get("file_md5"):
-            siblings = _get_sibling_records(_db, record["file_md5"], record_id)
         return jsonify({"code": 0, "data": record, "siblings": siblings})
     except Exception as e:
         logger.exception("获取保单记录 %d 失败", record_id)

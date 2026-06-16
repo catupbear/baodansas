@@ -159,6 +159,14 @@ def apply_mapping(fields: Dict[str, str], company_short: str = "") -> Dict[str, 
         if key not in known_ocr_fields and key not in result:
             result[key] = val
 
+    # 承保公司优先使用签单分公司全名：当"保司公司名称"是基础名的扩展（同一保司的分公司）时，
+    # 用分公司全名覆盖承保公司（如"现代财产保险（中国）有限公司" → "...广东分公司"）。
+    # 保险公司（base）保持不变，故保司（带地区）/规则分派/别名包含匹配均不受影响。
+    _branch = fields.get("保司公司名称", "")
+    _base = fields.get("保险公司", "")
+    if _branch and _base and _base in _branch and _branch != _base:
+        result["承保公司"] = _branch
+
     # 兼容历史记录：如果"保司（带地区）"为空，从地址+承保公司实时计算；无地址时直接用承保公司
     if not result.get("保司（带地区）"):
         address = fields.get("保司地址", "")
