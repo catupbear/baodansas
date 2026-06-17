@@ -115,6 +115,11 @@
             .mobile-search input { width: 100% !important; }
             .modal-mask { align-items: flex-start; padding-top: 20px; }
             .modal-content { width: min(420px, calc(100vw - 32px)) !important; }
+            /* 账号管理：左右布局在手机上改为「顶部横向分组条 + 下方列表」 */
+            .ug-layout { flex-direction: column !important; min-height: 0 !important; }
+            .ug-sidebar { width: 100% !important; max-height: none !important; border-right: none !important; border-bottom: 1px solid #f0f0f0; display: flex !important; overflow-x: auto; overflow-y: hidden; }
+            .ug-sidebar > div { flex-shrink: 0; border-left: none !important; white-space: nowrap; }
+            .ug-main { max-height: none !important; }
         }
     </style>
 </head>
@@ -199,29 +204,22 @@
                 </button>
             </div>
 
-            <!-- 用户列表（按企业折叠分组） -->
+            <!-- 用户列表（左侧企业分组 + 右侧用户） -->
             <div class="bg-white rounded-xl shadow-sm overflow-hidden">
                 <div v-if="loading" class="py-16 text-center text-gray-400 text-sm">加载中...</div>
                 <div v-else-if="groupedUsers.length === 0" class="py-16 text-center text-gray-400 text-sm">{{ searchKeyword ? '无匹配结果' : '暂无用户数据' }}</div>
-                <div v-else>
-                    <!-- 企业分组 -->
-                    <div v-for="group in groupedUsers" :key="group.key" style="border-bottom:1px solid #f3f4f6;">
-                        <!-- 企业行（可点击折叠） -->
-                        <div @click="toggleGroup(group.key)"
-                            style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;cursor:pointer;background:#fafafa;user-select:none;"
-                            onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background='#fafafa'">
-                            <div style="display:flex;align-items:center;gap:10px;">
-                                <svg :style="{transform: expandedGroups.has(group.key) ? 'rotate(90deg)' : ''}"
-                                    style="transition:transform 0.2s;width:14px;height:14px;color:#9ca3af;flex-shrink:0;"
-                                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                                </svg>
-                                <span style="font-size:14px;font-weight:600;color:#374151;">{{ group.name }}</span>
-                            </div>
-                            <span style="font-size:12px;color:#9ca3af;">{{ group.users.filter(u=>u.enabled).length }}/{{ group.users.length }}</span>
+                <div v-else class="ug-layout" style="display:flex;align-items:stretch;min-height:420px;">
+                    <!-- 左侧企业分组导航 -->
+                    <div class="ug-sidebar" style="width:200px;flex-shrink:0;border-right:1px solid #f0f0f0;background:#fafafa;overflow-y:auto;max-height:72vh;">
+                        <div v-for="group in groupedUsers" :key="group.key" @click="activeGroup = group.key"
+                             :style="{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px',cursor:'pointer',fontSize:'14px',userSelect:'none',borderLeft:(activeGroupData && activeGroupData.key===group.key)?'3px solid #ea580c':'3px solid transparent',background:(activeGroupData && activeGroupData.key===group.key)?'#fff':'transparent',fontWeight:(activeGroupData && activeGroupData.key===group.key)?'600':'400',color:(activeGroupData && activeGroupData.key===group.key)?'#ea580c':'#374151'}">
+                            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ group.name }}</span>
+                            <span style="font-size:11px;color:#9ca3af;flex-shrink:0;margin-left:6px;">{{ group.users.filter(u=>u.enabled).length }}/{{ group.users.length }}</span>
                         </div>
-                        <!-- 展开的用户列表 -->
-                        <template v-if="expandedGroups.has(group.key)">
+                    </div>
+                    <!-- 右侧用户列表 -->
+                    <div v-if="activeGroupData" class="ug-main" style="flex:1;min-width:0;overflow:auto;max-height:72vh;">
+                        <div>
                             <!-- 桌面端表格 -->
                             <div class="hidden sm:block overflow-x-auto">
                                 <table class="data-table">
@@ -246,7 +244,7 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr v-for="user in group.users" :key="user.id">
+                                        <tr v-for="user in activeGroupData.users" :key="user.id">
                                             <td class="font-medium text-gray-800">{{ user.phone }}</td>
                                             <td>{{ user.name || '-' }}</td>
                                             <td>
@@ -291,7 +289,7 @@
                             </div>
                             <!-- 移动端卡片 -->
                             <div class="sm:hidden">
-                                <div v-for="user in group.users" :key="'m'+user.id"
+                                <div v-for="user in activeGroupData.users" :key="'m'+user.id"
                                      style="border-bottom:1px solid #f5f0eb;padding:12px 4px;">
                                     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
                                         <div>
@@ -317,7 +315,7 @@
                                     </div>
                                 </div>
                             </div>
-                        </template>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -536,26 +534,31 @@ createApp({
             const result = [];
             for (const [, g] of map) result.push(g);
             result.sort((a, b) => {
-                if (a.key === '__none__') return 1;
-                if (b.key === '__none__') return -1;
+                // 未分组（待分配企业的注册用户）置顶，方便管理员拉入企业
+                if (a.key === '__none__') return -1;
+                if (b.key === '__none__') return 1;
                 return a.name.localeCompare(b.name, 'zh');
             });
             return result;
         });
 
-        // 有搜索词时自动展开所有匹配分组
-        Vue.watch(searchKeyword, () => {
-            if (searchKeyword.value.trim()) {
-                const keys = new Set(groupedUsers.value.map(g => g.key));
-                expandedGroups.value = keys;
-            }
+        // 左侧选中的企业分组（默认第一个，未分组已置顶）
+        const activeGroup = ref('');
+        const activeGroupData = computed(() => {
+            const groups = groupedUsers.value;
+            if (!groups.length) return null;
+            return groups.find(g => g.key === activeGroup.value) || groups[0];
         });
 
-        function toggleGroup(key) {
-            const s = new Set(expandedGroups.value);
-            s.has(key) ? s.delete(key) : s.add(key);
-            expandedGroups.value = s;
-        }
+        // 分组列表变化（搜索/加载）后，若当前选中分组已不存在则切到第一个
+        Vue.watch(groupedUsers, () => {
+            const groups = groupedUsers.value;
+            if (groups.length && !groups.find(g => g.key === activeGroup.value)) {
+                activeGroup.value = groups[0].key;
+            }
+        }, { immediate: true });
+
+        function toggleGroup(key) { activeGroup.value = key; }
         const filterRole = ref('');
 
         /* 弹窗状态 */
@@ -902,7 +905,7 @@ createApp({
             openResetPwdModal, closeResetPwdModal, submitResetPwd,
             showDeleteModal, deleteUser, openDeleteModal, closeDeleteModal, confirmDelete,
             toggleEnabled, logout, toast,
-            groupedUsers, expandedGroups, toggleGroup,
+            groupedUsers, expandedGroups, toggleGroup, activeGroup, activeGroupData,
             roleLabel, roleBadgeClass, salesTypeLabel, formatTime,
             allSenders, availableSenders, addSender, removeSender, customSenderId, addCustomSender,
             mobileMenuOpen,

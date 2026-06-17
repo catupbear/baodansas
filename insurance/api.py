@@ -792,6 +792,8 @@ def list_records():
         if _fix_ids:
             try:
                 update_records_abnormal_flag(_db, _fix_ids, is_abnormal=0)
+                # 已修正部分记录的 is_abnormal，清统计缓存使"需人工补充"数字与列表一致
+                _stats_cache.clear()
             except Exception:
                 pass
 
@@ -3902,9 +3904,15 @@ def export_excel():
         for row_idx in range(1, ws.max_row + 1):
             ws.row_dimensions[row_idx].height = 22
 
-        # 自动列宽（根据内容，中文字符按 2 倍宽度计算，最大 50）
+        # 指定列固定宽度（用户要求）：承保公司、被保人列固定 24.01 字符
+        FIXED_COL_WIDTH = {"承保公司": 24.01, "投保公司": 24.01, "被保人": 24.01, "被保险人": 24.01}
+        # 自动列宽（根据内容，中文字符按 2 倍宽度计算）
         for col_idx, _ in enumerate(ws[1], start=1):
             col_letter = get_column_letter(col_idx)
+            header_val = str(ws.cell(row=1, column=col_idx).value or "")
+            if header_val in FIXED_COL_WIDTH:
+                ws.column_dimensions[col_letter].width = FIXED_COL_WIDTH[header_val]
+                continue
             max_len = 0
             for cell in ws[col_letter]:
                 try:

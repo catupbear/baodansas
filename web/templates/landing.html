@@ -402,7 +402,7 @@ nav {
 }
 .billing-btn em { font-style: normal; color: var(--green); font-size: 12px; margin-left: 4px; }
 .billing-btn.active { background: linear-gradient(135deg, var(--blue), var(--purple)); color: #fff; box-shadow: 0 0 20px rgba(79,110,247,0.3); }
-.price-row { display: flex; align-items: baseline; gap: 4px; margin-bottom: 4px; }
+.price-row { display: flex; align-items: baseline; gap: 4px; margin-bottom: 4px; flex-wrap: wrap; }
 .price-origin { font-size: 12px; color: var(--text3); text-decoration: line-through; min-height: 18px; margin-bottom: 2px; }
 .price-sub { font-size: 12px; color: var(--text3); margin-bottom: 16px; }
 .price-quota { font-size: 14px; color: var(--text2); margin-bottom: 4px; }
@@ -980,7 +980,7 @@ footer {
       </div>
       <div class="contact-qr reveal reveal-d2">
         <div class="qr-placeholder">
-          <img src="/static/img/wechat_qr.png" alt="微信二维码">
+          <img src="/static/img/wechat_qr.png?v=2" alt="微信二维码">
         </div>
         <div class="qr-title">扫码添加微信</div>
         <div class="qr-desc">添加后发送「保单台账」即可快速开始咨询</div>

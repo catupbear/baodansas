@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>邀请有礼 · 分享赚佣金 — 午虎AI保单台账</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root{
+    --orange:#ea580c; --orange2:#fb923c; --orange-d:#c2410c;
+    --green:#16a34a; --text:#1f2937; --text2:#6b7280; --text3:#9ca3af;
+    --bg:#fff7ed; --card:#ffffff; --border:#f1e9e2;
+  }
+  body{ font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; color:var(--text); background:var(--bg); line-height:1.6; -webkit-font-smoothing:antialiased; }
+  .wrap{ max-width:960px; margin:0 auto; padding:0 20px; }
+  a{ text-decoration:none; }
+
+  /* Hero */
+  .hero{ background:linear-gradient(150deg,#7c2d12 0%,#ea580c 55%,#fb923c 100%); color:#fff; padding:64px 0 72px; text-align:center; position:relative; overflow:hidden; }
+  .hero::after{ content:''; position:absolute; bottom:-1px; left:0; right:0; height:40px; background:var(--bg); border-radius:50% 50% 0 0 / 100% 100% 0 0; }
+  .hero-badge{ display:inline-block; background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.3); padding:5px 16px; border-radius:100px; font-size:13px; margin-bottom:20px; backdrop-filter:blur(4px); }
+  .hero h1{ font-size:40px; font-weight:800; letter-spacing:-1px; margin-bottom:14px; }
+  .hero p{ font-size:16px; opacity:0.92; max-width:560px; margin:0 auto 8px; }
+  .hero-num{ font-size:72px; font-weight:900; line-height:1.1; margin:26px 0 4px; text-shadow:0 4px 24px rgba(0,0,0,0.2); }
+  .hero-num small{ font-size:24px; font-weight:700; }
+  .hero-num-label{ font-size:15px; opacity:0.9; }
+  .hero-cta{ margin-top:30px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap; position:relative; z-index:2; }
+  .btn{ display:inline-flex; align-items:center; gap:6px; padding:13px 28px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer; transition:all .2s; border:none; }
+  .btn-light{ background:#fff; color:var(--orange-d); box-shadow:0 6px 20px rgba(0,0,0,0.15); }
+  .btn-light:hover{ transform:translateY(-2px); box-shadow:0 10px 28px rgba(0,0,0,0.22); }
+  .btn-ghost{ background:rgba(255,255,255,0.15); color:#fff; border:1px solid rgba(255,255,255,0.4); }
+  .btn-ghost:hover{ background:rgba(255,255,255,0.25); }
+
+  section{ padding:54px 0; }
+  .sec-title{ text-align:center; font-size:28px; font-weight:800; margin-bottom:8px; letter-spacing:-0.5px; }
+  .sec-sub{ text-align:center; color:var(--text2); font-size:15px; margin-bottom:40px; }
+
+  /* 卖点 */
+  .feats{ display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
+  .feat{ background:var(--card); border:1px solid var(--border); border-radius:18px; padding:30px 24px; text-align:center; transition:all .25s; }
+  .feat:hover{ transform:translateY(-4px); box-shadow:0 16px 36px rgba(234,88,12,0.10); border-color:rgba(234,88,12,0.25); }
+  .feat-ic{ width:56px; height:56px; border-radius:16px; background:linear-gradient(135deg,#fff7ed,#fed7aa); display:flex; align-items:center; justify-content:center; font-size:28px; margin:0 auto 16px; }
+  .feat h3{ font-size:17px; font-weight:700; margin-bottom:8px; }
+  .feat p{ color:var(--text2); font-size:14px; }
+
+  /* 三步 */
+  .steps-wrap{ background:#fff; }
+  .steps{ display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
+  .step{ position:relative; background:var(--bg); border-radius:18px; padding:32px 24px 26px; }
+  .step-no{ position:absolute; top:-16px; left:24px; width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg,var(--orange2),var(--orange)); color:#fff; font-size:18px; font-weight:800; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(234,88,12,0.35); }
+  .step h3{ font-size:17px; font-weight:700; margin:14px 0 8px; }
+  .step p{ color:var(--text2); font-size:14px; }
+
+  /* 收益示例 */
+  .calc{ display:grid; grid-template-columns:repeat(2,1fr); gap:20px; max-width:720px; margin:0 auto; }
+  .calc-card{ background:var(--card); border:1px solid var(--border); border-radius:18px; padding:28px; text-align:center; position:relative; overflow:hidden; }
+  .calc-card.hot{ background:linear-gradient(160deg,#fff7ed,#fffbf5); border-color:rgba(234,88,12,0.3); }
+  .calc-tag{ position:absolute; top:14px; right:14px; background:rgba(234,88,12,0.1); color:var(--orange); font-size:11px; font-weight:700; padding:3px 10px; border-radius:100px; }
+  .calc-plan{ font-size:14px; color:var(--text2); margin-bottom:6px; }
+  .calc-price{ font-size:15px; color:var(--text3); margin-bottom:18px; }
+  .calc-earn-label{ font-size:13px; color:var(--text2); }
+  .calc-earn{ font-size:40px; font-weight:900; color:var(--green); line-height:1.1; margin-top:4px; }
+  .calc-earn small{ font-size:18px; }
+  .calc-note{ font-size:12px; color:var(--text3); margin-top:10px; }
+
+  /* 规则 */
+  .rules{ max-width:680px; margin:0 auto; }
+  .rule{ display:flex; gap:14px; align-items:flex-start; background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px 20px; margin-bottom:12px; }
+  .rule-ic{ color:var(--orange); font-size:18px; flex-shrink:0; margin-top:1px; }
+  .rule b{ display:block; font-size:15px; margin-bottom:2px; }
+  .rule span{ color:var(--text2); font-size:14px; }
+
+  /* 底部CTA */
+  .final{ background:linear-gradient(150deg,#7c2d12,#ea580c); color:#fff; text-align:center; border-radius:24px; padding:48px 24px; margin:0 20px; }
+  .final h2{ font-size:28px; font-weight:800; margin-bottom:10px; }
+  .final p{ opacity:0.9; margin-bottom:26px; font-size:15px; }
+  .qr-box{ display:inline-flex; flex-direction:column; align-items:center; gap:10px; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25); border-radius:16px; padding:18px; margin-top:28px; }
+  .qr-box img{ width:148px; height:148px; border-radius:12px; background:#fff; padding:6px; }
+  .qr-box span{ font-size:13px; opacity:0.92; }
+
+  footer{ text-align:center; color:var(--text3); font-size:13px; padding:34px 20px 40px; }
+
+  /* 我的专属邀请 */
+  .mine-sec{ background:#fff; }
+  .mine-card{ max-width:460px; margin:0 auto; background:var(--card); border:1px solid var(--border); border-radius:18px; padding:28px; text-align:center; box-shadow:0 8px 28px rgba(234,88,12,0.08); }
+  .mine-link-row{ display:flex; align-items:center; gap:8px; background:var(--bg); border-radius:10px; padding:10px 12px; margin-bottom:18px; }
+  .mine-link-row span{ flex:1; font-size:13px; color:var(--text2); word-break:break-all; text-align:left; }
+  .mine-link-row button{ flex-shrink:0; border:1px solid var(--orange); background:#fff; color:var(--orange); font-size:13px; font-weight:600; padding:6px 14px; border-radius:8px; cursor:pointer; }
+  .mine-qr{ display:inline-block; padding:12px; background:#fff; border:1px solid var(--border); border-radius:14px; line-height:0; }
+  .mine-tip{ font-size:13px; color:var(--text3); margin-top:12px; }
+  .mine-downline{ font-size:13px; color:var(--orange); font-weight:600; margin-top:14px; }
+
+  /* 平板 / 窄屏 */
+  @media (max-width:760px){
+    .hero{ padding:48px 0 56px; }
+    .hero h1{ font-size:28px; }
+    .hero p{ font-size:15px; }
+    .hero-num{ font-size:60px; }
+    .feats,.steps,.calc{ grid-template-columns:1fr; }
+    .calc{ max-width:420px; }
+    section{ padding:42px 0; }
+    .sec-title{ font-size:23px; }
+    .sec-sub{ margin-bottom:30px; }
+    .final{ margin:0 16px; padding:40px 20px; }
+    .final h2{ font-size:24px; }
+  }
+  /* 手机 */
+  @media (max-width:480px){
+    .wrap{ padding:0 16px; }
+    .hero{ padding:40px 0 50px; }
+    .hero-badge{ font-size:12px; margin-bottom:16px; }
+    .hero h1{ font-size:24px; }
+    .hero p{ font-size:14px; }
+    .hero-num{ font-size:52px; }
+    .hero-num small{ font-size:20px; }
+    .hero-num-label{ font-size:14px; }
+    .hero-cta{ flex-direction:column; gap:10px; }
+    .hero-cta .btn{ width:100%; justify-content:center; }
+    .btn{ padding:13px 20px; font-size:14px; }
+    .sec-title{ font-size:21px; }
+    .feat,.step,.calc-card{ padding:24px 20px; }
+    .feat-ic{ width:50px; height:50px; font-size:25px; }
+    .step-no{ width:36px; height:36px; font-size:16px; }
+    .calc-earn{ font-size:34px; }
+    .rule{ padding:15px 16px; }
+    .final{ padding:36px 18px; }
+    .final h2{ font-size:21px; }
+    .final .btn{ width:100%; justify-content:center; }
+    .qr-box img{ width:130px; height:130px; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="wrap">
+      <div class="hero-badge">🎁 邀请有礼计划</div>
+      <h1>分享好工具，赚取持续佣金</h1>
+      <p>把「午虎AI保单台账」推荐给身边的保险同行，每一位通过你邀请并购买套餐的用户，都为你带来真金白银的回报。</p>
+      <div class="hero-num">20<small>%</small></div>
+      <div class="hero-num-label">好友套餐费，直接返给你</div>
+      <div class="hero-cta">
+        <a href="#mine" class="btn btn-light">🔗 获取我的邀请链接</a>
+        <a href="/login" id="btn-register" class="btn btn-ghost">还没账号？免费注册</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 我的专属邀请（登录后显示） -->
+  <section id="mine" class="mine-sec" style="display:none;">
+    <div class="wrap">
+      <div class="sec-title">我的专属邀请</div>
+      <div class="sec-sub">把下面的链接或二维码发给好友，TA 购买套餐你就赚佣金</div>
+      <div class="mine-card">
+        <div class="mine-link-row">
+          <span id="mine-link">加载中...</span>
+          <button id="mine-copy" onclick="copyMineLink()">复制</button>
+        </div>
+        <div id="mine-qr" class="mine-qr"></div>
+        <div class="mine-tip">好友扫码注册，即与你绑定邀请关系</div>
+        <div id="mine-downline" class="mine-downline"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 卖点 -->
+  <section>
+    <div class="wrap">
+      <div class="sec-title">为什么值得分享</div>
+      <div class="sec-sub">动动手指分享，躺着也能赚佣金</div>
+      <div class="feats">
+        <div class="feat">
+          <div class="feat-ic">💰</div>
+          <h3>高额返佣 20%</h3>
+          <p>好友购买任意付费套餐，你立得套餐费的 20%，企业版单笔最高可赚约 2000 元。</p>
+        </div>
+        <div class="feat">
+          <div class="feat-ic">♾️</div>
+          <h3>专属码永久有效</h3>
+          <p>每个账号一个固定邀请码 / 二维码，绑定后永不失效，随时随地分享。</p>
+        </div>
+        <div class="feat">
+          <div class="feat-ic">⚡</div>
+          <h3>佣金实时入账</h3>
+          <p>好友成功购买后，佣金自动计入「我的钱包」，清晰可查，省心透明。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 三步 -->
+  <section class="steps-wrap">
+    <div class="wrap">
+      <div class="sec-title">三步开始赚钱</div>
+      <div class="sec-sub">简单到不能再简单</div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-no">1</div>
+          <h3>获取专属邀请</h3>
+          <p>登录后进入「个人中心 → 邀请有礼」，复制专属链接或保存邀请二维码。</p>
+        </div>
+        <div class="step">
+          <div class="step-no">2</div>
+          <h3>分享给好友</h3>
+          <p>把链接 / 二维码发给做保险的朋友、同行、客户，对方扫码注册并购买套餐。</p>
+        </div>
+        <div class="step">
+          <div class="step-no">3</div>
+          <h3>坐收佣金</h3>
+          <p>好友购买成功，套餐费的 20% 立即返给你，自动进入钱包，可随时提现。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 收益示例 -->
+  <section>
+    <div class="wrap">
+      <div class="sec-title">能赚多少？</div>
+      <div class="sec-sub">按好友购买的套餐计算，邀请越多赚得越多，上不封顶</div>
+      <div class="calc">
+        <div class="calc-card">
+          <div class="calc-plan">好友购买 · 标准版套餐</div>
+          <div class="calc-price">¥2,999 / 年</div>
+          <div class="calc-earn-label">你可获得</div>
+          <div class="calc-earn"><small>约 ¥</small>600</div>
+          <div class="calc-note">2,999 × 20%</div>
+        </div>
+        <div class="calc-card hot">
+          <div class="calc-tag">推荐</div>
+          <div class="calc-plan">好友购买 · 企业版套餐</div>
+          <div class="calc-price">¥9,999 / 年</div>
+          <div class="calc-earn-label">你可获得</div>
+          <div class="calc-earn"><small>约 ¥</small>2,000</div>
+          <div class="calc-note">9,999 × 20%</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 规则 -->
+  <section style="padding-top:0;">
+    <div class="wrap">
+      <div class="sec-title">活动规则</div>
+      <div class="sec-sub" style="margin-bottom:28px;">公开透明，放心分享</div>
+      <div class="rules">
+        <div class="rule"><span class="rule-ic">✓</span><div><b>佣金比例</b><span>好友首次购买付费套餐金额的 20%，作为佣金奖励发放给邀请人。</span></div></div>
+        <div class="rule"><span class="rule-ic">✓</span><div><b>邀请关系</b><span>好友通过你的专属链接 / 二维码注册，即与你永久绑定邀请关系。</span></div></div>
+        <div class="rule"><span class="rule-ic">✓</span><div><b>佣金结算</b><span>好友购买成功后，佣金实时计入你的「我的钱包」，明细可查。</span></div></div>
+        <div class="rule"><span class="rule-ic">✓</span><div><b>邀请上限</b><span>邀请人数与佣金均无上限，邀请越多，收益越多。</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 底部 CTA -->
+  <div class="final">
+    <div id="final-promo">
+      <h2>现在就开始邀请吧</h2>
+      <p>登录账号，在「个人中心 → 邀请有礼」获取你的专属链接和二维码</p>
+      <div class="hero-cta">
+        <a href="#mine" class="btn btn-light">🔗 获取我的邀请链接</a>
+      </div>
+    </div>
+    <div class="qr-box">
+      <img src="/static/img/wechat_qr.png?v=2" alt="客服微信二维码">
+      <span>扫码添加客服，了解更多详情</span>
+    </div>
+  </div>
+
+  <footer>© 2026 午虎AI保单台账 · 邀请有礼计划</footer>
+
+  <script src="/static/qrcode.min.js"></script>
+  <script>
+  (function(){
+    var token = localStorage.getItem('token');
+    if(!token) return;  // 未登录：仅作介绍页，不显示"我的专属邀请"
+    // 已登录：隐藏"免费注册"按钮
+    var reg = document.getElementById('btn-register');
+    if(reg) reg.style.display = 'none';
+    var fp = document.getElementById('final-promo');
+    if(fp) fp.style.display = 'none';
+    fetch('/api/auth/invite-info', { headers: { Authorization: 'Bearer ' + token } })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d || d.code !== 0 || !d.data || !d.data.invite_link) return;
+        var link = d.data.invite_link;
+        var cnt = d.data.downline_count || 0;
+        window.__mineLink = link;
+        document.getElementById('mine-link').textContent = link;
+        document.getElementById('mine-downline').textContent =
+          cnt > 0 ? ('🎉 已成功邀请 ' + cnt + ' 人') : '还没有邀请记录，快去分享吧';
+        var box = document.getElementById('mine-qr');
+        if (window.QRCode) {
+          box.innerHTML = '';
+          new QRCode(box, { text: link, width: 168, height: 168,
+            colorDark: '#1a1a1a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+        }
+        document.getElementById('mine').style.display = 'block';
+      })
+      .catch(function(){});
+  })();
+  function copyMineLink(){
+    if(!window.__mineLink) return;
+    navigator.clipboard.writeText(window.__mineLink).then(function(){
+      var b = document.getElementById('mine-copy');
+      b.textContent = '已复制'; setTimeout(function(){ b.textContent = '复制'; }, 2000);
+    });
+  }
+  </script>
+
+</body>
+</html>

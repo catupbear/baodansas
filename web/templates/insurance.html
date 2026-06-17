@@ -352,11 +352,21 @@
     .pm-cta-outline:hover{background:#fff7ed;}
     .pm-cta-fill{background:linear-gradient(135deg,var(--pm-orange2),var(--pm-orange));color:#fff;box-shadow:0 4px 16px rgba(234,88,12,0.35);}
     .pm-cta-fill:hover{box-shadow:0 6px 22px rgba(234,88,12,0.5);}
-    .pm-qr-overlay{position:fixed;inset:0;z-index:310;background:rgba(17,24,39,0.6);display:flex;align-items:center;justify-content:center;padding:20px;}
+    .pm-qr-overlay{position:fixed;inset:0;z-index:1100;background:rgba(17,24,39,0.6);display:flex;align-items:center;justify-content:center;padding:20px;}
     .pm-qr-modal{background:#fff;border-radius:20px;padding:32px 36px;position:relative;text-align:center;box-shadow:0 32px 80px rgba(0,0,0,0.35);}
     .pm-qr-close{position:absolute;top:14px;right:16px;width:30px;height:30px;border-radius:8px;background:#f3f4f6;border:1px solid #e5e7eb;color:#6b7280;font-size:16px;cursor:pointer;line-height:1;}
     .pm-qr-close:hover{background:#e5e7eb;color:#374151;}
     @media (max-width:680px){.pm-grid{grid-template-columns:1fr;}.pm-box{padding:32px 20px 24px;}.pm-val{font-size:32px;}}
+    /* 支持保司区：手机上改为上下布局（标签在上，保司标签在下全宽平铺） */
+    @media (max-width:639px){
+      .company-section{ flex-direction:column !important; gap:8px !important; }
+    }
+    /* 预览弹窗移动端：信息面板改为下方堆叠、顶部按钮可换行 */
+    @media (max-width:640px){
+      .preview-actions{ flex-wrap:wrap; justify-content:flex-end; }
+      .preview-body{ flex-direction:column; }
+      .preview-side{ width:100% !important; min-width:0 !important; max-height:45vh; border-left:none !important; border-top:1px solid #e5e7eb; }
+    }
     </style>
 </head>
 <body class="min-h-screen" style="background:#faf5f0;">
@@ -413,16 +423,6 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
                     </svg>
                     系统设置
-                </a>
-                <!-- 设置按钮（仅超管可见） → 跳转监控配置页 -->
-                <a v-if="currentUser && currentUser.role === 'super_admin'" href="/monitor-config"
-                   class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;text-decoration:none;"
-                   title="监控配置">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                    </svg>
-                    监控设置
                 </a>
                 <!-- 账号管理（超管可见） -->
                 <a v-if="currentUser && currentUser.role === 'super_admin'" href="/admin/users"
@@ -540,7 +540,7 @@
             <button class="pm-qr-close" @click="showPricingQr=false">✕</button>
             <div style="font-size:17px;font-weight:700;color:#111827;margin-bottom:6px;">扫码添加客服微信</div>
             <div style="font-size:13px;color:#6b7280;margin-bottom:18px;">添加客服开通套餐 / 咨询详情</div>
-            <img src="/static/img/wechat_qr.png" alt="客服二维码" style="width:200px;height:200px;border-radius:14px;background:#fff;padding:6px;border:1px solid #eceef1;display:block;margin:0 auto;">
+            <img src="/static/img/wechat_qr.png?v=2" alt="客服二维码" style="width:200px;height:200px;border-radius:14px;background:#fff;padding:6px;border:1px solid #eceef1;display:block;margin:0 auto;">
         </div>
     </div>
 
@@ -583,7 +583,6 @@
                     💎 购买套餐
                 </button>
                 <a href="/insurance/settings" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">系统设置</a>
-                <a v-if="currentUser && currentUser.role==='super_admin'" href="/monitor-config" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">监控设置</a>
                 <a v-if="currentUser && currentUser.role==='super_admin'" href="/admin/users" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">账号管理</a>
                 <button @click="profileVisible=true;loadQuota();mobileMenuOpen=false"
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;border:none;background:none;cursor:pointer;margin-bottom:3px;">
@@ -709,7 +708,7 @@
 
     <!-- ========== 个人中心弹窗 ========== -->
     <div v-if="profileVisible" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;display:flex;align-items:flex-start;justify-content:flex-end;" @click.self="closeProfile">
-        <div style="width:360px;height:100vh;background:#fff;box-shadow:-4px 0 24px rgba(0,0,0,0.12);display:flex;flex-direction:column;overflow:hidden;">
+        <div style="width:360px;max-width:90vw;height:100vh;background:#fff;box-shadow:-4px 0 24px rgba(0,0,0,0.12);display:flex;flex-direction:column;overflow:hidden;">
             <!-- 顶部用户信息 -->
             <div style="background:linear-gradient(135deg,#f5a623,#e8673d);padding:28px 24px 20px;flex-shrink:0;">
                 <div style="display:flex;align-items:center;gap:14px;">
@@ -851,47 +850,28 @@
                 </div>
 
 
-                <!-- 邀请有礼 -->
-                <div>
-                    <div @click="toggleShareTab()" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;cursor:pointer;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
-                        <div style="display:flex;align-items:center;gap:10px;">
-                            <div style="width:32px;height:32px;border-radius:8px;background:#fff7ed;display:flex;align-items:center;justify-content:center;">
-                                <svg width="16" height="16" fill="none" stroke="#f07c3e" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
-                            </div>
-                            <span style="font-size:14px;color:#1a1a1a;font-weight:500;">邀请有礼</span>
-                            <span v-if="inviteInfo.downline_count > 0" style="background:#f07c3e;color:#fff;font-size:11px;padding:1px 7px;border-radius:10px;">{{ inviteInfo.downline_count }}</span>
+                <!-- 邀请有礼（点击跳转到介绍/专属页） -->
+                <div onclick="location.href='/invite'" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;cursor:pointer;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="width:32px;height:32px;border-radius:8px;background:#fff7ed;display:flex;align-items:center;justify-content:center;">
+                            <svg width="16" height="16" fill="none" stroke="#f07c3e" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
                         </div>
-                        <svg :style="{transform: profileTab==='share' ? 'rotate(90deg)' : ''}" style="transition:transform 0.2s;width:16px;height:16px;color:#bbb" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        <span style="font-size:14px;color:#1a1a1a;font-weight:500;">邀请有礼</span>
                     </div>
-                    <div v-if="profileTab==='share'" style="padding:0 20px 16px;">
-                        <div style="background:#fff7ed;border-radius:10px;padding:14px;margin-bottom:10px;">
-                            <div style="font-size:12px;color:#92400e;font-weight:600;margin-bottom:6px;">🎁 邀请好友，赚取佣金</div>
-                            <div style="font-size:11px;color:#b45309;line-height:1.6;">每成功邀请一位用户并购买付费套餐，可获得套餐费的 20% 佣金奖励。</div>
-                        </div>
-                        <div v-if="inviteLoading" style="text-align:center;color:#aaa;font-size:12px;padding:8px 0;">加载中...</div>
-                        <template v-else>
-                            <div style="background:#fafafa;border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;">
-                                <span style="font-size:12px;color:#666;word-break:break-all;flex:1;">{{ shareLink || '加载中...' }}</span>
-                                <button @click="copyShareLink" :disabled="!shareLink" style="flex-shrink:0;border:1px solid #f07c3e;background:#fff;color:#f07c3e;font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;">
-                                    {{ shareCopied ? '已复制' : '复制' }}
-                                </button>
-                            </div>
-                            <div v-if="shareLink" style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:14px;">
-                                <div id="invite-qrcode" style="padding:10px;background:#fff;border:1px solid #f0f0f0;border-radius:10px;line-height:0;"></div>
-                                <div style="font-size:11px;color:#999;">扫码注册，成为我的下线</div>
-                            </div>
-                            <div v-if="inviteInfo.downlines.length > 0">
-                                <div style="font-size:12px;color:#666;font-weight:500;margin-bottom:6px;">已邀请 {{ inviteInfo.downline_count }} 人</div>
-                                <div v-for="dl in inviteInfo.downlines" :key="dl.id" style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f5f5f5;">
-                                    <span style="font-size:13px;color:#333;">{{ dl.name || dl.phone_masked }}</span>
-                                    <span style="font-size:11px;color:#aaa;">{{ (dl.created_at || '').slice(0, 10) }}</span>
-                                </div>
-                            </div>
-                            <div v-else style="text-align:center;color:#bbb;font-size:12px;padding:6px 0;">暂无下线，快去邀请好友吧</div>
-                        </template>
-                    </div>
+                    <svg style="width:16px;height:16px;color:#bbb" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 </div>
 
+            </div>
+
+            <!-- 联系我们 -->
+            <div @click="showPricingQr = true" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;cursor:pointer;border-top:1px solid #f5f5f5;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <div style="width:32px;height:32px;border-radius:8px;background:#fff7ed;display:flex;align-items:center;justify-content:center;">
+                        <svg width="16" height="16" fill="none" stroke="#f07c3e" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                    </div>
+                    <span style="font-size:14px;color:#1a1a1a;font-weight:500;">联系我们</span>
+                </div>
+                <svg style="width:16px;height:16px;color:#bbb" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
             </div>
         </div>
     </div>
@@ -912,7 +892,7 @@
                 </svg>
             </div>
             <!-- 加载完成 -->
-            <div v-else class="flex items-start gap-3">
+            <div v-else class="flex items-start gap-3 company-section">
                 <div class="flex flex-col items-start flex-shrink-0 mt-0.5">
                     <div class="flex items-center gap-2">
                         <svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1853,7 +1833,7 @@
             <!-- 状态 Tab 栏 + 操作按钮 -->
             <div class="flex items-center px-4 record-tab-row" style="gap:0;min-height:48px;">
                 <button v-for="tab in recordTabs" :key="tab.key"
-                        @click="recordActiveTab = tab.key; loadRecords()"
+                        @click="recordActiveTab = tab.key; loadRecords().then(() => loadRecordStats())"
                         class="px-4 py-3 text-sm font-medium transition-colors relative flex-shrink-0"
                         :class="recordActiveTab === tab.key
                             ? 'text-orange-600'
@@ -2911,7 +2891,7 @@
                             {{ previewOcrEngine === 'baidu' ? '百度OCR' : previewOcrEngine === 'volc' ? '火山引擎' : previewOcrEngine === 'pdfplumber+ocr' ? 'PDF+OCR' : previewOcrEngine === 'pdfplumber' ? 'PDF提取' : previewOcrEngine }}
                         </span>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 preview-actions">
                         <button @click="previewShowFields = !previewShowFields; if(previewShowFields) { previewShowRaw = false; previewShowRules = false; }"
                                 class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;"
                                 :class="previewShowFields ? 'btn-success' : 'btn-outline'">
@@ -2956,7 +2936,7 @@
                         <button @click="previewVisible = false" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer" style="font-size:18px;">&times;</button>
                     </div>
                 </div>
-                <div class="flex-1 flex min-h-0">
+                <div class="flex-1 flex min-h-0 preview-body">
                     <!-- 左侧：文件预览 -->
                     <div class="flex-1 overflow-auto bg-gray-100 min-w-0 relative">
                         <!-- 加载中提示 -->
@@ -2971,7 +2951,7 @@
                         <img v-else :src="previewSrc" class="max-w-full max-h-full mx-auto p-4" style="object-fit: contain;" @load="previewLoading = false">
                     </div>
                     <!-- 右侧：列表信息 -->
-                    <div v-if="previewShowFields" class="border-l flex flex-col" style="width: 420px; min-width: 320px;">
+                    <div v-if="previewShowFields" class="border-l flex flex-col preview-side" style="width: 420px; min-width: 320px;">
                         <div class="px-3 py-2 bg-gray-50 border-b flex-shrink-0 flex items-center justify-between">
                             <span class="text-xs text-gray-500 font-medium">列表信息（导出字段）</span>
                             <!-- 提示已移至承保公司字段行 -->
@@ -3051,7 +3031,7 @@
                         </div>
                     </div>
                     <!-- 右侧：提取原文 -->
-                    <div v-if="previewShowRaw" class="border-l flex flex-col" style="width: 420px; min-width: 320px;">
+                    <div v-if="previewShowRaw" class="border-l flex flex-col preview-side" style="width: 420px; min-width: 320px;">
                         <div class="px-3 py-2 bg-gray-50 border-b text-xs text-gray-500 font-medium flex-shrink-0 flex items-center justify-between">
                             <div class="flex items-center gap-2">
                                 <template v-if="previewOcrRawText">
@@ -3094,7 +3074,7 @@
                         </div>
                     </div>
                     <!-- 右侧：提取规则 -->
-                    <div v-if="previewShowRules" class="border-l flex flex-col" style="width: 480px; min-width: 380px;">
+                    <div v-if="previewShowRules" class="border-l flex flex-col preview-side" style="width: 480px; min-width: 380px;">
                         <div class="px-3 py-2 bg-orange-50 border-b text-xs text-orange-600 font-medium flex-shrink-0">
                             提取规则（{{ previewFieldsList.length ? previewFieldsList.find(f => (f.key || f.label) === '承保公司')?.value || '通用' : '通用' }}）
                         </div>
@@ -3309,7 +3289,7 @@
                     style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:20px;color:#bbb;cursor:pointer;line-height:1;">&#x2715;</button>
                 <div style="font-size:16px;font-weight:600;color:#1a1a1a;margin-bottom:6px;">申请提现</div>
                 <div style="font-size:13px;color:#999;margin-bottom:16px;">请联系客服进行提现</div>
-                <img src="/static/img/wechat_qr.png" alt="客服二维码"
+                <img src="/static/img/wechat_qr.png?v=2" alt="客服二维码"
                     style="width:180px;height:180px;object-fit:contain;border-radius:8px;border:1px solid #f0f0f0;">
                 <div style="font-size:12px;color:#bbb;margin-top:10px;">扫码添加客服微信</div>
             </div>
@@ -3340,7 +3320,7 @@
                     无限量 PDF 识别，立即体验
                 </div>
                 <div style="background:#f9fafb;border-radius:12px;padding:14px;margin-bottom:14px;display:inline-block;">
-                    <img src="/static/img/wechat_qr.png" alt="客服二维码"
+                    <img src="/static/img/wechat_qr.png?v=2" alt="客服二维码"
                         style="width:160px;height:160px;object-fit:contain;display:block;">
                 </div>
                 <div style="font-size:12px;color:#9ca3af;">扫码添加客服微信</div>
@@ -3772,7 +3752,7 @@ const _app = createApp({
             canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
             const ctx = canvas.getContext('2d');
             ctx.scale(dpr, dpr);
-            const pad = { top: 10, bottom: 24, left: 6, right: 6 };
+            const pad = { top: 10, bottom: 24, left: 14, right: 14 };
             const chartW = W - pad.left - pad.right;
             const chartH = H - pad.top - pad.bottom;
             _trendData = trend; _trendPad = pad; _trendStepX = chartW / Math.max(trend.length - 1, 1); _trendW = W;
@@ -3807,11 +3787,14 @@ const _app = createApp({
             drawLine('failed', '#f87171', 1.5, [4, 3]);
 
             // X 轴标签
-            ctx.fillStyle = '#9ca3af'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#9ca3af'; ctx.font = '10px sans-serif';
             const step = Math.max(1, Math.floor(trend.length / 6));
+            const lastIdx = trend.length - 1;
             trend.forEach((r, i) => {
-                if (i % step === 0 || i === trend.length - 1) {
+                if (i % step === 0 || i === lastIdx) {
                     const label = (r.label || r.day || '').slice(5);
+                    // 首尾标签靠边对齐，避免居中时半个文字超出画布被截断
+                    ctx.textAlign = i === 0 ? 'left' : (i === lastIdx ? 'right' : 'center');
                     ctx.fillText(label, getX(i), H - 4);
                 }
             });

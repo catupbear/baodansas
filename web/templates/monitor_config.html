@@ -182,11 +182,11 @@
     <header class="nav-header shadow-lg">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
             <div class="flex items-center gap-4">
-                <a href="/" style="color:#fff;opacity:0.85;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.85'">
+                <a href="/insurance" style="color:#fff;opacity:0.85;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.85'">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
                     </svg>
-                    返回首页
+                    返回保单台账
                 </a>
                 <div class="flex items-center gap-3">
                     <div class="w-8 h-8 rounded-lg bg-white bg-opacity-20 flex items-center justify-center flex-shrink-0">
@@ -319,8 +319,8 @@
                             <span v-else style="font-size:13px;color:var(--text-muted);">未绑定</span>
                         </div>
 
-                        <!-- 字段映射 -->
-                        <div class="flex items-center gap-2">
+                        <!-- 字段映射（已隐藏） -->
+                        <div v-if="false" class="flex items-center gap-2">
                             <span style="font-size:13px;color:var(--text-muted);min-width:65px;">字段映射:</span>
                             <span class="badge badge-gray">{{ getFieldCount(config) }} 个字段</span>
                         </div>
@@ -406,43 +406,6 @@
                         </div>
                     </div>
 
-                    <!-- 私聊监控 -->
-                    <div style="margin-bottom:20px;">
-                        <label class="form-label" style="margin-bottom:6px;">私聊监控</label>
-                        <!-- 已选标签 -->
-                        <div v-if="form.user_ids.length > 0" class="flex flex-wrap gap-2" style="margin-bottom:8px;">
-                            <span v-for="id in form.user_ids" :key="id" class="removable-tag badge-green">
-                                {{ getUserName(id) }}
-                                <span class="remove-btn" @click="removeUser(id)">
-                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                                    </svg>
-                                </span>
-                            </span>
-                        </div>
-                        <!-- 搜索输入 -->
-                        <div style="position:relative;">
-                            <input v-model="userSearch" class="form-input" placeholder="搜索用户..."
-                                   @focus="userDropdownOpen = true"
-                                   @blur="setTimeout(() => userDropdownOpen = false, 200)">
-                            <!-- 下拉列表 -->
-                            <div v-if="userDropdownOpen && filteredUsers.length > 0" class="multi-select-dropdown">
-                                <div v-for="user in filteredUsers" :key="user.id" class="option" @click="addUser(user.id)">
-                                    {{ user.name || user.id }}
-                                </div>
-                            </div>
-                            <div v-if="userDropdownOpen && filteredUsers.length === 0" class="multi-select-dropdown" style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">
-                                {{ userSearch ? '未找到匹配的用户' : '暂无用户数据' }}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 钉钉文档链接 -->
-                    <div style="margin-bottom:20px;">
-                        <label class="form-label">钉钉文档链接</label>
-                        <input v-model="form.dingtalk_doc_url" class="form-input" placeholder="请输入钉钉多维表格链接">
-                    </div>
-
                     <!-- 绑定企业 -->
                     <div style="margin-bottom:20px;">
                         <label class="form-label">绑定企业</label>
@@ -471,8 +434,8 @@
                         </p>
                     </div>
 
-                    <!-- 字段映射 -->
-                    <div>
+                    <!-- 字段映射（已隐藏） -->
+                    <div v-if="false">
                         <label class="form-label">字段映射</label>
                         <div style="border:1px solid var(--border-light);border-radius:8px;overflow:hidden;">
                             <table class="mapping-table">

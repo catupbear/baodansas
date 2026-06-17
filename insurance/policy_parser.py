@@ -176,7 +176,7 @@ def _is_valid_person(val: str) -> bool:
     val_no_paren = re.sub(r'[（(][^）)]*[）)]$', '', val)
     # 含"(地名)"的企业名（如"中设(深圳)设备检验检测"）也视为公司名
     has_location_paren = bool(re.search(r'[\u4e00-\u9fff][（(][\u4e00-\u9fff]{2,4}[）)][\u4e00-\u9fff]', val))
-    if re.search(r'公司|集团|合伙|工厂|商行|商贸|车行(?!驶)|车队|事务所|经营部|经营店|经销商|专营店|服务部|加工厂|养殖场|合作社|研究院|研究所|设计院|分院|医院|学院|中心|个体工商户|协会|商会|学会|联合会|促进会|基金会', val) or val_no_paren.endswith(('店', '厂', '铺')) or has_location_paren:
+    if re.search(r'公司|集团|合伙|工厂|商行|商贸|车行(?!驶)|车队|事务所|经营部|经营店|经销商|专营店|服务部|加工厂|养殖场|合作社|研究院|研究所|设计院|分院|医院|卫生院|学院|小学|中学|大学|幼儿园|学校|村民委员会|居民委员会|村委会|居委会|管理处|中心|个体工商户|协会|商会|学会|联合会|促进会|基金会', val) or val_no_paren.endswith(('店', '厂', '铺')) or has_location_paren:
         # 公司名允许长一些，但不能超过 30 字
         # 排除含动词/条款用语/保险术语的句子片段（如"向本公司提出的申请"）
         if re.search(r'提出|提供|负责|承担|向.*公司|本公司.*的|申请|告知|声明|附加.*险|附加.*费|损失费|保险费|约定|载明', val):
@@ -765,6 +765,13 @@ def _extract_id_numbers(text: str, text_merged: str, fields: dict):
         if m:
             fields["被保险人身份证号码"] = m.group(1)
 
+    # 人保等格式："被保险人身份证号码（统一社会信用代码）统一社会信用代码：12440306G34793623R"
+    # 标签"被保险人身份证号码"后直接跟统一社会信用代码（无单独"证件号"标签）
+    if "被保险人身份证号码" not in fields:
+        m = re.search(r'被保险人身份[证]?号[码]?[\s\S]{0,30}?' + _USCC_PATTERN, text)
+        if m:
+            fields["被保险人身份证号码"] = m.group(1)
+
     # 众诚/申能/国寿：被保险人证件号码
     if "被保险人身份证号码" not in fields:
         m = re.search(r'被保险人证件号码[：:\s]*' + _ID_PATTERN, text)
@@ -929,6 +936,12 @@ def _extract_id_numbers(text: str, text_merged: str, fields: dict):
         if m:
             fields["投保人身份证号码"] = m.group(1)
 
+    # 人保等格式："投保人身份证号码（统一社会信用代码）统一社会信用代码：XXX"（机构投保）
+    if "投保人身份证号码" not in fields:
+        m = re.search(r'投保人身份[证]?号[码]?[\s\S]{0,30}?' + _USCC_PATTERN, text)
+        if m:
+            fields["投保人身份证号码"] = m.group(1)
+
 
 # ============================================================
 # 保司公司名称 / 保司地址提取
@@ -1004,13 +1017,14 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
     # 排除"总公司地址"（太平洋等保单底部总部地址，非签单分公司地址）
     if "保司地址" not in fields:
         for src in [text, text_merged]:
-            m = re.search(r'(?<!总)公司地址[：:]\s*(.+?)(?:\s+公司网址|\s{2,}|\n|$)', src)
+            # 地址行尾常跟"邮政编码:xxx"（如平安同行），在邮政编码处截断保留前面地址
+            m = re.search(r'(?<!总)公司地址[：:]\s*(.+?)(?:\s*邮政编码|\s+公司网址|\s{2,}|\n|$)', src)
             if m:
                 val = m.group(1).strip()
-                # 排除竖排版式下跨行误抓到的"邮政编码/签单日期/公司主页"行（如华安）
+                # 排除竖排版式下跨行误抓到的"签单日期/公司主页"等行（如华安，邮编已在上方截断）
                 if (val and len(val) >= 4
                         and not re.search(r'^联系电话|^公司名称|^邮政编码', val)
-                        and not re.search(r'邮政编码|签单日期|公司主页|公司网址', val)):
+                        and not re.search(r'签单日期|公司主页|公司网址', val)):
                     fields["保司地址"] = val
                     break
 
@@ -1061,6 +1075,8 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
     if fields.get("保司地址"):
         addr = fields["保司地址"]
         addr = re.sub(r'\s*[（(][^（(）)]*(?:签章|盖章|印章)[^（(）)]*[）)].*$', '', addr)
+        # 去掉地址尾部裸签章标记（无括号），如阳光"...7单元B 电子保单签章"
+        addr = re.sub(r'\s*(?:电子保单|保险人|公司)?(?:签章|盖章|公章).*$', '', addr)
         addr = re.sub(r'\s*\S*(?:电话|热线)[：:]\s*\S+.*$', '', addr)
         addr = re.sub(r'\s*(?:全国统一|客服|投诉|邮政编码|签单日期|公司主页|公司网址)[^\n]*$', '', addr)
         addr = addr.strip().rstrip('、，,')
@@ -1136,16 +1152,30 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
             if val and len(val) >= 4:
                 fields["保司公司名称"] = val
 
-    # 补充模式F：签单机构（现代财产承运人险等）"签单机构：现代财产保险(中国) 有限公司广东分公司"
+    # 补充模式F：签单机构
+    # 现代财产承运人险："签单机构：现代财产保险(中国) 有限公司广东分公司"（公司名后换行）
+    # 平安车主尊享："签单机构：中国平安财产保险股份有限公司深圳市侨香支公司 <地址>"（公司名+地址同行）
     if "保司公司名称" not in fields:
         for src in [text, text_merged]:
-            m = re.search(r'签单机构[：:]\s*(.+?)(?:\s{2,}|\n|$)', src)
+            # 优先匹配到"支公司/分公司"（平安公司名后跟地址），否则到第一个"公司"
+            m = re.search(r'签单机构[：:]\s*(.+?(?:支公司|分公司))', src) or \
+                re.search(r'签单机构[：:]\s*(.+?公司)(?:\s{2,}|\n|$)', src)
             if m:
                 # 去掉OCR在公司名中夹的空格，半角括号统一为全角
                 val = re.sub(r'\s+', '', m.group(1).strip())
                 val = val.replace('(', '（').replace(')', '）')
-                if val and len(val) >= 4 and re.search(r'保险', val) and re.search(r'公司$', val):
+                if val and len(val) >= 4 and re.search(r'保险|财产', val) and re.search(r'公司$', val):
                     fields["保司公司名称"] = val
+                    break
+
+    # 补充地址模式F：签单机构同行的地址（平安车主尊享等：签单机构后公司名 + 地址）
+    if "保司地址" not in fields:
+        for src in [text, text_merged]:
+            m = re.search(r'签单机构[：:]\s*.+?(?:支公司|分公司)\s+([一-鿿][一-鿿\w、]{6,}?)(?:\s{2,}|\n|出单|$)', src)
+            if m:
+                val = m.group(1).strip()
+                if val and len(val) >= 6 and re.search(r'[市区县].*[路街号]|大厦|大楼|中心|栋', val):
+                    fields["保司地址"] = val
                     break
 
     # 补充地址模式A：签单公司地址（申能驾意险、平安小微等）
@@ -2696,6 +2726,18 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
         m = re.search(r"车主姓名[：:\s]+(\S+?)(?:\s|牌照|车牌|$)", text)
         if m and _is_valid_person(m.group(1)):
             fields["车主"] = m.group(1)
+    if "车主" not in fields:
+        # 紫金驾乘险表格："车辆所有人 车牌号码 ...\n<车型>\n沈立文 粤BA38V3 ..."
+        # 表头标签为"车辆所有人"，数据行首列为车主（中间可能夹车型行）
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            if re.search(r'车辆所有人', line):
+                for k in range(i + 1, min(i + 5, len(lines))):
+                    m = re.match(r'\s*([一-鿿]{2,4})\s+\S', lines[k])
+                    if m and _is_valid_person(m.group(1)):
+                        fields["车主"] = m.group(1)
+                        break
+                break
     if "车主" not in fields:
         for p in [
             r"(?:行驶证)?车主(?:\s*名称)?[：:\s]+(\S+?)(?:\s|$|投保人)",

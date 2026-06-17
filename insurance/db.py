@@ -1437,9 +1437,9 @@ def query_insurance_records(
     # 排除已软删除的记录
     conditions.append(f"{col_prefix}deleted_at IS NULL")
 
-    # 去重模式下排除 duplicate 状态的记录
-    if dedup:
-        conditions.append(f"{col_prefix}status != 'duplicate'")
+    # 统一排除：处理中/排队中（未出结果）和重复文件记录，
+    # 使"全部"与 成功+需人工补充+非保单+失败 各分类之和一致
+    conditions.append(f"{col_prefix}status NOT IN ('processing', 'pending', 'duplicate')")
 
     # 来源类型筛选
     if source_type == "room":
@@ -1926,9 +1926,9 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
         params = []
         # 排除已软删除的记录
         where_parts.append(f"{col_prefix}deleted_at IS NULL")
-        # 去重模式下排除 duplicate 状态的记录，避免 total 与各子状态之和不一致
-        if dedup:
-            where_parts.append(f"{col_prefix}status != 'duplicate'")
+        # 统一排除：处理中/排队中（未出结果）和重复文件记录，
+        # 使 total 与 done+failed（各分类之和）一致
+        where_parts.append(f"{col_prefix}status NOT IN ('processing', 'pending', 'duplicate')")
         if filters.get("roomid"):
             where_parts.append(f"{col_prefix}roomid = %s")
             params.append(filters["roomid"])

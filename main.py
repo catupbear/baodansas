@@ -160,6 +160,11 @@ def create_app(config: dict) -> Flask:
     def insurance_page():
         return render_template("insurance.html")
 
+    # 邀请有礼介绍页（对外营销页）
+    @app.route("/invite")
+    def invite_page():
+        return render_template("invite.html")
+
     # 监控配置管理
     @app.route("/monitor-config")
     def monitor_config_page():
