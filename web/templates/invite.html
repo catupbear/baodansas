@@ -132,6 +132,13 @@
 </head>
 <body>
 
+  <!-- 返回首页 -->
+  <a href="javascript:void(0)" onclick="goHome()" id="back-home"
+     style="position:fixed;top:18px;left:18px;z-index:1000;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:999px;background:#fff;border:1px solid #fed7aa;color:#ea580c;font-size:14px;font-weight:600;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,0.15);">
+    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M15 19l-7-7 7-7"/></svg>
+    返回首页
+  </a>
+
   <!-- HERO -->
   <div class="hero">
     <div class="wrap">
@@ -141,7 +148,7 @@
       <div class="hero-num">20<small>%</small></div>
       <div class="hero-num-label">好友套餐费，直接返给你</div>
       <div class="hero-cta">
-        <a href="#mine" class="btn btn-light">🔗 获取我的邀请链接</a>
+        <a href="#mine" class="btn btn-light" onclick="return goMine(event)">🔗 获取我的邀请链接</a>
         <a href="/login" id="btn-register" class="btn btn-ghost">还没账号？免费注册</a>
       </div>
     </div>
@@ -259,7 +266,7 @@
       <h2>现在就开始邀请吧</h2>
       <p>登录账号，在「个人中心 → 邀请有礼」获取你的专属链接和二维码</p>
       <div class="hero-cta">
-        <a href="#mine" class="btn btn-light">🔗 获取我的邀请链接</a>
+        <a href="#mine" class="btn btn-light" onclick="return goMine(event)">🔗 获取我的邀请链接</a>
       </div>
     </div>
     <div class="qr-box">
@@ -272,6 +279,19 @@
 
   <script src="/static/qrcode.min.js"></script>
   <script>
+  // 返回首页：已登录回保单台账，未登录回落地页
+  function goHome(){
+    window.location.href = localStorage.getItem('token') ? '/insurance' : '/';
+  }
+  // 获取我的邀请链接：未登录跳转登录页，已登录滚动到「我的专属邀请」
+  function goMine(e){
+    if(!localStorage.getItem('token')){
+      if(e) e.preventDefault();
+      window.location.href = '/login';
+      return false;
+    }
+    return true;
+  }
   (function(){
     var token = localStorage.getItem('token');
     if(!token) return;  // 未登录：仅作介绍页，不显示"我的专属邀请"

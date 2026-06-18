@@ -1070,18 +1070,6 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
                     fields["保司地址"] = ''.join(addr_parts)
                 break
 
-    # 清理保司地址尾部粘连的服务热线/电话/邮编/主页等干扰文本
-    # 如华安："深圳市龙岗区...5栋B座1209 全国统一服务及投诉维权电话：95556"
-    if fields.get("保司地址"):
-        addr = fields["保司地址"]
-        addr = re.sub(r'\s*[（(][^（(）)]*(?:签章|盖章|印章)[^（(）)]*[）)].*$', '', addr)
-        # 去掉地址尾部裸签章标记（无括号），如阳光"...7单元B 电子保单签章"
-        addr = re.sub(r'\s*(?:电子保单|保险人|公司)?(?:签章|盖章|公章).*$', '', addr)
-        addr = re.sub(r'\s*\S*(?:电话|热线)[：:]\s*\S+.*$', '', addr)
-        addr = re.sub(r'\s*(?:全国统一|客服|投诉|邮政编码|签单日期|公司主页|公司网址)[^\n]*$', '', addr)
-        addr = addr.strip().rstrip('、，,')
-        if addr and len(addr) >= 4:
-            fields["保司地址"] = addr
 
     # 联系电话：从"联系电话："标签附近提取（如95312）
     if "保司联系电话" not in fields:
@@ -1209,6 +1197,19 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
             fields["保司公司名称"] = name
 
     # 保司带地区：从保司地址提取城市 + 承保公司，如"深圳平安"
+    # 清理保司地址尾部干扰（在所有地址来源提取后统一执行）：
+    # 括号签章/生效说明（如平安"（本保单加盖保单专用章生效）"）、裸签章、电话热线、邮编、英文水印
+    if fields.get("保司地址"):
+        addr = fields["保司地址"]
+        addr = re.sub(r'\s*[（(][^（(）)]*(?:签章|盖章|印章|专用章|公章|生效)[^（(）)]*[）)].*$', '', addr)
+        addr = re.sub(r'\s*(?:电子保单|保险人|公司)?(?:签章|盖章|公章).*$', '', addr)
+        addr = re.sub(r'\s*\S*(?:电话|热线)[：:]\s*\S+.*$', '', addr)
+        addr = re.sub(r'\s*(?:全国统一|客服|投诉|邮政编码|签单日期|公司主页|公司网址)[^\n]*$', '', addr)
+        addr = re.sub(r'\s*[A-Z]{3,}\s*$', '', addr)
+        addr = addr.strip().rstrip('、，,')
+        if addr and len(addr) >= 4:
+            fields["保司地址"] = addr
+
     _build_insurer_with_region(fields)
 
 
@@ -2945,6 +2946,12 @@ def _extract_premium(text: str, fields: dict, company_short: str):
     # 表格中"保险费"表头后会跟费率(如0.02)，通用模式会误取，故优先匹配"总保险费...(CNY金额)"
     if company_short == "大地":
         patterns.insert(0, r"总保险费[：:]\s*人民币[^（(]*?[（(]CNY\s*([\d,]+\.\d{2})")
+
+    # 平安驾乘险（商车版）："八、总保费：260元" / "于...之前交清保险费260.0元"
+    # 金额可能为整数或单位小数，通用模式（要求两位小数）匹配不到
+    if company_short == "平安":
+        patterns.insert(0, r"总保费[：:\s]*([\d,]+\.?\d*)\s*元")
+        patterns.insert(1, r"交清保险费\s*([\d,]+\.?\d*)\s*元")
 
     # 永诚/太平驾意险："(小写)：200.00" 或 "小写： CNY 430.00" 或 "（小写）￥ 280.00"
     patterns.append(r"[（(]?小写[）)]?[：:\s]*(?:CNY\s*|[￥¥]\s*)?([\d,]+\.\d{2})")

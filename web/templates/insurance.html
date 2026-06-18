@@ -386,7 +386,7 @@
                     <h1 class="text-lg font-bold text-white tracking-tight">午虎AI保单台账</h1>
                 </div>
                 <!-- 页面级 Tab 切换（桌面端显示） -->
-                <div class="hidden sm:flex items-center gap-1 ml-4">
+                <div v-if="!notActivated" class="hidden sm:flex items-center gap-1 ml-4">
                     <button @click="pageTab = 'records'; loadRecords(); loadRecordStats(); loadRecordCompanies()" :class="pageTab === 'records' ? 'active' : ''" class="page-tab-btn">
                         识别记录
                     </button>
@@ -395,6 +395,12 @@
                     </button>
                     <button v-if="isSuperAdmin" @click="pageTab = 'dashboard'; loadDashboard()" :class="pageTab === 'dashboard' ? 'active' : ''" class="page-tab-btn">
                         数据看板
+                    </button>
+                </div>
+                <!-- 未激活：工作台入口（点击提示联系管理员激活） -->
+                <div v-else class="hidden sm:flex items-center gap-1 ml-4">
+                    <button @click="showActivateTip()" class="page-tab-btn">
+                        工作台
                     </button>
                 </div>
             </div>
@@ -415,8 +421,8 @@
                         title="购买套餐">
                     💎 购买套餐
                 </button>
-                <!-- 系统设置 -->
-                <a href="/insurance/settings"
+                <!-- 系统设置（未激活隐藏） -->
+                <a v-if="!notActivated" href="/insurance/settings"
                    class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 12px;font-size:12px;text-decoration:none;"
                    title="系统设置">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -424,14 +430,14 @@
                     </svg>
                     系统设置
                 </a>
-                <!-- 账号管理（超管可见） -->
+                <!-- 服务企业管理（超管可见） -->
                 <a v-if="currentUser && currentUser.role === 'super_admin'" href="/admin/users"
                    class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;text-decoration:none;"
-                   title="账号管理">
+                   title="服务企业管理">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
                     </svg>
-                    账号管理
+                    服务企业管理
                 </a>
                 <!-- 个人中心 -->
                 <button @click="profileVisible = true; loadQuota()" class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;" title="个人中心">
@@ -553,7 +559,7 @@
                 <button @click="mobileMenuOpen=false" style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:16px;line-height:1;">✕</button>
             </div>
             <!-- Tab 切换 -->
-            <div style="padding:12px 16px;border-bottom:1px solid #f3f4f6;">
+            <div v-if="!notActivated" style="padding:12px 16px;border-bottom:1px solid #f3f4f6;">
                 <div style="font-size:11px;color:#9ca3af;font-weight:600;margin-bottom:8px;letter-spacing:.05em;">页面</div>
                 <button @click="pageTab='records';loadRecords();loadRecordStats();loadRecordCompanies();mobileMenuOpen=false"
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;margin-bottom:3px;"
@@ -571,6 +577,14 @@
                     数据看板
                 </button>
             </div>
+            <!-- 未激活：工作台入口 -->
+            <div v-else style="padding:12px 16px;border-bottom:1px solid #f3f4f6;">
+                <div style="font-size:11px;color:#9ca3af;font-weight:600;margin-bottom:8px;letter-spacing:.05em;">页面</div>
+                <button @click="showActivateTip();mobileMenuOpen=false"
+                        style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;background:none;color:#374151;">
+                    工作台
+                </button>
+            </div>
             <!-- 功能链接 -->
             <div style="padding:12px 16px;border-bottom:1px solid #f3f4f6;">
                 <div style="font-size:11px;color:#9ca3af;font-weight:600;margin-bottom:8px;letter-spacing:.05em;">功能</div>
@@ -582,8 +596,8 @@
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;color:#b45309;font-weight:700;border:none;background:#fffbeb;cursor:pointer;margin-bottom:3px;">
                     💎 购买套餐
                 </button>
-                <a href="/insurance/settings" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">系统设置</a>
-                <a v-if="currentUser && currentUser.role==='super_admin'" href="/admin/users" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">账号管理</a>
+                <a v-if="!notActivated" href="/insurance/settings" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">系统设置</a>
+                <a v-if="currentUser && currentUser.role==='super_admin'" href="/admin/users" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">服务企业管理</a>
                 <button @click="profileVisible=true;loadQuota();mobileMenuOpen=false"
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;border:none;background:none;cursor:pointer;margin-bottom:3px;">
                     个人中心 · {{ currentUser ? (currentUser.name || currentUser.phone) : '' }}
@@ -730,11 +744,15 @@
                 <div style="background:#fafafa;border-radius:12px;padding:14px 16px;border:1px solid #f0f0f0;">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
                         <span style="font-size:12px;color:#666;font-weight:500;">本月PDF识别用量</span>
-                        <span v-if="quotaInfo.plan_type === 'enterprise'" style="font-size:11px;background:#eff6ff;color:#3b82f6;padding:2px 8px;border-radius:8px;font-weight:500;">企业版·无限量</span>
+                        <span v-if="quotaInfo.no_enterprise || !quotaInfo.plan_type" style="font-size:11px;background:#f3f4f6;color:#9ca3af;padding:2px 8px;border-radius:8px;font-weight:500;">未开通套餐</span>
+                        <span v-else-if="quotaInfo.plan_type === 'enterprise'" style="font-size:11px;background:#eff6ff;color:#3b82f6;padding:2px 8px;border-radius:8px;font-weight:500;">企业版·无限量</span>
                         <span v-else-if="quotaInfo.plan_type === 'enterprise_trial'" style="font-size:11px;background:#f5f3ff;color:#7c3aed;padding:2px 8px;border-radius:8px;font-weight:500;">企业试用·无限量</span>
                         <span v-else style="font-size:11px;background:#f0fdf4;color:#16a34a;padding:2px 8px;border-radius:8px;font-weight:500;">标准版·3000次</span>
                     </div>
                     <div v-if="quotaLoading" style="font-size:12px;color:#bbb;text-align:center;padding:4px 0;">加载中...</div>
+                    <div v-else-if="quotaInfo.no_enterprise || !quotaInfo.plan_type" style="font-size:12px;color:#9ca3af;line-height:1.7;padding:4px 0;">
+                        当前账号尚未开通套餐，请联系管理员开通后使用 PDF 识别功能。
+                    </div>
                     <template v-else>
                         <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:6px;">
                             <span style="font-size:22px;font-weight:700;color:#1a1a1a;">{{ quotaInfo.monthly_usage }}</span>
@@ -808,8 +826,8 @@
                     </div>
                 </div>
 
-                <!-- 我的钱包 -->
-                <div style="border-bottom:1px solid #f5f5f5;">
+                <!-- 我的钱包（暂时隐藏） -->
+                <div v-if="false" style="border-bottom:1px solid #f5f5f5;">
                     <div @click="profileTab = profileTab==='wallet' ? '' : 'wallet'; if(profileTab==='wallet') loadWallet()" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;cursor:pointer;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
                         <div style="display:flex;align-items:center;gap:10px;">
                             <div style="width:32px;height:32px;border-radius:8px;background:#fff7ed;display:flex;align-items:center;justify-content:center;">
@@ -826,8 +844,8 @@
                                 <div style="font-size:12px;opacity:0.85;margin-bottom:4px;">账户余额（元）</div>
                                 <div style="font-size:36px;font-weight:800;letter-spacing:-1px;">{{ walletBalance.toFixed(2) }}</div>
                             </div>
-                            <!-- 提现按钮 -->
-                            <button v-if="walletBalance > 0" @click="showWithdrawModal = true"
+                            <!-- 提现按钮（有销售权限，或钱包有余额时显示） -->
+                            <button v-if="walletBalance > 0 || isSalesUser" @click="showWithdrawModal = true"
                                 style="width:100%;margin-bottom:12px;padding:10px 0;border-radius:8px;background:#f07c3e;color:#fff;font-size:14px;font-weight:500;border:none;cursor:pointer;">
                                 申请提现
                             </button>
@@ -850,8 +868,8 @@
                 </div>
 
 
-                <!-- 邀请有礼（点击跳转到介绍/专属页） -->
-                <div onclick="location.href='/invite'" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;cursor:pointer;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+                <!-- 邀请有礼（暂时隐藏） -->
+                <div v-if="false" onclick="location.href='/invite'" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;cursor:pointer;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
                     <div style="display:flex;align-items:center;gap:10px;">
                         <div style="width:32px;height:32px;border-radius:8px;background:#fff7ed;display:flex;align-items:center;justify-content:center;">
                             <svg width="16" height="16" fill="none" stroke="#f07c3e" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
@@ -876,8 +894,84 @@
         </div>
     </div>
 
+    <!-- ========== 未激活用户首页（待激活提示 + 邀请有礼 + 套餐介绍） ========== -->
+    <main v-if="notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-5 pb-10" style="max-width:980px;">
+        <!-- 待激活提示横幅 -->
+        <div style="background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1px solid #fed7aa;border-radius:16px;padding:22px 24px;display:flex;align-items:flex-start;gap:14px;box-shadow:0 4px 16px rgba(234,88,12,0.08);">
+            <div style="flex-shrink:0;width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#fb923c,#ea580c);display:flex;align-items:center;justify-content:center;">
+                <svg style="width:24px;height:24px;color:#fff;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0L3.16 16.25A2 2 0 005 19z"/>
+                </svg>
+            </div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:17px;font-weight:700;color:#9a3412;margin-bottom:5px;">账号待激活</div>
+                <div style="font-size:13.5px;color:#7c2d12;line-height:1.7;">
+                    您的账号已注册成功，但还需要管理员激活后才能进入工作台使用保单识别功能。<br>
+                    请联系您的管理员为您激活账号；在此期间，您可以先了解下方的「套餐方案」。
+                </div>
+            </div>
+        </div>
+
+        <!-- 邀请有礼（暂时隐藏） -->
+        <div v-if="false" style="margin-top:18px;background:#fff;border:1px solid #f3e8d8;border-radius:16px;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,0.04);">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                <span style="font-size:22px;">🎁</span>
+                <div style="font-size:18px;font-weight:700;color:#1f2937;">邀请有礼</div>
+            </div>
+            <div style="font-size:14px;color:#4b5563;line-height:1.8;margin-bottom:18px;">
+                邀请好友注册使用午虎AI保单台账，好友开通套餐后您即可获得现金奖励，邀请越多奖励越多，多劳多得，长期有效。
+            </div>
+            <button onclick="location.href='/invite'"
+                    style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#fb923c,#ea580c);color:#fff;border:none;border-radius:10px;padding:11px 22px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(234,88,12,0.3);">
+                了解邀请有礼 →
+            </button>
+        </div>
+
+        <!-- 套餐介绍 -->
+        <div style="margin-top:18px;background:#fff;border:1px solid #f3e8d8;border-radius:16px;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,0.04);">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                <span style="font-size:22px;">💎</span>
+                <div style="font-size:18px;font-weight:700;color:#1f2937;">套餐方案</div>
+            </div>
+            <div style="font-size:14px;color:#4b5563;line-height:1.8;margin-bottom:18px;">
+                午虎AI保单台账支持 50+ 保险公司保单自动识别、批量导出、台账管理，按团队规模灵活选择套餐，助您告别手工录入。
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:20px;">
+                <div style="border:1px solid #fde68a;border-radius:12px;padding:18px;background:#fffbeb;">
+                    <div style="font-size:15px;font-weight:700;color:#92400e;margin-bottom:4px;">标准版</div>
+                    <div style="font-size:13px;color:#a16207;line-height:1.7;">适合个人 / 小团队<br>核心 AI 识别 + 台账导出<br>每月 3000 次识别额度</div>
+                </div>
+                <div style="border:1px solid #fbbf24;border-radius:12px;padding:18px;background:linear-gradient(135deg,#fffbeb,#fef3c7);position:relative;">
+                    <div style="position:absolute;top:-9px;right:14px;background:#ea580c;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;">推荐</div>
+                    <div style="font-size:15px;font-weight:700;color:#92400e;margin-bottom:4px;">企业版</div>
+                    <div style="font-size:13px;color:#a16207;line-height:1.7;">适合中大型团队<br>不限识别次数 + 多人协作<br>不限监控群 + 专属服务</div>
+                </div>
+            </div>
+            <button @click="pricingVisible=true;showPricingQr=false"
+                    style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#7c2d12;border:none;border-radius:10px;padding:11px 22px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(245,158,11,0.35);">
+                查看详细价格 →
+            </button>
+        </div>
+
+        <!-- 联系我们 · 激活账号 -->
+        <div style="margin-top:18px;background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1px solid #fed7aa;border-radius:16px;padding:24px;box-shadow:0 2px 12px rgba(234,88,12,0.06);">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                <span style="font-size:22px;">📞</span>
+                <div style="font-size:18px;font-weight:700;color:#9a3412;">联系我们 · 激活账号</div>
+            </div>
+            <div style="font-size:14px;color:#7c2d12;line-height:1.8;margin-bottom:18px;">
+                扫描下方客服微信二维码,添加客服即可申请激活账号、了解套餐详情。
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:10px;background:#fff;border:1px solid #f3e8d8;border-radius:14px;padding:22px;max-width:280px;margin:0 auto;">
+                <img src="/static/img/wechat_qr.png?v=2" alt="客服微信二维码" style="width:180px;height:180px;object-fit:contain;border-radius:8px;">
+                <span style="font-size:13px;color:#9a3412;font-weight:600;">微信扫码添加客服</span>
+                <span style="font-size:12px;color:#9ca3af;">工作日 9:00–18:00 在线为您服务</span>
+            </div>
+        </div>
+    </main>
+
     <!-- ========== 手动上传 Tab ========== -->
-    <main v-if="pageTab === 'upload'" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5">
+    <main v-if="pageTab === 'upload' && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5">
         <!-- 支持保司列表 -->
         <div class="card p-4">
             <!-- 加载中 -->
@@ -1398,7 +1492,7 @@
     </main>
 
     <!-- ========== 数据看板 Tab ========== -->
-    <main v-if="pageTab === 'dashboard'" class="mx-auto px-4 sm:px-6 lg:px-10 pt-4 pb-8">
+    <main v-if="pageTab === 'dashboard' && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-4 pb-8">
         <div v-if="dashboardLoading" class="flex items-center justify-center py-24 text-gray-400 text-sm">加载中...</div>
         <div v-else-if="dashboardData">
 
@@ -1569,7 +1663,7 @@
     </main>
 
     <!-- ========== 识别记录 Tab ========== -->
-    <main v-if="pageTab === 'records'" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5">
+    <main v-if="pageTab === 'records' && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5">
         <!-- 筛选栏 -->
         <div class="card p-4">
             <div class="flex flex-wrap items-center gap-3">
@@ -3334,7 +3428,14 @@
 
     <!-- ========== 移动端底部 Tab 栏 ========== -->
     <div class="sm:hidden mobile-bottom-nav" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:99;background:#fff;border-top:1px solid #e7e0d8;height:56px;box-shadow:0 -2px 10px rgba(0,0,0,0.07);">
-        <button @click="pageTab='records';loadRecords();loadRecordStats();loadRecordCompanies()"
+        <button v-if="notActivated" @click="showActivateTip()"
+                style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;color:#9ca3af;">
+            <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <span style="font-size:10px;font-weight:500;">工作台</span>
+        </button>
+        <button v-if="!notActivated" @click="pageTab='records';loadRecords();loadRecordStats();loadRecordCompanies()"
                 style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;"
                 :style="pageTab==='records'?'color:#ea580c;':'color:#9ca3af;'">
             <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3342,7 +3443,7 @@
             </svg>
             <span style="font-size:10px;font-weight:500;">识别记录</span>
         </button>
-        <button @click="pageTab='upload'"
+        <button v-if="!notActivated" @click="pageTab='upload'"
                 style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;"
                 :style="pageTab==='upload'?'color:#ea580c;':'color:#9ca3af;'">
             <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3350,7 +3451,7 @@
             </svg>
             <span style="font-size:10px;font-weight:500;">手动上传</span>
         </button>
-        <button v-if="isSuperAdmin" @click="pageTab='dashboard';loadDashboard()"
+        <button v-if="isSuperAdmin && !notActivated" @click="pageTab='dashboard';loadDashboard()"
                 style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;"
                 :style="pageTab==='dashboard'?'color:#ea580c;':'color:#9ca3af;'">
             <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3366,6 +3467,33 @@
             <span style="font-size:10px;font-weight:500;">更多</span>
         </button>
     </div>
+
+    <!-- ========== 账号待激活提示弹窗 ========== -->
+    <teleport to="body">
+      <div v-if="activateTipVisible" @click.self="activateTipVisible=false"
+           style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px;">
+        <div style="background:#fff;border-radius:18px;padding:30px 26px;width:380px;max-width:95vw;box-shadow:0 24px 70px rgba(0,0,0,0.25);text-align:center;">
+          <div style="width:60px;height:60px;margin:0 auto 16px;border-radius:16px;background:linear-gradient(135deg,#fb923c,#ea580c);display:flex;align-items:center;justify-content:center;">
+            <svg style="width:32px;height:32px;color:#fff;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
+          </div>
+          <div style="font-size:18px;font-weight:700;color:#1f2937;margin-bottom:8px;">账号尚未激活</div>
+          <div style="font-size:14px;color:#6b7280;line-height:1.7;margin-bottom:16px;">
+            您的账号还未激活，暂时无法进入工作台。<br>请扫码联系管理员为您激活账号。
+          </div>
+          <!-- 客服二维码 -->
+          <div style="display:flex;flex-direction:column;align-items:center;gap:8px;background:#fafafa;border:1px solid #f0f0f0;border-radius:12px;padding:16px;margin-bottom:18px;">
+            <img src="/static/img/wechat_qr.png?v=2" alt="客服微信二维码" style="width:160px;height:160px;object-fit:contain;border-radius:8px;">
+            <span style="font-size:12px;color:#9ca3af;">扫码添加客服微信，申请激活账号</span>
+          </div>
+          <button @click="activateTipVisible=false"
+                  style="width:100%;background:linear-gradient(135deg,#fb923c,#ea580c);color:#fff;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">
+            我知道了
+          </button>
+        </div>
+      </div>
+    </teleport>
 
 </div>
 
@@ -3400,6 +3528,24 @@ const _app = createApp({
             if (!u) return false;
             return u.role === 'channel_sales' || u.sales_type === 'channel';
         });
+        const isPersonalSales = computed(() => {
+            const u = currentUser.value;
+            if (!u) return false;
+            return u.role === 'personal_sales' || u.sales_type === 'personal';
+        });
+        // 个人销售 / 企业(渠道)销售 —— 均可申请提现
+        const isSalesUser = computed(() => isChannelSales.value || isPersonalSales.value);
+
+        // ========== 账号激活状态 ==========
+        // 自助注册的账号默认未激活（activated=0），需管理员在账号管理激活后才能进入工作台
+        const notActivated = computed(() => {
+            const u = currentUser.value;
+            if (!u) return false;
+            if (u.role === 'super_admin') return false;
+            return Number(u.activated) === 0;
+        });
+        const activateTipVisible = ref(false);
+        function showActivateTip() { activateTipVisible.value = true; }
 
         // ========== 个人中心 ==========
         const profileVisible = ref(false);
@@ -3533,7 +3679,8 @@ const _app = createApp({
                     // 仅对普通用户（非超管、非企业管理员）弹激活提醒
                     const role = currentUser.value && currentUser.value.role;
                     const isAdminRole = role === 'super_admin' || role === 'enterprise';
-                    const needActivate = !isAdminRole && (data.data.no_enterprise || !data.data.plan_type);
+                    // 待激活账号不弹"免费激活套餐"营销弹窗（避免与"账号待激活"提示混淆）
+                    const needActivate = !isAdminRole && !notActivated.value && (data.data.no_enterprise || !data.data.plan_type);
                     if (needActivate && !sessionStorage.getItem('activate_reminded')) {
                         sessionStorage.setItem('activate_reminded', '1');
                         showActivateModal.value = true;
@@ -7291,7 +7438,8 @@ const _app = createApp({
             contactEditVisible, contactEditSaving, contactEditForm, contactNameInput,
             openContactEdit, saveContactEdit,
             // 鉴权
-            currentUser, isSuperAdmin, isChannelSales, doLogout,
+            currentUser, isSuperAdmin, isChannelSales, isPersonalSales, isSalesUser, doLogout,
+            notActivated, activateTipVisible, showActivateTip,
             profileVisible, profileTab, profileForm, profileMsg, profileLoading,
             showWithdrawModal, showActivateModal,
             shareLink, shareCopied, inviteInfo, inviteLoading, loadInviteInfo, toggleShareTab,

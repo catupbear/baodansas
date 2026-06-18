@@ -12,7 +12,7 @@ from insurance.db import init_insurance_tables
 from insurance.monitor_config_db import init_monitor_config_table
 from insurance.handler import InsuranceHandler
 from insurance.api import insurance_bp, init_insurance_api
-from auth.db import init_users_table, init_enterprises_table
+from auth.db import init_users_table, init_enterprises_table, init_activated_column
 from auth.jwt_utils import init_jwt
 from auth.decorators import init_auth_decorators
 from auth.api import auth_bp, init_auth_api
@@ -51,6 +51,7 @@ def main():
     # 初始化账号认证模块
     init_users_table(db)
     init_enterprises_table(db)
+    init_activated_column(db)
     # JWT 密钥：优先 config.yaml，否则从数据库读取/自动生成持久化随机密钥
     jwt_secret = config.get("jwt_secret", "")
     if not jwt_secret:

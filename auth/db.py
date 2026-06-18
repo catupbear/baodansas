@@ -45,6 +45,7 @@ def init_users_table(db):
                 role         VARCHAR(32) NOT NULL DEFAULT 'employee',
                 parent_id    INT DEFAULT NULL COMMENT '所属企业账号ID，员工必填',
                 enabled      TINYINT NOT NULL DEFAULT 1,
+                activated    TINYINT NOT NULL DEFAULT 0 COMMENT '是否已激活（自助注册需管理员激活）',
                 created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX idx_users_role (role),
@@ -67,7 +68,7 @@ def init_users_table(db):
         cursor.execute("SELECT COUNT(*) AS cnt FROM users")
         if cursor.fetchone()["cnt"] == 0:
             cursor.execute(
-                "INSERT INTO users (phone, password_hash, role, name) VALUES (%s, %s, %s, %s)",
+                "INSERT INTO users (phone, password_hash, role, name, activated) VALUES (%s, %s, %s, %s, 1)",
                 ("admin", generate_password_hash("admin123"), ROLE_SUPER_ADMIN, "超级管理员"),
             )
             logger.info("已创建默认超管账号: admin / admin123")
@@ -94,7 +95,7 @@ def get_user_by_id(db, user_id: int) -> dict | None:
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("SELECT id, phone, role, parent_id, name, enabled, is_sales, sales_type, created_at, updated_at FROM users WHERE id = %s", (user_id,))
+        cursor.execute("SELECT id, phone, role, parent_id, name, enabled, activated, is_sales, sales_type, created_at, updated_at FROM users WHERE id = %s", (user_id,))
         return cursor.fetchone()
     finally:
         conn.close()
@@ -110,7 +111,7 @@ def list_users(db, role: str = "", parent_id: int = None, sales_type: str = "") 
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        sql = "SELECT id, phone, role, parent_id, name, enabled, is_sales, sales_type, created_at, updated_at FROM users WHERE 1=1"
+        sql = "SELECT id, phone, role, parent_id, name, enabled, activated, is_sales, sales_type, created_at, updated_at FROM users WHERE 1=1"
         params = []
         if role:
             sql += " AND role = %s"
@@ -139,8 +140,8 @@ def _generate_referral_code() -> str:
     return "".join(secrets.choice(chars) for _ in range(8))
 
 
-def create_user(db, phone: str, password: str, role: str, parent_id: int = None, name: str = "", referrer_id: int = None, is_sales: bool = False) -> int:
-    """创建用户，返回新用户 ID"""
+def create_user(db, phone: str, password: str, role: str, parent_id: int = None, name: str = "", referrer_id: int = None, is_sales: bool = False, activated: int = 1) -> int:
+    """创建用户，返回新用户 ID。activated 默认 1（管理员创建即激活），自助注册传 0。"""
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -153,8 +154,8 @@ def create_user(db, phone: str, password: str, role: str, parent_id: int = None,
                 referral_code = code
                 break
         cursor.execute(
-            "INSERT INTO users (phone, password_hash, role, parent_id, name, referral_code, referrer_id, is_sales, sales_type) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            (phone, generate_password_hash(password), role, parent_id, name, referral_code, referrer_id, 1 if is_sales else 0, ""),
+            "INSERT INTO users (phone, password_hash, role, parent_id, name, referral_code, referrer_id, is_sales, sales_type, activated) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (phone, generate_password_hash(password), role, parent_id, name, referral_code, referrer_id, 1 if is_sales else 0, "", 1 if activated else 0),
         )
         conn.commit()
         return cursor.lastrowid
@@ -167,7 +168,7 @@ def update_user(db, user_id: int, data: dict):
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        allowed = {"name", "role", "parent_id", "enabled", "is_sales", "sales_type"}
+        allowed = {"name", "role", "parent_id", "enabled", "is_sales", "sales_type", "activated"}
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
             return
@@ -198,7 +199,11 @@ def delete_user(db, user_id: int):
     conn = db.pool.connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM user_bindings WHERE user_id = %s", (user_id,))
+        # 清理发送人绑定（表名为 user_sender_binding；表不存在时忽略，不阻塞删除）
+        try:
+            cursor.execute("DELETE FROM user_sender_binding WHERE user_id = %s", (user_id,))
+        except Exception:
+            pass
         cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
         conn.commit()
     finally:
@@ -636,6 +641,28 @@ def init_is_sales_column(db):
             except Exception:
                 pass
         conn.commit()
+    finally:
+        conn.close()
+
+
+def init_activated_column(db):
+    """为 users 表添加 activated 字段（幂等迁移）。
+    首次添加时把所有存量用户置为已激活（activated=1），
+    此后仅新自助注册的用户为未激活（activated=0），需管理员在账号管理激活。"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "ALTER TABLE users ADD COLUMN activated TINYINT NOT NULL DEFAULT 0 "
+                "COMMENT '是否已激活（自助注册需管理员激活）'"
+            )
+            # 列首次创建：存量用户全部视为已激活，避免现有用户被锁在外面
+            cursor.execute("UPDATE users SET activated = 1")
+            conn.commit()
+            logger.info("users 表添加列 activated 完成，存量用户已全部置为已激活")
+        except Exception:
+            pass  # 列已存在，跳过（不再重复激活）
     finally:
         conn.close()
 

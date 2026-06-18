@@ -73,6 +73,7 @@
         .btn-primary:hover { background: #9a3412; }
         .btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
         .btn-sm { padding: 4px 10px; font-size: 12px; border-radius: 6px; }
+        .btn { white-space: nowrap; }
         .btn-outline {
             background: transparent; color: var(--text-secondary);
             border: 1px solid var(--border);
@@ -84,6 +85,7 @@
             display: inline-flex; align-items: center;
             padding: 2px 8px; border-radius: 6px;
             font-size: 12px; font-weight: 500;
+            white-space: nowrap;
         }
         .badge-red { background: #fef2f2; color: #dc2626; }
         .badge-blue { background: #eff6ff; color: #2563eb; }
@@ -184,8 +186,7 @@
                         <option value="super_admin">超级管理员</option>
                         <option value="enterprise">企业账号</option>
                         <option value="employee">员工账号</option>
-                        <option value="channel_sales">渠道销售</option>
-                        <option value="personal_sales">个人销售</option>
+                        <!-- <option value="agent_sales">代理销售</option> 暂时隐藏 -->
                     </select>
                     <div class="mobile-search" style="position:relative;">
                         <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:#9ca3af;pointer-events:none;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -224,13 +225,13 @@
                             <div class="hidden sm:block overflow-x-auto">
                                 <table class="data-table">
                                     <colgroup>
+                                        <col style="width:12%;">
+                                        <col style="width:8%;">
+                                        <col style="width:10%;">
                                         <col style="width:13%;">
                                         <col style="width:9%;">
-                                        <col style="width:10%;">
-                                        <col style="width:18%;">
-                                        <col style="width:6%;">
-                                        <col style="width:14%;">
-                                        <col style="width:30%;">
+                                        <col style="width:12%;">
+                                        <col style="width:36%;">
                                     </colgroup>
                                     <thead>
                                         <tr>
@@ -250,7 +251,7 @@
                                             <td>
                                                 <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;">
                                                     <span class="badge" :class="roleBadgeClass(user.role)">{{ roleLabel(user.role) }}</span>
-                                                    <span v-if="user.sales_type" style="font-size:11px;color:#9ca3af;">▸ {{ salesTypeLabel(user.sales_type) }}</span>
+                                                    <span v-if="false" style="font-size:11px;color:#9ca3af;">▸ {{ salesTypeLabel(user.sales_type) }}</span>
                                                 </div>
                                             </td>
                                             <td>
@@ -264,13 +265,25 @@
                                                 </div>
                                             </td>
                                             <td>
-                                                <span class="badge" :class="user.enabled ? 'badge-green' : 'badge-gray'">
-                                                    {{ user.enabled ? '启用' : '禁用' }}
-                                                </span>
+                                                <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;">
+                                                    <span class="badge" :class="user.enabled ? 'badge-green' : 'badge-gray'">
+                                                        {{ user.enabled ? '启用' : '禁用' }}
+                                                    </span>
+                                                    <span v-if="user.role !== 'super_admin'" class="badge"
+                                                          :class="Number(user.activated) === 1 ? 'badge-green' : 'badge-gray'"
+                                                          :style="Number(user.activated) === 1 ? '' : 'color:#b45309;background:#fef3c7;'">
+                                                        {{ Number(user.activated) === 1 ? '已激活' : '待激活' }}
+                                                    </span>
+                                                </div>
                                             </td>
                                             <td class="text-gray-500">{{ formatTime(user.created_at) }}</td>
                                             <td>
-                                                <div class="flex items-center gap-2">
+                                                <div class="flex items-center flex-wrap gap-1.5" style="row-gap:6px;">
+                                                    <button v-if="user.role !== 'super_admin'" @click="toggleActivated(user)"
+                                                        :style="Number(user.activated) === 1 ? 'color:#d97706;border-color:#fbbf24' : 'color:#fff;background:#ea580c;border-color:#ea580c;font-weight:600;'"
+                                                        class="btn btn-sm btn-outline">
+                                                        {{ Number(user.activated) === 1 ? '取消激活' : '激活' }}
+                                                    </button>
                                                     <button @click="openEditModal(user)" class="btn btn-sm btn-outline">编辑</button>
                                                     <button @click="openResetPwdModal(user)" class="btn btn-sm btn-outline">重置密码</button>
                                                     <button @click="toggleEnabled(user)"
@@ -299,9 +312,19 @@
                                         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
                                             <span class="badge" :class="roleBadgeClass(user.role)">{{ roleLabel(user.role) }}</span>
                                             <span class="badge" :class="user.enabled ? 'badge-green' : 'badge-gray'" style="font-size:11px;">{{ user.enabled ? '启用' : '禁用' }}</span>
+                                            <span v-if="user.role !== 'super_admin'" class="badge"
+                                                  :class="Number(user.activated) === 1 ? 'badge-green' : 'badge-gray'"
+                                                  :style="Number(user.activated) === 1 ? 'font-size:11px;' : 'font-size:11px;color:#b45309;background:#fef3c7;'">
+                                                {{ Number(user.activated) === 1 ? '已激活' : '待激活' }}
+                                            </span>
                                         </div>
                                     </div>
                                     <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                                        <button v-if="user.role !== 'super_admin'" @click="toggleActivated(user)"
+                                            :style="Number(user.activated) === 1 ? 'color:#d97706;border-color:#fbbf24' : 'color:#fff;background:#ea580c;border-color:#ea580c;font-weight:600;'"
+                                            class="btn btn-sm btn-outline">
+                                            {{ Number(user.activated) === 1 ? '取消激活' : '激活' }}
+                                        </button>
                                         <button @click="openEditModal(user)" class="btn btn-sm btn-outline">编辑</button>
                                         <button @click="openResetPwdModal(user)" class="btn btn-sm btn-outline">重置密码</button>
                                         <button @click="toggleEnabled(user)"
@@ -354,15 +377,13 @@
                                 <option value="super_admin">超级管理员</option>
                                 <option value="enterprise">企业管理员</option>
                                 <option value="employee">员工账号</option>
-                                <option value="channel_sales">渠道销售</option>
-                                <option value="personal_sales">个人销售</option>
+                                <!-- <option value="personal_sales">代理销售</option> 暂时隐藏 -->
                             </select>
-                            <div v-if="form.role === 'enterprise' || form.role === 'employee'" style="margin-top:8px;">
+                            <div v-if="false" style="margin-top:8px;">
                                 <label class="block text-sm text-gray-500 mb-1">附加销售权限</label>
                                 <select v-model="form.sales_type" class="form-select">
                                     <option value="">无</option>
-                                    <option value="channel">渠道销售</option>
-                                    <option value="personal">个人销售</option>
+                                    <option value="personal">代理销售</option>
                                 </select>
                             </div>
                         </div>
@@ -602,7 +623,7 @@ createApp({
 
         /* 角色相关 */
         function roleLabel(role) {
-            const map = { super_admin: '超级管理员', enterprise: '企业管理员', employee: '员工账号', sales: '销售', channel_sales: '渠道销售', personal_sales: '个人销售' };
+            const map = { super_admin: '超级管理员', enterprise: '企业管理员', employee: '员工账号', sales: '代理销售', channel_sales: '代理销售', personal_sales: '代理销售' };
             return map[role] || role;
         }
         function roleBadgeClass(role) {
@@ -610,7 +631,7 @@ createApp({
             return map[role] || 'badge-gray';
         }
         function salesTypeLabel(t) {
-            return t === 'channel' ? '渠道销售' : t === 'personal' ? '个人销售' : '';
+            return (t === 'channel' || t === 'personal') ? '代理销售' : '';
         }
 
         /* 时间格式化 */
@@ -734,14 +755,15 @@ createApp({
             form.phone = user.phone;
             form.password = '';
             form.name = user.name || '';
-            form.role = user.role;
+            // 代理销售已统一：旧的 channel_sales 归一到 personal_sales 以匹配单一下拉项
+            form.role = (user.role === 'channel_sales' || user.role === 'sales') ? 'personal_sales' : user.role;
             form.parent_id = user.parent_id || null;
             form.bound_senders = (user.bound_senders || []).map(s => ({
                 sender: s.sender,
                 sender_name: s.sender_name || '',
             }));
             form.is_sales = !!user.is_sales;
-            form.sales_type = user.sales_type || '';
+            form.sales_type = (user.sales_type === 'channel') ? 'personal' : (user.sales_type || '');
             formError.value = '';
             showUserModal.value = true;
             fetchEnterprises();
@@ -886,6 +908,27 @@ createApp({
             }
         }
 
+        /* 激活/取消激活切换 */
+        async function toggleActivated(user) {
+            const newActivated = Number(user.activated) === 1 ? 0 : 1;
+            const action = newActivated ? '激活' : '取消激活';
+            try {
+                const resp = await authFetch('/api/auth/users/' + user.id, {
+                    method: 'PUT',
+                    body: JSON.stringify({ activated: newActivated }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showToast('已' + action + '用户 ' + user.phone);
+                    fetchUsers();
+                } else {
+                    showToast(data.msg || action + '失败', 'error');
+                }
+            } catch (e) {
+                showToast('网络错误', 'error');
+            }
+        }
+
         function logout() { doLogout(); }
 
         /* 初始化 */
@@ -904,7 +947,7 @@ createApp({
             showResetPwdModal, resetPwdUser, resetPwdForm, resetPwdError,
             openResetPwdModal, closeResetPwdModal, submitResetPwd,
             showDeleteModal, deleteUser, openDeleteModal, closeDeleteModal, confirmDelete,
-            toggleEnabled, logout, toast,
+            toggleEnabled, toggleActivated, logout, toast,
             groupedUsers, expandedGroups, toggleGroup, activeGroup, activeGroupData,
             roleLabel, roleBadgeClass, salesTypeLabel, formatTime,
             allSenders, availableSenders, addSender, removeSender, customSenderId, addCustomSender,

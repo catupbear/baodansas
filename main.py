@@ -24,7 +24,7 @@ from insurance.monitor_config_db import init_monitor_config_table, migrate_from_
 from insurance.handler import InsuranceHandler
 from insurance.api import insurance_bp, init_insurance_api
 from quote.handler import QuoteHandler
-from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table, init_sms_verification_table, init_referral_columns, init_is_sales_column, init_enterprise_plan_column, init_wallet_tables
+from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table, init_sms_verification_table, init_referral_columns, init_is_sales_column, init_enterprise_plan_column, init_wallet_tables, init_activated_column
 from auth.jwt_utils import init_jwt
 from auth.decorators import init_auth_decorators
 from auth.api import auth_bp, init_auth_api
@@ -97,6 +97,7 @@ def create_app(config: dict) -> Flask:
     init_sms_verification_table(db)
     init_referral_columns(db)
     init_is_sales_column(db)
+    init_activated_column(db)
     init_enterprise_plan_column(db)
     init_wallet_tables(db)
 
@@ -163,7 +164,9 @@ def create_app(config: dict) -> Flask:
     # 邀请有礼介绍页（对外营销页）
     @app.route("/invite")
     def invite_page():
-        return render_template("invite.html")
+        # 邀请有礼功能暂时下线：重定向到首页（恢复时改回 render_template("invite.html")）
+        return redirect("/insurance")
+        # return render_template("invite.html")
 
     # 监控配置管理
     @app.route("/monitor-config")

@@ -242,7 +242,28 @@ def _require_login():
         "phone": payload.get("phone", payload.get("username", "")),
         "role": payload["role"],
         "parent_id": user.get("parent_id"),
+        "activated": int(user.get("activated", 1)),
     }
+
+    # 未激活用户（自助注册待管理员激活）：禁止上传/识别保单等工作类接口
+    if not user.get("activated", 1) and payload.get("role") != ROLE_SUPER_ADMIN:
+        _ACTIVATE_GUARD_PREFIXES = (
+            "/api/insurance/ocr",
+            "/api/insurance/parse",
+            "/api/insurance/retry",
+            "/api/insurance/reupload-reocr",
+            "/api/insurance/reocr",
+            "/api/insurance/batch-reocr-sync",
+            "/api/insurance/sync",
+            "/api/insurance/export",
+            "/api/insurance/batch-download",
+        )
+        if any(request.path.startswith(p) for p in _ACTIVATE_GUARD_PREFIXES):
+            return jsonify({
+                "code": 403,
+                "msg": "您的账号尚未激活，请联系管理员激活后再使用",
+                "not_activated": True,
+            }), 403
 
 
 def _get_user_ids_filter():

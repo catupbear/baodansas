@@ -106,6 +106,7 @@ def login():
                 "phone": user["phone"],
                 "role": user["role"],
                 "name": user.get("name", ""),
+                "activated": int(user.get("activated", 1)),
             },
         },
     })
@@ -181,14 +182,23 @@ def api_list_users():
 
     # channel_sales / personal_sales 是附加销售类型，存在 sales_type 字段而非 role
     sales_type = ""
+    _filter_agent = False
     if role == "channel_sales":
         sales_type = "channel"
         role = ""
     elif role == "personal_sales":
         sales_type = "personal"
         role = ""
+    elif role == "agent_sales":
+        # 代理销售：统一筛选所有具备销售能力的账号（含历史 channel/personal）
+        _filter_agent = True
+        role = ""
 
     users = list_users(_db, role=role, parent_id=parent_id, sales_type=sales_type)
+    if _filter_agent:
+        users = [u for u in users
+                 if u.get("role") in ("channel_sales", "personal_sales", "sales")
+                 or u.get("sales_type") in ("channel", "personal")]
     # 关键词搜索（姓名/手机号）
     q = request.args.get("q", "").strip()
     limit = request.args.get("limit", 0)
@@ -738,7 +748,8 @@ def api_register():
             referrer_id = referrer["id"]
 
     try:
-        user_id = create_user(_db, phone, password, ROLE_EMPLOYEE, None, name or phone, referrer_id=referrer_id)
+        # 自助注册：默认未激活，需管理员在账号管理激活后才能进入工作台
+        user_id = create_user(_db, phone, password, ROLE_EMPLOYEE, None, name or phone, referrer_id=referrer_id, activated=0)
         user = get_user_by_id(_db, user_id)
         token = generate_token(user["id"], user["phone"], user["role"])
         return jsonify({
@@ -750,6 +761,7 @@ def api_register():
                     "phone": user["phone"],
                     "role": user["role"],
                     "name": user.get("name", ""),
+                    "activated": int(user.get("activated", 0)),
                 },
             },
         })
