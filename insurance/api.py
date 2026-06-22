@@ -792,31 +792,10 @@ def list_records():
                     _inject_val = _format_date(str(_inject_val), _compulsory_fmt, _compulsory_no_pad)
                 df["交强到期时间"] = _inject_val
 
-        # 互补后重算 is_abnormal：display_fields 补齐了必填字段则视为正常，并同步写库保持统计一致
-        _RUNTIME_RF = {"承保公司", "保单号", "险种", "车牌", "投保人", "被保人", "签单日期", "起保日期", "终保日期", "保费"}
-        _fix_ids = []
-        for record in result.get("records", []):
-            if not record.get("is_abnormal") or record.get("abnormal_override_reason"):
-                continue
-            df = record.get("display_fields") or {}
-            missing = [f for f in _RUNTIME_RF if not df.get(f)]
-            _should_fix = False
-            if not missing:
-                _should_fix = True
-            else:
-                _ptype = df.get("险种", "")
-                if missing == ["投保人"] and ("交强" in _ptype or "交通事故责任强制" in _ptype):
-                    _should_fix = True
-            if _should_fix:
-                record["is_abnormal"] = 0
-                _fix_ids.append(record["id"])
-        if _fix_ids:
-            try:
-                update_records_abnormal_flag(_db, _fix_ids, is_abnormal=0)
-                # 已修正部分记录的 is_abnormal，清统计缓存使"需人工补充"数字与列表一致
-                _stats_cache.clear()
-            except Exception:
-                pass
+        # 注：is_abnormal（需人工补充）统一由 _compute_abnormal 在入库/字段更新/启动回填
+        # 时按固定 10 列口径计算并写库。此处不再做"浏览时惰性重判+写库"，避免浏览行为
+        # 持续改写历史记录的 is_abnormal、导致同一历史区间统计数字反复漂移。
+        # 列表展示与统计均直接信任 is_abnormal 列，两者口径一致。
 
         # 复用已加载的页面列配置
         result["column_config"] = list_col_cfg

@@ -2054,6 +2054,7 @@
                                     <span v-if="record.policy_count > 1" class="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">多保单 {{ record.policy_index }}/{{ record.policy_count }}</span>
                                     <span v-if="record.page_range" class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">第{{ record.page_range }}页</span>
                                     <span v-if="record.hint" class="text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">{{ record.hint }}</span>
+                                    <span v-if="getFailHint(record)" class="text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">{{ getFailHint(record) }}</span>
                                     <span v-if="record.abnormal_override_reason" class="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">已标记正常: {{ record.abnormal_override_reason }}</span>
                                 </template>
                                 <!-- 文档类型 -->
@@ -4786,10 +4787,7 @@ const _app = createApp({
             if (!r.success || isNonPolicy(r)) return false;
             const missing = REQUIRED_FIELDS.filter(col => !getMappedValue(r, col));
             if (missing.length === 0) return false;
-            // 交强险：仅缺投保人时不算异常
-            if (isCompulsory(r) && missing.length === 1 && missing[0] === '投保人') {
-                return false;
-            }
+            // 交强险缺投保人：不再豁免，归入"需人工补充"（仍由 getPolicyHint 给提示）
             // 紫金驾乘险：保单无签单日期属于正常
             const companyShort = getCompanyShort(r);
             const policyType = getMappedValue(r, '险种') || '';
@@ -4799,18 +4797,35 @@ const _app = createApp({
             return true;
         }
 
-        // 获取保单提示信息（如交强险无投保人、紫金无签单日期）
+        // 获取保单提示信息：逐项列出所有缺失的必填字段，方便知道缺什么去补
         function getPolicyHint(r) {
             if (!r || !r.success) return '';
-            const hints = [];
-            if (isCompulsory(r) && !getMappedValue(r, '投保人')) {
-                hints.push('交强险无投保人属正常');
+            const missing = REQUIRED_FIELDS.filter(col => !getMappedValue(r, col));
+            if (!missing.length) return '';
+            const compulsory = isCompulsory(r);
+            const fields = (r.invoices && r.invoices[0] && r.invoices[0].fields) || {};
+            const isNewCar = !!fields['新车未上牌'];
+            const parts = [];
+            // 暂未上牌新车：车牌缺失提示"新车无车牌"
+            if (isNewCar && missing.includes('车牌')) parts.push('新车无车牌');
+            const labels = [];
+            for (const col of missing) {
+                if (col === '车牌' && isNewCar) continue;
+                else if (col === '投保人' && compulsory) labels.push('投保人(交强险通常无)');
+                else labels.push(col);
             }
-            const pType = getMappedValue(r, '险种') || '';
-            if (getCompanyShort(r) === '紫金' && pType.includes('驾乘') && !getMappedValue(r, '签单日期')) {
-                hints.push('紫金驾乘险无签单日期属正常');
+            if (labels.length) parts.push('缺少：' + labels.join('、'));
+            return parts.join('；');
+        }
+
+        // 失败记录的友好提示：文件损坏/无法打开 → "文件异常，无法打开"
+        function getFailHint(record) {
+            if (!record || record.status !== 'failed') return '';
+            const e = record.error_message || '';
+            if (/未能提取到任何文字|下载失败|内容为空|无法加载|无法打开|损坏|读取失败|解析失败|PDF/.test(e)) {
+                return '文件异常，无法打开';
             }
-            return hints.join('；');
+            return '识别失败，可重新识别';
         }
 
         // 计算属性：分类结果（按车牌分组排列）
@@ -7392,7 +7407,7 @@ const _app = createApp({
             previewRawText, previewOcrRawText, previewRawTextTab, activeRawText, formattedRawText, previewFieldsList, rawTextCopied, copyRawText,
             extractionRules, loadExtractionRules,
             rawTextVisible, rawTextContent, rawTextFileName,
-            successResults, abnormalResults, nonPolicyResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal, getPolicyHint, getRecordHint,
+            successResults, abnormalResults, nonPolicyResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal, getPolicyHint, getRecordHint, getFailHint,
             outputColumns, listColumnConfig, visibleListColumns, fieldHelp, frozenColStyles, getColStyle, startColResize, getMappedValue, getDocCategory, docCategories,
             isLoadingFiles, loadingFileCount, loadingFileTotal, loadingPercent,
             handleFileSelect, handleDrop, removeFile, clearFiles,

@@ -776,10 +776,11 @@ def _compute_abnormal(parsed_fields: dict, status: str, doc_category: str,
         return False, ''
     fields = parsed_fields or {}
 
-    # 根据导出模板筛选实际需要检查的必填字段
+    # 需人工补充：固定检查全部核心必填列（_REQUIRED_FIELDS 的 10 列），
+    # 不再按用户导出模板筛选。模板筛选会让同一记录在"入库/启动回填(模板口径)"
+    # 与"浏览惰性修正(固定列口径)"之间被反复改写，导致历史区间统计数字漂移。
+    # visible_export_keys 参数保留仅为向后兼容，判定时忽略。
     check_fields = _REQUIRED_FIELDS
-    if visible_export_keys is not None:
-        check_fields = [f for f in _REQUIRED_FIELDS if f in visible_export_keys]
 
     missing = []
     for col in check_fields:
@@ -794,28 +795,37 @@ def _compute_abnormal(parsed_fields: dict, status: str, doc_category: str,
     _DATE_FIELDS = {'保险起期': '起保日期', '保险止期': '终保日期', '签单日期': '签单日期'}
     incomplete_dates = []
     for ocr_key, label in _DATE_FIELDS.items():
-        # 模板中不显示该日期列则跳过检查
-        if visible_export_keys is not None and label not in visible_export_keys:
-            continue
+        # 固定口径：三个日期列均检查完整性，不再按模板跳过
         val = fields.get(ocr_key, '')
         if val and not _re.search(r'\d{1,2}[日号]|\d{4}[-/]\d{1,2}[-/]\d{1,2}', val):
             incomplete_dates.append(label)
 
-    # 交强险仅缺投保人不算异常，但给提示
+    # 提示信息：逐项列出所有缺失的必填字段 + 日期不全，方便用户知道缺什么去补。
     policy_type = fields.get('险种类型', '')
     is_compulsory = '交强' in policy_type or '交通事故责任强制' in policy_type
-    if is_compulsory and not fields.get('投保人'):
-        hint = '保单无投保人'
-    else:
-        hint = ''
-
+    is_new_car = bool(fields.get('新车未上牌'))
+    hint_parts = []
+    # 暂未上牌新车：车牌缺失单独提示"新车无车牌"（仍计入需人工补充）
+    if is_new_car and '车牌' in missing:
+        hint_parts.append('新车无车牌')
+    if missing:
+        labels = []
+        for col in missing:
+            # 暂未上牌新车的车牌已用"新车无车牌"提示，跳过
+            if col == '车牌' and is_new_car:
+                continue
+            # 交强险无投保人用更友好的措辞，其余直接列字段名
+            if col == '投保人' and is_compulsory:
+                labels.append('投保人(交强险通常无)')
+            else:
+                labels.append(col)
+        if labels:
+            hint_parts.append('缺少：' + '、'.join(labels))
     if incomplete_dates:
-        date_hint = '日期不全: ' + ','.join(incomplete_dates)
-        hint = f"{hint}; {date_hint}" if hint else date_hint
+        hint_parts.append('日期不全：' + '、'.join(incomplete_dates))
+    hint = '；'.join(hint_parts)
 
     if not missing and not incomplete_dates:
-        return False, hint
-    if not incomplete_dates and is_compulsory and len(missing) == 1 and missing[0] == '投保人':
         return False, hint
 
     return True, hint
@@ -1663,7 +1673,7 @@ def query_insurance_records(
                 "r2.filename, r2.cos_url, r2.ocr_engine, r2.doc_category, r2.confidence, "
                 "r2.dingtalk_synced, r2.status, r2.source, r2.created_at, r2.updated_at, "
                 "r2.company_short, r2.is_abnormal, r2.hint, r2.display_fields, r2.manual_fields, "
-                "r2.abnormal_override_reason, r2.user_id, r2.file_md5, "
+                "r2.abnormal_override_reason, r2.user_id, r2.file_md5, r2.error_message, "
                 "pf3.owner AS _pf_owner"
             )
             cursor.execute(
@@ -2048,14 +2058,44 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
                 cursor.execute(f"SELECT COUNT(*) as cnt FROM {from_sql}{w}", all_params)
                 return cursor.fetchone()["cnt"]
 
-        done_where = f"({col_prefix}status = 'done' OR {col_prefix}status = 'success')"
-        total = _count()
-        done_cnt = _count(done_where)
-        failed_cnt = _count(f"{col_prefix}status = 'failed'")
-        pending_cnt = _count(f"{col_prefix}status = 'pending'")
-        processing_cnt = _count(f"{col_prefix}status = 'processing'")
-        abnormal_cnt = _count(f"{done_where} AND {col_prefix}is_abnormal = 1")
-        nonpolicy_cnt = _count(f"{done_where} AND {col_prefix}doc_category != '' AND {col_prefix}doc_category != '保单'")
+        # total 与各分项必须在【同一数据快照、同一去重基准】上一次性算出，否则：
+        #  1) 后台识别线程并发把记录 processing→done 时，分多条 SQL 顺序查询会看到
+        #     不同快照，导致 done+failed 与 total 加总对不上（"有时候数字不对"）；
+        #  2) dedup 模式下同一保单号跨状态的记录被各分项分别去重而重复计数。
+        # 做法：先确定参与统计的"代表记录"行集（dedup 时每个保单号取 MAX(id) +
+        # 无保单号记录全取；非 dedup 时即全部符合条件记录），再在该行集上用
+        # SUM(CASE WHEN) 一次性聚合，保证 sum(各分项) == total 恒成立。
+        if dedup:
+            _gp = " AND" if where_sql else " WHERE"
+            rep_sql = (
+                f"SELECT MAX({col_prefix}id) AS id FROM {from_sql}{where_sql}"
+                f"{_gp} (pf.policy_no IS NOT NULL AND pf.policy_no != '') GROUP BY pf.policy_no"
+                f" UNION ALL "
+                f"SELECT {col_prefix}id AS id FROM {from_sql}{where_sql}"
+                f"{_gp} (pf.policy_no IS NULL OR pf.policy_no = '')"
+            )
+            rep_params = params + params
+        else:
+            rep_sql = f"SELECT {col_prefix}id AS id FROM {from_sql}{where_sql}"
+            rep_params = list(params)
+
+        cursor.execute(
+            "SELECT COUNT(*) AS total, "
+            "SUM(CASE WHEN ir.status IN ('done','success') THEN 1 ELSE 0 END) AS done_cnt, "
+            "SUM(CASE WHEN ir.status = 'failed' THEN 1 ELSE 0 END) AS failed_cnt, "
+            "SUM(CASE WHEN ir.status IN ('done','success') AND ir.is_abnormal = 1 THEN 1 ELSE 0 END) AS abnormal_cnt, "
+            "SUM(CASE WHEN ir.status IN ('done','success') AND ir.doc_category != '' AND ir.doc_category != '保单' THEN 1 ELSE 0 END) AS nonpolicy_cnt "
+            f"FROM insurance_records ir JOIN ({rep_sql}) reps ON ir.id = reps.id",
+            rep_params
+        )
+        _agg = cursor.fetchone() or {}
+        total = int(_agg.get("total") or 0)
+        done_cnt = int(_agg.get("done_cnt") or 0)
+        failed_cnt = int(_agg.get("failed_cnt") or 0)
+        abnormal_cnt = int(_agg.get("abnormal_cnt") or 0)
+        nonpolicy_cnt = int(_agg.get("nonpolicy_cnt") or 0)
+        pending_cnt = 0       # 已在 where 排除，统计中恒为 0
+        processing_cnt = 0    # 已在 where 排除，统计中恒为 0
         summary = {
             "total": total, "done_cnt": done_cnt, "failed_cnt": failed_cnt,
             "pending_cnt": pending_cnt, "processing_cnt": processing_cnt,
@@ -2063,8 +2103,7 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
         }
 
         status_stats = []
-        for s, c in [("done", done_cnt), ("failed", failed_cnt),
-                      ("pending", pending_cnt), ("processing", processing_cnt)]:
+        for s, c in [("done", done_cnt), ("failed", failed_cnt)]:
             if c:
                 status_stats.append({"status": s, "cnt": int(c)})
 

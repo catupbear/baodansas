@@ -59,7 +59,7 @@ def _ocr_early_stop_check(combined_text: str) -> bool:
         if len(boundaries) > 1:
             return False
         # 兜底：即使标题匹配不足，也检查是否存在多个不同保单号
-        policy_no_pattern = r"保[险]?单号[：:\s]*([A-Za-z0-9]{10,30})"
+        policy_no_pattern = r"保[险]?单号码?[：:\s]*([A-Za-z0-9]{10,30})"
         seen_nos = []
         for m in re.finditer(policy_no_pattern, combined_text):
             no_val = m.group(1)
@@ -852,7 +852,7 @@ class InsuranceHandler:
     # ------------------------------------------------------------------ #
 
     # 可从同车牌历史保单互补的字段
-    CROSS_FILL_FIELDS = ["投保人", "被保险人", "车主", "车架号VIN", "被保险人身份证号码", "投保人身份证号码", "保司公司名称", "保司地址"]
+    CROSS_FILL_FIELDS = ["投保人", "被保险人", "车主", "车架号VIN", "被保险人身份证号码", "投保人身份证号码", "保司公司名称", "保司地址", "签单日期"]
     # 其中需要人名验证的字段
     _PERSON_VALIDATE_FIELDS = {"投保人", "被保险人", "车主"}
 
@@ -890,7 +890,7 @@ class InsuranceHandler:
 
     # 可从同车架号历史保单互补的字段（用车架号匹配，故补车牌号，不补车架号本身）
     VIN_CROSS_FILL_FIELDS = ["车牌号", "投保人", "被保险人", "车主",
-                             "被保险人身份证号码", "投保人身份证号码", "保司公司名称", "保司地址"]
+                             "被保险人身份证号码", "投保人身份证号码", "保司公司名称", "保司地址", "签单日期"]
 
     def _cross_fill_by_vin(self, parsed_fields: dict, record_id: int = None):
         """同车架号(VIN)保单双向互补：适用于"暂未上牌"等无车牌保单与同车车险互补。"""

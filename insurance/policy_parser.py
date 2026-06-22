@@ -60,6 +60,8 @@ COMPANY_BASES = [
     "中国大地财产保险股份有限公司",
     "北部湾财产保险股份有限公司",
     "现代财产保险（中国）有限公司",
+    "利宝保险有限公司",
+    "富德财产保险股份有限公司",
 ]
 
 # 保司简称映射
@@ -99,6 +101,10 @@ COMPANY_SHORT_MAP = {
     "大地财产": "大地",
     "北部湾财产": "北部湾",
     "现代财产": "现代财产",
+    "利宝保险": "利宝",
+    "利宝": "利宝",
+    "富德财产": "富德",
+    "富德": "富德",
 }
 
 # 通过特征关键词辅助识别保司（当公司名未直接出现时的兜底）
@@ -128,6 +134,8 @@ COMPANY_FALLBACK_SIGNALS = [
     (r"95522|tkol\.com|泰康在线|泰康财产", "泰康在线财产保险股份有限公司"),
     (r"95502|yaic\.com|永安保险|永安财产", "永安财产保险股份有限公司"),
     (r"4006080808|hi-ins\.com|现代财产保险|现代保险", "现代财产保险（中国）有限公司"),
+    (r"4008882008|libertymutual|利宝保险|利宝财险|利宝", "利宝保险有限公司"),
+    (r"40066-?95535|4006695535|fundins\.com|富德财产|富德保险|富德", "富德财产保险股份有限公司"),
 ]
 
 
@@ -899,6 +907,15 @@ def _extract_id_numbers(text: str, text_merged: str, fields: dict):
         if m:
             fields["投保人身份证号码"] = m.group(1)
 
+    # 投保人信息块 + 统一社会信用代码（太平E驾等机构投保人，证件号含字母）
+    if "投保人身份证号码" not in fields:
+        m = re.search(
+            r'投保人(?:基本)?(?:信息|姓名)[：:\s]*[\s\S]{0,200}?证件号码[：:\s]*' + _USCC_PATTERN,
+            text
+        )
+        if m:
+            fields["投保人身份证号码"] = m.group(1)
+
     # 平安驾意险表格：投保人姓名 证件类型 证件号码\nXXX 身份证 XXXXXX
     if "投保人身份证号码" not in fields:
         m = re.search(
@@ -975,7 +992,7 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
     # OCR 可能将"保险人"区域的"公司名称"拆行，用 text_merged 兜底
     if "保司公司名称" not in fields:
         for src in [text, text_merged]:
-            m = re.search(r'公司名称[：:]\s*(.+?)(?:\s+公司(?:网址|地址)|公司网址|\s{2,}|\n|$)', src)
+            m = re.search(r'公司名称[：: 　\t]+(.+?)(?:\s+公司(?:网址|地址)|公司网址|\s{2,}|\n|$)', src)
             if m:
                 val = m.group(1).strip()
                 # 必须像公司名（含"公司/分公司"），且不能是地址（含"市+路/街"等）
@@ -1018,7 +1035,7 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
     if "保司地址" not in fields:
         for src in [text, text_merged]:
             # 地址行尾常跟"邮政编码:xxx"（如平安同行），在邮政编码处截断保留前面地址
-            m = re.search(r'(?<!总)公司地址[：:]\s*(.+?)(?:\s*邮政编码|\s+公司网址|\s{2,}|\n|$)', src)
+            m = re.search(r'(?<!总)公司地址[：: 　\t]+(.+?)(?:\s*邮政编码|\s+公司网址|\s{2,}|\n|$)', src)
             if m:
                 val = m.group(1).strip()
                 # 排除竖排版式下跨行误抓到的"签单日期/公司主页"等行（如华安，邮编已在上方截断）
@@ -1045,7 +1062,7 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
     # "深圳市龙岗区龙城街道尚景社区龙福路荣超英 95312\n险 公司地址： 联系电话：\n隆大厦A座A2108"
     if "保司地址" not in fields:
         for i, line in enumerate(lines):
-            if re.search(r'公司地址[：:]', line):
+            if re.search(r'(?<!总)公司地址[：:]', line):
                 addr_parts = []
                 # 上方行可能有地址开头
                 if i > 0:
@@ -1054,7 +1071,9 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
                     prev_clean = re.sub(r'\s+\d{5,11}$', '', prev)
                     # 去掉开头的干扰字符（如"保"、"险"等单字）
                     prev_clean = re.sub(r'^[一-鿿]\s+', '', prev_clean).strip()
-                    if prev_clean and re.search(r'市|区|街|路|号|大厦|广场', prev_clean):
+                    # 必须是真正的地址（市/区 + 街路号大厦等），排除"流水号/保单号"等含"号"字的干扰行
+                    if (prev_clean and re.search(r'[市区].{2,}[街路号大厦广场楼栋座弄巷]', prev_clean)
+                            and not re.search(r'流水号|编号|保单号|证件号|发动机号|车架号|识别代码', prev_clean)):
                         addr_parts.append(prev_clean)
                 # 下方行可能有地址结尾（跳过"联系电话"等标签行）
                 for k in range(i + 1, min(i + 3, len(lines))):
@@ -1070,6 +1089,13 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
                     fields["保司地址"] = ''.join(addr_parts)
                 break
 
+    # 兜底：部分保单（如太平E驾驾乘险）无分公司"公司地址"、只有抬头"总公司地址"，用之
+    if "保司地址" not in fields:
+        m = re.search(r'总公司地址[：:\s]+(.+?)(?:\s*邮编|\s*电话|\s*Tel|\s{2,}|\n|$)', text)
+        if m:
+            val = m.group(1).strip()
+            if val and len(val) >= 4 and re.search(r'[市区].{2,}[街路号大厦广场楼栋座]', val):
+                fields["保司地址"] = val
 
     # 联系电话：从"联系电话："标签附近提取（如95312）
     if "保司联系电话" not in fields:
@@ -2537,6 +2563,11 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
                         break
                 break
 
+    # 暂未上牌的新车：仅打标志（车牌仍按缺失处理、算需人工补充，但提示措辞改为"新车无车牌"）
+    if "车牌号" not in fields:
+        if re.search(r"(?:牌照号码?|号\s*牌\s*号\s*码|号牌号码|车牌号码?)[：:\s]*暂未上牌", text):
+            fields["新车未上牌"] = "暂未上牌"
+
     # 归一化车牌序号中的 OCR 易混字符（O→0、I→1），排除"新车"等占位值
     if fields.get("车牌号") and fields["车牌号"] != "新车":
         fields["车牌号"] = _normalize_plate(fields["车牌号"])
@@ -2553,6 +2584,8 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
         r"车架号/VIN号[码]?\s*([A-Z0-9]{17})",
         # 鼎和/大地：车架号/VIN码（含或不含冒号）
         r"车架号/VIN码[：:\s]*([A-Z0-9]{17})",
+        # 华安交强险等：车架号/VIN（VIN后无"号/码"字，直接空格接值）
+        r"车架号/VIN[：:\s]+([A-Z0-9]{17})",
         # 中银保险等：车架号码
         r"车架号码[：:\s]*([A-Z0-9]{17})",
         # 紫金保险交强险：PDF提取文字错位导致"车架号"变成"车号架号"
@@ -2630,6 +2663,13 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
             r"车架号.*?VIN.*?\n.*?\n.*?([A-HJ-NPR-Z][A-Z0-9]{16})",
             text
         )
+        if m:
+            fields["车架号VIN"] = m.group(1)
+
+    # 兜底8：非标准短车架号（老旧车辆，如华安交强险1995年老车 "车架号/VIN 0091073"）
+    # 仅在标准17位均未匹配时，按显式"车架号/VIN"标签提取5~16位短码
+    if "车架号VIN" not in fields:
+        m = re.search(r"车架号/VIN[码号]?[：:\s]+([A-Z0-9]{5,16})(?![A-Z0-9])", text)
         if m:
             fields["车架号VIN"] = m.group(1)
 
@@ -2953,6 +2993,10 @@ def _extract_premium(text: str, fields: dict, company_short: str):
         patterns.insert(0, r"总保费[：:\s]*([\d,]+\.?\d*)\s*元")
         patterns.insert(1, r"交清保险费\s*([\d,]+\.?\d*)\s*元")
 
+    # 富德驾乘险："总保险费 人民币（大写）￥壹佰玖拾捌元整 ￥：198元"（整数，标签"总保险费"）
+    if company_short == "富德":
+        patterns.insert(0, r"总保险费(?:(?!其中).)*?[￥¥][：:\s]*([\d,]+\.?\d*)\s*元")
+
     # 永诚/太平驾意险："(小写)：200.00" 或 "小写： CNY 430.00" 或 "（小写）￥ 280.00"
     patterns.append(r"[（(]?小写[）)]?[：:\s]*(?:CNY\s*|[￥¥]\s*)?([\d,]+\.\d{2})")
     # 缴款通知书："签单保费合计为17029.02元"
@@ -3229,6 +3273,19 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
     period_text = re.sub(r'(时|分)\s+(\d)', r'\1\2', period_text)
     # 清理冒号周围的空格（人保投保单OCR："0 : 00" → "0:00"）
     period_text = re.sub(r'(\d)\s*:\s*(\d)', r'\1:\2', period_text)
+
+    # 利宝等：标签为"保险期限"，且日期中可能混入字母水印（如"2026年06S月20日""A20日"，SALI 水印）。
+    # 仅对"保险期限/期间…止"片段单独清理字母水印后提取，避免对全文清理而误伤车架号等。
+    m_seg = re.search(r'保险期[限间][\s\S]{0,100}?止', period_text)
+    if m_seg:
+        seg = re.sub(r'(\d)[A-Za-z]+(?=[年月日时分])', r'\1', m_seg.group(0))
+        seg = re.sub(r'(?<=[年月日])[A-Za-z]+(?=\d)', '', seg)
+        m = re.search(r'(\d{4}年\d{1,2}月\d{1,2}日)[\s\S]{0,15}?[至到起][\s\S]{0,15}?(\d{4}年\d{1,2}月\d{1,2}日)', seg)
+        if m:
+            fields["保险起期"] = m.group(1)
+            fields["保险止期"] = m.group(2)
+            fields["保险期间"] = f"{m.group(1)} 至 {m.group(2)}"
+            return
 
     # 华泰驾乘险格式："自2026年05月27日00:00:时起（北京时间）至2027年05月26日 24:00:时止（北京时间）"
     # 起/止后跟"（北京时间）"等注释文字
@@ -3863,7 +3920,9 @@ def _find_policy_boundaries(text: str) -> List[dict]:
     # 当标题匹配不足时，检查是否存在多个不同的保单号
     if len(found) <= 1:
         # 匹配所有"保单号"/"保险单号"及其值
-        policy_no_pattern = r"保[险]?单号[：:\s]*([A-Za-z0-9]{10,30})"
+        # 支持"保单号码：""保险单号码："等带"码"字的标签，否则真保单号提取不到、
+        # 无法与附录/条款页中重复出现的同一保单号去重，导致附录被误拆成独立保单。
+        policy_no_pattern = r"保[险]?单号码?[：:\s]*([A-Za-z0-9]{10,30})"
         policy_nos = []
         seen_nos = []  # 记录所有见过的保单号（含被跳过的），防止同一号码远距离重复出现被误判为新保单
         for m in re.finditer(policy_no_pattern, text):
