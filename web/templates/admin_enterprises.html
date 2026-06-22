@@ -4,9 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>企业管理 - 午虎AI保单台账</title>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="/static/vue.global.prod.js"></script>
+    <link href="https://wxbotcdn.wuhuxiche.com/tailwind.min.css" rel="stylesheet">
     <style>
         :root {
             --primary: #c2410c;
@@ -45,15 +44,18 @@
 
         .data-table { font-size: 13px; border-collapse: collapse; width: 100%; }
         .data-table th {
-            background: #faf8f5; color: #57534e; font-weight: 500;
-            text-align: left; padding: 10px 16px;
-            border-bottom: 1px solid #e7e0d8;
+            background: #faf8f5; color: #78716c; font-weight: 600;
+            text-align: left; padding: 12px 16px;
+            border-bottom: 1px solid #ede8e2;
+            font-size: 12px; letter-spacing: 0.03em; white-space: nowrap;
         }
         .data-table td {
-            padding: 10px 16px;
+            padding: 14px 16px;
             border-bottom: 1px solid #f5f0eb;
+            vertical-align: middle;
         }
-        .data-table tr:hover { background: #fffbf7; }
+        .data-table tbody tr:nth-child(even) { background: #fdfbf9; }
+        .data-table tbody tr:hover { background: #fff7ed; }
 
         .btn {
             display: inline-flex; align-items: center; gap: 6px;
@@ -75,8 +77,8 @@
 
         .badge {
             display: inline-flex; align-items: center;
-            padding: 2px 8px; border-radius: 6px;
-            font-size: 12px; font-weight: 500;
+            padding: 3px 10px; border-radius: 999px;
+            font-size: 12px; font-weight: 600;
         }
         .badge-green { background: #ecfdf5; color: #059669; }
         .badge-gray { background: #f3f4f6; color: #6b7280; }
@@ -93,8 +95,6 @@
             transition: width 0.4s ease;
         }
         .quota-label { font-size: 11px; color: #6b7280; margin-bottom: 2px; }
-
-        .data-table td { vertical-align: middle; }
 
         .form-input {
             width: 100%; height: 40px; padding: 0 12px;
@@ -134,9 +134,7 @@
             <div class="flex items-center space-x-6">
                 <span class="font-semibold text-gray-800">午虎AI保单台账</span>
                 <a href="/insurance" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">保单台账</a>
-                <a href="/monitor-config" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">监控配置</a>
-                <a href="/admin/enterprises" class="hidden sm:inline text-sm text-orange-600 font-medium">企业管理</a>
-                <a href="/admin/users" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">账号管理</a>
+                <a href="/admin/enterprises" class="hidden sm:inline text-sm text-orange-600 font-medium">服务企业管理</a>
             </div>
             <div class="flex items-center space-x-4">
                 <div class="hidden sm:flex items-center space-x-4">
@@ -155,9 +153,7 @@
         <!-- 移动端菜单面板 -->
         <div v-if="mobileMenuOpen" class="sm:hidden bg-white border-b border-gray-200 px-4 py-3 space-y-2">
             <a href="/insurance" class="block text-sm text-gray-600 py-2">保单台账</a>
-            <a href="/monitor-config" class="block text-sm text-gray-600 py-2">监控配置</a>
-            <a href="/admin/enterprises" class="block text-sm text-gray-600 py-2">企业管理</a>
-            <a href="/admin/users" class="block text-sm text-gray-600 py-2">账号管理</a>
+            <a href="/admin/enterprises" class="block text-sm text-gray-600 py-2">服务企业管理</a>
             <hr class="border-gray-100">
             <div class="flex items-center justify-between py-2">
                 <span class="text-sm text-gray-500">{{ currentUser.name || currentUser.phone }}</span>
@@ -166,7 +162,7 @@
         </div>
 
         <!-- 页面内容 -->
-        <div class="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+        <div class="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
             <!-- 操作栏 -->
             <div class="mobile-bar flex items-center justify-between mb-5">
                 <div class="flex items-center gap-3" style="flex-wrap:wrap;">
@@ -180,31 +176,35 @@
                             @focus="$event.target.style.borderColor='#ea580c'" @blur="$event.target.style.borderColor='#e7e0d8'">
                     </div>
                 </div>
-                <button @click="openCreateModal" class="btn btn-primary">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                    </svg>
-                    添加企业
-                </button>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <a href="/admin/users?enterprise_id=__none__" class="btn btn-outline" style="font-size:13px;color:#374151;border-color:#e7e0d8;text-decoration:none;">未分组账号</a>
+                    <button @click="openCreateModal" class="btn btn-primary">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        添加企业
+                    </button>
+                </div>
             </div>
 
             <!-- 企业列表 -->
-            <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="bg-white rounded-xl shadow-sm" style="overflow:hidden;">
                 <div v-if="loading" class="py-16 text-center text-gray-400 text-sm">加载中...</div>
                 <div v-else-if="filteredEnterprises.length === 0" class="py-16 text-center text-gray-400 text-sm">{{ entSearch ? '无匹配结果' : '暂无企业数据' }}</div>
                 <div v-else class="overflow-x-auto">
-                    <table class="data-table">
+                    <table class="data-table" style="min-width:1080px;">
                         <thead>
                             <tr>
                                 <th style="min-width:140px;">企业名称</th>
                                 <th style="min-width:130px;">套餐</th>
+                                <th style="min-width:120px;">套餐到期</th>
                                 <th style="min-width:160px;">本月识别量</th>
                                 <th style="min-width:80px;">联系人</th>
                                 <th style="min-width:110px;">联系电话</th>
                                 <th style="min-width:80px;">推荐人</th>
                                 <th style="min-width:60px;">状态</th>
                                 <th style="min-width:100px;">创建时间</th>
-                                <th style="min-width:130px;">操作</th>
+                                <th style="min-width:190px;">操作</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -222,32 +222,33 @@
                                         </span>
                                         <span style="font-size:11px;color:#9ca3af;white-space:nowrap;">{{ ent.plan_months || 1 }}个月</span>
                                     </div>
-                                    <template v-if="ent.plan_start_at">
-                                        <div style="display:flex;align-items:center;gap:4px;">
-                                            <span style="font-size:11px;white-space:nowrap;padding:1px 6px;border-radius:4px;"
-                                                :style="{
-                                                    background: planDaysLeft(ent) <= 0 ? '#fef2f2' : planDaysLeft(ent) <= 7 ? '#fffbeb' : '#f9fafb',
-                                                    color: planDaysLeft(ent) <= 0 ? '#dc2626' : planDaysLeft(ent) <= 7 ? '#d97706' : '#6b7280'
-                                                }">
-                                                {{ planDaysLeft(ent) <= 0 ? '已到期' : planDaysLeft(ent) + '天后到期' }}
-                                            </span>
-                                        </div>
-                                        <div style="font-size:11px;color:#9ca3af;margin-top:2px;">{{ planExpiryStr(ent) }}</div>
-                                    </template>
-                                    <div v-else style="font-size:11px;color:#d1d5db;margin-top:2px;">未设置到期</div>
-
-                                    <!-- 下一个套餐（叠加续费） -->
+                                    <!-- 下一个套餐（叠加续费）：仅显示类型+时长，日期统一在"套餐到期"列 -->
                                     <template v-if="ent.next_plan_type">
-                                        <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #e5e7eb;">
-                                            <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">
-                                                <span style="font-size:10px;color:#9ca3af;">续费:</span>
-                                                <span class="badge" style="font-size:10px;padding:1px 6px;"
-                                                    :class="ent.next_plan_type==='enterprise' ? 'badge-blue' : ent.next_plan_type==='enterprise_trial' ? 'badge-purple' : 'badge-green'">
-                                                    {{ ent.next_plan_type==='enterprise' ? '企业版' : ent.next_plan_type==='enterprise_trial' ? '企业试用' : '标准版' }}
-                                                </span>
-                                                <span style="font-size:10px;color:#9ca3af;">{{ ent.next_plan_months }}个月</span>
-                                            </div>
-                                            <div style="font-size:10px;color:#9ca3af;">{{ nextPlanExpiryStr(ent) }} 起生效</div>
+                                        <div style="display:flex;align-items:center;gap:4px;margin-top:4px;">
+                                            <span style="font-size:10px;color:#9ca3af;">续费:</span>
+                                            <span class="badge" style="font-size:10px;padding:1px 6px;"
+                                                :class="ent.next_plan_type==='enterprise' ? 'badge-blue' : ent.next_plan_type==='enterprise_trial' ? 'badge-purple' : 'badge-green'">
+                                                {{ ent.next_plan_type==='enterprise' ? '企业版' : ent.next_plan_type==='enterprise_trial' ? '企业试用' : '标准版' }}
+                                            </span>
+                                            <span style="font-size:10px;color:#9ca3af;">{{ ent.next_plan_months }}个月</span>
+                                        </div>
+                                    </template>
+                                </td>
+
+                                <!-- 套餐到期 -->
+                                <td style="vertical-align:middle;">
+                                    <template v-if="planExpiryStr(ent)">
+                                        <div style="font-size:13px;font-weight:600;"
+                                            :style="{color: planDaysLeft(ent) <= 0 ? '#dc2626' : planDaysLeft(ent) <= 7 ? '#d97706' : '#059669'}">
+                                            {{ planDaysLeft(ent) <= 0 ? '已到期' : planDaysLeft(ent) + ' 天后到期' }}
+                                        </div>
+                                        <div style="font-size:12px;color:#9ca3af;margin-top:2px;">{{ planExpiryStr(ent) }}</div>
+                                    </template>
+                                    <span v-else style="font-size:12px;color:#d1d5db;">未设置</span>
+                                    <!-- 续费套餐的生效时间 -->
+                                    <template v-if="ent.next_plan_type">
+                                        <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #e5e7eb;font-size:11px;color:#9ca3af;">
+                                            续费 {{ nextPlanExpiryStr(ent) }} 起生效
                                         </div>
                                     </template>
                                 </td>
@@ -297,7 +298,9 @@
 
                                 <!-- 操作 -->
                                 <td>
-                                    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                                    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;row-gap:6px;max-width:200px;">
+                                        <button @click="gotoMembers(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#ea580c;border-color:#fed7aa;font-weight:600;">人员管理</button>
+                                        <button @click="gotoMonitor(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#ea580c;border-color:#fed7aa;font-weight:600;">监控设置</button>
                                         <button @click="openEditModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;">编辑</button>
                                         <button @click="openPlanModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#c2410c;border-color:#fed7aa;">开通</button>
                                         <button @click="toggleEnabled(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;"
@@ -822,6 +825,14 @@ createApp({
 
         function logout() { doLogout(); }
 
+        // 进入某企业的人员/监控（三级目录：服务企业管理 > 企业 > 人员/监控）
+        function gotoMembers(ent) {
+            window.location.href = `/admin/users?enterprise_id=${ent.id}&enterprise_name=${encodeURIComponent(ent.name || '')}`;
+        }
+        function gotoMonitor(ent) {
+            window.location.href = `/monitor-config?enterprise_id=${ent.id}&enterprise_name=${encodeURIComponent(ent.name || '')}`;
+        }
+
         onMounted(() => {
             if (checkAuth()) {
                 ready.value = true;
@@ -835,7 +846,7 @@ createApp({
             openCreateModal, openEditModal, closeModal, submitForm,
             showPlanModal, planEditEnt, planForm, planFormError, planSubmitting, planCurrentExpiry,
             openPlanModal, closePlanModal, submitPlanForm,
-            toggleEnabled, logout, toast, formatTime,
+            toggleEnabled, logout, toast, formatTime, gotoMembers, gotoMonitor,
             deleteTarget, deleting, confirmDelete, doDelete,
             planDaysLeft, planExpiryStr, nextPlanExpiryStr,
             showReferrerModal, referrerEnt, referrerSearch, referrerUserList, referrerSelected, referrerSaving,

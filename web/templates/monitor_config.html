@@ -4,9 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>监控配置管理</title>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="/static/vue.global.prod.js"></script>
+    <link href="https://wxbotcdn.wuhuxiche.com/tailwind.min.css" rel="stylesheet">
     <style>
         :root {
             --primary: #c2410c;
@@ -182,11 +181,11 @@
     <header class="nav-header shadow-lg">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
             <div class="flex items-center gap-4">
-                <a href="/insurance" style="color:#fff;opacity:0.85;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.85'">
+                <a :href="urlEnterpriseId ? '/admin/enterprises' : '/insurance'" style="color:#fff;opacity:0.85;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.85'">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
                     </svg>
-                    返回保单台账
+                    {{ urlEnterpriseId ? '返回服务企业管理' : '返回保单台账' }}
                 </a>
                 <div class="flex items-center gap-3">
                     <div class="w-8 h-8 rounded-lg bg-white bg-opacity-20 flex items-center justify-center flex-shrink-0">
@@ -195,7 +194,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                         </svg>
                     </div>
-                    <h1 class="text-lg font-bold text-white tracking-tight">监控配置管理</h1>
+                    <h1 class="text-lg font-bold text-white tracking-tight">监控配置管理<span v-if="urlEnterpriseName" style="font-size:13px;font-weight:400;opacity:0.85;"> · {{ urlEnterpriseName }}</span></h1>
                 </div>
             </div>
             <div class="flex items-center gap-2">
@@ -232,7 +231,7 @@
         </div>
 
         <!-- 空状态 -->
-        <div v-else-if="configs.length === 0" class="empty-state card" style="margin-top:40px;">
+        <div v-else-if="displayConfigs.length === 0" class="empty-state card" style="margin-top:40px;">
             <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
             </svg>
@@ -248,7 +247,7 @@
 
         <!-- 配置卡片列表 -->
         <div v-else class="grid gap-4">
-            <div v-for="config in configs" :key="config.id" class="card" style="padding:20px;">
+            <div v-for="config in displayConfigs" :key="config.id" class="card" style="padding:20px;">
                 <div class="flex items-start justify-between gap-4">
                     <!-- 左侧信息 -->
                     <div style="flex:1;min-width:0;">
@@ -569,6 +568,13 @@ createApp({
 
         // 状态
         const configs = ref([]);
+        // 从企业管理页跳转进来：?enterprise_id=X，只显示该企业的监控配置
+        const urlEnterpriseId = new URLSearchParams(location.search).get('enterprise_id') || '';
+        const urlEnterpriseName = new URLSearchParams(location.search).get('enterprise_name') || '';
+        const displayConfigs = Vue.computed(() => {
+            if (!urlEnterpriseId) return configs.value;
+            return configs.value.filter(c => String(c.enterprise_id || '') === String(urlEnterpriseId));
+        });
         const loading = ref(false);
         const showModal = ref(false);
         const editingId = ref(null);
@@ -768,7 +774,8 @@ createApp({
         // 打开新增弹窗
         function openAddModal() {
             editingId.value = null;
-            form.value = { name: '', room_ids: [], user_ids: [], dingtalk_doc_url: '', bind_enterprise_id: '', bind_user_id: '' };
+            // 从某企业进入时，新建配置默认绑定该企业
+            form.value = { name: '', room_ids: [], user_ids: [], dingtalk_doc_url: '', bind_enterprise_id: urlEnterpriseId || '', bind_user_id: '' };
             initFieldMapping(null);
             showModal.value = true;
         }
@@ -890,7 +897,7 @@ createApp({
 
         return {
             currentUser, doLogout, enterpriseOptions, bindUserOptions, filteredBindUsers, onEnterpriseChange,
-            configs, loading, showModal, editingId, saving,
+            configs, displayConfigs, urlEnterpriseId, urlEnterpriseName, loading, showModal, editingId, saving,
             form, roomSearch, userSearch, roomDropdownOpen, userDropdownOpen,
             fieldMappingRows, toast, refreshingOptions,
             filteredRooms, filteredUsers,

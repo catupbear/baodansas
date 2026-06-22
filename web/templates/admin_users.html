@@ -4,9 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>账号管理 - 午虎AI保单台账</title>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="/static/vue.global.prod.js"></script>
+    <link href="https://wxbotcdn.wuhuxiche.com/tailwind.min.css" rel="stylesheet">
     <style>
         :root {
             --primary: #c2410c;
@@ -144,9 +143,7 @@
             <div class="flex items-center space-x-6">
                 <span class="font-semibold text-gray-800">午虎AI保单台账</span>
                 <a href="/insurance" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">保单台账</a>
-                <a href="/monitor-config" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">监控配置</a>
-                <a href="/admin/enterprises" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">企业管理</a>
-                <a href="/admin/users" class="hidden sm:inline text-sm text-orange-600 font-medium">账号管理</a>
+                <a href="/admin/enterprises" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">服务企业管理</a>
             </div>
             <div class="flex items-center space-x-4">
                 <div class="hidden sm:flex items-center space-x-4">
@@ -165,9 +162,7 @@
         <!-- 移动端菜单面板 -->
         <div v-if="mobileMenuOpen" class="sm:hidden bg-white border-b border-gray-200 px-4 py-3 space-y-2">
             <a href="/insurance" class="block text-sm text-gray-600 py-2">保单台账</a>
-            <a href="/monitor-config" class="block text-sm text-gray-600 py-2">监控配置</a>
-            <a href="/admin/enterprises" class="block text-sm text-gray-600 py-2">企业管理</a>
-            <a href="/admin/users" class="block text-sm text-gray-600 py-2">账号管理</a>
+            <a href="/admin/enterprises" class="block text-sm text-gray-600 py-2">服务企业管理</a>
             <hr class="border-gray-100">
             <div class="flex items-center justify-between py-2">
                 <span class="text-sm text-gray-500">{{ currentUser.name || currentUser.phone }}</span>
@@ -177,6 +172,12 @@
 
         <!-- 页面内容 -->
         <div class="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+            <!-- 面包屑 -->
+            <div class="mb-3" style="font-size:13px;color:#9ca3af;">
+                <a href="/admin/enterprises" style="color:#ea580c;text-decoration:none;">服务企业管理</a>
+                <span v-if="urlEnterpriseName"> / {{ urlEnterpriseName }}</span>
+                <span> / 人员管理</span>
+            </div>
             <!-- 操作栏 -->
             <div class="mobile-bar flex items-center justify-between mb-5">
                 <div class="flex items-center gap-3" style="flex-wrap:wrap;">
@@ -210,8 +211,8 @@
                 <div v-if="loading" class="py-16 text-center text-gray-400 text-sm">加载中...</div>
                 <div v-else-if="groupedUsers.length === 0" class="py-16 text-center text-gray-400 text-sm">{{ searchKeyword ? '无匹配结果' : '暂无用户数据' }}</div>
                 <div v-else class="ug-layout" style="display:flex;align-items:stretch;min-height:420px;">
-                    <!-- 左侧企业分组导航 -->
-                    <div class="ug-sidebar" style="width:200px;flex-shrink:0;border-right:1px solid #f0f0f0;background:#fafafa;overflow-y:auto;max-height:72vh;">
+                    <!-- 左侧企业分组导航（从企业管理进入的单企业视图下隐藏） -->
+                    <div v-if="!singleEnterprise" class="ug-sidebar" style="width:200px;flex-shrink:0;border-right:1px solid #f0f0f0;background:#fafafa;overflow-y:auto;max-height:72vh;">
                         <div v-for="group in groupedUsers" :key="group.key" @click="activeGroup = group.key"
                              :style="{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px',cursor:'pointer',fontSize:'14px',userSelect:'none',borderLeft:(activeGroupData && activeGroupData.key===group.key)?'3px solid #ea580c':'3px solid transparent',background:(activeGroupData && activeGroupData.key===group.key)?'#fff':'transparent',fontWeight:(activeGroupData && activeGroupData.key===group.key)?'600':'400',color:(activeGroupData && activeGroupData.key===group.key)?'#ea580c':'#374151'}">
                             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ group.name }}</span>
@@ -567,14 +568,34 @@ createApp({
         const activeGroup = ref('');
         const activeGroupData = computed(() => {
             const groups = groupedUsers.value;
+            // 单企业视图（从企业管理进入）：锁定该企业，无人员则显示空，不落到别的企业
+            const _ueid = new URLSearchParams(location.search).get('enterprise_id');
+            if (_ueid) {
+                const g = groups.find(x => x.key === _ueid);
+                if (g) return g;
+                const _uname = new URLSearchParams(location.search).get('enterprise_name') || '该企业';
+                return { key: _ueid, name: _ueid === '__none__' ? '未分组' : _uname, users: [] };
+            }
             if (!groups.length) return null;
             return groups.find(g => g.key === activeGroup.value) || groups[0];
         });
 
-        // 分组列表变化（搜索/加载）后，若当前选中分组已不存在则切到第一个
+        // URL 预选企业（从企业管理页跳转进来：?enterprise_id=X）
+        const _urlEnterpriseId = new URLSearchParams(location.search).get('enterprise_id');
+        const _urlEnterpriseName = new URLSearchParams(location.search).get('enterprise_name') || '';
+        // 单企业视图：从企业管理进入（含未分组 __none__），隐藏左侧分组栏、只看该企业
+        const singleEnterprise = !!_urlEnterpriseId;
+        let _pendingGroup = _urlEnterpriseId || '';
+        // 分组列表变化（搜索/加载）后：URL 指定企业优先选中（仅一次），否则若当前分组不存在则切第一个
         Vue.watch(groupedUsers, () => {
             const groups = groupedUsers.value;
-            if (groups.length && !groups.find(g => g.key === activeGroup.value)) {
+            if (!groups.length) return;
+            if (_pendingGroup && groups.find(g => g.key === _pendingGroup)) {
+                activeGroup.value = _pendingGroup;
+                _pendingGroup = '';
+                return;
+            }
+            if (!groups.find(g => g.key === activeGroup.value)) {
                 activeGroup.value = groups[0].key;
             }
         }, { immediate: true });
@@ -947,7 +968,7 @@ createApp({
             showResetPwdModal, resetPwdUser, resetPwdForm, resetPwdError,
             openResetPwdModal, closeResetPwdModal, submitResetPwd,
             showDeleteModal, deleteUser, openDeleteModal, closeDeleteModal, confirmDelete,
-            toggleEnabled, toggleActivated, logout, toast,
+            toggleEnabled, toggleActivated, logout, toast, urlEnterpriseName: _urlEnterpriseName, singleEnterprise,
             groupedUsers, expandedGroups, toggleGroup, activeGroup, activeGroupData,
             roleLabel, roleBadgeClass, salesTypeLabel, formatTime,
             allSenders, availableSenders, addSender, removeSender, customSenderId, addCustomSender,
