@@ -1207,6 +1207,27 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
             if val and len(val) >= 4:
                 fields["保司公司名称"] = val
 
+    # 补充模式E2：保险人后直接跟分支机构名（缺公司主体），如国寿财险电子保单
+    # "保险人： 深圳市分公司红岭支公司综修厂业务八部 保险人盖章"
+    # 该行只有分/支机构、无"XX保险公司"主体，用保险公司全称拼成签单机构全名，
+    # 避免最终留空或被旧逻辑误截成"...公司深"。
+    if "保司公司名称" not in fields:
+        # 注意：_extract_insurer_info 内的 fields 是 _extract_common_fields 的局部 dict，
+        # 此时尚未并入"保险公司"，需就地识别保司全称作为拼接基底。
+        base = fields.get("保险公司") or _identify_company(text).get("保险公司", "")
+        if base:
+            for line in lines:
+                m = re.search(r'(?<!被)保险人[：:]\s*(.+)', line)
+                if not m:
+                    continue
+                val = re.sub(r'\s*(?:保险人)?\s*(?:盖章|签章|印章|授权签字).*$', '', m.group(1))
+                val = re.sub(r'\s+', '', val)
+                # 必须是分支机构名（含分/支公司、营业部、业务部），且非地址（不含路号大厦等）
+                if (val and re.search(r'分公司|支公司|营业部|业务\S*部|营销服务部', val)
+                        and not re.search(r'[路街号]|大厦|大楼|广场|栋|楼', val)):
+                    fields["保司公司名称"] = val if base in val else base + val
+                    break
+
     # 补充模式F：签单机构
     # 现代财产承运人险："签单机构：现代财产保险(中国) 有限公司广东分公司"（公司名后换行）
     # 平安车主尊享："签单机构：中国平安财产保险股份有限公司深圳市侨香支公司 <地址>"（公司名+地址同行）
