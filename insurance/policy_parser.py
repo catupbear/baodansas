@@ -247,6 +247,9 @@ def _clean_person_name(val: str) -> str:
     if re.search(r'[（(][^）)]*[）)][\u4e00-\u9fff]', val):
         # 括号后面还有中文，属于名称的一部分（如"中设(深圳)设备"），只清理冒号
         val = re.sub(r'[：:].*', '', val)
+    elif re.search(r'[（(](?:个体工商户|个人独资|普通合伙|有限合伙|合伙企业)[）)]', val):
+        # 末尾"（个体工商户）"等机构性质标识属于名称的一部分，保留，仅清理冒号备注
+        val = re.sub(r'[：:].*', '', val)
     else:
         val = re.sub(r'[：:（(].*', '', val)
     val = re.sub(r'车主.*', '', val)
@@ -536,6 +539,9 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
     # ===== 身份证号码（投保人/被保险人） =====
     _extract_id_numbers(text, text_merged, fields)
 
+    # 投保人与被保险人为同一主体时，身份证号码/统一社会信用代码互补（适用所有保司）
+    _fill_same_party_id_number(fields)
+
     # ===== 车辆信息 =====
     _extract_vehicle_info(text, fields, company_short)
 
@@ -548,7 +554,15 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
     _extract_sign_date(text, fields, company_short)
 
     # ===== 收费确认时间 =====
-    m = re.search(r"收费确认时间[：:\s]*([\d\-/:年月日时分秒\s]+?)(?:\s{2,}|$|投保|有效|打印)", text)
+    # 直接匹配"日期+时间"结构，不依赖尾部分隔符（兼容 OCR 把日期与时分粘连成
+    # "2026-06-2311:16" 的情况，以及 2026/06/23 10:12:55、2026年06月23日10时12分 等格式）
+    m = re.search(
+        r"收费确认时间[：:\s]*(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日号]?\s*\d{1,2}[：:时]\d{1,2})(?:[：:分]\d{1,2})?[分秒]?",
+        text,
+    )
+    if not m:
+        # 兜底：只有日期没时间
+        m = re.search(r"收费确认时间[：:\s]*(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日号]?)", text)
     if m:
         fields["收费确认时间"] = m.group(1).strip()
 
@@ -737,6 +751,25 @@ _ID_PATTERN = r'([1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]
 # 统一社会信用代码正则：18位，"登记部门+机构类别"(2位数字/字母) + 行政区划(6位数字) + 主体标识码(9位) + 校验码(1位)
 # 如企业被保险人 92441303L69443363R（含字母，_ID_PATTERN 无法匹配）
 _USCC_PATTERN = r'([0-9A-Z]{2}\d{6}[0-9A-Z]{10})'
+
+
+def _fill_same_party_id_number(fields: dict):
+    """投保人与被保险人为同一主体（同名）时，互补身份证号码/统一社会信用代码。
+
+    一张保单内，若投保人与被保险人是同一个人或同一家机构，二者证件号必然相同；
+    OCR 常只在其中一方标注证件号，这里据此把有值的一方补给空缺的一方。适用所有保司。
+    """
+    norm = lambda s: re.sub(r'\s+', '', s or '')
+    p_name = norm(fields.get("投保人"))
+    i_name = norm(fields.get("被保险人"))
+    if not p_name or p_name != i_name:
+        return
+    p_id = (fields.get("投保人身份证号码") or "").strip()
+    i_id = (fields.get("被保险人身份证号码") or "").strip()
+    if i_id and not p_id:
+        fields["投保人身份证号码"] = i_id
+    elif p_id and not i_id:
+        fields["被保险人身份证号码"] = p_id
 
 
 def _extract_id_numbers(text: str, text_merged: str, fields: dict):
@@ -1038,6 +1071,14 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
             m = re.search(r'(?<!总)公司地址[：: 　\t]+(.+?)(?:\s*邮政编码|\s+公司网址|\s{2,}|\n|$)', src)
             if m:
                 val = m.group(1).strip()
+                # 地址跨行且括号未闭合（如富德"...招商盛世广场C座(\n中国燃气大厦）13层02、03、04单元"）：
+                # 单行会在"C座("处被换行截断，这里重新跨行匹配到"邮政编码/签单日期"边界，去换行空格补全
+                if (val.count('(') + val.count('（')) > (val.count(')') + val.count('）')):
+                    m2 = re.search(r'(?<!总)公司地址[：: 　\t]+([\s\S]{4,120}?)(?:邮政编码|邮编|签单日期)', src)
+                    if m2:
+                        val2 = re.sub(r'\s+', '', m2.group(1))
+                        if val2:
+                            val = val2
                 # 排除竖排版式下跨行误抓到的"签单日期/公司主页"等行（如华安，邮编已在上方截断）
                 if (val and len(val) >= 4
                         and not re.search(r'^联系电话|^公司名称|^邮政编码', val)
@@ -2161,6 +2202,14 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
     # 众诚等OCR带字间空格格式："投 保 人 陈豪金"（要求字间有空格，避免误匹配正文"投保人已向"）
     if "投保人" not in fields:
         m = re.search(r'投\s+保\s+人\s+([一-鿿·]{2,6})(?=\s|$)', text)
+        if m:
+            val = _clean_person_name(m.group(1))
+            if _is_valid_person(val):
+                fields["投保人"] = val
+
+    # 大家财险驾乘等："投保人身份信息\n姓名:马爽 联系电话：..."（标签在上，姓名在下方/同行）
+    if "投保人" not in fields:
+        m = re.search(r'投保人(?:身份)?信息[\s\S]{0,40}?姓名[：:]\s*([一-鿿·]{2,6})(?=\s|联系|证件|性别|$)', text)
         if m:
             val = _clean_person_name(m.group(1))
             if _is_valid_person(val):
@@ -3668,9 +3717,13 @@ def _identify_doc_category(text: str, fields: dict) -> str:
     if text_len < 500 and '保险人签章' in text:
         return "电子标志"
 
-    # 交强险标志：包含"此标志粘贴在机动车前窗"等特征
-    # 注意：多页交强险保单可能在附页包含电子标志，需排除含保单关键字段的情况
-    if '此标志粘贴在机动车前窗' in text or '此标志正面的年份' in text:
+    # 交强险标志：包含"此标志粘贴在机动车前窗"/"强制保险标志"等特征
+    # 单独的电子标志虽印有"保险单号/号牌号码"（会触发 _has_policy_markers），但没有
+    # 被保险人/保费/承保险种等保单详情；据此区别于"保单+附页标志"合订 PDF（后者含完整信息）
+    if ('此标志粘贴在机动车前窗' in text or '此标志正面的年份' in text
+            or '强制保险标志' in text):
+        if not re.search(r'被保险人|保险费|投保人|保险金额|承保险种|责任限额', text):
+            return "电子标志"
         if not _has_policy_markers:
             return "电子标志"
     # 电子标志：文本极短 + 含"单证查验" + 无被保人/保费信息（安盛天平等格式）
@@ -3734,6 +3787,13 @@ def _identify_doc_category(text: str, fields: dict) -> str:
                 if not re.search(r'投保单\s*是本保险[单合]', text_head):
                     if not re.search(r'(?:由|包括)投保单', text_head):
                         if _has_policy_markers:
+                            # 已签发投保单（太平E驾、平安驾意等以"投保单"为正式承保凭证）：
+                            # 已含保单号+保费+起保期即为有效保单，归为"保单"而非附属文件，
+                            # 避免被前端 isNonPolicy 误归入"非保单"。
+                            # 真正的草稿投保单（未承保、无保单号/保费）仍返回"投保单"。
+                            if (fields.get("保单号") and fields.get("保费合计")
+                                    and fields.get("保险起期")):
+                                return "保单"
                             return "投保单"
 
     # 有保单关键字段才认定为保单，否则标记为未知
