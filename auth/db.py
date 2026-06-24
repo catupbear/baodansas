@@ -3,6 +3,7 @@
 负责 users 表的建表与 CRUD 操作
 """
 
+import json
 import logging
 import secrets
 import string
@@ -279,8 +280,10 @@ def create_enterprise(db, name: str, contact_person: str = "", contact_phone: st
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        # plan_type 显式置空串表示"未开通"：列为 NOT NULL DEFAULT 'standard'，
+        # 若不写该列，数据库会默认成 standard，导致新企业被自动开通。开通由管理员后续操作。
         cursor.execute(
-            "INSERT INTO enterprises (name, contact_person, contact_phone) VALUES (%s, %s, %s)",
+            "INSERT INTO enterprises (name, contact_person, contact_phone, plan_type) VALUES (%s, %s, %s, '')",
             (name, contact_person, contact_phone),
         )
         conn.commit()
@@ -874,6 +877,48 @@ def get_monthly_pdf_usage_batch(db) -> dict:
             "GROUP BY enterprise_id"
         )
         return {row["enterprise_id"]: row["cnt"] for row in cursor.fetchall()}
+    except Exception:
+        return {}
+    finally:
+        conn.close()
+
+
+def get_member_count_batch(db) -> dict:
+    """批量获取各企业人员数（按 parent_id 分组），返回 {enterprise_id: count}"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT parent_id, COUNT(*) as cnt FROM users WHERE parent_id IS NOT NULL GROUP BY parent_id"
+        )
+        return {row["parent_id"]: row["cnt"] for row in cursor.fetchall()}
+    except Exception:
+        return {}
+    finally:
+        conn.close()
+
+
+def get_monitor_count_batch(db) -> dict:
+    """批量获取各企业监控的群聊数（统计 rooms 内不同群，去重），返回 {enterprise_id: 群数}"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT enterprise_id, rooms FROM monitor_configs WHERE enterprise_id IS NOT NULL"
+        )
+        ent_rooms = {}  # {enterprise_id: set(room_id)}
+        for row in cursor.fetchall():
+            eid = row["enterprise_id"]
+            try:
+                rooms = json.loads(row["rooms"]) if row.get("rooms") else []
+            except (TypeError, ValueError):
+                rooms = []
+            s = ent_rooms.setdefault(eid, set())
+            for r in (rooms or []):
+                rid = r.get("id") if isinstance(r, dict) else r
+                if rid:
+                    s.add(rid)
+        return {eid: len(s) for eid, s in ent_rooms.items()}
     except Exception:
         return {}
     finally:

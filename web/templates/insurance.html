@@ -7,7 +7,7 @@
     <script src="/static/vue.global.prod.js"></script>
     <script src="/static/qrcode.min.js"></script>
     <script>window.pdfjsLib = null;</script>
-    <link href="https://wxbotcdn.wuhuxiche.com/tailwind.min.css" rel="stylesheet">
+    <link href="/static/tailwind.min.css" rel="stylesheet">
     <style>
         :root {
             --primary: #c2410c;
@@ -171,6 +171,7 @@
             transition: all 0.15s ease;
         }
         .company-tag:hover { background: #ffedd5; border-color: rgba(234,88,12,0.3); }
+        .company-tag-active { background: linear-gradient(135deg,#fb923c,#ea580c) !important; color: #fff !important; border-color: #ea580c !important; opacity: 1 !important; }
 
         /* Tab样式 */
         .tab-btn {
@@ -387,7 +388,7 @@
                 </div>
                 <!-- 页面级 Tab 切换（桌面端显示） -->
                 <div v-if="!notActivated" class="hidden sm:flex items-center gap-1 ml-4">
-                    <button @click="pageTab = 'records'; loadRecords(); loadRecordStats(); loadRecordCompanies()" :class="pageTab === 'records' ? 'active' : ''" class="page-tab-btn">
+                    <button @click="pageTab = 'records'; loadRecords(); loadRecordCompanies()" :class="pageTab === 'records' ? 'active' : ''" class="page-tab-btn">
                         识别记录
                     </button>
                     <button @click="pageTab = 'upload'" :class="pageTab === 'upload' ? 'active' : ''" class="page-tab-btn">
@@ -415,8 +416,8 @@
                     </svg>
                     字段映射
                 </button>
-                <!-- 购买套餐 -->
-                <button @click="pricingVisible = true; showPricingQr = false" class="btn"
+                <!-- 购买套餐（超管不显示） -->
+                <button v-if="!isSuperAdmin" @click="pricingVisible = true; showPricingQr = false" class="btn"
                         style="background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#7c2d12;border:none;padding:6px 14px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(245,158,11,0.4);"
                         title="购买套餐">
                     💎 购买套餐
@@ -561,7 +562,7 @@
             <!-- Tab 切换 -->
             <div v-if="!notActivated" style="padding:12px 16px;border-bottom:1px solid #f3f4f6;">
                 <div style="font-size:11px;color:#9ca3af;font-weight:600;margin-bottom:8px;letter-spacing:.05em;">页面</div>
-                <button @click="pageTab='records';loadRecords();loadRecordStats();loadRecordCompanies();mobileMenuOpen=false"
+                <button @click="pageTab='records';loadRecords();loadRecordCompanies();mobileMenuOpen=false"
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;margin-bottom:3px;"
                         :style="pageTab==='records'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
                     识别记录
@@ -592,7 +593,7 @@
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;border:none;background:none;cursor:pointer;margin-bottom:3px;">
                     字段映射
                 </button>
-                <button @click="pricingVisible=true;showPricingQr=false;mobileMenuOpen=false"
+                <button v-if="!isSuperAdmin" @click="pricingVisible=true;showPricingQr=false;mobileMenuOpen=false"
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;color:#b45309;font-weight:700;border:none;background:#fffbeb;cursor:pointer;margin-bottom:3px;">
                     💎 购买套餐
                 </button>
@@ -1664,6 +1665,34 @@
 
     <!-- ========== 识别记录 Tab ========== -->
     <main v-if="pageTab === 'records' && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5">
+        <!-- 接入保司总览（仅超管，点击保司筛选下方记录） -->
+        <div v-if="isSuperAdmin && !companiesLoading" class="card p-4">
+            <div class="flex items-start gap-3 company-section">
+                <div class="flex flex-col items-start flex-shrink-0 mt-0.5">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                        </svg>
+                        <span class="text-sm font-medium text-gray-700">接入保司</span>
+                        <span class="badge badge-info font-semibold">{{ supportedCompanies.length }}家</span>
+                        <span v-if="recordCompanyFilter" class="text-xs text-orange-600 cursor-pointer ml-1"
+                              @click="filterByCompany(recordCompanyFilter)">✕ 清除筛选（当前：{{ recordCompanyFilter }}）</span>
+                    </div>
+                    <span class="text-xs text-gray-400 ml-6">点击保司查看其全部识别记录</span>
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                    <span v-for="c in allCompaniesData" :key="c.company"
+                          class="company-tag cursor-pointer"
+                          :class="{ 'opacity-40': !c.supported, 'company-tag-active': recordCompanyFilter === c.company }"
+                          @click="filterByCompany(c.company)"
+                          :title="c.company + '：已识别 ' + c.count + ' 次，点击查看记录'">
+                        {{ c.company }}
+                        <span class="text-xs ml-0.5"
+                              :class="recordCompanyFilter === c.company ? 'text-orange-100' : 'text-gray-400'">({{ c.count }})</span>
+                    </span>
+                </div>
+            </div>
+        </div>
         <!-- 筛选栏 -->
         <div class="card p-4">
             <div class="flex flex-wrap items-center gap-3">
@@ -1927,7 +1956,7 @@
             <!-- 状态 Tab 栏 + 操作按钮 -->
             <div class="flex items-center px-4 record-tab-row" style="gap:0;min-height:48px;">
                 <button v-for="tab in recordTabs" :key="tab.key"
-                        @click="recordActiveTab = tab.key; loadRecords().then(() => loadRecordStats())"
+                        @click="recordActiveTab = tab.key; loadRecords()"
                         class="px-4 py-3 text-sm font-medium transition-colors relative flex-shrink-0"
                         :class="recordActiveTab === tab.key
                             ? 'text-orange-600'
@@ -2002,18 +2031,21 @@
                             <th class="sticky-col-check" style="min-width:40px;">
                                 <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" class="cursor-pointer">
                             </th>
-                            <th v-for="(col, colIdx) in visibleListColumns" :key="col.key"
-                                :class="[
-                                    col.frozen ? 'frozen-col' : '',
-                                    col.frozen && col.key === frozenColStyles._lastFrozenKey ? 'frozen-col-last' : ''
-                                ].join(' ')"
-                                class="text-gray-600 font-medium"
-                                :style="getColStyle(col)">
-                                {{ col.display_name }}
-                                <span v-if="fieldHelp[col.key]" class="field-help-icon" :title="fieldHelp[col.key]">?</span>
-                                <span class="col-resize-handle"
-                                      @mousedown.prevent="startColResize($event, col)"></span>
-                            </th>
+                            <template v-for="(col, colIdx) in visibleListColumns" :key="col.key">
+                                <!-- 所属企业（仅超管可见，置于承保公司列前） -->
+                                <th v-if="isSuperAdmin && col.key === '承保公司'" class="text-gray-600 font-medium" style="min-width:90px;">所属企业</th>
+                                <th :class="[
+                                        col.frozen ? 'frozen-col' : '',
+                                        col.frozen && col.key === frozenColStyles._lastFrozenKey ? 'frozen-col-last' : ''
+                                    ].join(' ')"
+                                    class="text-gray-600 font-medium"
+                                    :style="getColStyle(col)">
+                                    {{ col.display_name }}
+                                    <span v-if="fieldHelp[col.key]" class="field-help-icon" :title="fieldHelp[col.key]">?</span>
+                                    <span class="col-resize-handle"
+                                          @mousedown.prevent="startColResize($event, col)"></span>
+                                </th>
+                            </template>
                             <th v-if="isSuperAdmin" style="min-width:70px;">识别方式</th>
                             <th v-if="isSuperAdmin" style="min-width:60px;">置信度</th>
                             <th style="min-width:160px;">操作</th>
@@ -2027,8 +2059,13 @@
                                 <input type="checkbox" :value="record.id" v-model="selectedRecordIds" class="cursor-pointer">
                             </td>
                             <!-- 动态列（按列配置渲染） -->
-                            <td v-for="(col, colIdx) in visibleListColumns" :key="col.key"
-                                :class="[
+                            <template v-for="(col, colIdx) in visibleListColumns" :key="col.key">
+                            <!-- 所属企业（仅超管可见，置于承保公司列前） -->
+                            <td v-if="isSuperAdmin && col.key === '承保公司'" class="text-gray-700 text-sm">
+                                <span v-if="record.enterprise_name" class="text-sm text-gray-700">{{ record.enterprise_name }}</span>
+                                <span v-else class="text-gray-400 text-sm">—</span>
+                            </td>
+                            <td :class="[
                                     col.frozen ? 'frozen-col' : '',
                                     col.frozen && col.key === frozenColStyles._lastFrozenKey ? 'frozen-col-last' : ''
                                 ].join(' ')"
@@ -2130,6 +2167,7 @@
                                     </template>
                                 </template>
                             </td>
+                            </template>
                             <!-- 识别方式（仅超管可见） -->
                             <td v-if="isSuperAdmin">
                                 <span v-if="record.ocr_engine" class="badge text-xs"
@@ -3436,7 +3474,7 @@
             </svg>
             <span style="font-size:10px;font-weight:500;">工作台</span>
         </button>
-        <button v-if="!notActivated" @click="pageTab='records';loadRecords();loadRecordStats();loadRecordCompanies()"
+        <button v-if="!notActivated" @click="pageTab='records';loadRecords();loadRecordCompanies()"
                 style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;"
                 :style="pageTab==='records'?'color:#ea580c;':'color:#9ca3af;'">
             <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -6164,29 +6202,31 @@ const _app = createApp({
             _appendAdvancedParams(params);
             return params;
         }
+        // 统计数据解析（列表内联 stats 与独立统计接口共用，保证口径完全一致）
+        function applyStatsData(data) {
+            if (!data) return;
+            const statusMap = {};
+            for (const s of (data.status_stats || [])) statusMap[s.status] = s.cnt;
+            recordStats.total = data.total || 0;
+            recordStats.done = (statusMap['done'] || 0) + (statusMap['success'] || 0);
+            recordStats.failed = statusMap['failed'] || 0;
+            recordStats.pending = statusMap['pending'] || 0;
+            recordStats.processing = statusMap['processing'] || 0;
+            recordStats.successRate = recordStats.total > 0
+                ? Math.round(recordStats.done / recordStats.total * 100) : 0;
+            recordStats.engines = (data.engine_stats || [])
+                .filter(e => e.ocr_engine)
+                .map(e => ({ name: e.ocr_engine, cnt: e.cnt }));
+            recordStats.abnormal = data.abnormal_cnt || 0;
+            recordStats.nonpolicy = data.nonpolicy_cnt || 0;
+        }
         async function loadRecordStats() {
             try {
                 const params = buildStatsFilterParams();
                 const qs = params.toString();
                 const resp = await authFetch('/api/insurance/stats' + (qs ? '?' + qs : ''));
                 const json = await resp.json();
-                const data = json.data || json;
-                const statusMap = {};
-                for (const s of (data.status_stats || [])) {
-                    statusMap[s.status] = s.cnt;
-                }
-                recordStats.total = data.total || 0;
-                recordStats.done = (statusMap['done'] || 0) + (statusMap['success'] || 0);
-                recordStats.failed = statusMap['failed'] || 0;
-                recordStats.pending = statusMap['pending'] || 0;
-                recordStats.processing = statusMap['processing'] || 0;
-                recordStats.successRate = recordStats.total > 0
-                    ? Math.round(recordStats.done / recordStats.total * 100) : 0;
-                recordStats.engines = (data.engine_stats || [])
-                    .filter(e => e.ocr_engine)
-                    .map(e => ({ name: e.ocr_engine, cnt: e.cnt }));
-                recordStats.abnormal = data.abnormal_cnt || 0;
-                recordStats.nonpolicy = data.nonpolicy_cnt || 0;
+                applyStatsData(json.data || json);
             } catch (e) {
                 console.error('加载统计失败', e);
             }
@@ -6208,6 +6248,12 @@ const _app = createApp({
 
         // 保司和文档类型筛选
         const recordCompanyFilter = ref('');
+        // 点击「接入保司」总览中的保司：切换筛选（再次点击同一保司则取消），
+        // 同步刷新记录列表与上方 Tab 统计，避免列表/统计口径不一致
+        function filterByCompany(company) {
+            recordCompanyFilter.value = (recordCompanyFilter.value === company) ? '' : company;
+            loadRecords();
+                   }
         const recordPolicyTypeFilter = ref('');  // 险种大类筛选（商业险/交强险/驾意险/非车险）
         const recordDocTypeFilter = ref('');
         const recordEnterpriseFilter = ref('');
@@ -6900,13 +6946,15 @@ const _app = createApp({
                 const roomMap = {};  // id → name
                 const userMap = {};
                 try {
-                    const statsResp = await authFetch('/api/insurance/stats');
-                    const statsJson = await statsResp.json();
-                    const roomStats = (statsJson.data || statsJson).room_stats || [];
-                    for (const r of roomStats) {
-                        if (r.roomid) {
-                            roomMap[r.roomid] = r.room_name || r.roomid;
-                        }
+                    // 群下拉只列「正在监控的群」（来自监控配置），不再列历史识别过的旧群/重名群
+                    const monResp = await authFetch('/api/insurance/monitored-rooms');
+                    const monJson = await monResp.json();
+                    const monData = monJson.data || monJson;
+                    for (const r of (monData.rooms || [])) {
+                        if (r.id) roomMap[r.id] = r.name || r.id;
+                    }
+                    for (const u of (monData.users || [])) {
+                        if (u.id) userMap[u.id] = u.name || u.id;
                     }
                 } catch (e) {}
 
@@ -7004,14 +7052,19 @@ const _app = createApp({
                 }
                 recordPagination.total = data.total || 0;
                 recordPagination.totalPages = Math.ceil(recordPagination.total / recordPagination.pageSize) || 1;
+                // Tab 统计直接用列表接口「内联返回」的 stats（同一次查询、同筛选、同时刻），
+                // 彻底保证「列表 ↔ 统计」一致，不再单独请求统计接口造成不同步。
+                if (data.stats) {
+                    applyStatsData(data.stats);
+                } else {
+                    loadRecordStats();  // 兜底：旧返回无 stats 时退回独立请求
+                }
             } catch (e) {
                 console.error('加载记录失败', e);
                 records.value = [];
             } finally {
                 isLoadingRecords.value = false;
             }
-            // 同步刷新统计数量（与筛选条件一致）
-            loadRecordStats();
         }
 
         // 跳转分页
@@ -7191,8 +7244,7 @@ const _app = createApp({
                     showMessage('已删除', true);
                     deleteRecordVisible.value = false;
                     loadRecords(false);
-                    loadRecordStats();
-                } else {
+                                   } else {
                     showMessage(data.msg || '删除失败', false);
                 }
             } catch (e) {
@@ -7250,8 +7302,7 @@ const _app = createApp({
                     markNormalVisible.value = false;
                     // 刷新列表和统计
                     loadRecords(false);
-                    loadRecordStats();
-                } else {
+                                   } else {
                     showMessage(data.msg || '标记失败', false);
                 }
             } catch (e) {
@@ -7271,8 +7322,7 @@ const _app = createApp({
                     record.is_abnormal = 1;
                     record.abnormal_override_reason = null;
                     loadRecords(false);
-                    loadRecordStats();
-                } else {
+                                   } else {
                     showMessage(data.msg || '撤销失败', false);
                 }
             } catch (e) {
@@ -7365,8 +7415,7 @@ const _app = createApp({
             } catch (e) {}
             // 默认筛选今天（同步，无 IO）+ 同步触发统计数（与 loadRecords 并行）
             setDateShortcut('today');
-            loadRecordStats();
-            // 并行加载所有初始化数据（任一失败不影响其他）
+                       // 并行加载所有初始化数据（任一失败不影响其他）
             await Promise.allSettled([
                 authFetch('/api/insurance/config/status').then(r => r.json()).then(d => { configStatus.value = d; }),
                 loadTargets(),
@@ -7400,7 +7449,7 @@ const _app = createApp({
             supportedCompanies, supportedCompaniesData, allCompaniesData, companyThreshold, companyAliases, companiesLoading,
             loadSupportedCompanies, showCompanyConfig, editThreshold, editAliases,
             newAliasFrom, newAliasTo, toggleCompanyConfig, addAlias, saveCompanyConfig,
-            companyStats,
+            companyStats, filterByCompany,
             syncMessage, syncSuccess,
             previewVisible, previewSrc, previewLoading, previewIsImage, previewOcrEngine,
             previewType, previewFileName, previewHasRawText, previewShowRaw, previewShowFields, previewShowRules,

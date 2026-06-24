@@ -58,6 +58,7 @@ DEFAULT_COLUMNS = [
     {"key": "保司地址",     "visible": True, "order": 25, "display_name": "保司地址"},
     {"key": "保司（带地区）", "visible": True, "order": 26, "display_name": "保司（带地区）"},
     {"key": "交强到期时间", "visible": False, "order": 27, "display_name": "交强到期时间"},
+    {"key": "收费确认时间", "visible": False, "order": 28, "display_name": "收费确认时间"},
 ]
 
 # 记录级字段的 key 集合（用于前端区分渲染方式）
@@ -125,17 +126,19 @@ def _format_plate_with_hyphen(plate: str) -> str:
 def _build_date_str(dt: datetime, fmt: str, no_pad: bool = False) -> str:
     """
     根据前端日期格式（YYYY/MM/DD、YYYY-MM-DD HH:mm 等）构建日期字符串。
-    no_pad=True 时月/日/时/分不补前导零（如 2026/5/7）；否则补零至两位（与 strftime 一致）。
+    no_pad=True 时月/日不补前导零（如 2026/5/7）；时:分始终补零（13:05 而非 13:5）。
     按 token 替换，YYYY 先于其它，MM(月)/mm(分) 区分大小写，互不干扰。
     """
     def _n(v: int) -> str:
         return str(v) if no_pad else f"{v:02d}"
+    def _p(v: int) -> str:  # 时/分始终补零，避免出现 13:5
+        return f"{v:02d}"
     return (fmt
             .replace("YYYY", str(dt.year))
             .replace("MM", _n(dt.month))
             .replace("DD", _n(dt.day))
-            .replace("HH", _n(dt.hour))
-            .replace("mm", _n(dt.minute)))
+            .replace("HH", _p(dt.hour))
+            .replace("mm", _p(dt.minute)))
 
 
 def _format_date(raw: str, fmt: str, no_pad: bool = False) -> str:
@@ -158,11 +161,29 @@ def _format_date(raw: str, fmt: str, no_pad: bool = False) -> str:
     # 尝试多种格式解析（含时间的优先匹配）
     raw_str = str(raw).strip()
     # ISO 8601 / datetime 格式（如 2026-05-26T14:30:00 或 2026-05-26 14:30:00）
-    m = re.match(r'(\d{4})-(\d{1,2})-(\d{1,2})[T ](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', raw_str)
+    m = re.match(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})[T ](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?', raw_str)
     if m:
         try:
             dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)),
                           int(m.group(4)), int(m.group(5)), int(m.group(6) or 0))
+            return _render(dt)
+        except (ValueError, OverflowError):
+            pass
+    # 日期与时分粘连（OCR 把日期和时分连在一起且无分隔符，如收费确认时间"2026-06-2311:16"）
+    m = re.match(r'(\d{4})[-/](\d{1,2})[-/](\d{2})(\d{2}):(\d{1,2})', raw_str)
+    if m:
+        try:
+            dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                          int(m.group(4)), int(m.group(5)))
+            return _render(dt)
+        except (ValueError, OverflowError):
+            pass
+    # 中文日期带时分（如"2026年06月23日10时12"）
+    m = re.match(r'(\d{4})年(\d{1,2})月(\d{1,2})日?\s*(\d{1,2})[时:](\d{1,2})', raw_str)
+    if m:
+        try:
+            dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                          int(m.group(4)), int(m.group(5)))
             return _render(dt)
         except (ValueError, OverflowError):
             pass

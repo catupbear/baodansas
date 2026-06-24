@@ -23,13 +23,14 @@ from insurance.db import (
     get_insurance_config,
     get_insurance_record,
     save_insurance_record,
+    set_insurance_config,
     update_insurance_record,
 )
 from insurance.monitor_config_db import get_enabled_monitor_configs
 from insurance.field_mapping import apply_mapping
 from insurance.ocr_service import extract_text_from_pdf_bytes
 from insurance.policy_parser import parse_policy_text, parse_policy_text_multi, _find_policy_boundaries
-from core.notify import notify_error
+from core.notify import notify_error, notify_new_company
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,32 @@ def _ocr_early_stop_check(combined_text: str) -> bool:
         return all(f in fields for f in required_fields)
     except Exception:
         return False
+
+
+def maybe_notify_new_company(db, parsed_fields, doc_category, company_short, filename, record_id):
+    """识别为保单但归不出保司简称 → 钉钉通知"新保司"（持久去重）。
+    自动识别与手动重新识别共用，确保两条路径都会提醒。
+    全称缺失时用「保司公司名称」兜底，避免不同新保司互相去重漏报。
+    """
+    if doc_category != "保单" or company_short:
+        return
+    try:
+        cf = (parsed_fields.get("保险公司") or parsed_fields.get("保司公司名称") or "").strip()
+        key = cf or "未识别保司"
+        notified = get_insurance_config(db, "notified_new_companies", [])
+        if not isinstance(notified, list):
+            notified = []
+        if key in notified:
+            return
+        notified.append(key)
+        set_insurance_config(db, "notified_new_companies", notified)
+        plate = parsed_fields.get("车牌号", "") or parsed_fields.get("车牌", "")
+        ntf = get_insurance_config(db, "new_company_notify", {}) or {}
+        notify_new_company(cf, f"文件: {filename} | record_id={record_id} | 车牌: {plate}",
+                           ntf.get("webhook", ""), ntf.get("secret", ""))
+        logger.info("发现新保司，已通知: %s (record_id=%s)", key, record_id)
+    except Exception:
+        logger.debug("新保司通知失败", exc_info=True)
 
 
 class InsuranceHandler:
@@ -617,6 +644,9 @@ class InsuranceHandler:
                 if ocr_raw_text:
                     updates["ocr_text"] = ocr_raw_text
                 update_insurance_record(self.db, cur_record_id, updates)
+
+                # 发现规则外的新保司 → 钉钉通知（自动识别与手动重新识别共用同一函数）
+                maybe_notify_new_company(self.db, parsed_fields, doc_category, company_short, filename, cur_record_id)
 
                 # 更新发送人名称
                 if sender_name and sender_name != sender:
@@ -1206,9 +1236,11 @@ class InsuranceHandler:
             conn = self.db.pool.connection()
             try:
                 cursor = conn.cursor(pymysql.cursors.DictCursor)
+                # 关键修复：限定「同一次发送」(msg_seq 相同) 的保单组，避免把"多人各发一次
+                # 同一 PDF"误当成"一份 PDF 含多个保单"——否则会凭空复制出张冠李戴的假记录。
                 cursor.execute(
-                    "SELECT * FROM insurance_records WHERE file_md5 = %s AND status = 'done' ORDER BY policy_index",
-                    (file_md5,)
+                    "SELECT * FROM insurance_records WHERE file_md5 = %s AND msg_seq = %s AND status = 'done' ORDER BY policy_index",
+                    (file_md5, source_record.get("msg_seq"))
                 )
                 all_source = cursor.fetchall()
                 if all_source:
@@ -1223,11 +1255,15 @@ class InsuranceHandler:
             if idx == 0:
                 cur_id = record_id
             else:
+                # 兄弟记录（同一份PDF的其它保单）：发送信息(msg_seq/群/sender)一律用「当前这次
+                # 发送」的，识别结果用源记录的，避免群/归属张冠李戴到别人或别的群
+                cur_rec = get_insurance_record(self.db, record_id) or {}
                 extra = {
-                    "msg_seq": src.get("msg_seq", 0),
-                    "roomid": src.get("roomid", ""),
-                    "room_name": src.get("room_name", ""),
-                    "sender": "",  # 下面会被 updates 覆盖前先用当前记录的 sender
+                    "msg_seq": cur_rec.get("msg_seq", 0),
+                    "roomid": cur_rec.get("roomid", ""),
+                    "room_name": cur_rec.get("room_name", ""),
+                    "sender": cur_rec.get("sender", ""),
+                    "sender_name": cur_rec.get("sender_name", ""),
                     "filename": src.get("filename", ""),
                     "filesize": src.get("filesize", 0),
                     "file_md5": file_md5,
@@ -1236,11 +1272,6 @@ class InsuranceHandler:
                     "user_id": user_id,
                     "enterprise_id": enterprise_id,
                 }
-                # 从当前记录获取 sender 信息
-                cur_rec = get_insurance_record(self.db, record_id)
-                if cur_rec:
-                    extra["sender"] = cur_rec.get("sender", "")
-                    extra["sender_name"] = cur_rec.get("sender_name", "")
                 try:
                     cur_id = save_insurance_record(self.db, extra)
                 except Exception as e:

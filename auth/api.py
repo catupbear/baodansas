@@ -43,6 +43,8 @@ from .db import (
     get_referral_downlines,
     get_or_create_referral_code,
     get_monthly_pdf_usage_batch,
+    get_member_count_batch,
+    get_monitor_count_batch,
     get_enterprise_monthly_pdf_usage,
 )
 from .jwt_utils import generate_token
@@ -456,6 +458,8 @@ def api_list_enterprises():
     """查询企业列表（附带当月PDF识别使用量 + 推荐人名称）"""
     enterprises = list_enterprises(_db)
     usage_map = get_monthly_pdf_usage_batch(_db)
+    member_map = get_member_count_batch(_db)
+    monitor_map = get_monitor_count_batch(_db)
     # 批量查推荐人名称
     referrer_ids = list({e["referrer_id"] for e in enterprises if e.get("referrer_id")})
     referrer_map = {}
@@ -467,6 +471,8 @@ def api_list_enterprises():
                 referrer_map[rid] = u.get("name") or u.get("phone", "")
     for ent in enterprises:
         ent["monthly_pdf_usage"] = usage_map.get(ent["id"], 0)
+        ent["member_count"] = member_map.get(ent["id"], 0)
+        ent["monitor_count"] = monitor_map.get(ent["id"], 0)
         ent["referrer_name"] = referrer_map.get(ent.get("referrer_id"), "")
     return jsonify({"code": 0, "data": enterprises})
 
@@ -479,19 +485,19 @@ def api_create_enterprise():
     name = data.get("name", "").strip()
     contact_person = data.get("contact_person", "").strip()
     contact_phone = data.get("contact_phone", "").strip()
-    plan_type = data.get("plan_type", "standard")
-    plan_months = int(data.get("plan_months", 1))
-
     if not name:
         return jsonify({"code": 400, "msg": "企业名称不能为空"}), 400
 
     try:
         eid = create_enterprise(_db, name, contact_person, contact_phone)
-        update_enterprise(_db, eid, {
-            "plan_type": plan_type,
-            "plan_months": plan_months,
-            "plan_start_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        })
+        # 默认不自动开通套餐：新企业为"未开通"状态，由管理员手动「开通套餐」配置。
+        # 仅当显式传入 plan_type 时才开通（兼容将来在创建表单里直接选套餐的场景）。
+        if data.get("plan_type"):
+            update_enterprise(_db, eid, {
+                "plan_type": data["plan_type"],
+                "plan_months": int(data.get("plan_months", 1)),
+                "plan_start_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            })
         return jsonify({"code": 0, "data": {"id": eid}})
     except Exception as e:
         logger.exception("创建企业失败")

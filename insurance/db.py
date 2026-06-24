@@ -1674,6 +1674,7 @@ def query_insurance_records(
                 "r2.dingtalk_synced, r2.status, r2.source, r2.created_at, r2.updated_at, "
                 "r2.company_short, r2.is_abnormal, r2.hint, r2.display_fields, r2.manual_fields, "
                 "r2.abnormal_override_reason, r2.user_id, r2.file_md5, r2.error_message, "
+                "r2.enterprise_id, "
                 "pf3.owner AS _pf_owner"
             )
             cursor.execute(
@@ -1904,6 +1905,109 @@ def get_record_company_list(db, user_ids: list = None, enterprise_id: int = None
         conn.close()
 
 
+def get_enterprise_report_data(db, enterprise_id: int, date_start: str, date_end: str) -> dict:
+    """企业报告数据聚合：按企业 + 日期范围（created_at，含端点）返回
+    汇总 / 每日趋势 / 保司分布 / 险种分布 / 上传人排名。"""
+    import datetime as _dt
+    base = ("enterprise_id = %s AND deleted_at IS NULL "
+            "AND created_at >= %s AND created_at < DATE_ADD(%s, INTERVAL 1 DAY)")
+    base_r = base.replace("enterprise_id", "r.enterprise_id") \
+                 .replace("deleted_at", "r.deleted_at") \
+                 .replace("created_at", "r.created_at")
+    bp = [enterprise_id, date_start, date_end]
+    done = "status = 'done'"
+    conn = db.pool.connection()
+    try:
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+
+        # 1. 汇总（口径与 Tab 一致：total = 成功 + 需补充 + 非保单 + 失败）
+        cur.execute(f"""
+            SELECT
+              SUM({done} AND is_abnormal=0 AND doc_category='保单') AS success,
+              SUM({done} AND is_abnormal=1) AS abnormal,
+              SUM({done} AND doc_category<>'保单' AND doc_category<>'') AS nonpolicy,
+              SUM(status='failed') AS failed
+            FROM insurance_records WHERE {base}
+        """, bp)
+        row = cur.fetchone() or {}
+        success = int(row.get("success") or 0)
+        abnormal = int(row.get("abnormal") or 0)
+        nonpolicy = int(row.get("nonpolicy") or 0)
+        failed = int(row.get("failed") or 0)
+        total = success + abnormal + nonpolicy + failed
+        summary = {
+            "total": total, "success": success, "abnormal": abnormal,
+            "nonpolicy": nonpolicy, "failed": failed,
+            "success_rate": round(success / total * 100, 1) if total else 0.0,
+        }
+
+        # 2. 每日趋势（按天），并补全无数据的日期为 0
+        cur.execute(f"""
+            SELECT DATE(created_at) AS day, COUNT(*) AS total,
+              SUM({done} AND is_abnormal=0 AND doc_category='保单') AS success,
+              SUM(status='failed') AS failed
+            FROM insurance_records
+            WHERE {base} AND status NOT IN ('processing','pending','duplicate')
+            GROUP BY DATE(created_at)
+        """, bp)
+        dmap = {}
+        for r in cur.fetchall():
+            d = r["day"]
+            ds = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)
+            dmap[ds] = (int(r["total"] or 0), int(r["success"] or 0), int(r["failed"] or 0))
+        daily = []
+        d0 = _dt.datetime.strptime(date_start, "%Y-%m-%d").date()
+        d1 = _dt.datetime.strptime(date_end, "%Y-%m-%d").date()
+        cd = d0
+        while cd <= d1:
+            ds = cd.strftime("%Y-%m-%d")
+            t, s, f = dmap.get(ds, (0, 0, 0))
+            daily.append({"day": ds, "total": t, "success": s, "failed": f})
+            cd += _dt.timedelta(days=1)
+
+        # 3. 保司分布（仅成功保单，含保费合计）
+        cur.execute(f"""
+            SELECT COALESCE(NULLIF(r.company_short,''),'未知') AS name, COUNT(*) AS cnt,
+              ROUND(SUM(CAST(REPLACE(REPLACE(IFNULL(pf.total_premium,''),',',''),'元','') AS DECIMAL(14,2))),2) AS premium
+            FROM insurance_records r
+            LEFT JOIN insurance_policy_fields pf ON pf.record_id = r.id
+            WHERE {base_r} AND r.status='done' AND r.is_abnormal=0 AND r.doc_category='保单'
+            GROUP BY name ORDER BY cnt DESC
+        """, bp)
+        companies = [{"name": r["name"], "count": int(r["cnt"]),
+                      "premium": float(r["premium"] or 0)} for r in cur.fetchall()]
+
+        # 4. 险种分布（仅成功保单）
+        cur.execute(f"""
+            SELECT COALESCE(NULLIF(pf.policy_type,''),'未知') AS name, COUNT(*) AS cnt
+            FROM insurance_records r JOIN insurance_policy_fields pf ON pf.record_id = r.id
+            WHERE {base_r} AND r.status='done' AND r.is_abnormal=0 AND r.doc_category='保单'
+            GROUP BY name ORDER BY cnt DESC
+        """, bp)
+        policy_types = [{"name": r["name"], "count": int(r["cnt"])} for r in cur.fetchall()]
+
+        # 5. 上传人排名
+        cur.execute(f"""
+            SELECT sender, MAX(sender_name) AS sender_name, COUNT(*) AS total,
+              SUM({done} AND is_abnormal=0 AND doc_category='保单') AS success
+            FROM insurance_records
+            WHERE {base} AND status NOT IN ('processing','pending','duplicate')
+            GROUP BY sender ORDER BY total DESC
+        """, bp)
+        uploaders = []
+        for r in cur.fetchall():
+            uploaders.append({
+                "sender_name": r["sender_name"] or r["sender"] or "未知",
+                "total": int(r["total"] or 0),
+                "success": int(r["success"] or 0),
+            })
+
+        return {"summary": summary, "daily": daily, "companies": companies,
+                "policy_types": policy_types, "uploaders": uploaders}
+    finally:
+        conn.close()
+
+
 def get_insurance_stats(db, filters: dict = None) -> dict:
     """
     获取保单识别统计信息，支持筛选条件。
@@ -2058,42 +2162,20 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
                 cursor.execute(f"SELECT COUNT(*) as cnt FROM {from_sql}{w}", all_params)
                 return cursor.fetchone()["cnt"]
 
-        # total 与各分项必须在【同一数据快照、同一去重基准】上一次性算出，否则：
-        #  1) 后台识别线程并发把记录 processing→done 时，分多条 SQL 顺序查询会看到
-        #     不同快照，导致 done+failed 与 total 加总对不上（"有时候数字不对"）；
-        #  2) dedup 模式下同一保单号跨状态的记录被各分项分别去重而重复计数。
-        # 做法：先确定参与统计的"代表记录"行集（dedup 时每个保单号取 MAX(id) +
-        # 无保单号记录全取；非 dedup 时即全部符合条件记录），再在该行集上用
-        # SUM(CASE WHEN) 一次性聚合，保证 sum(各分项) == total 恒成立。
-        if dedup:
-            _gp = " AND" if where_sql else " WHERE"
-            rep_sql = (
-                f"SELECT MAX({col_prefix}id) AS id FROM {from_sql}{where_sql}"
-                f"{_gp} (pf.policy_no IS NOT NULL AND pf.policy_no != '') GROUP BY pf.policy_no"
-                f" UNION ALL "
-                f"SELECT {col_prefix}id AS id FROM {from_sql}{where_sql}"
-                f"{_gp} (pf.policy_no IS NULL OR pf.policy_no = '')"
-            )
-            rep_params = params + params
-        else:
-            rep_sql = f"SELECT {col_prefix}id AS id FROM {from_sql}{where_sql}"
-            rep_params = list(params)
-
-        cursor.execute(
-            "SELECT COUNT(*) AS total, "
-            "SUM(CASE WHEN ir.status IN ('done','success') THEN 1 ELSE 0 END) AS done_cnt, "
-            "SUM(CASE WHEN ir.status = 'failed' THEN 1 ELSE 0 END) AS failed_cnt, "
-            "SUM(CASE WHEN ir.status IN ('done','success') AND ir.is_abnormal = 1 THEN 1 ELSE 0 END) AS abnormal_cnt, "
-            "SUM(CASE WHEN ir.status IN ('done','success') AND ir.doc_category != '' AND ir.doc_category != '保单' THEN 1 ELSE 0 END) AS nonpolicy_cnt "
-            f"FROM insurance_records ir JOIN ({rep_sql}) reps ON ir.id = reps.id",
-            rep_params
-        )
-        _agg = cursor.fetchone() or {}
-        total = int(_agg.get("total") or 0)
-        done_cnt = int(_agg.get("done_cnt") or 0)
-        failed_cnt = int(_agg.get("failed_cnt") or 0)
-        abnormal_cnt = int(_agg.get("abnormal_cnt") or 0)
-        nonpolicy_cnt = int(_agg.get("nonpolicy_cnt") or 0)
+        done_where = f"({col_prefix}status = 'done' OR {col_prefix}status = 'success')"
+        # 各分项按与列表各 Tab【完全一致】的筛选 + 去重口径独立统计，total = 各分项之和：
+        #  - 成功    = done 且 is_abnormal=0 且 doc_category=保单
+        #  - 需补充  = done 且 is_abnormal=1
+        #  - 非保单  = done 且 doc_category≠保单且≠空
+        #  - 失败    = failed
+        # 这样保证「每个 Tab 数字 = 点进去列表条数」（电子标志等与保单同号时，
+        # 各 Tab 在自己子集内去重，不会被全局去重并入保单而少算），且加总 = 全部。
+        success_cnt = _count(f"{done_where} AND {col_prefix}is_abnormal = 0 AND {col_prefix}doc_category = '保单'")
+        abnormal_cnt = _count(f"{done_where} AND {col_prefix}is_abnormal = 1")
+        nonpolicy_cnt = _count(f"{done_where} AND {col_prefix}doc_category != '保单' AND {col_prefix}doc_category != ''")
+        failed_cnt = _count(f"{col_prefix}status = 'failed'")
+        done_cnt = success_cnt + abnormal_cnt + nonpolicy_cnt
+        total = done_cnt + failed_cnt
         pending_cnt = 0       # 已在 where 排除，统计中恒为 0
         processing_cnt = 0    # 已在 where 排除，统计中恒为 0
         summary = {

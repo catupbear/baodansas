@@ -3788,6 +3788,11 @@ def _identify_doc_category(text: str, fields: dict) -> str:
     if '授权委托书' in text_head:
         return "其他"
 
+    # 告知单（交强险费率浮动告知单等）：仅告知费率/投保信息，非正式保单。
+    # 无保险单号/保单号等强标记时才判定，避免误伤正文引用"告知单"的正式保单。
+    if re.search(r'费率浮动告知单|告知单', text_head) and not _has_strong_policy_markers:
+        return "告知单"
+
     # 条款/免责说明
     # 注意：正式保单中常出现"适用条款"/"产品名称"引用了"保险示范条款"字样，
     # 必须排除含保单关键字段的文件，避免将正式保单误判为条款
@@ -3822,12 +3827,12 @@ def _identify_doc_category(text: str, fields: dict) -> str:
                 if not re.search(r'投保单\s*是本保险[单合]', text_head):
                     if not re.search(r'(?:由|包括)投保单', text_head):
                         if _has_policy_markers:
-                            # 已签发投保单（太平E驾、平安驾意等以"投保单"为正式承保凭证）：
-                            # 已含保单号+保费+起保期即为有效保单，归为"保单"而非附属文件，
-                            # 避免被前端 isNonPolicy 误归入"非保单"。
-                            # 真正的草稿投保单（未承保、无保单号/保费）仍返回"投保单"。
-                            if (fields.get("保单号") and fields.get("保费合计")
-                                    and fields.get("保险起期")):
+                            # 已实质投保的投保单（太平E驾/平安驾意/人保盖章投保单等）：
+                            # 只要有保费合计+保险起期，即视为有效保单凭证（人保等投保单
+                            # 无保险单号但信息完整），归为"保单"而非附属文件，避免被前端
+                            # isNonPolicy 误归入"非保单"。
+                            # 真正的空白草稿投保单（无保费/无起保期）才保留"投保单"。
+                            if fields.get("保费合计") and fields.get("保险起期"):
                                 return "保单"
                             return "投保单"
 

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>账号管理 - 午虎AI保单台账</title>
     <script src="/static/vue.global.prod.js"></script>
-    <link href="https://wxbotcdn.wuhuxiche.com/tailwind.min.css" rel="stylesheet">
+    <link href="/static/tailwind.min.css" rel="stylesheet">
     <style>
         :root {
             --primary: #c2410c;
@@ -175,16 +175,18 @@
             <!-- 面包屑 -->
             <div class="mb-3" style="font-size:13px;color:#9ca3af;">
                 <a href="/admin/enterprises" style="color:#ea580c;text-decoration:none;">服务企业管理</a>
-                <span v-if="urlEnterpriseName"> / {{ urlEnterpriseName }}</span>
-                <span> / 人员管理</span>
+                <span v-if="isInternalView"> / 内部账号</span>
+                <template v-else>
+                    <span v-if="urlEnterpriseName"> / {{ urlEnterpriseName }}</span>
+                    <span> / 人员管理</span>
+                </template>
             </div>
             <!-- 操作栏 -->
             <div class="mobile-bar flex items-center justify-between mb-5">
                 <div class="flex items-center gap-3" style="flex-wrap:wrap;">
-                    <h1 class="text-lg font-semibold text-gray-800">账号管理</h1>
-                    <select v-model="filterRole" @change="fetchUsers" class="form-select" style="width:130px;height:34px;font-size:13px;">
+                    <h1 class="text-lg font-semibold text-gray-800">{{ isInternalView ? '内部账号' : '账号管理' }}</h1>
+                    <select v-if="!isInternalView" v-model="filterRole" @change="fetchUsers" class="form-select" style="width:130px;height:34px;font-size:13px;">
                         <option value="">全部角色</option>
-                        <option value="super_admin">超级管理员</option>
                         <option value="enterprise">企业账号</option>
                         <option value="employee">员工账号</option>
                         <!-- <option value="agent_sales">代理销售</option> 暂时隐藏 -->
@@ -285,6 +287,11 @@
                                                         class="btn btn-sm btn-outline">
                                                         {{ Number(user.activated) === 1 ? '取消激活' : '激活' }}
                                                     </button>
+                                                    <button @click="toggleSuperAdmin(user)"
+                                                        style="color:#7c3aed;border-color:#c4b5fd;"
+                                                        class="btn btn-sm btn-outline">
+                                                        {{ user.role === 'super_admin' ? '取消超管' : '设为超管' }}
+                                                    </button>
                                                     <button @click="openEditModal(user)" class="btn btn-sm btn-outline">编辑</button>
                                                     <button @click="openResetPwdModal(user)" class="btn btn-sm btn-outline">重置密码</button>
                                                     <button @click="toggleEnabled(user)"
@@ -325,6 +332,11 @@
                                             :style="Number(user.activated) === 1 ? 'color:#d97706;border-color:#fbbf24' : 'color:#fff;background:#ea580c;border-color:#ea580c;font-weight:600;'"
                                             class="btn btn-sm btn-outline">
                                             {{ Number(user.activated) === 1 ? '取消激活' : '激活' }}
+                                        </button>
+                                        <button @click="toggleSuperAdmin(user)"
+                                            style="color:#7c3aed;border-color:#c4b5fd;"
+                                            class="btn btn-sm btn-outline">
+                                            {{ user.role === 'super_admin' ? '取消超管' : '设为超管' }}
                                         </button>
                                         <button @click="openEditModal(user)" class="btn btn-sm btn-outline">编辑</button>
                                         <button @click="openResetPwdModal(user)" class="btn btn-sm btn-outline">重置密码</button>
@@ -541,11 +553,13 @@ createApp({
         // 按企业分组（含关键词过滤）
         const groupedUsers = computed(() => {
             const q = searchKeyword.value.trim().toLowerCase();
+            // 普通账号管理不显示超级管理员（超管只在「内部账号」页管理）
+            const base = isInternalView ? users.value : users.value.filter(u => u.role !== 'super_admin');
             const source = q
-                ? users.value.filter(u =>
+                ? base.filter(u =>
                     (u.name || '').toLowerCase().includes(q) ||
                     (u.phone || '').includes(q))
-                : users.value;
+                : base;
             const map = new Map();
             for (const u of source) {
                 const key = u.parent_id ? String(u.parent_id) : '__none__';
@@ -583,8 +597,11 @@ createApp({
         // URL 预选企业（从企业管理页跳转进来：?enterprise_id=X）
         const _urlEnterpriseId = new URLSearchParams(location.search).get('enterprise_id');
         const _urlEnterpriseName = new URLSearchParams(location.search).get('enterprise_name') || '';
-        // 单企业视图：从企业管理进入（含未分组 __none__），隐藏左侧分组栏、只看该企业
-        const singleEnterprise = !!_urlEnterpriseId;
+        // 内部账号视图：从「内部账号」入口进入（?role=super_admin），只列超级管理员
+        const _urlRole = new URLSearchParams(location.search).get('role') || '';
+        const isInternalView = _urlRole === 'super_admin';
+        // 单企业视图 / 内部账号视图：隐藏左侧分组栏
+        const singleEnterprise = !!_urlEnterpriseId || isInternalView;
         let _pendingGroup = _urlEnterpriseId || '';
         // 分组列表变化（搜索/加载）后：URL 指定企业优先选中（仅一次），否则若当前分组不存在则切第一个
         Vue.watch(groupedUsers, () => {
@@ -601,7 +618,7 @@ createApp({
         }, { immediate: true });
 
         function toggleGroup(key) { activeGroup.value = key; }
-        const filterRole = ref('');
+        const filterRole = ref(isInternalView ? 'super_admin' : '');
 
         /* 弹窗状态 */
         const showUserModal = ref(false);
@@ -758,8 +775,10 @@ createApp({
             form.phone = '';
             form.password = '';
             form.name = '';
-            form.role = 'employee';
-            form.parent_id = null;
+            // 内部账号入口创建时默认超级管理员
+            form.role = isInternalView ? 'super_admin' : 'employee';
+            // 从某企业的人员管理进入时，所属企业默认选中该企业（未分组 __none__ 不预选）
+            form.parent_id = (_urlEnterpriseId && _urlEnterpriseId !== '__none__') ? Number(_urlEnterpriseId) : null;
             form.bound_senders = [];
             form.is_sales = false;
             form.sales_type = '';
@@ -950,6 +969,36 @@ createApp({
             }
         }
 
+        /* 设为/取消 内部超级管理员（来回切换权限） */
+        async function toggleSuperAdmin(user) {
+            const toSuper = user.role !== 'super_admin';
+            if (!toSuper && currentUser.value && Number(currentUser.value.id) === Number(user.id)) {
+                showToast('不能取消自己的超管权限', 'error');
+                return;
+            }
+            const action = toSuper ? '设为内部超管' : '取消超管权限';
+            const tip = toSuper
+                ? '确定把账号 ' + user.phone + ' 设为内部超级管理员吗？\n设置后该账号将出现在「内部账号」列表，并拥有超管权限。'
+                : '确定取消账号 ' + user.phone + ' 的超管权限吗？\n取消后将变为未分组员工，需重新分配企业。';
+            if (!confirm(tip)) return;
+            try {
+                const body = toSuper ? { role: 'super_admin', parent_id: null } : { role: 'employee', parent_id: null };
+                const resp = await authFetch('/api/auth/users/' + user.id, {
+                    method: 'PUT',
+                    body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showToast('已' + action + '：' + user.phone);
+                    fetchUsers();
+                } else {
+                    showToast(data.msg || (action + '失败'), 'error');
+                }
+            } catch (e) {
+                showToast('网络错误', 'error');
+            }
+        }
+
         function logout() { doLogout(); }
 
         /* 初始化 */
@@ -968,7 +1017,7 @@ createApp({
             showResetPwdModal, resetPwdUser, resetPwdForm, resetPwdError,
             openResetPwdModal, closeResetPwdModal, submitResetPwd,
             showDeleteModal, deleteUser, openDeleteModal, closeDeleteModal, confirmDelete,
-            toggleEnabled, toggleActivated, logout, toast, urlEnterpriseName: _urlEnterpriseName, singleEnterprise,
+            toggleEnabled, toggleActivated, toggleSuperAdmin, logout, toast, urlEnterpriseName: _urlEnterpriseName, singleEnterprise, isInternalView,
             groupedUsers, expandedGroups, toggleGroup, activeGroup, activeGroupData,
             roleLabel, roleBadgeClass, salesTypeLabel, formatTime,
             allSenders, availableSenders, addSender, removeSender, customSenderId, addCustomSender,

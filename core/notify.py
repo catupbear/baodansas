@@ -121,3 +121,38 @@ def notify_error(module: str, method: str, error: str, detail: str = ""):
     threading.Thread(
         target=_notifier.send, args=(title, content), daemon=True
     ).start()
+
+
+def notify_new_company(company: str, detail: str = "", webhook: str = "", secret: str = ""):
+    """
+    发现规则外的新保司时通知（钉钉，新保司专用群）。
+
+    使用独立 webhook（与系统错误告警分开）；未配置 webhook 则不发送。
+
+    Args:
+        company: 识别出的保司全称（可能为空，表示连全称都没归出来）
+        detail:  补充信息（文件名、record_id、车牌等）
+        webhook: 新保司专用钉钉群机器人 webhook
+        secret:  加签密钥（可选）
+    """
+    if not webhook:
+        return
+
+    title = f"🆕 发现新保司: {company or '未识别'}"
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    lines = [
+        "### 🆕 发现规则外的新保司",
+        f"- **保司**: {company or '（未能识别出保司名称）'}",
+        f"- **时间**: {ts}",
+    ]
+    if detail:
+        lines.append(f"- **详情**: {detail[:500]}")
+    lines.append("")
+    lines.append("> 系统识别为保单但归不出保司简称，请在 `policy_parser.py` 补充识别规则"
+                 "（COMPANY_SHORT_MAP 简称 + COMPANY_BASES 全称/前缀）。")
+    content = "\n".join(lines)
+
+    notifier = DingTalkNotifier(webhook, secret)
+    threading.Thread(
+        target=notifier.send, args=(title, content), daemon=True
+    ).start()

@@ -596,7 +596,7 @@
                         </div>
                         不自动补零
                     </label>
-                    <span style="font-size:11px; color:var(--text-muted);">开启后月、日、时、分不补前导 0（如 2026/5/7，而非 2026/05/07）</span>
+                    <span style="font-size:11px; color:var(--text-muted);">开启后月、日不补前导 0（如 2026/5/7，而非 2026/05/07）；时:分始终补零（13:05）</span>
                 </div>
 
                 <div style="background:var(--surface-secondary); border-radius:8px; padding:4px 20px;">
@@ -1676,12 +1676,13 @@ createApp({
             { label: 'YYYY/MM/DD HH:mm（2026/05/07 14:30）', value: 'YYYY/MM/DD HH:mm' },
             { label: 'YYYY年MM月DD日 HH:mm（2026年05月07日 14:30）', value: 'YYYY年MM月DD日 HH:mm' },
         ];
-        const DATETIME_FIELDS = new Set(['创建时间', '识别时间']);
+        const DATETIME_FIELDS = new Set(['创建时间', '识别时间', '收费确认时间']);
         const dateFields = ref([
             { name: '签单日期', format: 'YYYY-MM-DD' },
             { name: '起保日期', format: 'YYYY-MM-DD' },
             { name: '终保日期', format: 'YYYY-MM-DD' },
             { name: '交强到期时间', format: 'YYYY-MM-DD' },
+            { name: '收费确认时间', format: 'YYYY-MM-DD HH:mm' },
             { name: '创建时间', format: 'YYYY-MM-DD HH:mm' },
             { name: '识别时间', format: 'YYYY-MM-DD HH:mm' },
         ]);
@@ -1691,11 +1692,12 @@ createApp({
 
         const formatDate = (date, fmt) => {
             const pad = n => dateNoPad.value ? String(n) : String(n).padStart(2, '0');
+            const pad2 = n => String(n).padStart(2, '0');  // 时/分始终补零，避免 13:5
             const y = date.getFullYear();
             const m = pad(date.getMonth() + 1);
             const d = pad(date.getDate());
-            const H = pad(date.getHours());
-            const min = pad(date.getMinutes());
+            const H = pad2(date.getHours());
+            const min = pad2(date.getMinutes());
             const map = {
                 'YYYY-MM-DD': `${y}-${m}-${d}`,
                 'YYYY/MM/DD': `${y}/${m}/${d}`,

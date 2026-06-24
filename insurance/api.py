@@ -459,7 +459,27 @@ def list_records():
             except Exception:
                 logger.debug("批量查询上传用户姓名失败")
 
+        # 批量查询记录所属企业名称（超管列表「所属企业」列展示用，避免逐条查 DB）
+        _ent_ids = {r.get("enterprise_id") for r in result.get("records", [])
+                    if r.get("enterprise_id")}
+        _ent_name_map: dict = {}
+        if _ent_ids:
+            try:
+                _conn = _db.pool.connection()
+                try:
+                    _cur = _conn.cursor(pymysql.cursors.DictCursor)
+                    _ph = ",".join(["%s"] * len(_ent_ids))
+                    _cur.execute(f"SELECT id, name FROM enterprises WHERE id IN ({_ph})", list(_ent_ids))
+                    for _row in _cur.fetchall():
+                        _ent_name_map[_row["id"]] = _row.get("name") or ""
+                finally:
+                    _conn.close()
+            except Exception:
+                logger.debug("批量查询企业名称失败")
+
         for record in result.get("records", []):
+            # 注入所属企业名称（超管列表展示）
+            record["enterprise_name"] = _ent_name_map.get(record.get("enterprise_id"), "")
             # 反序列化 display_fields
             if isinstance(record.get("display_fields"), str):
                 try:
@@ -799,6 +819,34 @@ def list_records():
 
         # 复用已加载的页面列配置
         result["column_config"] = list_col_cfg
+
+        # 用「与列表完全相同的筛选」内联返回 Tab 统计，确保列表与统计同源同时刻、
+        # 永不打架（彻底杜绝"记数与实际识别数量对不上"）。statu/doc_category/is_abnormal
+        # 不传，由统计自身按全部状态分类计算。
+        try:
+            _sf = {
+                "roomid": roomid, "source_type": source_type, "source": source,
+                "sender": sender, "keyword": keyword, "company_short": company_short,
+                "ocr_engine": ocr_engine, "policy_type": policy_type,
+                "date_start": date_start, "date_end": date_end,
+                "updated_at_date_start": updated_at_date_start, "updated_at_date_end": updated_at_date_end,
+                "search_company": search_company, "search_policy_no": search_policy_no,
+                "search_plate_no": search_plate_no, "search_applicant": search_applicant,
+                "search_insured": search_insured, "search_salesperson": search_salesperson,
+                "sign_date_start": sign_date_start, "sign_date_end": sign_date_end,
+                "start_date_start": start_date_start, "start_date_end": start_date_end,
+                "end_date_start": end_date_start, "end_date_end": end_date_end,
+            }
+            _sf = {k: v for k, v in _sf.items() if v}
+            if dedup:
+                _sf["dedup"] = True
+            if effective_user_ids is not None:
+                _sf["user_ids"] = effective_user_ids
+            if effective_enterprise_id is not None:
+                _sf["enterprise_id"] = effective_enterprise_id
+            result["stats"] = get_insurance_stats(_db, _sf or None)
+        except Exception:
+            logger.debug("列表内联统计计算失败", exc_info=True)
 
         return jsonify({"code": 0, "data": result})
     except Exception as e:
@@ -2158,6 +2206,10 @@ def reupload_reocr(record_id):
         })
 
         updated = get_insurance_record(_db, record_id)
+        # 重新识别后也检测新保司（与自动识别共用同一函数，避免手动重新识别漏报）
+        from insurance.handler import maybe_notify_new_company
+        maybe_notify_new_company(_db, parsed_fields, best_policy.get("doc_category", ""),
+                                 company_short, (updated or {}).get("filename", ""), record_id)
         return jsonify({"code": 0, "msg": "重新上传识别成功", "data": updated})
 
     except Exception as e:
@@ -2308,6 +2360,9 @@ def reocr_record(record_id):
             if reocr_ocr_text:
                 updates["ocr_text"] = reocr_ocr_text
             update_insurance_record(_db, rec_id, updates)
+            # 重新识别也检测新保司（与自动识别共用同一函数；函数自带去重，多保单不会重复通知）
+            from insurance.handler import maybe_notify_new_company
+            maybe_notify_new_company(_db, pf, doc_cat, cs, filename, rec_id)
 
         _apply_policy_to_record(record_id, policies[best_idx], best_idx)
         updated_count = 1
@@ -3054,6 +3109,59 @@ def get_rooms():
         return jsonify({"rooms": [], "users": []})
 
 
+@insurance_bp.route("/api/insurance/monitored-rooms", methods=["GET"])
+@login_required
+def get_monitored_rooms():
+    """返回当前账号"正在监控"的群与私聊（来自启用的监控配置），用于筛选下拉。
+    与 /rooms（messages 里全部历史群）不同：这里只列当前监控配置中的对象，
+    并按账号权限过滤——超管看全部配置，企业/员工只看本企业的配置。
+    """
+    try:
+        eid = _get_enterprise_id_filter()  # 超管 None=看全部；其他角色=本企业 id
+        configs = list_monitor_configs(_db)
+        rooms, users = {}, {}
+        for cfg in configs:
+            if not cfg.get("enabled"):
+                continue
+            if eid is not None and cfg.get("enterprise_id") != eid:
+                continue
+            # rooms/users 可能是字符串数组（["wrxxx",...]）或对象数组（[{"id","name"},...]），兼容两种
+            for room in (cfg.get("rooms") or []):
+                rid = room.get("id") if isinstance(room, dict) else room
+                rname = room.get("name") if isinstance(room, dict) else None
+                if rid:
+                    rooms[rid] = rname or rooms.get(rid) or rid
+            for u in (cfg.get("users") or []):
+                uid = u.get("id") if isinstance(u, dict) else u
+                uname = u.get("name") if isinstance(u, dict) else None
+                if uid:
+                    users[uid] = uname or users.get(uid) or uid
+        # 配置里多数只存 id，用 contacts_cache 补真实群名/人名
+        ids = list(rooms.keys()) + list(users.keys())
+        if ids:
+            conn = _db.pool.connection()
+            try:
+                cur = conn.cursor(pymysql.cursors.DictCursor)
+                ph = ",".join(["%s"] * len(ids))
+                cur.execute(f"SELECT id, name FROM contacts_cache WHERE id IN ({ph})", ids)
+                nm = {r["id"]: r["name"] for r in cur.fetchall()
+                      if r["name"] and r["name"] != "__unresolvable__"}
+            finally:
+                conn.close()
+            for rid in rooms:
+                if rooms[rid] == rid and nm.get(rid):
+                    rooms[rid] = nm[rid]
+            for uid in users:
+                if users[uid] == uid and nm.get(uid):
+                    users[uid] = nm[uid]
+        room_list = sorted([{"id": k, "name": v} for k, v in rooms.items()], key=lambda x: x["name"])
+        user_list = sorted([{"id": k, "name": v} for k, v in users.items()], key=lambda x: x["name"])
+        return jsonify({"code": 0, "data": {"rooms": room_list, "users": user_list}})
+    except Exception:
+        logger.exception("获取监控群列表失败")
+        return jsonify({"code": 0, "data": {"rooms": [], "users": []}})
+
+
 @insurance_bp.route("/api/insurance/sync-contacts", methods=["POST"])
 def sync_contacts():
     """
@@ -3581,6 +3689,131 @@ def _pure_number(s):
         f = float(t)
         return int(f) if f == int(f) else f
     return None
+
+
+@insurance_bp.route("/api/insurance/enterprise-report", methods=["GET"])
+@login_required
+def export_enterprise_report():
+    """导出企业经营报告 Excel（仅超管）。
+    含：识别量汇总、每日趋势(折线图)、保司/险种分布、上传人排名。
+    参数：enterprise_id, date_start(YYYY-MM-DD), date_end, enterprise_name(可选)。"""
+    from auth.db import ROLE_SUPER_ADMIN
+    if g.current_user.get("role") != ROLE_SUPER_ADMIN:
+        return jsonify({"code": 403, "msg": "无权限"}), 403
+    try:
+        import openpyxl
+        from openpyxl.chart import LineChart, Reference
+        from openpyxl.styles import Font, PatternFill, Alignment
+    except ImportError:
+        return jsonify({"code": 500, "msg": "缺少 openpyxl 依赖"}), 500
+    try:
+        enterprise_id = request.args.get("enterprise_id", "").strip()
+        date_start = request.args.get("date_start", "").strip()
+        date_end = request.args.get("date_end", "").strip()
+        ent_name = request.args.get("enterprise_name", "").strip()
+        if not enterprise_id or not date_start or not date_end:
+            return jsonify({"code": 400, "msg": "缺少参数"}), 400
+
+        from insurance.db import get_enterprise_report_data
+        data = get_enterprise_report_data(_db, int(enterprise_id), date_start, date_end)
+
+        if not ent_name:
+            try:
+                from auth.db import get_enterprise_by_id
+                ent = get_enterprise_by_id(_db, int(enterprise_id))
+                if ent:
+                    ent_name = ent.get("name") or ent.get("phone") or f"企业{enterprise_id}"
+            except Exception:
+                ent_name = f"企业{enterprise_id}"
+
+        wb = openpyxl.Workbook()
+        title_font = Font(bold=True, size=14)
+        h_font = Font(bold=True, size=11, color="FFFFFF")
+        h_fill = PatternFill("solid", fgColor="ED7D31")
+        sec_font = Font(bold=True, size=12, color="C55A11")
+        center = Alignment(horizontal="center")
+
+        ws = wb.active
+        ws.title = "企业报告"
+        ws["A1"] = f"{ent_name} 经营报告"
+        ws["A1"].font = title_font
+        ws["A2"] = f"报告周期：{date_start} ~ {date_end}"
+        from datetime import datetime as _dtn
+        ws["A3"] = f"生成时间：{_dtn.now().strftime('%Y-%m-%d %H:%M')}"
+        row = [5]  # 用列表以便闭包内修改
+
+        def section(t):
+            ws.cell(row=row[0], column=1, value=t).font = sec_font
+            row[0] += 1
+
+        def table(headers, rows_data):
+            for j, h in enumerate(headers, 1):
+                c = ws.cell(row=row[0], column=j, value=h)
+                c.font = h_font; c.fill = h_fill; c.alignment = center
+            row[0] += 1
+            for rd in rows_data:
+                for j, v in enumerate(rd, 1):
+                    ws.cell(row=row[0], column=j, value=v)
+                row[0] += 1
+            row[0] += 1
+
+        s = data["summary"]
+        section("① 识别量汇总")
+        table(["指标", "数量"], [
+            ["总识别量", s["total"]],
+            ["成功(保单)", s["success"]],
+            ["需人工补充", s["abnormal"]],
+            ["非保单", s["nonpolicy"]],
+            ["失败", s["failed"]],
+            ["成功率", f"{s['success_rate']}%"],
+        ])
+        section("② 保司分布（成功保单）")
+        table(["保险公司", "保单数", "保费合计(元)"],
+              [[c["name"], c["count"], c["premium"]] for c in data["companies"]] or [["(无数据)", "", ""]])
+        section("③ 险种分布（成功保单）")
+        table(["险种", "保单数"],
+              [[p["name"], p["count"]] for p in data["policy_types"]] or [["(无数据)", ""]])
+        section("④ 上传人排名")
+        table(["上传人", "识别量", "成功量"],
+              [[u["sender_name"], u["total"], u["success"]] for u in data["uploaders"]] or [["(无数据)", "", ""]])
+        for col, w in {"A": 22, "B": 14, "C": 16}.items():
+            ws.column_dimensions[col].width = w
+
+        # 每日趋势 + 折线图
+        ws2 = wb.create_sheet("每日趋势")
+        ws2.append(["日期", "总量", "成功", "失败"])
+        for c in ws2[1]:
+            c.font = h_font; c.fill = h_fill; c.alignment = center
+        for d in data["daily"]:
+            ws2.append([d["day"], d["total"], d["success"], d["failed"]])
+        ws2.column_dimensions["A"].width = 14
+        n = len(data["daily"])
+        if n >= 1:
+            chart = LineChart()
+            chart.title = f"{ent_name} 识别趋势"
+            chart.style = 12
+            chart.y_axis.title = "数量"
+            chart.x_axis.title = "日期"
+            chart.height = 9; chart.width = 26
+            cats = Reference(ws2, min_col=1, min_row=2, max_row=n + 1)
+            dref = Reference(ws2, min_col=2, max_col=4, min_row=1, max_row=n + 1)
+            chart.add_data(dref, titles_from_data=True)
+            chart.set_categories(cats)
+            ws2.add_chart(chart, "F2")
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        fname = f"{ent_name}_经营报告_{date_start}_{date_end}.xlsx"
+        return send_file(
+            output,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=fname,
+        )
+    except Exception as e:
+        logger.exception("导出企业报告失败")
+        return jsonify({"code": 500, "msg": f"导出失败: {e}"}), 500
 
 
 @insurance_bp.route("/api/insurance/export/excel", methods=["POST"])

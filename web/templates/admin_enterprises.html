@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>企业管理 - 午虎AI保单台账</title>
     <script src="/static/vue.global.prod.js"></script>
-    <link href="https://wxbotcdn.wuhuxiche.com/tailwind.min.css" rel="stylesheet">
+    <link href="/static/tailwind.min.css" rel="stylesheet">
     <style>
         :root {
             --primary: #c2410c;
@@ -45,15 +45,16 @@
         .data-table { font-size: 13px; border-collapse: collapse; width: 100%; }
         .data-table th {
             background: #faf8f5; color: #78716c; font-weight: 600;
-            text-align: left; padding: 12px 16px;
+            text-align: left; padding: 10px 8px;
             border-bottom: 1px solid #ede8e2;
-            font-size: 12px; letter-spacing: 0.03em; white-space: nowrap;
+            font-size: 12px; letter-spacing: 0.02em; white-space: nowrap;
         }
         .data-table td {
-            padding: 14px 16px;
+            padding: 10px 8px;
             border-bottom: 1px solid #f5f0eb;
             vertical-align: middle;
         }
+        .data-table .btn-sm { padding: 4px 8px; }
         .data-table tbody tr:nth-child(even) { background: #fdfbf9; }
         .data-table tbody tr:hover { background: #fff7ed; }
 
@@ -177,6 +178,7 @@
                     </div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center;">
+                    <a href="/admin/users?role=super_admin" class="btn btn-outline" style="font-size:13px;color:#7c3aed;border-color:#c4b5fd;text-decoration:none;">内部账号</a>
                     <a href="/admin/users?enterprise_id=__none__" class="btn btn-outline" style="font-size:13px;color:#374151;border-color:#e7e0d8;text-decoration:none;">未分组账号</a>
                     <button @click="openCreateModal" class="btn btn-primary">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -192,19 +194,19 @@
                 <div v-if="loading" class="py-16 text-center text-gray-400 text-sm">加载中...</div>
                 <div v-else-if="filteredEnterprises.length === 0" class="py-16 text-center text-gray-400 text-sm">{{ entSearch ? '无匹配结果' : '暂无企业数据' }}</div>
                 <div v-else class="overflow-x-auto">
-                    <table class="data-table" style="min-width:1080px;">
+                    <table class="data-table">
                         <thead>
                             <tr>
-                                <th style="min-width:140px;">企业名称</th>
-                                <th style="min-width:130px;">套餐</th>
-                                <th style="min-width:120px;">套餐到期</th>
-                                <th style="min-width:160px;">本月识别量</th>
-                                <th style="min-width:80px;">联系人</th>
-                                <th style="min-width:110px;">联系电话</th>
-                                <th style="min-width:80px;">推荐人</th>
-                                <th style="min-width:60px;">状态</th>
-                                <th style="min-width:100px;">创建时间</th>
-                                <th style="min-width:190px;">操作</th>
+                                <th style="min-width:120px;">企业名称</th>
+                                <th style="min-width:95px;">套餐</th>
+                                <th style="min-width:95px;">套餐到期</th>
+                                <th style="min-width:110px;text-align:center;">本月识别量</th>
+                                <th style="min-width:105px;text-align:center;">人员管理</th>
+                                <th style="min-width:105px;text-align:center;">监控设置</th>
+                                <th style="min-width:60px;">推荐人</th>
+                                <th style="min-width:50px;">状态</th>
+                                <th style="min-width:90px;">创建时间</th>
+                                <th style="min-width:150px;">操作</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -216,11 +218,14 @@
                                 <td>
                                     <!-- 当前套餐 -->
                                     <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-                                        <span class="badge" style="white-space:nowrap;"
-                                            :class="ent.plan_type==='enterprise' ? 'badge-blue' : ent.plan_type==='enterprise_trial' ? 'badge-purple' : 'badge-green'">
-                                            {{ ent.plan_type==='enterprise' ? '企业版' : ent.plan_type==='enterprise_trial' ? '企业试用' : '标准版' }}
-                                        </span>
-                                        <span style="font-size:11px;color:#9ca3af;white-space:nowrap;">{{ ent.plan_months || 1 }}个月</span>
+                                        <template v-if="ent.plan_type">
+                                            <span class="badge" style="white-space:nowrap;"
+                                                :class="ent.plan_type==='enterprise' ? 'badge-blue' : ent.plan_type==='enterprise_trial' ? 'badge-purple' : 'badge-green'">
+                                                {{ ent.plan_type==='enterprise' ? '企业版' : ent.plan_type==='enterprise_trial' ? '企业试用' : '标准版' }}
+                                            </span>
+                                            <span style="font-size:11px;color:#9ca3af;white-space:nowrap;">{{ ent.plan_months || 1 }}个月</span>
+                                        </template>
+                                        <span v-else class="badge" style="white-space:nowrap;background:#f3f4f6;color:#9ca3af;border:1px solid #e5e7eb;">未开通</span>
                                     </div>
                                     <!-- 下一个套餐（叠加续费）：仅显示类型+时长，日期统一在"套餐到期"列 -->
                                     <template v-if="ent.next_plan_type">
@@ -274,10 +279,20 @@
                                     </template>
                                 </td>
 
-                                <!-- 联系人 -->
-                                <td style="color:#57534e;font-size:13px;">{{ ent.contact_person || '-' }}</td>
-                                <!-- 联系电话 -->
-                                <td style="color:#57534e;font-size:13px;">{{ ent.contact_phone || '-' }}</td>
+                                <!-- 人员管理 -->
+                                <td style="vertical-align:middle;text-align:center;">
+                                    <div style="display:inline-flex;align-items:center;gap:6px;">
+                                        <button @click="gotoMembers(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#ea580c;border-color:#fed7aa;font-weight:600;white-space:nowrap;">人员管理</button>
+                                        <span style="font-size:12px;color:#9ca3af;white-space:nowrap;">{{ ent.member_count || 0 }} 人</span>
+                                    </div>
+                                </td>
+                                <!-- 监控设置 -->
+                                <td style="vertical-align:middle;text-align:center;">
+                                    <div style="display:inline-flex;align-items:center;gap:6px;">
+                                        <button @click="gotoMonitor(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#ea580c;border-color:#fed7aa;font-weight:600;white-space:nowrap;">监控设置</button>
+                                        <span style="font-size:12px;color:#9ca3af;white-space:nowrap;">{{ ent.monitor_count || 0 }} 个群</span>
+                                    </div>
+                                </td>
 
                                 <!-- 推荐人 -->
                                 <td style="font-size:12px;color:#57534e;">
@@ -299,9 +314,8 @@
                                 <!-- 操作 -->
                                 <td>
                                     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;row-gap:6px;max-width:200px;">
-                                        <button @click="gotoMembers(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#ea580c;border-color:#fed7aa;font-weight:600;">人员管理</button>
-                                        <button @click="gotoMonitor(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#ea580c;border-color:#fed7aa;font-weight:600;">监控设置</button>
                                         <button @click="openEditModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;">编辑</button>
+                                        <button @click="openReportModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#2563eb;border-color:#bfdbfe;">导出报告</button>
                                         <button @click="openPlanModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#c2410c;border-color:#fed7aa;">开通</button>
                                         <button @click="toggleEnabled(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;"
                                             :style="ent.enabled ? 'color:#d97706;border-color:#fde68a;' : 'color:#059669;border-color:#6ee7b7;'">
@@ -449,6 +463,36 @@
             </div>
         </transition>
 
+        <!-- 导出企业报告弹窗 -->
+        <transition name="fade">
+            <div v-if="showReportModal" class="modal-mask" @click.self="showReportModal=false">
+                <div class="modal-content" style="width:min(440px, calc(100vw - 32px));">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-1">导出企业报告</h3>
+                    <p style="font-size:13px;color:#888;margin-bottom:16px;">{{ reportTarget && reportTarget.name }}</p>
+                    <div style="font-size:13px;color:#555;margin-bottom:8px;">选择时间范围</div>
+                    <div style="display:flex;gap:8px;margin-bottom:14px;">
+                        <button v-for="opt in [{k:'7',l:'近一周'},{k:'30',l:'近一月'},{k:'custom',l:'自定义'}]" :key="opt.k"
+                            @click="reportRange=opt.k"
+                            :style="reportRange===opt.k ? 'flex:1;padding:8px;font-size:13px;background:#ea580c;color:#fff;border:1px solid #ea580c;border-radius:8px;cursor:pointer;' : 'flex:1;padding:8px;font-size:13px;background:#fff;color:#555;border:1px solid #e7e0d8;border-radius:8px;cursor:pointer;'">
+                            {{ opt.l }}
+                        </button>
+                    </div>
+                    <div v-if="reportRange==='custom'" style="display:flex;gap:8px;align-items:center;margin-bottom:14px;">
+                        <input type="date" v-model="reportStart" class="form-input" style="flex:1;">
+                        <span style="color:#999;">~</span>
+                        <input type="date" v-model="reportEnd" class="form-input" style="flex:1;">
+                    </div>
+                    <p style="font-size:12px;color:#999;margin-bottom:14px;">报告含：识别量汇总、每日趋势(折线图)、保司/险种分布、上传人排名。</p>
+                    <div class="flex justify-end gap-3 mt-2">
+                        <button @click="showReportModal=false" class="btn btn-outline">取消</button>
+                        <button @click="doExportReport" :disabled="reportSubmitting" class="btn btn-primary" style="padding:8px 20px;">
+                            {{ reportSubmitting ? '生成中...' : '导出Excel' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
         <!-- 提示消息 -->
         <transition name="fade">
             <div v-if="toast" class="fixed top-4 right-4 z-50 bg-white shadow-lg rounded-lg px-5 py-3 text-sm flex items-center gap-2 border"
@@ -578,6 +622,64 @@ createApp({
 
         const deleteTarget = ref(null);
         const deleting = ref(false);
+
+        // 导出企业报告
+        const showReportModal = ref(false);
+        const reportTarget = ref(null);
+        const reportRange = ref('7');
+        const reportStart = ref('');
+        const reportEnd = ref('');
+        const reportSubmitting = ref(false);
+        function openReportModal(ent) {
+            reportTarget.value = ent;
+            reportRange.value = '7';
+            reportStart.value = '';
+            reportEnd.value = '';
+            showReportModal.value = true;
+        }
+        function _fmtDate(d) {
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }
+        async function doExportReport() {
+            const ent = reportTarget.value;
+            if (!ent) return;
+            let start, end;
+            const today = new Date();
+            if (reportRange.value === '7') {
+                const s = new Date(today); s.setDate(s.getDate() - 6);
+                start = _fmtDate(s); end = _fmtDate(today);
+            } else if (reportRange.value === '30') {
+                const s = new Date(today); s.setDate(s.getDate() - 29);
+                start = _fmtDate(s); end = _fmtDate(today);
+            } else {
+                start = reportStart.value; end = reportEnd.value;
+                if (!start || !end) { showToast('请选择起止日期', 'error'); return; }
+                if (start > end) { showToast('起始日期不能晚于结束日期', 'error'); return; }
+            }
+            reportSubmitting.value = true;
+            try {
+                const url = `/api/insurance/enterprise-report?enterprise_id=${ent.id}&date_start=${start}&date_end=${end}&enterprise_name=${encodeURIComponent(ent.name || '')}`;
+                const resp = await authFetch(url);
+                if (!resp.ok) {
+                    let msg = '导出失败';
+                    try { const j = await resp.json(); msg = j.msg || msg; } catch (e) {}
+                    showToast(msg, 'error');
+                    return;
+                }
+                const blob = await resp.blob();
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `${ent.name || '企业'}_经营报告_${start}_${end}.xlsx`;
+                document.body.appendChild(a); a.click(); a.remove();
+                URL.revokeObjectURL(a.href);
+                showReportModal.value = false;
+                showToast('报告已导出');
+            } catch (e) {
+                showToast('网络错误', 'error');
+            } finally {
+                reportSubmitting.value = false;
+            }
+        }
 
         // 设置推荐人
         const showReferrerModal = ref(false);
@@ -848,6 +950,8 @@ createApp({
             openPlanModal, closePlanModal, submitPlanForm,
             toggleEnabled, logout, toast, formatTime, gotoMembers, gotoMonitor,
             deleteTarget, deleting, confirmDelete, doDelete,
+            showReportModal, reportTarget, reportRange, reportStart, reportEnd, reportSubmitting,
+            openReportModal, doExportReport,
             planDaysLeft, planExpiryStr, nextPlanExpiryStr,
             showReferrerModal, referrerEnt, referrerSearch, referrerUserList, referrerSelected, referrerSaving,
             openSetReferrer, searchReferrerUsers, selectReferrer, saveReferrer,
