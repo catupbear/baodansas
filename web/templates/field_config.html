@@ -739,6 +739,7 @@
                         </span>
                     </div>
                     <div style="display:flex; gap:8px;">
+                        <button class="btn btn-outline btn-sm" @click="syncExportToList" :disabled="activeSource === 'enterprise'" title="把当前导出列配置的字段、顺序、列名、显隐整体应用到页面列表显示">同步到页面列</button>
                         <button class="btn btn-outline btn-sm" @click="resetColumnConfig('export_columns')" :disabled="activeSource === 'enterprise'">恢复默认</button>
                         <button class="btn btn-primary btn-sm" @click="saveColumnConfig('export_columns')" :disabled="activeSource === 'enterprise'">保存</button>
                     </div>
@@ -1468,6 +1469,23 @@ createApp({
             }
         };
 
+        // 把「导出列配置」整体同步到「页面列配置」：字段、顺序、列名、显隐以导出列为准，
+        // 保留页面列特有的「冻结」属性；去掉导出列特有的「按险种拆分隐藏」标记。
+        const syncExportToList = async () => {
+            if (activeSource.value === 'enterprise') return;
+            if (!confirm('将用当前「导出列配置」的字段、顺序、列名、显隐覆盖「页面列配置」，确定？')) return;
+            const frozenMap = {};
+            listColItems.value.forEach(c => { if (c.frozen) frozenMap[c.key] = true; });
+            listColItems.value = exportColItems.value.map(c => {
+                const n = { ...c };
+                delete n._mergeHidden;
+                n.frozen = !!frozenMap[c.key];
+                return n;
+            });
+            await saveColumnConfig('list_columns');
+            showToast('已同步到页面列');
+        };
+
         const resetPending = ref(null);
         const resetColumnConfig = (configType) => { resetPending.value = configType; };
         const doResetColumn = async (mode) => {
@@ -1556,23 +1574,21 @@ createApp({
             const name = (target === 'list' ? newColName.list : newColName.export || '').trim();
             if (!name) return;
             const items = target === 'list' ? listColItems.value : exportColItems.value;
-            if (items.some(c => c.key === name)) {
-                showToast('字段已存在', 'error');
-                return;
-            }
-            const newCol = { key: name, visible: true, order: items.length, display_name: name, custom: true, is_percent: false };
+            // 允许重复字段名：Excel 列头(display_name)可以重复，但内部 key 必须唯一
+            //（v-for 的 :key、双向同步、删除都按 key 匹配，重复 key 会导致渲染/同步错乱）。
+            // 若同名已存在，则给 key 追加 #2、#3… 后缀，列头仍显示原名。
+            const allKeys = new Set([...listColItems.value.map(c => c.key), ...exportColItems.value.map(c => c.key)]);
+            let key = name, n = 2;
+            while (allKeys.has(key)) { key = `${name}#${n++}`; }
+            const newCol = { key, visible: true, order: items.length, display_name: name, custom: true, is_percent: false };
             items.push(newCol);
-            // 双向同步：添加到另一侧
+            // 双向同步：用同一个唯一 key 添加到另一侧
             if (target === 'list') {
                 newColName.list = '';
-                if (!exportColItems.value.some(c => c.key === name)) {
-                    exportColItems.value.push({ ...newCol, order: exportColItems.value.length });
-                }
+                exportColItems.value.push({ ...newCol, order: exportColItems.value.length });
             } else {
                 newColName.export = '';
-                if (!listColItems.value.some(c => c.key === name)) {
-                    listColItems.value.push({ ...newCol, order: listColItems.value.length });
-                }
+                listColItems.value.push({ ...newCol, order: listColItems.value.length });
             }
         };
 
@@ -1768,7 +1784,7 @@ createApp({
 
         // 公式中可引用的字段：保费、车船税 + 所有自定义字段
         const allFields = computed(() => {
-            const base = ['保费', '车船税'];
+            const base = ['保费', '车船税', '商业险保费', '交强险保费', '非车险保费'];
             const custom = exportColItems.value.filter(c => c.custom && !c.merge).map(c => c.key);
             return [...base, ...custom.filter(k => !base.includes(k))];
         });
@@ -2403,7 +2419,7 @@ createApp({
             formulaError, previewExpression, previewResult,
             insertField, insertOp, openFormulaModal, saveFormula, deleteRule,
             listColConfig, exportColConfig, listColItems, exportColItems, fieldHelp,
-            loadColumnConfig, saveColumnConfig, resetColumnConfig, resetPending, doResetColumn,
+            loadColumnConfig, saveColumnConfig, syncExportToList, resetColumnConfig, resetPending, doResetColumn,
             dragState, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd,
             newColName, addCustomCol, removeCustomCol, syncListToExport,
             fixedValues, saveFixedValues,

@@ -199,6 +199,10 @@ def _is_valid_person(val: str) -> bool:
 
     # ====== 以下是人名判断（严格白名单） ======
 
+    # 排除法条/条款引用（如"第十三条""第3款""第二章"），不是人名（防止条款正文被误当车主/人名）
+    if re.match(r'^第[\d一二三四五六七八九十百千零两]+[条章款项节]$', val):
+        return False
+
     # 人名长度：2-6 个中文字符（含少数民族 4-6 字名）
     # 允许中间有 · 分隔符（少数民族名如"阿卜杜拉·艾买提"）
     if not re.match(r'^[\u4e00-\u9fff]{2,6}$', val) and \
@@ -2780,10 +2784,16 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
                 fields["厂牌型号"] = val
                 break
 
-    # 核定载客
-    m = re.search(r"核\s*定\s*载\s*客[：:\s]*(\d+)\s*人", text)
+    # 核定载客（兼容"核定载客X人"与驾乘险常用的"核定座位数:5"）
+    m = re.search(r"核\s*定\s*(?:载\s*客|座\s*位\s*数)[：:\s]*(\d+)\s*人?", text)
     if m:
         fields["核定载客"] = m.group(1) + "人"
+    # 兜底：驾乘险"核定载客人数/被保险人数"表格（国寿等），数字常被 OCR 排到标签
+    # 中间或"行驶区域"行（如"核定载客人数\n行驶区域 5\n/被保险人数"）
+    if "核定载客" not in fields:
+        m = re.search(r"核定载客人数[\s\S]{0,25}?(\d+)[\s\S]{0,12}?被保险人数", text)
+        if m:
+            fields["核定载客"] = m.group(1) + "人"
 
     # 核定载质量
     m = re.search(r"核定载质量[：:\s]*([\d.]+)\s*千克", text)
@@ -2856,7 +2866,8 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
         # 表头标签为"车辆所有人"，数据行首列为车主（中间可能夹车型行）
         lines = text.split('\n')
         for i, line in enumerate(lines):
-            if re.search(r'车辆所有人', line):
+            # 必须是表头行（同行含车牌/号牌列），避免条款正文"代替车辆所有人进行车辆送检"等误匹配
+            if re.search(r'车辆所有人', line) and re.search(r'车牌|号牌|车\s*号', line):
                 for k in range(i + 1, min(i + 5, len(lines))):
                     m = re.match(r'\s*([一-鿿]{2,4})\s+\S', lines[k])
                     if m and _is_valid_person(m.group(1)):
@@ -3910,6 +3921,20 @@ def parse_policy_text(text: str) -> Dict[str, Any]:
     # ===== 第三步：按保司提取各字段 =====
     extracted = _extract_common_fields(text, company_short, policy_type or "")
     fields.update(extracted)
+
+    # ===== 派生字段（供用户自定义导出列「司机乘客/厂牌车型/车辆性质」直接取用）=====
+    # 司机乘客 = 核定载客数；厂牌车型 = 厂牌型号（同一信息的别名列）
+    if fields.get("核定载客") and not fields.get("司机乘客"):
+        fields["司机乘客"] = fields["核定载客"]
+    if fields.get("厂牌型号") and not fields.get("厂牌车型"):
+        fields["厂牌车型"] = fields["厂牌型号"]
+    # 车辆性质：按车牌号位数判断（新能源车牌本体比普通多 1 位：
+    # 普通「粤B+5位」=7 位 → 燃油；新能源「粤B+6位」=8 位 → 新能源）
+    _plate_for_type = (fields.get("车牌号") or "").replace("-", "").replace(" ", "").strip()
+    if len(_plate_for_type) >= 8:
+        fields["车辆性质"] = "新能源"
+    elif len(_plate_for_type) == 7:
+        fields["车辆性质"] = "燃油"
 
     # ===== 第四步：险种明细 =====
     lines = text.split("\n")

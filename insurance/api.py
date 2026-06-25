@@ -21,6 +21,7 @@ from .db import (
     backfill_records_by_sources,
     get_all_insurance_config,
     get_company_stats,
+    get_company_detail_stats,
     get_insurance_config,
     get_insurance_record,
     get_insurance_stats,
@@ -826,7 +827,11 @@ def list_records():
         try:
             _sf = {
                 "roomid": roomid, "source_type": source_type, "source": source,
-                "sender": sender, "keyword": keyword, "company_short": company_short,
+                # sender 仅在私聊筛选(source_type=user)时生效——与列表查询口径一致
+                # （列表的 sender 也只在 source_type=user 时使用）；否则"全部来源"下
+                # 残留的 sender 会让统计多筛一层、与列表对不上。
+                "sender": (sender if source_type == "user" else ""),
+                "keyword": keyword, "company_short": company_short,
                 "ocr_engine": ocr_engine, "policy_type": policy_type,
                 "date_start": date_start, "date_end": date_end,
                 "updated_at_date_start": updated_at_date_start, "updated_at_date_end": updated_at_date_end,
@@ -847,6 +852,9 @@ def list_records():
             result["stats"] = get_insurance_stats(_db, _sf or None)
         except Exception:
             logger.debug("列表内联统计计算失败", exc_info=True)
+
+        # 鑫辉祥贸(企业9)台账默认按车牌合并显示（前端据此自动开启合并视图）
+        result["default_merge_by_plate"] = (effective_enterprise_id == 9)
 
         return jsonify({"code": 0, "data": result})
     except Exception as e:
@@ -1602,18 +1610,26 @@ def get_supported_companies():
         if not isinstance(aliases, dict):
             aliases = {}
 
-        # 从数据库统计各保司识别数量
-        stats = get_company_stats(_db)
+        # 从数据库统计各保司明细数据（总量/本月量/险种分布/最近识别时间）
+        stats = get_company_detail_stats(_db)
 
-        # 应用别名合并统计：多个原名 → 同一简称的数量合并
+        # 应用别名合并统计：多个原名 → 同一简称，各项数值累加、最近时间取较大者
+        _num_keys = ("count", "month_count", "compulsory", "commercial", "accident", "non_vehicle")
         merged = {}
         for item in stats:
             company = item["company"]
             display_name = aliases.get(company, company)
             if display_name in merged:
-                merged[display_name]["count"] += item["count"]
+                m = merged[display_name]
+                for k in _num_keys:
+                    m[k] += item.get(k, 0)
+                if item.get("last_time", "") > m.get("last_time", ""):
+                    m["last_time"] = item["last_time"]
+                _fa, _fb = m.get("first_time", ""), item.get("first_time", "")
+                if _fb and (not _fa or _fb < _fa):
+                    m["first_time"] = _fb
             else:
-                merged[display_name] = {"company": display_name, "count": item["count"]}
+                merged[display_name] = {**item, "company": display_name}
 
         companies = sorted(merged.values(), key=lambda x: x["count"], reverse=True)
         for c in companies:
@@ -3919,7 +3935,10 @@ def export_excel():
                     if col in formula_map:
                         excel_f = _formula_to_excel(formula_map[col], col_letter_map, row_idx)
                         if excel_f:
-                            cell.value = excel_f
+                            # 用静态计算值做 IFERROR 兜底：公式引用到空单元格（如未填的"补点"）时，
+                            # Excel 会 #VALUE! 并级联污染"保险公司合计/公司毛利"，兜底后回退到算好的值
+                            _sv = _pure_number(src_fields.get(col, ""))
+                            cell.value = "=IFERROR(" + excel_f[1:] + "," + (str(_sv) if _sv is not None else "0") + ")"
                             cell.number_format = "0.00"
                             continue
                     # 2) 费率列（值形如 "20%"）→ 转小数 + 百分比格式，使其能参与公式
@@ -4086,6 +4105,16 @@ def export_excel():
 
                 # 3. 排序（按车牌）
                 merged_rows.sort(key=lambda r: r.get("车牌", ""))
+
+                # 合并行重新计算公式：合并行才同时有 商业险保费/交强险保费/非车险保费 拆分列，
+                # 各险种金额、保险公司合计等汇总公式只有在合并行上才能算对。
+                # 注意 apply_user_config_to_fields 返回新 dict、不改入参，必须把返回值写回。
+                merged_rows = [apply_user_config_to_fields(user_config, _mrow, formula_only=True)
+                               for _mrow in merged_rows]
+
+                # 页面"按车牌合并"显示：直接返回合并行 JSON（与导出完全同一套合并逻辑），不生成 Excel
+                if body.get("return_json"):
+                    return jsonify({"code": 0, "data": {"rows": merged_rows}})
 
                 # 4. 写入表头和数据（前缀列已在用户配置中按勾选状态过滤）
                 if field_display_names:
@@ -5255,6 +5284,26 @@ def api_submit_error_report():
             (record_id, user["id"], user.get("name") or user.get("phone"), enterprise, filename, policy_no, description)
         )
         conn.commit()
+        # 入库后发钉钉群（复用「新保司通知」群）；通知失败不影响提交结果
+        try:
+            from core.notify import notify_error_report
+            ntf = get_insurance_config(_db, "new_company_notify", {}) or {}
+            _parts = []
+            _uname = user.get("name") or user.get("phone") or ""
+            if _uname:
+                _parts.append(f"反馈人: {_uname}")
+            if enterprise:
+                _parts.append(f"企业: {enterprise}")
+            if filename:
+                _parts.append(f"文件: {filename}")
+            if policy_no:
+                _parts.append(f"保单号: {policy_no}")
+            if record_id:
+                _parts.append(f"record_id={record_id}")
+            notify_error_report(description, " | ".join(_parts),
+                                ntf.get("webhook", ""), ntf.get("secret", ""))
+        except Exception:
+            logger.exception("报错反馈钉钉通知失败")
         return jsonify({"code": 0, "msg": "已提交"})
     except Exception as e:
         logger.exception("提交报错失败")
@@ -5263,113 +5312,5 @@ def api_submit_error_report():
         conn.close()
 
 
-@insurance_bp.route("/api/insurance/error-reports", methods=["GET"])
-@login_required
-def api_get_error_reports():
-    """超级管理员获取报错列表"""
-    from auth.jwt_utils import verify_token
-    from auth.db import get_user_by_id
-    token = request.headers.get("Authorization", "").replace("Bearer ", "")
-    payload = verify_token(token)
-    if not payload:
-        return jsonify({"code": 401, "msg": "未授权"}), 401
-    user = get_user_by_id(_db, payload["user_id"])
-    if not user or user.get("role") != "super_admin":
-        return jsonify({"code": 403, "msg": "无权限"}), 403
-
-    conn = _db.pool.connection()
-    try:
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute(
-            "SELECT * FROM error_reports ORDER BY created_at DESC LIMIT 200"
-        )
-        rows = cursor.fetchall()
-        for r in rows:
-            if r.get("created_at"):
-                r["created_at"] = r["created_at"].strftime("%Y-%m-%d %H:%M")
-        cursor.execute("SELECT COUNT(*) as cnt FROM error_reports WHERE status='unread'")
-        unread = cursor.fetchone()["cnt"]
-        return jsonify({"code": 0, "data": {"list": rows, "unread": unread}})
-    except Exception as e:
-        logger.exception("获取报错列表失败")
-        return jsonify({"code": 500, "msg": str(e)}), 500
-    finally:
-        conn.close()
-
-
-@insurance_bp.route("/api/insurance/error-reports/unread-count", methods=["GET"])
-@login_required
-def api_error_reports_unread_count():
-    """超级管理员轮询未读数"""
-    from auth.jwt_utils import verify_token
-    from auth.db import get_user_by_id
-    token = request.headers.get("Authorization", "").replace("Bearer ", "")
-    payload = verify_token(token)
-    if not payload:
-        return jsonify({"code": 401, "msg": "未授权"}), 401
-    user = get_user_by_id(_db, payload["user_id"])
-    if not user or user.get("role") != "super_admin":
-        return jsonify({"code": 0, "data": {"unread": 0}})
-
-    conn = _db.pool.connection()
-    try:
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("SELECT COUNT(*) as cnt FROM error_reports WHERE status='unread'")
-        unread = cursor.fetchone()["cnt"]
-        return jsonify({"code": 0, "data": {"unread": unread}})
-    except Exception as e:
-        return jsonify({"code": 500, "msg": str(e)}), 500
-    finally:
-        conn.close()
-
-
-@insurance_bp.route("/api/insurance/error-reports/<int:report_id>/read", methods=["POST"])
-@login_required
-def api_mark_error_report_read(report_id):
-    """超级管理员标记已读"""
-    from auth.jwt_utils import verify_token
-    from auth.db import get_user_by_id
-    token = request.headers.get("Authorization", "").replace("Bearer ", "")
-    payload = verify_token(token)
-    if not payload:
-        return jsonify({"code": 401, "msg": "未授权"}), 401
-    user = get_user_by_id(_db, payload["user_id"])
-    if not user or user.get("role") != "super_admin":
-        return jsonify({"code": 403, "msg": "无权限"}), 403
-
-    conn = _db.pool.connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE error_reports SET status='read' WHERE id=%s", (report_id,))
-        conn.commit()
-        return jsonify({"code": 0, "msg": "ok"})
-    except Exception as e:
-        return jsonify({"code": 500, "msg": str(e)}), 500
-    finally:
-        conn.close()
-
-
-@insurance_bp.route("/api/insurance/error-reports/read-all", methods=["POST"])
-@login_required
-def api_mark_all_error_reports_read():
-    """超级管理员全部标记已读"""
-    from auth.jwt_utils import verify_token
-    from auth.db import get_user_by_id
-    token = request.headers.get("Authorization", "").replace("Bearer ", "")
-    payload = verify_token(token)
-    if not payload:
-        return jsonify({"code": 401, "msg": "未授权"}), 401
-    user = get_user_by_id(_db, payload["user_id"])
-    if not user or user.get("role") != "super_admin":
-        return jsonify({"code": 403, "msg": "无权限"}), 403
-
-    conn = _db.pool.connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE error_reports SET status='read' WHERE status='unread'")
-        conn.commit()
-        return jsonify({"code": 0, "msg": "ok"})
-    except Exception as e:
-        return jsonify({"code": 500, "msg": str(e)}), 500
-    finally:
-        conn.close()
+# 站内通知（报错列表/未读数/标记已读）已下线：报错反馈改为提交时直接发钉钉群。
+# error_reports 表仍保留入库做存档，但不再提供超管读取/已读接口。

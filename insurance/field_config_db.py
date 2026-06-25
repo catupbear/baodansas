@@ -1332,6 +1332,10 @@ def evaluate_formula(formula: str, fields: dict) -> str:
                 num_val = 0.0
             expr = expr.replace(key, str(num_val))
 
+    # 公式引用了记录里没有的字段（如未回填的"补点"、暂未算出的中间字段），按 0 处理，
+    # 避免一个缺失字段拖累整条公式算不出（如"保险公司合计"因"补点金额"缺失而为空）
+    expr = re.sub(r'[一-鿿][一-鿿\w#]*', '0', expr)
+
     # 安全校验：只允许数字、运算符、括号、空格、小数点
     if not re.match(r'^[\d\s\+\-\*\/\.\(\)]+$', expr):
         logger.warning("公式安全校验失败，拒绝执行: %s", expr)
@@ -1350,6 +1354,21 @@ def evaluate_formula(formula: str, fields: dict) -> str:
     except Exception as e:
         logger.debug("公式计算失败: %s，expr=%s", e, expr)
         return ""
+
+
+def _split_fee_context(fields: dict) -> dict:
+    """为公式求值临时提供按险种拆分的保费字段：商业险保费 / 交强险保费 / 非车险保费。
+    当前记录险种对应的那个 = 本记录「保费」，其余 = 0。
+    返回新 dict，不写入原 fields（不污染 display_fields）。"""
+    from insurance.policy_parser import get_policy_type_code
+    pt = fields.get("险种类型") or fields.get("险种") or ""
+    code, _ = get_policy_type_code(pt)
+    prefix = MERGE_PREFIXES.get(code, "非车险")
+    fee = fields.get("保费", "") or "0"
+    # 仅为单条记录注入（fields 里没有拆分保费时）；合并行已有真实拆分列，不覆盖
+    extra = {f"{p}保费": (fee if p == prefix else "0")
+             for p in ("商业险", "交强险", "非车险") if f"{p}保费" not in fields}
+    return {**fields, **extra}
 
 
 def match_fee_formulas(config: dict, fields: dict) -> list:
@@ -1556,7 +1575,7 @@ def apply_user_config_to_fields(config: dict, fields: dict, formula_only: bool =
                         rate_fields.append(target_field)
                     continue
             old_val = result.get(target_field)
-            calculated = evaluate_formula(formula, result)
+            calculated = evaluate_formula(formula, _split_fee_context(result))
             if calculated:
                 result[target_field] = calculated
                 if round_idx == 0 and "率" in target_field:

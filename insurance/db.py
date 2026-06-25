@@ -1864,6 +1864,64 @@ def get_company_stats(db) -> list:
         conn.close()
 
 
+def get_company_detail_stats(db) -> list:
+    """
+    统计每个保司的明细数据：总量、本月量、险种分布（交强/商业/驾意/非车）、最近识别时间。
+    口径与 get_company_stats 一致（status=done/success、doc_category=保单、confidence>0）。
+    险种大类由 policy_parser.get_policy_type_code 按 policy_type 归类后在 Python 端聚合。
+    返回: [{company, count, month_count, compulsory, commercial, accident, non_vehicle, last_time}]
+    """
+    from insurance.policy_parser import get_policy_type_code
+
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("""
+            SELECT company_short AS company,
+                   JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$."险种类型"')) AS ptype,
+                   COUNT(*) AS cnt,
+                   SUM(CASE WHEN created_at >= DATE_FORMAT(NOW(), '%%Y-%%m-01') THEN 1 ELSE 0 END) AS month_cnt,
+                   MIN(created_at) AS first_time,
+                   MAX(created_at) AS last_time
+            FROM insurance_records
+            WHERE status IN ('done', 'success')
+              AND doc_category = '保单'
+              AND confidence > 0
+              AND company_short != ''
+              AND deleted_at IS NULL
+            GROUP BY company_short, ptype
+        """)
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
+
+    agg = {}
+    for r in rows:
+        comp = r["company"]
+        a = agg.get(comp)
+        if a is None:
+            a = {"company": comp, "count": 0, "month_count": 0,
+                 "compulsory": 0, "commercial": 0, "accident": 0, "non_vehicle": 0,
+                 "first_time": None, "last_time": None}
+            agg[comp] = a
+        cnt = int(r["cnt"] or 0)
+        a["count"] += cnt
+        a["month_count"] += int(r["month_cnt"] or 0)
+        code, _ = get_policy_type_code(r["ptype"] or "")
+        a[code] = a.get(code, 0) + cnt
+        lt = r["last_time"]
+        if lt and (a["last_time"] is None or lt > a["last_time"]):
+            a["last_time"] = lt
+        ft = r["first_time"]
+        if ft and (a["first_time"] is None or ft < a["first_time"]):
+            a["first_time"] = ft
+
+    for a in agg.values():
+        a["first_time"] = a["first_time"].strftime("%Y-%m-%d %H:%M") if a["first_time"] else ""
+        a["last_time"] = a["last_time"].strftime("%Y-%m-%d %H:%M") if a["last_time"] else ""
+    return list(agg.values())
+
+
 def get_record_company_list(db, user_ids: list = None, enterprise_id: int = None) -> list:
     """
     获取全库（权限范围内）去重后的保险公司简称列表，供列表「保司」筛选下拉使用。
@@ -2175,7 +2233,10 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
         nonpolicy_cnt = _count(f"{done_where} AND {col_prefix}doc_category != '保单' AND {col_prefix}doc_category != ''")
         failed_cnt = _count(f"{col_prefix}status = 'failed'")
         done_cnt = success_cnt + abnormal_cnt + nonpolicy_cnt
-        total = done_cnt + failed_cnt
+        # total 改用与列表"全部"Tab【完全一致】的全局去重口径：去重时同一保单号跨分类
+        # （如保单与电子标志同号）全局只算 1 条，与列表条数一致；不再用各分项相加
+        # （各分项相加会把跨分类同号记录在不同分项各算一次，导致统计比列表多算）。
+        total = _count("")
         pending_cnt = 0       # 已在 where 排除，统计中恒为 0
         processing_cnt = 0    # 已在 where 排除，统计中恒为 0
         summary = {

@@ -156,3 +156,35 @@ def notify_new_company(company: str, detail: str = "", webhook: str = "", secret
     threading.Thread(
         target=notifier.send, args=(title, content), daemon=True
     ).start()
+
+
+def notify_error_report(description: str, detail: str = "", webhook: str = "", secret: str = ""):
+    """
+    用户提交识别报错反馈时通知钉钉群（异步，不阻塞业务）。
+
+    复用「新保司通知」群的 webhook/secret（由调用方传入）；未配置则不发送。
+
+    Args:
+        description: 用户填写的问题描述
+        detail:      补充信息（反馈人、企业、文件名、保单号、record_id 等）
+        webhook:     钉钉群机器人 webhook
+        secret:      加签密钥（可选）
+    """
+    if not webhook:
+        return
+
+    title = "⚠️ 用户报错反馈"
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    lines = [
+        "### ⚠️ 用户提交识别报错反馈",
+        f"- **时间**: {ts}",
+    ]
+    if detail:
+        lines.append(f"- **记录**: {detail[:500]}")
+    lines.append(f"- **问题描述**: {(description or '')[:1000]}")
+    content = "\n".join(lines)
+
+    notifier = DingTalkNotifier(webhook, secret)
+    threading.Thread(
+        target=notifier.send, args=(title, content), daemon=True
+    ).start()

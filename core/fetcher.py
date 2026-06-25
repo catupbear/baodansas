@@ -367,9 +367,44 @@ class MessageFetcher:
 
             # 检查是否需要触发保险报价
             self._check_quote_trigger(msg_seq, msg_data, parsed)
+
+            # 检查是否为"政策报价"文本（车牌+商业/交强/驾意），按车牌回填政策字段
+            self._check_policy_fill_trigger(msg_seq, parsed)
         except json.JSONDecodeError as e:
             logger.error("%s消息JSON解析失败, seq=%d: %s", self._log_prefix, msg_seq, e)
             notify_error("消息解析", "_process_item", f"JSON解析失败, seq={msg_seq}", str(e))
+
+    def _check_policy_fill_trigger(self, seq: int, parsed: dict):
+        """群内"政策报价"文本（车牌 + 商业X/交强X/驾意X）按车牌回填政策字段。
+
+        仅对监控群的文本消息生效；普通聊天文本（无车牌或无政策项）自动忽略。
+        企业定制：填充的「政策商业险/政策强险/政策非车险/电话」是自定义字段，
+        未配置这些列的企业看不到、无副作用。
+        """
+        handler = getattr(self, "insurance_handler", None)
+        if not handler:
+            return
+        if parsed.get("msgtype", "") != "text":
+            return
+        roomid = parsed.get("roomid", "")
+        if not roomid:
+            return
+        # 仅监控群
+        watch = handler.get_watch_config()
+        if roomid not in watch.get("rooms", []):
+            return
+        # 文本消息内容在 content["text"]（parser 解析为 {"text": ...}）；兼容旧 content 字段
+        _content = parsed.get("content", {}) or {}
+        text = _content.get("text") or _content.get("content") or ""
+        if not text:
+            return
+        try:
+            from insurance.policy_quote_fill import apply_policy_quote
+            cnt, info = apply_policy_quote(handler.db, text)
+            if info:
+                logger.info("政策回填: seq=%d room=%s 命中%d条 %s", seq, roomid, cnt, info)
+        except Exception as e:
+            logger.error("政策回填异常 seq=%d: %s", seq, e, exc_info=True)
 
     def _check_insurance_trigger(self, seq: int, msg_data: dict, parsed: dict):
         """检查是否需要触发保单识别（支持群聊 + 私聊）"""
