@@ -125,6 +125,20 @@
         .op-btn.red { background: #fef2f2; color: #dc2626; }
         .op-btn.gray { background: #f3f4f6; color: #6b7280; }
         .op-btn.on { box-shadow: inset 0 0 0 1.5px currentColor; font-weight: 700; }
+        /* 移动端企业卡片视图（窄屏替代横滑表格） */
+        .ent-cards { display: none; }
+        @media (max-width: 820px) {
+            .ent-table-wrap { display: none; }
+            .ent-cards { display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+        }
+        .ent-card { border: 1px solid #f0ece8; border-radius: 14px; padding: 16px; background: #fff; }
+        .ec-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+        .ec-name { font-size: 16px; font-weight: 700; color: #1c1410; line-height: 1.3; }
+        .ec-no { font-size: 12px; color: #9ca3af; background: #f7f5f3; padding: 3px 9px; border-radius: 6px; white-space: nowrap; flex-shrink: 0; }
+        .ec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px 14px; margin-bottom: 14px; }
+        .ec-item .k { font-size: 11px; color: #9ca3af; margin-bottom: 3px; }
+        .ec-item .vv { font-size: 13.5px; color: #374151; font-weight: 500; }
+        .ec-ops { display: flex; flex-wrap: wrap; gap: 7px; padding-top: 13px; border-top: 1px solid #f3f0ec; }
     </style>
 </head>
 <body class="min-h-screen">
@@ -204,7 +218,8 @@
             <div class="bg-white rounded-xl shadow-sm" style="overflow:hidden;">
                 <div v-if="loading" class="py-16 text-center text-gray-400 text-sm">加载中...</div>
                 <div v-else-if="filteredEnterprises.length === 0" class="py-16 text-center text-gray-400 text-sm">{{ entSearch ? '无匹配结果' : '暂无企业数据' }}</div>
-                <div v-else class="overflow-x-auto">
+                <div v-else>
+                    <div class="overflow-x-auto ent-table-wrap">
                     <table class="data-table">
                         <thead>
                             <tr>
@@ -340,6 +355,41 @@
                             </tr>
                         </tbody>
                     </table>
+                    </div>
+                    <!-- 移动端卡片视图（窄屏显示，替代横滑表格） -->
+                    <div class="ent-cards">
+                        <div class="ent-card" v-for="ent in filteredEnterprises" :key="'c'+ent.id">
+                            <div class="ec-head">
+                                <div class="ec-name">{{ ent.name }}</div>
+                                <span class="ec-no">编号 {{ ent.enterprise_no || '-' }}</span>
+                            </div>
+                            <div class="ec-grid">
+                                <div class="ec-item"><div class="k">套餐</div><div class="vv">
+                                    <span v-if="ent.plan_type">{{ ent.plan_type==='enterprise'?'企业版':ent.plan_type==='enterprise_trial'?'企业试用':'标准版' }} · {{ ent.plan_months||1 }}个月</span>
+                                    <span v-else style="color:#9ca3af;">未开通</span>
+                                </div></div>
+                                <div class="ec-item"><div class="k">套餐到期</div>
+                                    <div class="vv" v-if="planExpiryStr(ent)" :style="{color: planDaysLeft(ent)<=0?'#dc2626':planDaysLeft(ent)<=7?'#d97706':'#059669'}">{{ planDaysLeft(ent)<=0?'已到期':planDaysLeft(ent)+' 天后' }}</div>
+                                    <div class="vv" v-else style="color:#d1d5db;">未设置</div>
+                                </div>
+                                <div class="ec-item"><div class="k">本月识别</div><div class="vv">{{ ent.monthly_pdf_usage || 0 }} 次</div></div>
+                                <div class="ec-item"><div class="k">状态</div><div class="vv"><span :style="{color: ent.enabled?'#059669':'#dc2626'}">{{ ent.enabled?'启用':'禁用' }}</span></div></div>
+                                <div class="ec-item"><div class="k">人员 / 群</div><div class="vv">{{ ent.member_count||0 }} 人 · {{ ent.monitor_count||0 }} 群</div></div>
+                                <div class="ec-item"><div class="k">推荐人</div><div class="vv">{{ ent.referrer_name || '—' }}</div></div>
+                            </div>
+                            <div class="ec-ops">
+                                <button @click="openEditModal(ent)" class="op-btn gray">编辑</button>
+                                <button @click="gotoMembers(ent)" class="op-btn orange">人员管理</button>
+                                <button @click="gotoMonitor(ent)" class="op-btn orange">监控设置</button>
+                                <button @click="openReportModal(ent)" class="op-btn blue">导出报告</button>
+                                <button @click="openPlanModal(ent)" class="op-btn orange">开通</button>
+                                <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled?'amber':'green']">{{ ent.enabled?'禁用':'启用' }}</button>
+                                <button @click="toggleMerge(ent)" :class="['op-btn', ent.merge_by_plate?'orange on':'gray']">车牌合并{{ ent.merge_by_plate?'✓':'' }}</button>
+                                <button @click="openSurveyModal(ent)" class="op-btn purple">信息收集</button>
+                                <button @click="confirmDelete(ent)" class="op-btn red">删除</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
