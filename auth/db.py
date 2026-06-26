@@ -224,6 +224,8 @@ def init_enterprises_table(db):
                 id             INT PRIMARY KEY AUTO_INCREMENT,
                 name           VARCHAR(128) NOT NULL COMMENT '企业名称',
                 enterprise_no  VARCHAR(50) DEFAULT '' COMMENT '企业编号（可编辑业务编号）',
+                survey_token   VARCHAR(64) DEFAULT '' COMMENT '企业信息收集表专属链接token',
+                survey_data    TEXT COMMENT '企业信息收集表提交内容(JSON)',
                 contact_person VARCHAR(64) DEFAULT '' COMMENT '联系人',
                 contact_phone  VARCHAR(64) DEFAULT '' COMMENT '联系电话',
                 enabled        TINYINT NOT NULL DEFAULT 1,
@@ -299,7 +301,7 @@ def update_enterprise(db, enterprise_id: int, data: dict):
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        allowed = {"name", "enterprise_no", "contact_person", "contact_phone", "enabled", "merge_by_plate", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at", "referrer_id"}
+        allowed = {"name", "enterprise_no", "contact_person", "contact_phone", "enabled", "merge_by_plate", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at", "referrer_id", "survey_token", "survey_data"}
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
             return
@@ -320,6 +322,32 @@ def delete_enterprise(db, enterprise_id: int):
         conn.commit()
     finally:
         conn.close()
+
+
+def get_enterprise_by_survey_token(db, token: str):
+    """按信息收集表 token 查企业。"""
+    if not token:
+        return None
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT * FROM enterprises WHERE survey_token = %s", (token,))
+        return cursor.fetchone()
+    finally:
+        conn.close()
+
+
+def ensure_survey_token(db, enterprise_id: int) -> str:
+    """确保企业有信息收集表 token，没有则生成并保存，返回 token。"""
+    import secrets
+    ent = get_enterprise_by_id(db, enterprise_id)
+    if not ent:
+        return ""
+    token = (ent.get("survey_token") or "").strip()
+    if not token:
+        token = secrets.token_urlsafe(24)
+        update_enterprise(db, enterprise_id, {"survey_token": token})
+    return token
 
 
 def get_enterprise_employee_ids(db, enterprise_id: int) -> list[int]:
@@ -686,6 +714,8 @@ def init_enterprise_plan_column(db):
             ("next_plan_start_at", "DATETIME DEFAULT NULL COMMENT '下一个套餐开始时间'"),
             ("referrer_id", "INT DEFAULT NULL COMMENT '推荐人用户ID'"),
             ("enterprise_no", "VARCHAR(50) DEFAULT '' COMMENT '企业编号（可编辑业务编号）'"),
+            ("survey_token", "VARCHAR(64) DEFAULT '' COMMENT '企业信息收集表专属链接token'"),
+            ("survey_data", "TEXT COMMENT '企业信息收集表提交内容(JSON)'"),
         ]:
             try:
                 cursor.execute(f"ALTER TABLE enterprises ADD COLUMN {col} {definition}")

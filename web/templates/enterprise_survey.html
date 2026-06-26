@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>企业信息收集表 · 午虎AI保单台账</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f5f3f0; color: #1c1410; line-height: 1.6; }
+        .wrap { max-width: 680px; margin: 0 auto; padding: 0 0 60px; }
+        .hero { background: linear-gradient(135deg, #ea580c, #f97316); color: #fff; padding: 32px 24px 28px; border-radius: 0 0 20px 20px; }
+        .hero h1 { font-size: 22px; font-weight: 800; letter-spacing: 0.5px; }
+        .hero .sub { margin-top: 8px; font-size: 14px; opacity: 0.92; }
+        .hero .ent { margin-top: 14px; display: inline-block; background: rgba(255,255,255,0.22); padding: 5px 14px; border-radius: 8px; font-size: 14px; font-weight: 600; }
+        .card { background: #fff; margin: 16px; border-radius: 14px; padding: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); }
+        .field { margin-bottom: 22px; }
+        .field:last-child { margin-bottom: 0; }
+        .q { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+        .q .req { color: #dc2626; margin-left: 2px; }
+        .q .hint { display: block; font-size: 12px; color: #9ca3af; font-weight: 400; margin-top: 3px; }
+        input[type=text], textarea { width: 100%; border: 1.5px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; font-size: 15px; font-family: inherit; outline: none; transition: border-color 0.15s; background: #fafafa; }
+        input[type=text]:focus, textarea:focus { border-color: #fb923c; background: #fff; }
+        textarea { resize: vertical; min-height: 70px; }
+        .row { display: flex; gap: 10px; }
+        .row > div { flex: 1; }
+        .radio-grp { display: flex; gap: 10px; flex-wrap: wrap; }
+        .radio-grp label { flex: 1; min-width: 110px; border: 1.5px solid #e5e7eb; border-radius: 10px; padding: 9px 12px; font-size: 14px; cursor: pointer; text-align: center; transition: all 0.15s; background: #fafafa; }
+        .radio-grp label.on { border-color: #ea580c; background: #fff7ed; color: #ea580c; font-weight: 600; }
+        .radio-grp input { display: none; }
+        .submit-btn { width: 100%; background: #ea580c; color: #fff; border: none; border-radius: 12px; padding: 15px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 4px; transition: background 0.15s; }
+        .submit-btn:active { background: #c2410c; }
+        .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .err { background: #fef2f2; color: #dc2626; border-radius: 10px; padding: 10px 14px; font-size: 14px; margin: 0 16px 12px; }
+        .done { text-align: center; padding: 60px 24px; }
+        .done .ico { font-size: 56px; }
+        .done h2 { font-size: 20px; font-weight: 800; margin: 16px 0 8px; color: #16a34a; }
+        .done p { color: #6b7280; font-size: 15px; }
+        .loading, .invalid { text-align: center; padding: 80px 24px; color: #9ca3af; }
+        .num { display: inline-block; width: 22px; height: 22px; line-height: 22px; text-align: center; background: #fff7ed; color: #ea580c; border-radius: 6px; font-size: 12px; font-weight: 700; margin-right: 7px; }
+    </style>
+</head>
+<body>
+{% raw %}
+<div id="app" class="wrap">
+    <div v-if="loading" class="loading">加载中…</div>
+    <div v-else-if="invalid" class="invalid">链接无效或已失效，请联系您的对接人重新获取。</div>
+
+    <div v-else-if="done" class="done">
+        <div class="ico">✅</div>
+        <h2>提交成功</h2>
+        <p>我们已收到您的信息，将尽快为您完成配置～</p>
+    </div>
+
+    <template v-else>
+        <div class="hero">
+            <h1>企业信息收集表</h1>
+            <div class="sub">填好以下信息发给我们，即可开始为您配置专属台账系统</div>
+            <div class="ent" v-if="entName">当前企业：{{ entName }}</div>
+        </div>
+
+        <div v-if="error" class="err">{{ error }}</div>
+
+        <div class="card">
+            <div class="field">
+                <div class="q"><span class="num">1</span>企业全称<span class="req">*</span></div>
+                <input type="text" v-model="f.company_full_name" placeholder="请填写营业执照上的企业全称">
+            </div>
+            <div class="field">
+                <div class="q"><span class="num">2</span>联系人姓名 + 手机号<span class="req">*</span>
+                    <span class="hint">手机号将作为您的管理员登录账号</span>
+                </div>
+                <div class="row">
+                    <div><input type="text" v-model="f.contact_name" placeholder="姓名"></div>
+                    <div><input type="text" v-model="f.contact_phone" placeholder="手机号" maxlength="11"></div>
+                </div>
+            </div>
+            <div class="field">
+                <div class="q"><span class="num">3</span>贵公司每月大约处理多少份保单？<span class="hint">帮您推荐合适套餐</span></div>
+                <input type="text" v-model="f.monthly_policies" placeholder="如：每月约 300 份">
+            </div>
+            <div class="field">
+                <div class="q"><span class="num">4</span>保单主要有哪些保险公司？<span class="hint">3-5 家即可</span></div>
+                <textarea v-model="f.main_insurers" placeholder="如：人保、平安、太平洋…"></textarea>
+            </div>
+            <div class="field">
+                <div class="q"><span class="num">5</span>需要开通系统账号的人员名单<span class="hint">姓名 + 手机号，并标注谁是管理员（看全公司数据）、谁是员工（只看自己的数据）</span></div>
+                <textarea v-model="f.staff_list" placeholder="如：&#10;张三 13800000000 管理员&#10;李四 13900000000 员工"></textarea>
+            </div>
+            <div class="field">
+                <div class="q"><span class="num">6</span>现有的台账 Excel 模板能否发一份？<span class="hint">我照着配导出格式；没有的话用系统默认格式，后续随时可改</span></div>
+                <textarea v-model="f.excel_template" placeholder="可在此说明，或直接把模板发给对接人"></textarea>
+            </div>
+            <div class="field">
+                <div class="q"><span class="num">7</span>保险公司名称需要简写吗？<span class="hint">如「中国人民财产保险股份有限公司」显示为「人保」</span></div>
+                <div class="radio-grp">
+                    <label :class="{on: f.company_abbr==='需要'}"><input type="radio" value="需要" v-model="f.company_abbr">需要</label>
+                    <label :class="{on: f.company_abbr==='不需要'}"><input type="radio" value="不需要" v-model="f.company_abbr">不需要</label>
+                </div>
+            </div>
+            <div class="field">
+                <div class="q"><span class="num">8</span>险种名称需要简写吗？<span class="hint">如简写为：交强险、商业险、驾意险、非车险</span></div>
+                <div class="radio-grp">
+                    <label :class="{on: f.policy_abbr==='需要'}"><input type="radio" value="需要" v-model="f.policy_abbr">需要</label>
+                    <label :class="{on: f.policy_abbr==='不需要'}"><input type="radio" value="不需要" v-model="f.policy_abbr">不需要</label>
+                </div>
+            </div>
+            <div class="field">
+                <div class="q"><span class="num">9</span>导出的 Excel 需要自动计算佣金吗？<span class="hint">如需要请说明计算方式，如「商业险保费 × 30%」，不同保司不同比例也可以</span></div>
+                <textarea v-model="f.commission" placeholder="不需要 / 或写明计算公式"></textarea>
+            </div>
+            <div class="field">
+                <div class="q"><span class="num">10</span>日期格式有要求吗？<span class="hint">如 2026/05/07 或 2026-05-07</span></div>
+                <input type="text" v-model="f.date_format" placeholder="写具体格式，或留空用默认">
+            </div>
+        </div>
+
+        <div style="margin: 0 16px;">
+            <button class="submit-btn" :disabled="submitting" @click="submit">{{ submitting ? '提交中…' : '提交信息' }}</button>
+        </div>
+    </template>
+</div>
+
+<script>
+const { createApp, ref, reactive } = Vue;
+createApp({
+    setup() {
+        const token = window.location.pathname.split('/').filter(Boolean).pop();
+        const loading = ref(true);
+        const invalid = ref(false);
+        const done = ref(false);
+        const submitting = ref(false);
+        const error = ref('');
+        const entName = ref('');
+        const f = reactive({
+            company_full_name: '', contact_name: '', contact_phone: '',
+            monthly_policies: '', main_insurers: '', staff_list: '', excel_template: '',
+            company_abbr: '', policy_abbr: '', commission: '', date_format: '',
+        });
+
+        async function load() {
+            try {
+                const r = await fetch(`/api/enterprise-survey/${token}`);
+                const j = await r.json();
+                if (j.code !== 0) { invalid.value = true; }
+                else { entName.value = j.data.enterprise_name || ''; if (j.data.submitted) done.value = true; }
+            } catch (e) { invalid.value = true; }
+            loading.value = false;
+        }
+
+        async function submit() {
+            error.value = '';
+            if (!f.company_full_name.trim()) { error.value = '请填写企业全称'; window.scrollTo(0,0); return; }
+            if (!f.contact_name.trim() || !f.contact_phone.trim()) { error.value = '请填写联系人姓名和手机号'; window.scrollTo(0,0); return; }
+            if (!/^1[3-9]\d{9}$/.test(f.contact_phone.trim())) { error.value = '联系人手机号格式不正确（需11位）'; window.scrollTo(0,0); return; }
+            submitting.value = true;
+            try {
+                const r = await fetch(`/api/enterprise-survey/${token}`, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(f),
+                });
+                const j = await r.json();
+                if (j.code === 0) { done.value = true; window.scrollTo(0,0); }
+                else { error.value = j.msg || '提交失败，请重试'; window.scrollTo(0,0); }
+            } catch (e) { error.value = '网络错误，请重试'; }
+            submitting.value = false;
+        }
+
+        load();
+        return { loading, invalid, done, submitting, error, entName, f, submit };
+    }
+}).mount('#app');
+</script>
+{% endraw %}
+</body>
+</html>

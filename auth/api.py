@@ -30,6 +30,8 @@ from .db import (
     create_enterprise,
     update_enterprise,
     delete_enterprise,
+    ensure_survey_token,
+    get_enterprise_by_survey_token,
     get_bindings_by_user,
     set_user_bindings,
     list_all_bindings,
@@ -487,11 +489,20 @@ def api_create_enterprise():
     contact_phone = data.get("contact_phone", "").strip()
     if not name:
         return jsonify({"code": 400, "msg": "企业名称不能为空"}), 400
+    enterprise_no = data.get("enterprise_no", "").strip()
+    if not enterprise_no:
+        return jsonify({"code": 400, "msg": "企业编号不能为空"}), 400
+
+    # 企业编号(小写、去掉横线)将作为该企业管理员的登录账号，需提前确保账号未被占用
+    admin_phone = enterprise_no.lower().replace("-", "")
+    if get_user_by_phone(_db, admin_phone):
+        return jsonify({"code": 400, "msg": f"企业编号「{enterprise_no}」对应的账号已存在，请更换编号"}), 400
 
     try:
         eid = create_enterprise(_db, name, contact_person, contact_phone)
-        if data.get("enterprise_no"):
-            update_enterprise(_db, eid, {"enterprise_no": data.get("enterprise_no", "").strip()})
+        update_enterprise(_db, eid, {"enterprise_no": enterprise_no})
+        # 同步创建该企业的管理员账号：登录账号=企业编号(小写去横线)，姓名=企业管理员，初始密码=wuhu2025
+        create_user(_db, admin_phone, "wuhu2025", ROLE_ENTERPRISE, eid, "企业管理员", activated=1)
         # 默认不自动开通套餐：新企业为"未开通"状态，由管理员手动「开通套餐」配置。
         # 仅当显式传入 plan_type 时才开通（兼容将来在创建表单里直接选套餐的场景）。
         if data.get("plan_type"):
@@ -504,6 +515,67 @@ def api_create_enterprise():
     except Exception as e:
         logger.exception("创建企业失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+# ==================== 企业信息收集表 ====================
+
+@auth_bp.route("/api/auth/enterprises/<int:eid>/survey-link", methods=["POST"])
+@admin_required
+def api_enterprise_survey_link(eid):
+    """生成/获取企业信息收集表的专属链接（超管）。重复调用返回同一个 token。"""
+    ent = get_enterprise_by_id(_db, eid)
+    if not ent:
+        return jsonify({"code": 404, "msg": "企业不存在"}), 404
+    token = ensure_survey_token(_db, eid)
+    submitted = bool((ent.get("survey_data") or "").strip())
+    return jsonify({"code": 0, "data": {"token": token, "path": f"/enterprise-survey/{token}", "submitted": submitted}})
+
+
+@auth_bp.route("/api/enterprise-survey/<token>", methods=["GET"])
+def api_get_survey(token):
+    """公开：客户打开收集表时拉取企业当前名称（用于页面展示）。"""
+    ent = get_enterprise_by_survey_token(_db, token)
+    if not ent:
+        return jsonify({"code": 404, "msg": "链接无效或已失效"}), 404
+    return jsonify({"code": 0, "data": {
+        "enterprise_name": ent.get("name", ""),
+        "submitted": bool((ent.get("survey_data") or "").strip()),
+    }})
+
+
+@auth_bp.route("/api/enterprise-survey/<token>", methods=["POST"])
+def api_submit_survey(token):
+    """公开：客户提交收集表 → 更新企业名称 + 按手机号建管理员账号(密码888888) + 存档全部内容。"""
+    import json as _json
+    ent = get_enterprise_by_survey_token(_db, token)
+    if not ent:
+        return jsonify({"code": 404, "msg": "链接无效或已失效"}), 404
+    data = request.get_json(silent=True) or {}
+    company = (data.get("company_full_name") or "").strip()
+    contact_name = (data.get("contact_name") or "").strip()
+    contact_phone = (data.get("contact_phone") or "").strip()
+    # 必填：企业全称、联系人姓名+手机号
+    if not company:
+        return jsonify({"code": 400, "msg": "请填写企业全称"}), 400
+    if not contact_name or not contact_phone:
+        return jsonify({"code": 400, "msg": "请填写联系人姓名和手机号"}), 400
+    if not _PHONE_RE.match(contact_phone):
+        return jsonify({"code": 400, "msg": "联系人手机号格式不正确（需11位）"}), 400
+
+    eid = ent["id"]
+    # 1. 用企业全称更新企业名称、联系人
+    update_enterprise(_db, eid, {"name": company, "contact_person": contact_name, "contact_phone": contact_phone})
+    # 2. 按联系人手机号创建企业管理员账号（密码 888888）；手机号已注册则跳过创建
+    admin_created = False
+    if not get_user_by_phone(_db, contact_phone):
+        try:
+            create_user(_db, contact_phone, "888888", ROLE_ENTERPRISE, eid, contact_name, activated=1)
+            admin_created = True
+        except Exception:
+            logger.exception("信息收集表创建管理员账号失败")
+    # 3. 存档全部收集内容
+    update_enterprise(_db, eid, {"survey_data": _json.dumps(data, ensure_ascii=False)})
+    return jsonify({"code": 0, "msg": "提交成功，我们会尽快为您配置", "data": {"admin_created": admin_created}})
 
 
 @auth_bp.route("/api/auth/enterprises/<int:eid>", methods=["PUT"])

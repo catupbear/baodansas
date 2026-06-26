@@ -329,6 +329,7 @@
                                             title="开启后该企业识别记录默认按车牌合并显示">
                                             车牌合并{{ ent.merge_by_plate ? '✓' : '' }}
                                         </button>
+                                        <button @click="openSurveyModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#7c3aed;border-color:#ddd6fe;">信息收集</button>
                                         <button @click="confirmDelete(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#dc2626;border-color:#fca5a5;">删除</button>
                                     </div>
                                 </td>
@@ -338,6 +339,31 @@
                 </div>
             </div>
         </div>
+
+        <!-- 企业信息收集表链接弹窗 -->
+        <transition name="fade">
+            <div v-if="showSurveyModal" class="modal-mask" @click.self="showSurveyModal=false">
+                <div class="modal-content">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-3">企业信息收集表</h3>
+                    <p style="font-size:13px;color:#6b7280;margin-bottom:12px;line-height:1.6;">把下面的专属链接发给「<span style="color:#1c1410;font-weight:600;">{{ surveyEnt.name }}</span>」的对接人。对方填写并提交后，系统会自动用「企业全称」更新企业名称，并按联系人手机号创建管理员账号（密码 <span style="color:#ea580c;font-weight:600;">888888</span>）。</p>
+                    <div style="display:flex;gap:8px;">
+                        <input :value="surveyUrl" readonly class="form-input" style="flex:1;font-size:13px;" @focus="$event.target.select()">
+                        <button @click="copySurveyLink" class="btn btn-primary" style="white-space:nowrap;">{{ copied ? '已复制 ✓' : '复制链接' }}</button>
+                    </div>
+                    <div v-if="surveySubmitted" style="margin-top:16px;">
+                        <div style="font-size:13px;font-weight:600;color:#16a34a;margin-bottom:8px;">✅ 该企业已提交以下信息</div>
+                        <div style="background:#f9fafb;border:1px solid #f3f4f6;border-radius:10px;padding:12px;font-size:13px;max-height:320px;overflow:auto;">
+                            <div v-for="(item,idx) in surveyRows" :key="idx" style="margin-bottom:9px;line-height:1.5;">
+                                <span style="color:#9ca3af;">{{ item.label }}：</span><span style="color:#1c1410;white-space:pre-wrap;">{{ item.value || '—' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex justify-end gap-3 mt-5">
+                        <button @click="showSurveyModal=false" class="btn btn-outline">关闭</button>
+                    </div>
+                </div>
+            </div>
+        </transition>
 
         <!-- 创建/编辑企业弹窗（只含名称、联系人、电话） -->
         <transition name="fade">
@@ -350,8 +376,9 @@
                             <input v-model="form.name" type="text" class="form-input" placeholder="请输入企业名称">
                         </div>
                         <div>
-                            <label class="block text-sm text-gray-500 mb-1">企业编号</label>
-                            <input v-model="form.enterprise_no" type="text" class="form-input" placeholder="请输入企业编号（可选）">
+                            <label class="block text-sm text-gray-500 mb-1">企业编号 <span class="text-red-500">*</span></label>
+                            <input v-model="form.enterprise_no" type="text" class="form-input" placeholder="请输入企业编号">
+                            <p v-if="!isEdit" style="font-size:12px;color:#9ca3af;margin-top:4px;line-height:1.5;">添加后将自动创建该企业管理员账号：<br>账号为企业编号（小写、去掉横线），初始密码 <span style="color:#ea580c;font-weight:600;">wuhu2025</span></p>
                         </div>
                         <div>
                             <label class="block text-sm text-gray-500 mb-1">联系人</label>
@@ -860,6 +887,43 @@ createApp({
             }
         }
 
+        // ===== 企业信息收集表 =====
+        const showSurveyModal = ref(false);
+        const surveyEnt = ref({});
+        const surveyUrl = ref('');
+        const surveySubmitted = ref(false);
+        const surveyRows = ref([]);
+        const copied = ref(false);
+        const SURVEY_LABELS = [
+            ['company_full_name','企业全称'],['contact_name','联系人'],['contact_phone','手机号'],
+            ['monthly_policies','每月保单量'],['main_insurers','主要保司'],['staff_list','人员名单'],
+            ['excel_template','台账模板'],['company_abbr','保司简称'],['policy_abbr','险种简称'],
+            ['commission','佣金计算'],['date_format','日期格式'],
+        ];
+        async function openSurveyModal(ent) {
+            surveyEnt.value = ent; copied.value = false; surveySubmitted.value = false; surveyRows.value = [];
+            try {
+                const resp = await authFetch('/api/auth/enterprises/' + ent.id + '/survey-link', { method: 'POST' });
+                const j = await resp.json();
+                if (j.code === 0) {
+                    surveyUrl.value = window.location.origin + j.data.path;
+                    if (ent.survey_data) {
+                        try {
+                            const d = JSON.parse(ent.survey_data);
+                            surveySubmitted.value = true;
+                            surveyRows.value = SURVEY_LABELS.map(([k,label]) => ({label, value: d[k]}));
+                        } catch(e){}
+                    }
+                    showSurveyModal.value = true;
+                } else { toast(j.msg || '生成链接失败'); }
+            } catch(e) { toast('网络错误'); }
+        }
+        function copySurveyLink() {
+            const ok = () => { copied.value = true; setTimeout(()=>copied.value=false, 2000); };
+            if (navigator.clipboard) navigator.clipboard.writeText(surveyUrl.value).then(ok).catch(ok);
+            else ok();
+        }
+
         function confirmDelete(ent) {
             deleteTarget.value = ent;
         }
@@ -887,6 +951,7 @@ createApp({
         async function submitForm() {
             formError.value = '';
             if (!form.name.trim()) { formError.value = '请输入企业名称'; return; }
+            if (!form.enterprise_no.trim()) { formError.value = '请输入企业编号'; return; }
             submitting.value = true;
             try {
                 const body = {
@@ -990,6 +1055,7 @@ createApp({
             showReferrerModal, referrerEnt, referrerSearch, referrerUserList, referrerSelected, referrerSaving,
             openSetReferrer, searchReferrerUsers, selectReferrer, saveReferrer,
             mobileMenuOpen,
+            showSurveyModal, surveyEnt, surveyUrl, surveySubmitted, surveyRows, copied, openSurveyModal, copySurveyLink,
         };
     }
 }).mount('#app');

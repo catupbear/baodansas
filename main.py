@@ -188,6 +188,11 @@ def create_app(config: dict) -> Flask:
     def admin_users_page():
         return render_template("admin_users.html")
 
+    # 企业信息收集表（公开页面，凭专属 token 访问，无需登录）
+    @app.route("/enterprise-survey/<token>")
+    def enterprise_survey_page(token):
+        return render_template("enterprise_survey.html")
+
     # 消息监控（需要密码）
     @app.route("/monitor")
     def monitor_page():
