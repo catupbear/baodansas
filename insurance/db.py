@@ -1996,7 +1996,8 @@ def get_enterprise_report_data(db, enterprise_id: int, date_start: str, date_end
         summary = {
             "total": total, "success": success, "abnormal": abnormal,
             "nonpolicy": nonpolicy, "failed": failed,
-            "success_rate": round(success / total * 100, 1) if total else 0.0,
+            # 成功率口径：仅"失败"算失败，需人工补充/非保单均算成功 → (总量-失败)/总量
+            "success_rate": round((total - failed) / total * 100, 1) if total else 0.0,
         }
 
         # 2. 每日趋势（按天），并补全无数据的日期为 0

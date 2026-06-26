@@ -50,6 +50,7 @@
         <div class="ico">✅</div>
         <h2>提交成功</h2>
         <p>我们已收到您的信息，将尽快为您完成配置～</p>
+        <button class="submit-btn" style="max-width:220px;margin:24px auto 0;" @click="done=false">需要修改？再次填写</button>
     </div>
 
     <template v-else>
@@ -143,7 +144,11 @@ createApp({
                 const r = await fetch(`/api/enterprise-survey/${token}`);
                 const j = await r.json();
                 if (j.code !== 0) { invalid.value = true; }
-                else { entName.value = j.data.enterprise_name || ''; if (j.data.submitted) done.value = true; }
+                else {
+                    entName.value = j.data.enterprise_name || '';
+                    // 允许重复提交：已填过则预填上次内容，可修改后再次提交
+                    if (j.data.data) Object.assign(f, j.data.data);
+                }
             } catch (e) { invalid.value = true; }
             loading.value = false;
         }

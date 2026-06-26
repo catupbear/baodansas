@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>企业经营报告 · 午虎AI保单台账</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f5f3f0; color: #1c1410; }
+        .wrap { max-width: 920px; margin: 0 auto; padding: 0 0 50px; }
+        .hero { background: linear-gradient(135deg, #ea580c, #f97316); color: #fff; padding: 30px 24px 26px; border-radius: 0 0 20px 20px; }
+        .hero h1 { font-size: 22px; font-weight: 800; }
+        .hero .period { margin-top: 8px; font-size: 14px; opacity: 0.92; }
+        .card { background: #fff; margin: 16px; border-radius: 14px; padding: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); }
+        .card h2 { font-size: 16px; font-weight: 700; margin-bottom: 16px; color: #1c1410; }
+        .card h2 .bar { display: inline-block; width: 4px; height: 16px; background: #ea580c; border-radius: 2px; margin-right: 8px; vertical-align: -2px; }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        .stat { background: #faf9f7; border-radius: 12px; padding: 16px 12px; text-align: center; }
+        .stat .v { font-size: 26px; font-weight: 800; color: #1c1410; }
+        .stat .v.ok { color: #16a34a; } .stat .v.muted { color: #9ca3af; } .stat .v.rate { color: #ea580c; }
+        .stat .l { font-size: 12px; color: #6b7280; margin-top: 5px; }
+        .chart-legend { display: flex; gap: 18px; margin-bottom: 10px; font-size: 13px; }
+        .chart-legend span { display: inline-flex; align-items: center; }
+        .chart-legend i { width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; display: inline-block; }
+        .chart-box { position: relative; }
+        canvas { width: 100%; height: 320px; display: block; }
+        .tip { display: none; position: absolute; background: rgba(30,30,30,0.88); color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 12px; pointer-events: none; white-space: nowrap; z-index: 20; box-shadow: 0 2px 8px rgba(0,0,0,0.18); line-height: 1.8; }
+        .state { text-align: center; padding: 80px 24px; color: #9ca3af; }
+        @media (max-width: 480px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="hero">
+            <h1 id="entName">企业经营报告</h1>
+            <div class="period" id="period">加载中…</div>
+        </div>
+        <div id="content" style="display:none;">
+            <div class="card">
+                <h2><span class="bar"></span>识别量汇总</h2>
+                <div class="grid">
+                    <div class="stat"><div class="v" id="s_total">-</div><div class="l">总识别量</div></div>
+                    <div class="stat"><div class="v ok" id="s_success">-</div><div class="l">成功</div></div>
+                    <div class="stat"><div class="v muted" id="s_nonpolicy">-</div><div class="l">非保单</div></div>
+                    <div class="stat"><div class="v" id="s_failed" style="color:#dc2626;">-</div><div class="l">失败</div></div>
+                    <div class="stat"><div class="v rate" id="s_rate">-</div><div class="l">成功率</div></div>
+                </div>
+                <p style="font-size:12px;color:#9ca3af;margin-top:12px;line-height:1.6;">成功率 =（总量 − 失败）÷ 总量。除「失败」外，需人工补充、非保单均计入成功（非保单数量单列供参考）。</p>
+            </div>
+            <div class="card">
+                <h2><span class="bar"></span>识别趋势</h2>
+                <div class="chart-legend">
+                    <span><i style="background:#ea580c;"></i>总量</span>
+                    <span><i style="background:#16a34a;"></i>成功</span>
+                    <span><i style="background:#dc2626;"></i>失败</span>
+                </div>
+                <div class="chart-box">
+                    <canvas id="trend"></canvas>
+                    <div id="trendTip" class="tip"></div>
+                </div>
+            </div>
+        </div>
+        <div id="loading" class="state">加载中…</div>
+        <div id="error" class="state" style="display:none;">报告加载失败，请确认已登录后重试。</div>
+    </div>
+
+<script>
+(function () {
+    var qs = new URLSearchParams(location.search);
+    var eid = qs.get('enterprise_id'), start = qs.get('date_start'), end = qs.get('date_end');
+    function token() { return localStorage.getItem('token'); }
+    function setText(id, v) { document.getElementById(id).textContent = v; }
+    function fmt(n) { return (n == null ? 0 : n).toLocaleString('en-US'); }
+
+    // 趋势图状态（供 tooltip 命中计算）
+    var _td = [], _padL = 0, _stepX = 0, _cw = 0;
+
+    function load() {
+        var url = '/api/insurance/enterprise-report?format=json&enterprise_id=' + encodeURIComponent(eid) +
+                  '&date_start=' + encodeURIComponent(start) + '&date_end=' + encodeURIComponent(end);
+        fetch(url, { headers: { 'Authorization': 'Bearer ' + token() } })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (j.code !== 0) throw new Error(j.msg || 'fail');
+                render(j.data);
+            })
+            .catch(function () {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+            });
+    }
+
+    function render(d) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('content').style.display = 'block';
+        setText('entName', (d.enterprise_name || '企业') + ' 经营报告');
+        setText('period', '报告周期：' + d.date_start + ' ~ ' + d.date_end);
+        var s = d.summary || {};
+        setText('s_total', fmt(s.total));
+        setText('s_success', fmt((s.total || 0) - (s.failed || 0)));
+        setText('s_nonpolicy', fmt(s.nonpolicy));
+        setText('s_failed', fmt(s.failed));
+        setText('s_rate', (s.success_rate != null ? s.success_rate : 0) + '%');
+        // 趋势口径：成功 = 总量 - 失败（非保单、需人工补充都算成功）
+        var daily = d.daily || [];
+        daily.forEach(function (x) { x.success = (x.total || 0) - (x.failed || 0); });
+        // 延迟一帧确保 canvas 已布局拿到正确宽度
+        requestAnimationFrame(function () { drawTrend(daily); });
+    }
+
+    function drawTrend(daily) {
+        var canvas = document.getElementById('trend');
+        if (!daily.length) return;
+        var dpr = window.devicePixelRatio || 1;
+        var W = canvas.clientWidth, H = 320;
+        canvas.width = W * dpr; canvas.height = H * dpr;
+        var ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr);
+        var pad = { top: 16, bottom: 42, left: 48, right: 18 };
+        var cw = W - pad.left - pad.right, ch = H - pad.top - pad.bottom;
+        var maxv = 1; daily.forEach(function (d) { maxv = Math.max(maxv, d.total || 0); });
+        var step = Math.ceil(maxv / 4 / 10) * 10 || 1, top = step * 4;
+        var stepX = cw / Math.max(daily.length - 1, 1);
+        _td = daily; _padL = pad.left; _stepX = stepX; _cw = W;
+        function X(i) { return pad.left + i * stepX; }
+        function Y(v) { return pad.top + ch - (v || 0) / top * ch; }
+
+        // 网格 + y 轴刻度
+        ctx.strokeStyle = '#f3f4f6'; ctx.lineWidth = 1; ctx.fillStyle = '#9ca3af'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
+        for (var i = 0; i <= 4; i++) {
+            var y = pad.top + ch - (i / 4) * ch;
+            ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+            ctx.fillText(String(step * i), pad.left - 6, y + 4);
+        }
+        // 成功面积渐变填充
+        var grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+        grad.addColorStop(0, 'rgba(22,163,74,0.18)'); grad.addColorStop(1, 'rgba(22,163,74,0.01)');
+        ctx.beginPath(); ctx.fillStyle = grad;
+        daily.forEach(function (d, i) { i ? ctx.lineTo(X(i), Y(d.success)) : ctx.moveTo(X(i), Y(d.success)); });
+        ctx.lineTo(X(daily.length - 1), pad.top + ch); ctx.lineTo(X(0), pad.top + ch); ctx.closePath(); ctx.fill();
+        // 三条线
+        function line(key, color, w, dash) {
+            ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w; ctx.setLineDash(dash || []); ctx.lineJoin = 'round';
+            daily.forEach(function (d, i) { i ? ctx.lineTo(X(i), Y(d[key])) : ctx.moveTo(X(i), Y(d[key])); });
+            ctx.stroke(); ctx.setLineDash([]);
+        }
+        line('total', '#ea580c', 2);
+        line('success', '#16a34a', 2);
+        line('failed', '#dc2626', 1.5, [4, 3]);
+        // x 轴标签
+        ctx.fillStyle = '#9ca3af'; var ls = Math.max(1, Math.floor(daily.length / 7)), last = daily.length - 1;
+        daily.forEach(function (d, i) {
+            if (i % ls === 0 || i === last) {
+                ctx.textAlign = i === 0 ? 'left' : (i === last ? 'right' : 'center');
+                ctx.fillText(d.day.slice(5), X(i), H - 8);
+            }
+        });
+        canvas.onmousemove = onMove; canvas.onmouseleave = onLeave;
+    }
+
+    function onMove(e) {
+        var canvas = document.getElementById('trend'), tip = document.getElementById('trendTip');
+        if (!_td.length) return;
+        var rect = canvas.getBoundingClientRect();
+        var idx = Math.min(Math.max(Math.round((e.clientX - rect.left - _padL) / _stepX), 0), _td.length - 1);
+        var d = _td[idx]; if (!d) return;
+        tip.innerHTML = '<div style="margin-bottom:2px;font-weight:600;color:#e5e7eb">' + d.day + '</div>'
+            + '<div><span style="color:#ea580c">●</span> 总量：<b>' + (d.total || 0) + '</b></div>'
+            + '<div><span style="color:#16a34a">●</span> 成功：<b>' + (d.success || 0) + '</b></div>'
+            + '<div><span style="color:#dc2626">●</span> 失败：<b>' + (d.failed || 0) + '</b></div>';
+        var tipW = 140, left = _padL + idx * _stepX + 14;
+        if (left + tipW > _cw) left = _padL + idx * _stepX - tipW - 6;
+        tip.style.left = left + 'px'; tip.style.top = '8px'; tip.style.display = 'block';
+    }
+    function onLeave() { document.getElementById('trendTip').style.display = 'none'; }
+
+    window.addEventListener('resize', function () { if (_td.length) drawTrend(_td); });
+
+    if (!eid || !start || !end) {
+        document.getElementById('loading').textContent = '缺少参数';
+    } else {
+        load();
+    }
+})();
+</script>
+</body>
+</html>

@@ -114,6 +114,17 @@
             .modal-mask { align-items: flex-start; padding-top: 20px; }
             .modal-content { width: min(420px, calc(100vw - 32px)) !important; }
         }
+        /* 操作列按钮统一美化：浅底 + 主题色，hover 微浮起 */
+        .op-btn { display: inline-flex; align-items: center; padding: 5px 11px; font-size: 12px; font-weight: 500; border-radius: 8px; border: 1px solid transparent; cursor: pointer; transition: all 0.15s ease; line-height: 1; white-space: nowrap; background: #f3f4f6; color: #4b5563; }
+        .op-btn:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.10); }
+        .op-btn.blue { background: #eff6ff; color: #2563eb; }
+        .op-btn.orange { background: #fff7ed; color: #ea580c; }
+        .op-btn.green { background: #ecfdf5; color: #059669; }
+        .op-btn.amber { background: #fffbeb; color: #d97706; }
+        .op-btn.purple { background: #f5f3ff; color: #7c3aed; }
+        .op-btn.red { background: #fef2f2; color: #dc2626; }
+        .op-btn.gray { background: #f3f4f6; color: #6b7280; }
+        .op-btn.on { box-shadow: inset 0 0 0 1.5px currentColor; font-weight: 700; }
     </style>
 </head>
 <body class="min-h-screen">
@@ -316,21 +327,14 @@
 
                                 <!-- 操作 -->
                                 <td>
-                                    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;row-gap:6px;max-width:200px;">
-                                        <button @click="openEditModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;">编辑</button>
-                                        <button @click="openReportModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#2563eb;border-color:#bfdbfe;">导出报告</button>
-                                        <button @click="openPlanModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#c2410c;border-color:#fed7aa;">开通</button>
-                                        <button @click="toggleEnabled(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;"
-                                            :style="ent.enabled ? 'color:#d97706;border-color:#fde68a;' : 'color:#059669;border-color:#6ee7b7;'">
-                                            {{ ent.enabled ? '禁用' : '启用' }}
-                                        </button>
-                                        <button @click="toggleMerge(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;"
-                                            :style="ent.merge_by_plate ? 'color:#ea580c;border-color:#fed7aa;font-weight:600;' : 'color:#9ca3af;border-color:#e5e7eb;'"
-                                            title="开启后该企业识别记录默认按车牌合并显示">
-                                            车牌合并{{ ent.merge_by_plate ? '✓' : '' }}
-                                        </button>
-                                        <button @click="openSurveyModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#7c3aed;border-color:#ddd6fe;">信息收集</button>
-                                        <button @click="confirmDelete(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#dc2626;border-color:#fca5a5;">删除</button>
+                                    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;row-gap:6px;max-width:210px;">
+                                        <button @click="openEditModal(ent)" class="op-btn gray">编辑</button>
+                                        <button @click="openReportModal(ent)" class="op-btn blue">导出报告</button>
+                                        <button @click="openPlanModal(ent)" class="op-btn orange">开通</button>
+                                        <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled ? 'amber' : 'green']">{{ ent.enabled ? '禁用' : '启用' }}</button>
+                                        <button @click="toggleMerge(ent)" :class="['op-btn', ent.merge_by_plate ? 'orange on' : 'gray']" title="开启后该企业识别记录默认按车牌合并显示">车牌合并{{ ent.merge_by_plate ? '✓' : '' }}</button>
+                                        <button @click="openSurveyModal(ent)" class="op-btn purple">信息收集</button>
+                                        <button @click="confirmDelete(ent)" class="op-btn red">删除</button>
                                     </div>
                                 </td>
                             </tr>
@@ -511,7 +515,7 @@
                     <div style="font-size:13px;color:#555;margin-bottom:8px;">选择时间范围</div>
                     <div style="display:flex;gap:8px;margin-bottom:14px;">
                         <button v-for="opt in [{k:'7',l:'近一周'},{k:'30',l:'近一月'},{k:'custom',l:'自定义'}]" :key="opt.k"
-                            @click="reportRange=opt.k"
+                            @click="reportRange=opt.k; reportLink=''"
                             :style="reportRange===opt.k ? 'flex:1;padding:8px;font-size:13px;background:#ea580c;color:#fff;border:1px solid #ea580c;border-radius:8px;cursor:pointer;' : 'flex:1;padding:8px;font-size:13px;background:#fff;color:#555;border:1px solid #e7e0d8;border-radius:8px;cursor:pointer;'">
                             {{ opt.l }}
                         </button>
@@ -521,12 +525,18 @@
                         <span style="color:#999;">~</span>
                         <input type="date" v-model="reportEnd" class="form-input" style="flex:1;">
                     </div>
-                    <p style="font-size:12px;color:#999;margin-bottom:14px;">报告含：识别量汇总、每日趋势(折线图)、保司/险种分布、上传人排名。</p>
+                    <p style="font-size:12px;color:#999;margin-bottom:14px;">报告含：识别量汇总、每日识别趋势（折线图）。</p>
+                    <div v-if="reportLink" style="margin-bottom:14px;">
+                        <div style="font-size:13px;color:#16a34a;font-weight:600;margin-bottom:6px;">✅ 报告链接已生成</div>
+                        <div style="display:flex;gap:8px;">
+                            <input :value="reportLink" readonly class="form-input" style="flex:1;font-size:12px;" @focus="$event.target.select()">
+                            <button @click="copyReportLink" class="btn btn-primary" style="white-space:nowrap;">{{ reportCopied ? '已复制 ✓' : '复制' }}</button>
+                        </div>
+                        <a :href="reportLink" target="_blank" style="display:inline-block;margin-top:8px;font-size:13px;color:#2563eb;">→ 直接打开查看</a>
+                    </div>
                     <div class="flex justify-end gap-3 mt-2">
-                        <button @click="showReportModal=false" class="btn btn-outline">取消</button>
-                        <button @click="doExportReport" :disabled="reportSubmitting" class="btn btn-primary" style="padding:8px 20px;">
-                            {{ reportSubmitting ? '生成中...' : '导出Excel' }}
-                        </button>
+                        <button @click="showReportModal=false" class="btn btn-outline">关闭</button>
+                        <button @click="doExportReport" class="btn btn-primary" style="padding:8px 20px;">生成报告链接</button>
                     </div>
                 </div>
             </div>
@@ -669,11 +679,14 @@ createApp({
         const reportStart = ref('');
         const reportEnd = ref('');
         const reportSubmitting = ref(false);
+        const reportLink = ref('');
+        const reportCopied = ref(false);
         function openReportModal(ent) {
             reportTarget.value = ent;
             reportRange.value = '7';
             reportStart.value = '';
             reportEnd.value = '';
+            reportLink.value = '';
             showReportModal.value = true;
         }
         function _fmtDate(d) {
@@ -695,29 +708,14 @@ createApp({
                 if (!start || !end) { showToast('请选择起止日期', 'error'); return; }
                 if (start > end) { showToast('起始日期不能晚于结束日期', 'error'); return; }
             }
-            reportSubmitting.value = true;
-            try {
-                const url = `/api/insurance/enterprise-report?enterprise_id=${ent.id}&date_start=${start}&date_end=${end}&enterprise_name=${encodeURIComponent(ent.name || '')}`;
-                const resp = await authFetch(url);
-                if (!resp.ok) {
-                    let msg = '导出失败';
-                    try { const j = await resp.json(); msg = j.msg || msg; } catch (e) {}
-                    showToast(msg, 'error');
-                    return;
-                }
-                const blob = await resp.blob();
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = `${ent.name || '企业'}_经营报告_${start}_${end}.xlsx`;
-                document.body.appendChild(a); a.click(); a.remove();
-                URL.revokeObjectURL(a.href);
-                showReportModal.value = false;
-                showToast('报告已导出');
-            } catch (e) {
-                showToast('网络错误', 'error');
-            } finally {
-                reportSubmitting.value = false;
-            }
+            // 生成网页版报告链接，显示在弹窗里供复制（不直接打开/下载）
+            reportLink.value = `${window.location.origin}/enterprise-report-view?enterprise_id=${ent.id}&date_start=${start}&date_end=${end}&enterprise_name=${encodeURIComponent(ent.name || '')}`;
+            reportCopied.value = false;
+        }
+        function copyReportLink() {
+            const ok = () => { reportCopied.value = true; setTimeout(()=>reportCopied.value=false, 2000); };
+            if (navigator.clipboard) navigator.clipboard.writeText(reportLink.value).then(ok).catch(ok);
+            else ok();
         }
 
         // 设置推荐人
@@ -1050,6 +1048,7 @@ createApp({
             toggleEnabled, toggleMerge, logout, toast, formatTime, gotoMembers, gotoMonitor,
             deleteTarget, deleting, confirmDelete, doDelete,
             showReportModal, reportTarget, reportRange, reportStart, reportEnd, reportSubmitting,
+            reportLink, reportCopied, copyReportLink,
             openReportModal, doExportReport,
             planDaysLeft, planExpiryStr, nextPlanExpiryStr,
             showReferrerModal, referrerEnt, referrerSearch, referrerUserList, referrerSelected, referrerSaving,

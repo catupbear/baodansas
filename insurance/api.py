@@ -3743,6 +3743,23 @@ def export_enterprise_report():
         from insurance.db import get_enterprise_report_data
         data = get_enterprise_report_data(_db, int(enterprise_id), date_start, date_end)
 
+        # 网页报告：format=json 时只返回 汇总 + 每日趋势（不含保司/险种/上传排名），供报告页面渲染
+        if request.args.get("format") == "json":
+            _nm = ent_name
+            if not _nm:
+                try:
+                    from auth.db import get_enterprise_by_id
+                    _ent = get_enterprise_by_id(_db, int(enterprise_id))
+                    _nm = (_ent.get("name") if _ent else "") or f"企业{enterprise_id}"
+                except Exception:
+                    _nm = f"企业{enterprise_id}"
+            return jsonify({"code": 0, "data": {
+                "enterprise_name": _nm,
+                "date_start": date_start, "date_end": date_end,
+                "summary": data.get("summary", {}),
+                "daily": data.get("daily", []),
+            }})
+
         if not ent_name:
             try:
                 from auth.db import get_enterprise_by_id

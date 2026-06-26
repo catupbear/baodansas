@@ -193,6 +193,11 @@ def create_app(config: dict) -> Flask:
     def enterprise_survey_page(token):
         return render_template("enterprise_survey.html")
 
+    # 企业经营报告（网页版，超管在后台打开，前端凭 token 拉数据）
+    @app.route("/enterprise-report-view")
+    def enterprise_report_view_page():
+        return render_template("enterprise_report.html")
+
     # 消息监控（需要密码）
     @app.route("/monitor")
     def monitor_page():

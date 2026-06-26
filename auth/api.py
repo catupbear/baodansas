@@ -537,9 +537,17 @@ def api_get_survey(token):
     ent = get_enterprise_by_survey_token(_db, token)
     if not ent:
         return jsonify({"code": 404, "msg": "链接无效或已失效"}), 404
+    import json as _json
+    prev = {}
+    if (ent.get("survey_data") or "").strip():
+        try:
+            prev = _json.loads(ent["survey_data"])
+        except Exception:
+            prev = {}
     return jsonify({"code": 0, "data": {
         "enterprise_name": ent.get("name", ""),
-        "submitted": bool((ent.get("survey_data") or "").strip()),
+        "submitted": bool(prev),
+        "data": prev,
     }})
 
 
