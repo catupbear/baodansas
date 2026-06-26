@@ -94,7 +94,13 @@ def maybe_notify_new_company(db, parsed_fields, doc_category, company_short, fil
         return
     try:
         cf = (parsed_fields.get("保险公司") or parsed_fields.get("保司公司名称") or "").strip()
-        key = cf or "未识别保司"
+        if cf:
+            key = cf
+        else:
+            # 全称也缺失时，用保单号前缀区分不同保司：否则所有归不出全称的保单
+            # 都退化成同一个"未识别保司" key，第一份提醒后其余全被去重漏报。
+            _pno = (parsed_fields.get("保单号") or "").strip()
+            key = ("未识别保司#" + _pno[:9]) if _pno else "未识别保司"
         notified = get_insurance_config(db, "notified_new_companies", [])
         if not isinstance(notified, list):
             notified = []

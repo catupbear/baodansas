@@ -3144,6 +3144,7 @@ def get_monitored_rooms():
         eid = _get_enterprise_id_filter()  # 超管 None=看全部；其他角色=本企业 id
         configs = list_monitor_configs(_db)
         rooms, users = {}, {}
+        room_ent = {}  # roomid -> 所属企业 id（供超管按企业筛选群下拉）
         for cfg in configs:
             if not cfg.get("enabled"):
                 continue
@@ -3155,6 +3156,7 @@ def get_monitored_rooms():
                 rname = room.get("name") if isinstance(room, dict) else None
                 if rid:
                     rooms[rid] = rname or rooms.get(rid) or rid
+                    room_ent.setdefault(rid, cfg.get("enterprise_id"))
             for u in (cfg.get("users") or []):
                 uid = u.get("id") if isinstance(u, dict) else u
                 uname = u.get("name") if isinstance(u, dict) else None
@@ -3178,7 +3180,7 @@ def get_monitored_rooms():
             for uid in users:
                 if users[uid] == uid and nm.get(uid):
                     users[uid] = nm[uid]
-        room_list = sorted([{"id": k, "name": v} for k, v in rooms.items()], key=lambda x: x["name"])
+        room_list = sorted([{"id": k, "name": v, "enterprise_id": room_ent.get(k)} for k, v in rooms.items()], key=lambda x: x["name"])
         user_list = sorted([{"id": k, "name": v} for k, v in users.items()], key=lambda x: x["name"])
         return jsonify({"code": 0, "data": {"rooms": room_list, "users": user_list}})
     except Exception:

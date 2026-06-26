@@ -1648,7 +1648,7 @@
                             class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer"
                             @change="loadRecords()">
                         <option value="">全部群</option>
-                        <option v-for="room in monitorRooms" :key="room.id" :value="room.id">
+                        <option v-for="room in filteredMonitorRooms" :key="room.id" :value="room.id">
                             {{ room.name }}
                         </option>
                     </select>
@@ -1713,7 +1713,7 @@
                 <!-- 企业筛选（仅超管可见） -->
                 <div v-if="isSuperAdmin" class="flex items-center gap-1.5">
                     <span class="text-xs text-gray-500 font-medium">企业:</span>
-                    <select v-model="recordEnterpriseFilter" @change="loadRecords()"
+                    <select v-model="recordEnterpriseFilter" @change="onEnterpriseChange()"
                             class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer">
                         <option value="">全部</option>
                         <option v-for="e in recordEnterpriseList" :key="e.id" :value="e.id">{{ e.name }}</option>
@@ -6709,6 +6709,21 @@ const _app = createApp({
         const roomList = ref([]);  // 群列表（用于筛选下拉）
         const monitorRooms = ref([]);  // 监控群列表
         const monitorUsers = ref([]);  // 监控用户列表
+        // 群下拉按当前企业筛选：选了企业则只显示该企业监控的群（超管场景）
+        const filteredMonitorRooms = computed(() => {
+            const ef = recordEnterpriseFilter.value;
+            if (!ef) return monitorRooms.value;
+            return monitorRooms.value.filter(r => String(r.enterprise_id) === String(ef));
+        });
+        // 切换企业时：若当前选中的群不属于该企业则清空群筛选，再加载
+        function onEnterpriseChange() {
+            const ef = recordEnterpriseFilter.value;
+            if (ef && recordFilter.roomid) {
+                const r = monitorRooms.value.find(x => x.id === recordFilter.roomid);
+                if (!r || String(r.enterprise_id) !== String(ef)) recordFilter.roomid = '';
+            }
+            loadRecords();
+        }
         const recordFilter = reactive({
             dedup: true,      // 按保单号去重，默认开启
             source_type: '',  // '': 全部, 'room': 群聊, 'user': 私聊, 'manual': 手动上传
@@ -6878,6 +6893,7 @@ const _app = createApp({
             try {
                 // 从识别记录统计中获取当前账号/企业关联的群（不带日期筛选）
                 const roomMap = {};  // id → name
+                const roomEntMap = {};  // id → enterprise_id（供按企业过滤群下拉）
                 const userMap = {};
                 try {
                     // 群下拉只列「正在监控的群」（来自监控配置），不再列历史识别过的旧群/重名群
@@ -6885,7 +6901,7 @@ const _app = createApp({
                     const monJson = await monResp.json();
                     const monData = monJson.data || monJson;
                     for (const r of (monData.rooms || [])) {
-                        if (r.id) roomMap[r.id] = r.name || r.id;
+                        if (r.id) { roomMap[r.id] = r.name || r.id; roomEntMap[r.id] = r.enterprise_id; }
                     }
                     for (const u of (monData.users || [])) {
                         if (u.id) userMap[u.id] = u.name || u.id;
@@ -6908,7 +6924,7 @@ const _app = createApp({
                     } catch (e) {}
                 }
 
-                monitorRooms.value = Object.entries(roomMap).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+                monitorRooms.value = Object.entries(roomMap).map(([id, name]) => ({ id, name, enterprise_id: roomEntMap[id] })).sort((a, b) => a.name.localeCompare(b.name));
             } catch (e) {
                 console.error('加载筛选列表失败', e);
                 monitorRooms.value = [];
@@ -7465,7 +7481,7 @@ const _app = createApp({
             // 识别记录
             records, filteredRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
             isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask, collapseDownloadTask, expandDownloadTask, retryDownloadTask, batchFailModal, batchFailRetry, batchFailUpload,
-            roomList, monitorRooms, monitorUsers,
+            roomList, monitorRooms, filteredMonitorRooms, onEnterpriseChange, monitorUsers,
             recordFilter, dateTypeSupportsTime, openNativePicker, statusLabel, onSourceTypeChange, clearAllFilters, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
             recordEnterpriseFilter, recordEnterpriseList,
             recordPagination, visiblePages, recordStats,
