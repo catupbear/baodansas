@@ -197,6 +197,7 @@
                     <table class="data-table">
                         <thead>
                             <tr>
+                                <th style="min-width:55px;text-align:center;">企业编号</th>
                                 <th style="min-width:120px;">企业名称</th>
                                 <th style="min-width:95px;">套餐</th>
                                 <th style="min-width:95px;">套餐到期</th>
@@ -211,6 +212,8 @@
                         </thead>
                         <tbody>
                             <tr v-for="ent in filteredEnterprises" :key="ent.id">
+                                <!-- 企业编号 -->
+                                <td style="text-align:center;color:#9ca3af;font-weight:600;">{{ ent.enterprise_no || '-' }}</td>
                                 <!-- 企业名称 -->
                                 <td style="font-weight:600;color:#1c1410;">{{ ent.name }}</td>
 
@@ -345,6 +348,10 @@
                         <div>
                             <label class="block text-sm text-gray-500 mb-1">企业名称 <span class="text-red-500">*</span></label>
                             <input v-model="form.name" type="text" class="form-input" placeholder="请输入企业名称">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-1">企业编号</label>
+                            <input v-model="form.enterprise_no" type="text" class="form-input" placeholder="请输入企业编号（可选）">
                         </div>
                         <div>
                             <label class="block text-sm text-gray-500 mb-1">联系人</label>
@@ -586,7 +593,7 @@ createApp({
         const showModal = ref(false);
         const isEdit = ref(false);
         const editId = ref(null);
-        const form = reactive({ name: '', contact_person: '', contact_phone: '' });
+        const form = reactive({ name: '', enterprise_no: '', contact_person: '', contact_phone: '' });
         const formError = ref('');
         const submitting = ref(false);
 
@@ -782,6 +789,7 @@ createApp({
             isEdit.value = false;
             editId.value = null;
             form.name = '';
+            form.enterprise_no = '';
             form.contact_person = '';
             form.contact_phone = '';
             formError.value = '';
@@ -792,6 +800,7 @@ createApp({
             isEdit.value = true;
             editId.value = ent.id;
             form.name = ent.name || '';
+            form.enterprise_no = ent.enterprise_no || '';
             form.contact_person = ent.contact_person || '';
             form.contact_phone = ent.contact_phone || '';
             formError.value = '';
@@ -882,6 +891,7 @@ createApp({
             try {
                 const body = {
                     name: form.name.trim(),
+                    enterprise_no: form.enterprise_no.trim(),
                     contact_person: form.contact_person.trim(),
                     contact_phone: form.contact_phone.trim(),
                 };

@@ -223,6 +223,7 @@ def init_enterprises_table(db):
             CREATE TABLE IF NOT EXISTS enterprises (
                 id             INT PRIMARY KEY AUTO_INCREMENT,
                 name           VARCHAR(128) NOT NULL COMMENT '企业名称',
+                enterprise_no  VARCHAR(50) DEFAULT '' COMMENT '企业编号（可编辑业务编号）',
                 contact_person VARCHAR(64) DEFAULT '' COMMENT '联系人',
                 contact_phone  VARCHAR(64) DEFAULT '' COMMENT '联系电话',
                 enabled        TINYINT NOT NULL DEFAULT 1,
@@ -298,7 +299,7 @@ def update_enterprise(db, enterprise_id: int, data: dict):
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        allowed = {"name", "contact_person", "contact_phone", "enabled", "merge_by_plate", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at", "referrer_id"}
+        allowed = {"name", "enterprise_no", "contact_person", "contact_phone", "enabled", "merge_by_plate", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at", "referrer_id"}
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
             return
@@ -684,6 +685,7 @@ def init_enterprise_plan_column(db):
             ("next_plan_months", "INT DEFAULT NULL COMMENT '下一个套餐时长（月）'"),
             ("next_plan_start_at", "DATETIME DEFAULT NULL COMMENT '下一个套餐开始时间'"),
             ("referrer_id", "INT DEFAULT NULL COMMENT '推荐人用户ID'"),
+            ("enterprise_no", "VARCHAR(50) DEFAULT '' COMMENT '企业编号（可编辑业务编号）'"),
         ]:
             try:
                 cursor.execute(f"ALTER TABLE enterprises ADD COLUMN {col} {definition}")

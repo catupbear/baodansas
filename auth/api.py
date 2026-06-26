@@ -490,6 +490,8 @@ def api_create_enterprise():
 
     try:
         eid = create_enterprise(_db, name, contact_person, contact_phone)
+        if data.get("enterprise_no"):
+            update_enterprise(_db, eid, {"enterprise_no": data.get("enterprise_no", "").strip()})
         # 默认不自动开通套餐：新企业为"未开通"状态，由管理员手动「开通套餐」配置。
         # 仅当显式传入 plan_type 时才开通（兼容将来在创建表单里直接选套餐的场景）。
         if data.get("plan_type"):

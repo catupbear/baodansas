@@ -1314,7 +1314,9 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
         addr = re.sub(r'\s*(?:电子保单|保险人|公司)?(?:签章|盖章|公章).*$', '', addr)
         addr = re.sub(r'\s*\S*(?:电话|热线)[：:]\s*\S+.*$', '', addr)
         addr = re.sub(r'\s*(?:全国统一|客服|投诉|邮政编码|签单日期|公司主页|公司网址)[^\n]*$', '', addr)
-        addr = re.sub(r'\s*[A-Z]{3,}\s*$', '', addr)
+        # 删尾部独立英文水印（前面是中文/空格），但保留紧跟数字或连字符后的字母——
+        # 那是地址单元号的一部分（如"A座1701-BCDEF"），不是水印
+        addr = re.sub(r'(?<=[一-龥\s])[A-Z]{3,}\s*$', '', addr)
         addr = addr.strip().rstrip('、，,')
         if addr and len(addr) >= 4:
             fields["保司地址"] = addr
