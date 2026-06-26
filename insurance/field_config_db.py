@@ -59,6 +59,16 @@ DEFAULT_COLUMNS = [
     {"key": "保司（带地区）", "visible": True, "order": 26, "display_name": "保司（带地区）"},
     {"key": "交强到期时间", "visible": False, "order": 27, "display_name": "交强到期时间"},
     {"key": "收费确认时间", "visible": False, "order": 28, "display_name": "收费确认时间"},
+    {"key": "厂牌车型", "visible": False, "order": 29, "display_name": "厂牌车型"},
+    {"key": "司机乘客", "visible": False, "order": 30, "display_name": "司机乘客"},
+    {"key": "车辆性质", "visible": False, "order": 31, "display_name": "车辆性质"},
+    {"key": "发动机号", "visible": False, "order": 32, "display_name": "发动机号"},
+    {"key": "使用性质", "visible": False, "order": 33, "display_name": "使用性质"},
+    {"key": "机动车种类", "visible": False, "order": 34, "display_name": "机动车种类"},
+    {"key": "核定载质量", "visible": False, "order": 35, "display_name": "核定载质量"},
+    {"key": "初次登记日期", "visible": False, "order": 36, "display_name": "初次登记日期"},
+    {"key": "不含税保费", "visible": False, "order": 37, "display_name": "不含税保费"},
+    {"key": "增值税额", "visible": False, "order": 38, "display_name": "增值税额"},
 ]
 
 # 记录级字段的 key 集合（用于前端区分渲染方式）

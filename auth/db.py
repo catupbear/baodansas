@@ -226,6 +226,7 @@ def init_enterprises_table(db):
                 contact_person VARCHAR(64) DEFAULT '' COMMENT '联系人',
                 contact_phone  VARCHAR(64) DEFAULT '' COMMENT '联系电话',
                 enabled        TINYINT NOT NULL DEFAULT 1,
+                merge_by_plate TINYINT NOT NULL DEFAULT 0 COMMENT '识别记录默认按车牌合并显示',
                 created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX idx_enterprises_name (name)
@@ -297,7 +298,7 @@ def update_enterprise(db, enterprise_id: int, data: dict):
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        allowed = {"name", "contact_person", "contact_phone", "enabled", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at", "referrer_id"}
+        allowed = {"name", "contact_person", "contact_phone", "enabled", "merge_by_plate", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at", "referrer_id"}
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
             return

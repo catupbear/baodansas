@@ -853,8 +853,16 @@ def list_records():
         except Exception:
             logger.debug("列表内联统计计算失败", exc_info=True)
 
-        # 鑫辉祥贸(企业9)台账默认按车牌合并显示（前端据此自动开启合并视图）
-        result["default_merge_by_plate"] = (effective_enterprise_id == 9)
+        # 企业可在「服务企业管理」里开启「默认按车牌合并显示」，前端据此自动开启合并视图
+        _merge_default = False
+        if effective_enterprise_id:
+            try:
+                from auth.db import get_enterprise_by_id
+                _ent = get_enterprise_by_id(_db, effective_enterprise_id)
+                _merge_default = bool(_ent and _ent.get("merge_by_plate"))
+            except Exception:
+                pass
+        result["default_merge_by_plate"] = _merge_default
 
         return jsonify({"code": 0, "data": result})
     except Exception as e:

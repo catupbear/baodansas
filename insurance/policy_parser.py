@@ -2784,10 +2784,42 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
                 fields["厂牌型号"] = val
                 break
 
-    # 核定载客（兼容"核定载客X人"与驾乘险常用的"核定座位数:5"）
-    m = re.search(r"核\s*定\s*(?:载\s*客|座\s*位\s*数)[：:\s]*(\d+)\s*人?", text)
+    # 太平洋交强险表格 OCR 错位：厂牌型号的值被拆到"厂牌型号"标签的上一行(行首"机")和
+    # 下一行(行首"动")，中间夹着标签行；行首"机""动"是左栏竖排"机动车"串入。拼接上下行即完整厂牌型号。
+    if "厂牌型号" not in fields:
+        _plines = text.split('\n')
+        for _i in range(1, len(_plines) - 1):
+            if re.search(r'厂\s*牌\s*型\s*号', _plines[_i]):
+                _m1 = re.match(r'^机\s+(.+)$', _plines[_i - 1].strip())
+                _m2 = re.match(r'^动\s+(.+)$', _plines[_i + 1].strip())
+                if _m1 and _m2:
+                    _val = (_m1.group(1) + _m2.group(1)).replace(' ', '')
+                    if len(_val) >= 2:
+                        fields["厂牌型号"] = _val
+                        break
+
+    # 厂牌型号值含内部空格（北部湾"厂牌型号：东 风日产DFL7151MAK1轿车"，OCR 把双字品牌拆开）：
+    # 取到下一字段标签前、去掉内部空格
+    _cp = fields.get("厂牌型号", "")
+    if len(re.sub(r'[^一-鿿A-Za-z0-9]', '', _cp)) < 3:
+        _mcp = re.search(r"厂\s*牌\s*型\s*号[：:]\s*([一-鿿A-Za-z0-9][一-鿿A-Za-z0-9.\- ]{2,30}?)\s*(?:绝对免赔|车辆|发动机|核定|VIN|车架|使用性质)", text)
+        if _mcp:
+            _v = _mcp.group(1).replace(' ', '')
+            if len(_v) >= 3:
+                fields["厂牌型号"] = _v
+
+    # 核定载客：兼容多种写法——
+    #   通用"核定载客 5 人"；阳光/申能"核定载客数(人)：5人"；安诚/永诚"核定载客/载质量：23人/9500千克"。
+    #   载客/座位数后允许夹"数 (人) /载质量 ："等（限8字符），且要求紧跟"人"，
+    #   以免误吃后面"核定载质量X千克"的数字。
+    m = re.search(r"核\s*定\s*(?:载\s*客|座\s*位\s*数)[^\d]{0,8}?(\d+)\s*人", text)
     if m:
         fields["核定载客"] = m.group(1) + "人"
+    # 无"人"兜底：核定载客/座位数后直接跟数字（太平洋驾乘"核定座位数:5"、人民财产"核定载客 7"）
+    if "核定载客" not in fields:
+        m = re.search(r"核\s*定\s*(?:载\s*客|座\s*位\s*数)[：:\s]*(\d+)", text)
+        if m:
+            fields["核定载客"] = m.group(1) + "人"
     # 兜底：驾乘险"核定载客人数/被保险人数"表格（国寿等），数字常被 OCR 排到标签
     # 中间或"行驶区域"行（如"核定载客人数\n行驶区域 5\n/被保险人数"）
     if "核定载客" not in fields:
@@ -2821,10 +2853,16 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
         val = re.sub(r'1', '', val)
         fields["机动车种类"] = val
 
-    # 初次登记日期
-    m = re.search(r"初[次登]*登[记日]*[期：:\s]*([\d\-/年月日]+)", text)
+    # 初次登记日期：兼容"初次登记日期"/"登记日期"/"登 记 日 期"（字间空格），
+    # 日期支持"2011年11月15日"与"2015-02-13"两种格式
+    m = re.search(r"(?:初\s*次)?\s*登\s*记\s*日\s*期[：:\s]*(\d{4}\s*[年\-/.]\s*\d{1,2}\s*[月\-/.]\s*\d{1,2}\s*日?)", text)
     if m:
-        fields["初次登记日期"] = m.group(1)
+        fields["初次登记日期"] = re.sub(r"\s+", "", m.group(1))
+    # 兜底：旧格式（覆盖新正则日期模式没命中的写法，如阳光等），保证不回退
+    if "初次登记日期" not in fields:
+        m = re.search(r"初[次登]*登[记日]*[期：:\s]*([\d\-/年月日]{6,})", text)
+        if m:
+            fields["初次登记日期"] = m.group(1)
 
     # 证件号码
     m = re.search(r"证件号码[：:\s]*([A-Z0-9]+)", text)
