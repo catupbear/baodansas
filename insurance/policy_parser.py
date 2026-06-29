@@ -1090,7 +1090,8 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
     # 公司地址：深圳市南山区南山街道东滨路南荔源商务大厦A栋1301-1306、1401
     # 排除"总公司地址"（太平洋等保单底部总部地址，非签单分公司地址）
     if "保司地址" not in fields:
-        for src in [text, text_merged]:
+        # text_merged 优先：它把跨行/字间空格的中文合并（"管理中\n心"→"管理中心"），地址更完整不易截断
+        for src in [text_merged, text]:
             # 地址行尾常跟"邮政编码:xxx"（如平安同行），在邮政编码处截断保留前面地址
             m = re.search(r'(?<!总)公司地址[：: 　\t]+(.+?)(?:\s*邮政编码|\s+公司网址|\s{2,}|\n|$)', src)
             if m:
