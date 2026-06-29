@@ -2783,7 +2783,7 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
     for p in [
         # 优先取整段（厂牌型号 → 下一个字段标签之前），修复值含内部空格被 \S+ 截断的情况：
         # 太平洋"厂牌型号 奔驰BENZ G500越野车 核定载客"，旧规则在空格处截成"奔驰BENZ"。
-        r"厂\s*牌\s*型\s*号[：:\s]+([^\n]{2,40}?)\s*(?:核\s*定\s*载|发\s*动\s*机|排\s*量|使用性质|机动车种类|识别代码|车架号|绝对免赔|VIN)",
+        r"厂\s*牌\s*型\s*号[：:\s]+([^\n]{2,40}?)\s*(?:核\s*定\s*载|发\s*动\s*机|排\s*量|使用性质|机动车种类|识别代码|车架号|绝对免赔|初?次?登\s*记\s*日\s*期|VIN)",
         # 厂牌型号值独占一行、后面直接换行（雷克萨斯LEXUS ES200轿车 / 保时捷PORSCHE TAYCAN纯电动轿车）
         r"厂\s*牌\s*型\s*号[：:\s]+([^\n]{2,40}?)\s*(?:\n|$)",
         r"厂\s*牌\s*型\s*号[：:\s]*(\S+)",
@@ -2795,7 +2795,7 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
             # 串行误取校验：竖排版式 OCR 串行时，"厂牌型号"标签后紧跟的是下一个字段标签
             #（如"核定载客"），被 \S+ 当成值。合法厂牌型号不会以这些标签词开头，命中则不采用，
             # 留给下方的错位兜底重组，或宁可留空也不要错值。
-            _invalid = re.match(r'(核定|载客|载质量|座位|使用性质|营业性质|营业|发动机|识别代码|车架号|机动车种类|号牌|车牌|排\s*量|功率|登记日期|野车|VIN)', val)
+            _invalid = re.match(r'(核定|载客|载质量|座位|使用性质|营业性质|营业|发动机|识别代码|车架号|机动车种类|号牌|车牌|排\s*量|功率|初\s*次|登\s*记\s*日\s*期|野车|VIN)', val)
             if len(val) >= 2 and not _invalid:
                 fields["厂牌型号"] = val
                 break
@@ -2821,10 +2821,11 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
         for _i in range(1, len(_pl) - 1):
             if re.search(r'厂\s*牌\s*型\s*号', _pl[_i]):
                 _after = re.sub(r'.*厂\s*牌\s*型\s*号[：:\s]*', '', _pl[_i]).strip()
-                if re.match(r'(登记日期|核\s*定|发\s*动\s*机|排\s*量|使用性质|机动车种类)', _after):
+                if re.match(r'(初?次?登\s*记\s*日\s*期|核\s*定|发\s*动\s*机|排\s*量|使用性质|机动车种类)', _after):
                     _prev = _pl[_i - 1].strip().replace(' ', '')
                     _next = _pl[_i + 1].strip().replace(' ', '')
-                    if (re.match(r'^[一-鿿A-Za-z]', _prev) and len(_prev) >= 5 and len(_next) <= 2
+                    # 上一行须含字母数字型号代码（区分泰康/人民财产的完整前半 vs 平安那种纯中文残段）
+                    if (re.search(r'[A-Za-z0-9]{4,}', _prev) and len(_prev) >= 6 and len(_next) <= 6
                             and not re.match(r'(车牌|号牌|发动机|车架|被保险|地址|核定|投保|保险|机动车)', _prev)):
                         fields["厂牌型号"] = _prev + _next
                         break
@@ -2838,6 +2839,19 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
             _v = _mcp.group(1).replace(' ', '')
             if len(_v) >= 3:
                 fields["厂牌型号"] = _v
+
+    # 厂牌型号取到纯中文残段（OCR 把"品牌+型号代码"拆到了上一行，如人民财产新能源车
+    # "腾势QCJ6520MT6HEV2\n…厂牌型号 插电式混合动力多用 初次登记日期"）：前置上一行的品牌代码。
+    _cp2 = fields.get("厂牌型号", "")
+    if _cp2 and not re.search(r'[A-Za-z0-9]', _cp2) and len(_cp2) <= 12:
+        _pl2 = text.split('\n')
+        for _j in range(1, len(_pl2)):
+            if re.search(r'厂\s*牌\s*型\s*号', _pl2[_j]):
+                _pv = _pl2[_j - 1].strip().replace(' ', '')
+                if (re.search(r'[A-Za-z0-9]{4,}', _pv) and 4 <= len(_pv) <= 25
+                        and not re.match(r'(车牌|号牌|发动机|车架|被保险|地址|核定|投保|保险|机动车|车主|公司)', _pv)):
+                    fields["厂牌型号"] = _pv + _cp2
+                break
 
     # 核定载客：兼容多种写法——
     #   通用"核定载客 5 人"；阳光/申能"核定载客数(人)：5人"；安诚/永诚"核定载客/载质量：23人/9500千克"。
