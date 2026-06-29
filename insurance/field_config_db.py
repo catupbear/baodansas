@@ -989,6 +989,17 @@ def save_column_config(db, config_type: str, scope: str, scope_id, columns: list
         conn.close()
 
 
+def init_enterprise_default_template(db, enterprise_id: int):
+    """新建企业时初始化默认导出列配置：包含全部识别字段（都勾选导出）。"""
+    import copy
+    cols = []
+    for c in copy.deepcopy(DEFAULT_COLUMNS):
+        c["visible"] = True
+        cols.append(c)
+    save_column_config(db, "export_columns", "enterprise", enterprise_id, cols)
+    logger.info("企业 %s 默认导出模板已初始化（全字段导出，共 %d 列）", enterprise_id, len(cols))
+
+
 def delete_column_config(db, config_type: str, scope: str, scope_id):
     """删除当前模板的列配置（不影响备份模板），回退到上一级默认。"""
     conn = db.pool.connection()

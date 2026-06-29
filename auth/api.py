@@ -503,6 +503,12 @@ def api_create_enterprise():
         update_enterprise(_db, eid, {"enterprise_no": enterprise_no})
         # 同步创建该企业的管理员账号：登录账号=企业编号(小写去横线)，姓名=企业管理员，初始密码=wuhu2025
         create_user(_db, admin_phone, "wuhu2025", ROLE_ENTERPRISE, eid, "企业管理员", activated=1)
+        # 初始化企业默认导出列配置：包含全部识别字段（都勾选导出）
+        try:
+            from insurance.field_config_db import init_enterprise_default_template
+            init_enterprise_default_template(_db, eid)
+        except Exception:
+            logger.exception("初始化企业默认导出模板失败")
         # 默认不自动开通套餐：新企业为"未开通"状态，由管理员手动「开通套餐」配置。
         # 仅当显式传入 plan_type 时才开通（兼容将来在创建表单里直接选套餐的场景）。
         if data.get("plan_type"):

@@ -289,7 +289,8 @@
 
                                 <!-- 本月识别量 -->
                                 <td style="text-align:center;vertical-align:middle;">
-                                    <template v-if="ent.plan_type==='enterprise' || ent.plan_type==='enterprise_trial'">
+                                    <span v-if="!ent.plan_type" style="font-size:12px;color:#9ca3af;">暂未开通套餐</span>
+                                    <template v-else-if="ent.plan_type==='enterprise' || ent.plan_type==='enterprise_trial'">
                                         <span style="font-size:12px;color:#374151;">本月 {{ ent.monthly_pdf_usage }} 次</span>
                                     </template>
                                     <template v-else>
@@ -372,7 +373,7 @@
                                     <div class="vv" v-if="planExpiryStr(ent)" :style="{color: planDaysLeft(ent)<=0?'#dc2626':planDaysLeft(ent)<=7?'#d97706':'#059669'}">{{ planDaysLeft(ent)<=0?'已到期':planDaysLeft(ent)+' 天后' }}</div>
                                     <div class="vv" v-else style="color:#d1d5db;">未设置</div>
                                 </div>
-                                <div class="ec-item"><div class="k">本月识别</div><div class="vv">{{ ent.monthly_pdf_usage || 0 }} 次</div></div>
+                                <div class="ec-item"><div class="k">本月识别</div><div class="vv">{{ ent.plan_type ? (ent.monthly_pdf_usage || 0) + ' 次' : '暂未开通套餐' }}</div></div>
                                 <div class="ec-item"><div class="k">状态</div><div class="vv"><span :style="{color: ent.enabled?'#059669':'#dc2626'}">{{ ent.enabled?'启用':'禁用' }}</span></div></div>
                                 <div class="ec-item"><div class="k">人员 / 群</div><div class="vv">{{ ent.member_count||0 }} 人 · {{ ent.monitor_count||0 }} 群</div></div>
                                 <div class="ec-item"><div class="k">推荐人</div><div class="vv">{{ ent.referrer_name || '—' }}</div></div>

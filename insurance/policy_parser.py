@@ -2781,14 +2781,22 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
 
     # 厂牌型号
     for p in [
+        # 优先取整段（厂牌型号 → 下一个字段标签之前），修复值含内部空格被 \S+ 截断的情况：
+        # 太平洋"厂牌型号 奔驰BENZ G500越野车 核定载客"，旧规则在空格处截成"奔驰BENZ"。
+        r"厂\s*牌\s*型\s*号[：:\s]+([^\n]{2,40}?)\s*(?:核\s*定\s*载|发\s*动\s*机|排\s*量|使用性质|机动车种类|识别代码|车架号|绝对免赔|VIN)",
+        # 厂牌型号值独占一行、后面直接换行（雷克萨斯LEXUS ES200轿车 / 保时捷PORSCHE TAYCAN纯电动轿车）
+        r"厂\s*牌\s*型\s*号[：:\s]+([^\n]{2,40}?)\s*(?:\n|$)",
         r"厂\s*牌\s*型\s*号[：:\s]*(\S+)",
-        r"厂牌型号[：:\s]*(\S+)",
         r"品牌型号[：:\s]*(\S+)",
     ]:
         m = re.search(p, text)
         if m:
-            val = m.group(1)
-            if len(val) >= 2 and val not in ("核", "核定", "营业性质", "营业"):
+            val = re.sub(r'[\s　]+', '', m.group(1))
+            # 串行误取校验：竖排版式 OCR 串行时，"厂牌型号"标签后紧跟的是下一个字段标签
+            #（如"核定载客"），被 \S+ 当成值。合法厂牌型号不会以这些标签词开头，命中则不采用，
+            # 留给下方的错位兜底重组，或宁可留空也不要错值。
+            _invalid = re.match(r'(核定|载客|载质量|座位|使用性质|营业性质|营业|发动机|识别代码|车架号|机动车种类|号牌|车牌|排\s*量|功率|登记日期|野车|VIN)', val)
+            if len(val) >= 2 and not _invalid:
                 fields["厂牌型号"] = val
                 break
 
@@ -2804,6 +2812,21 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
                     _val = (_m1.group(1) + _m2.group(1)).replace(' ', '')
                     if len(_val) >= 2:
                         fields["厂牌型号"] = _val
+                        break
+
+    # 泰康等竖排错位：厂牌型号前半在标签上一行(品牌开头)、后半是下一行残字("车")，标签后直接
+    # 串到"登记日期/核定"等下一字段标签。仅当下一行是短残字(≤2字)时上下行拼接，避免误伤平安(下行是长串)。
+    if "厂牌型号" not in fields:
+        _pl = text.split('\n')
+        for _i in range(1, len(_pl) - 1):
+            if re.search(r'厂\s*牌\s*型\s*号', _pl[_i]):
+                _after = re.sub(r'.*厂\s*牌\s*型\s*号[：:\s]*', '', _pl[_i]).strip()
+                if re.match(r'(登记日期|核\s*定|发\s*动\s*机|排\s*量|使用性质|机动车种类)', _after):
+                    _prev = _pl[_i - 1].strip().replace(' ', '')
+                    _next = _pl[_i + 1].strip().replace(' ', '')
+                    if (re.match(r'^[一-鿿A-Za-z]', _prev) and len(_prev) >= 5 and len(_next) <= 2
+                            and not re.match(r'(车牌|号牌|发动机|车架|被保险|地址|核定|投保|保险|机动车)', _prev)):
+                        fields["厂牌型号"] = _prev + _next
                         break
 
     # 厂牌型号值含内部空格（北部湾"厂牌型号：东 风日产DFL7151MAK1轿车"，OCR 把双字品牌拆开）：
@@ -2842,8 +2865,8 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
 
     # 使用性质
     for p in [
-        r"使用性质[：:\s]*(\S+?)(?:\s|$|核定|年平均|机动车种类)",
-        r"使用性质\s+(\S+)",
+        r"使\s*用\s*性\s*质[：:\s]*(\S+?)(?:\s|$|核定|年平均|机动车种类)",
+        r"使\s*用\s*性\s*质\s+(\S+)",
     ]:
         m = re.search(p, text)
         if m:
@@ -3303,13 +3326,14 @@ def _extract_premium(text: str, fields: dict, company_short: str):
                                     fields["保费合计"], cn_val, diff_ratio * 100)
                         fields["保费合计"] = cn_val
 
-    # 不含税保费：兼容"不含税保费：1132.08"和"不含税保费（元）：1132.08"等
-    m = re.search(r"不含税保[险]?费[^：:\d]*[：:\s]*([\d,]+\.\d{2})", text)
+    # 不含税保费：兼容"不含税保费：1132.08"、"不含税保费（元）：1132.08"、
+    # 国寿/安诚"不含税价格为376.41元"、太平"不含税保费：RMB627.36元"（值前允许 RMB/CNY/￥ 等非数字前缀）
+    m = re.search(r"不含税(?:保[险]?费|价格)[^\d\n]{0,8}?([\d,]+\.\d{2})", text)
     if m:
         fields["不含税保费"] = m.group(1)
 
-    # 增值税额：兼容"税额：67.92"、"增值税10.88元"、"增值税（元）：67.92"等
-    m = re.search(r"(?:增值)?税额[^：:\d]*[：:\s]*([\d,]+\.\d{2})", text)
+    # 增值税额：兼容"税额：67.92"、"增值税10.88元"、"增值税额为22.59元"、太平"税额：RMB37.64元"
+    m = re.search(r"(?:增值)?税额[^\d\n]{0,8}?([\d,]+\.\d{2})", text)
     if not m:
         m = re.search(r"增值税[^：:\d]*[：:\s]*([\d,]+\.\d{2})", text)
     if not m:

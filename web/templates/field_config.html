@@ -384,6 +384,10 @@
                         </button>
                         <!-- 下拉面板 -->
                         <div v-if="showTemplateDropdown" style="position:absolute; right:0; top:calc(100% + 6px); background:var(--surface); border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,0.15); border:1px solid var(--border-light); z-index:50; overflow:hidden;" :style="{width: currentRole === 'super_admin' && allTemplatesData ? '340px' : '260px', maxHeight: '70vh', overflowY: 'auto'}">
+                            <!-- 搜索（仅超管，模板多时快速定位） -->
+                            <div v-if="currentRole === 'super_admin'" style="padding:8px; border-bottom:1px solid var(--border-light); position:sticky; top:0; background:var(--surface); z-index:2;">
+                                <input v-model="templateSearch" @click.stop placeholder="搜索企业 / 模板名…" style="width:100%; padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:12px; outline:none;">
+                            </div>
                             <!-- 我的模板（全局） -->
                             <div style="padding:8px 12px 4px; font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">
                                 {{ currentRole === 'super_admin' ? '系统模板' : '我的模板' }}
@@ -423,35 +427,45 @@
                                     <span style="font-size:10px; padding:1px 6px; background:#f3f4f6; color:var(--text-muted); border-radius:3px; flex-shrink:0;">只读</span>
                                 </div>
                             </template>
-                            <!-- 超管：所有企业模板 -->
-                            <template v-if="currentRole === 'super_admin' && allTemplatesData && allTemplatesData.enterprises.length">
+                            <!-- 超管：所有企业模板（搜索过滤 + 分组折叠） -->
+                            <template v-if="currentRole === 'super_admin' && filteredEnterprises.length">
                                 <div style="border-top:1px solid var(--border-light); padding:8px 12px 4px; font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">企业模板</div>
-                                <template v-for="ent in allTemplatesData.enterprises" :key="'ent-'+ent.enterprise_id">
-                                    <div style="padding:4px 12px 2px; font-size:11px; color:var(--text-muted);">{{ ent.enterprise_name }}</div>
-                                    <div v-for="t in ent.templates" :key="'ent-'+ent.enterprise_id+'-'+t.name"
-                                         @click="selectAdminTemplate('enterprise', ent.enterprise_id, t.name, ent.enterprise_name)"
-                                         style="padding:6px 12px 6px 24px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; transition:background 0.15s;"
-                                         :style="{background: adminTarget && adminTarget.scope==='enterprise' && adminTarget.scope_id===ent.enterprise_id && activeTemplateName===t.name ? '#fef3c7' : '', color: adminTarget && adminTarget.scope==='enterprise' && adminTarget.scope_id===ent.enterprise_id && activeTemplateName===t.name ? '#92400e' : 'var(--text-primary)'}"
-                                         onmouseover="this.style.background=this.style.background||'#f9fafb'" onmouseout="this.style.background=''">
-                                        <span v-if="adminTarget && adminTarget.scope==='enterprise' && adminTarget.scope_id===ent.enterprise_id && activeTemplateName===t.name" style="color:#92400e; flex-shrink:0;">✓</span>
-                                        <span style="flex:1;">{{ t.name }}</span>
-                                        <span v-if="t.visible" style="font-size:10px; padding:1px 6px; background:#ecfdf5; color:#059669; border-radius:3px; flex-shrink:0;">员工可见</span>
+                                <template v-for="ent in filteredEnterprises" :key="'ent-'+ent.enterprise_id">
+                                    <div @click="toggleEnt(ent.enterprise_id)" style="padding:6px 12px; font-size:12px; color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; justify-content:space-between; background:#fafafa;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#fafafa'">
+                                        <span>{{ ent.enterprise_name }} <span style="color:#9ca3af; font-size:11px;">({{ ent.templates.length }})</span></span>
+                                        <span style="font-size:10px; color:#9ca3af;">{{ isEntExpanded(ent) ? '▾' : '▸' }}</span>
                                     </div>
+                                    <template v-if="isEntExpanded(ent)">
+                                        <div v-for="t in ent.templates" :key="'ent-'+ent.enterprise_id+'-'+t.name"
+                                             @click="selectAdminTemplate('enterprise', ent.enterprise_id, t.name, ent.enterprise_name)"
+                                             style="padding:6px 12px 6px 24px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; transition:background 0.15s;"
+                                             :style="{background: adminTarget && adminTarget.scope==='enterprise' && adminTarget.scope_id===ent.enterprise_id && activeTemplateName===t.name ? '#fef3c7' : '', color: adminTarget && adminTarget.scope==='enterprise' && adminTarget.scope_id===ent.enterprise_id && activeTemplateName===t.name ? '#92400e' : 'var(--text-primary)'}"
+                                             onmouseover="this.style.background=this.style.background||'#f9fafb'" onmouseout="this.style.background=''">
+                                            <span v-if="adminTarget && adminTarget.scope==='enterprise' && adminTarget.scope_id===ent.enterprise_id && activeTemplateName===t.name" style="color:#92400e; flex-shrink:0;">✓</span>
+                                            <span style="flex:1;">{{ t.name }}</span>
+                                            <span v-if="t.visible" style="font-size:10px; padding:1px 6px; background:#ecfdf5; color:#059669; border-radius:3px; flex-shrink:0;">员工可见</span>
+                                        </div>
+                                    </template>
                                 </template>
                             </template>
-                            <!-- 超管：所有员工模板 -->
-                            <template v-if="currentRole === 'super_admin' && allTemplatesData && allTemplatesData.users.length">
+                            <!-- 超管：所有员工模板（搜索过滤 + 分组折叠） -->
+                            <template v-if="currentRole === 'super_admin' && filteredUsers.length">
                                 <div style="border-top:1px solid var(--border-light); padding:8px 12px 4px; font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">员工模板</div>
-                                <template v-for="u in allTemplatesData.users" :key="'user-'+u.user_id">
-                                    <div style="padding:4px 12px 2px; font-size:11px; color:var(--text-muted);">{{ u.user_name }}<span v-if="u.enterprise_name" style="margin-left:4px; font-size:10px; color:#9ca3af;">（{{ u.enterprise_name }}）</span></div>
-                                    <div v-for="t in u.templates" :key="'user-'+u.user_id+'-'+t.name"
-                                         @click="selectAdminTemplate('user', u.user_id, t.name, u.user_name)"
-                                         style="padding:6px 12px 6px 24px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; transition:background 0.15s;"
-                                         :style="{background: adminTarget && adminTarget.scope==='user' && adminTarget.scope_id===u.user_id && activeTemplateName===t.name ? '#fef3c7' : '', color: adminTarget && adminTarget.scope==='user' && adminTarget.scope_id===u.user_id && activeTemplateName===t.name ? '#92400e' : 'var(--text-primary)'}"
-                                         onmouseover="this.style.background=this.style.background||'#f9fafb'" onmouseout="this.style.background=''">
-                                        <span v-if="adminTarget && adminTarget.scope==='user' && adminTarget.scope_id===u.user_id && activeTemplateName===t.name" style="color:#92400e; flex-shrink:0;">✓</span>
-                                        <span style="flex:1;">{{ t.name }}</span>
+                                <template v-for="u in filteredUsers" :key="'user-'+u.user_id">
+                                    <div @click="toggleUser(u.user_id)" style="padding:6px 12px; font-size:12px; color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; justify-content:space-between; background:#fafafa;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#fafafa'">
+                                        <span>{{ u.user_name }}<span v-if="u.enterprise_name" style="margin-left:4px; font-size:10px; color:#9ca3af;">（{{ u.enterprise_name }}）</span> <span style="color:#9ca3af; font-size:11px;">({{ u.templates.length }})</span></span>
+                                        <span style="font-size:10px; color:#9ca3af;">{{ isUserExpanded(u) ? '▾' : '▸' }}</span>
                                     </div>
+                                    <template v-if="isUserExpanded(u)">
+                                        <div v-for="t in u.templates" :key="'user-'+u.user_id+'-'+t.name"
+                                             @click="selectAdminTemplate('user', u.user_id, t.name, u.user_name)"
+                                             style="padding:6px 12px 6px 24px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; transition:background 0.15s;"
+                                             :style="{background: adminTarget && adminTarget.scope==='user' && adminTarget.scope_id===u.user_id && activeTemplateName===t.name ? '#fef3c7' : '', color: adminTarget && adminTarget.scope==='user' && adminTarget.scope_id===u.user_id && activeTemplateName===t.name ? '#92400e' : 'var(--text-primary)'}"
+                                             onmouseover="this.style.background=this.style.background||'#f9fafb'" onmouseout="this.style.background=''">
+                                            <span v-if="adminTarget && adminTarget.scope==='user' && adminTarget.scope_id===u.user_id && activeTemplateName===t.name" style="color:#92400e; flex-shrink:0;">✓</span>
+                                            <span style="flex:1;">{{ t.name }}</span>
+                                        </div>
+                                    </template>
                                 </template>
                             </template>
                             <!-- 底部操作 -->
@@ -780,39 +794,69 @@
                     </label>
                     <span style="font-size:11px; color:var(--text-muted);">开启后，平安保单车牌自动添加连字符（如 粤BB446T → 粤B-B446T）</span>
                 </div>
-                <div class="alias-table-wrap">
-                    <table class="alias-table">
-                        <thead>
-                            <tr>
-                                <th style="width:40px;"></th>
-                                <th style="width:50px;">导出</th>
-                                <th>字段标识</th>
-                                <th style="width:180px;">Excel 列头</th>
-                                <th style="width:150px;">固定值</th>
-                                <th style="width:60px;">百分比</th>
-                                <th style="width:40px;"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="(col, idx) in exportColItems" :key="col.key"
-                                v-show="!col._mergeHidden"
-                                :draggable="activeSource !== 'enterprise'"
-                                :class="{ dragging: dragState.dragging === idx && dragState.target === 'export', 'drag-over': dragState.over === idx && dragState.target === 'export' }"
-                                @dragstart="onDragStart($event, idx, 'export')"
-                                @dragover.prevent="onDragOver(idx, 'export')"
-                                @dragleave="onDragLeave(idx, 'export')"
-                                @drop.prevent="onDrop($event, idx, 'export')"
-                                @dragend="onDragEnd">
-                                <td><span class="drag-handle" :style="activeSource === 'enterprise' ? 'cursor:not-allowed;opacity:0.3' : ''">⠿</span></td>
-                                <td><input type="checkbox" v-model="col.visible" :disabled="activeSource === 'enterprise'"></td>
-                                <td style="color:var(--text-muted);">{{ col.key }}<span v-if="fieldHelp[col.key]" class="field-help-icon" :title="fieldHelp[col.key]">?</span><span v-if="col.merge" style="margin-left:6px;font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;">合并</span><span v-else-if="col.custom" style="margin-left:6px;font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:3px;">自定义</span></td>
-                                <td><input type="text" v-model="col.display_name" :disabled="activeSource === 'enterprise'" :placeholder="col.key" /></td>
-                                <td><input v-if="col.custom && !col.merge" type="text" v-model="fixedValues[col.key]" placeholder="无数据时自动填充" style="font-size:12px;" @change="saveFixedValues" /></td>
-                                <td style="text-align:center;"><input v-if="col.custom && !col.merge" type="checkbox" v-model="col.is_percent" :disabled="activeSource === 'enterprise'" title="勾选后此列按百分比处理：填 10 表示 10%，公式按 0.1 计算，导出显示 10%" /></td>
-                                <td><button v-if="col.custom && !col.merge" @click="removeCustomCol(exportColItems, idx)" :disabled="activeSource === 'enterprise'" style="color:var(--danger);cursor:pointer;background:none;border:none;font-size:14px;" title="删除">✕</button></td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <!-- 穿梭框：左侧=可选字段池，右侧=已导出字段（排序/配置） -->
+                <div style="display:flex; gap:14px; align-items:stretch;">
+                    <!-- 左：可选字段 -->
+                    <div style="flex:1; min-width:0; border:1px solid var(--border-light); border-radius:8px; display:flex; flex-direction:column; height:480px;">
+                        <div style="padding:9px 12px; border-bottom:1px solid var(--border-light); background:var(--surface-secondary); display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:13px; font-weight:600;">可选字段（{{ availableExportCols.length }}）</span>
+                            <button class="btn btn-outline btn-sm" @click="addAllToExport" :disabled="activeSource==='enterprise' || !availableExportCols.length" style="font-size:11px; padding:2px 8px;">全部加入 →</button>
+                        </div>
+                        <div style="padding:8px;"><input v-model="exportSearch" type="text" placeholder="搜索字段…" style="width:100%; padding:5px 9px; border:1px solid var(--border); border-radius:6px; font-size:12px;"></div>
+                        <div style="flex:1; overflow-y:auto; padding:0 8px 8px;">
+                            <div v-for="col in filteredAvailableExport" :key="col.key"
+                                 style="padding:7px 10px; margin-bottom:5px; border:1px solid var(--border-light); border-radius:6px; font-size:13px; display:flex; align-items:center; justify-content:space-between;"
+                                 :style="{cursor: activeSource==='enterprise'?'not-allowed':'pointer', opacity: activeSource==='enterprise'?0.5:1}"
+                                 @click="activeSource!=='enterprise' && addToExport(col)">
+                                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ col.display_name || col.key }}
+                                    <span v-if="col.merge" style="margin-left:4px;font-size:10px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;">合并</span>
+                                    <span v-else-if="col.custom" style="margin-left:4px;font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 5px;border-radius:3px;">自定义</span>
+                                </span>
+                                <span style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                                    <button v-if="col.custom && !col.merge" @click.stop="removeCustomColByKey(col)" :disabled="activeSource==='enterprise'" title="彻底删除该自定义字段" style="color:var(--danger); background:none; border:none; cursor:pointer; font-size:13px;">✕</button>
+                                    <span style="color:var(--primary); font-weight:700; font-size:16px;">＋</span>
+                                </span>
+                            </div>
+                            <div v-if="!filteredAvailableExport.length" style="padding:24px 12px; text-align:center; color:var(--text-muted); font-size:12px;">{{ exportSearch ? '无匹配字段' : '所有字段已加入导出' }}</div>
+                        </div>
+                    </div>
+                    <!-- 右：已导出字段 -->
+                    <div style="flex:1.6; min-width:0; border:1px solid var(--border-light); border-radius:8px; display:flex; flex-direction:column; height:480px;">
+                        <div style="padding:9px 12px; border-bottom:1px solid var(--border-light); background:var(--surface-secondary); display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:13px; font-weight:600;">已导出（{{ selectedExportCols.length }} 列，从上到下即列顺序）</span>
+                            <button class="btn btn-outline btn-sm" @click="removeAllFromExport" :disabled="activeSource==='enterprise' || !selectedExportCols.length" style="font-size:11px; padding:2px 8px;">← 全部移除</button>
+                        </div>
+                        <div style="flex:1; overflow-y:auto;">
+                            <table class="alias-table" style="width:100%;">
+                                <thead><tr>
+                                    <th style="width:28px;">#</th>
+                                    <th style="width:88px;">排序</th>
+                                    <th>列头 / 字段</th>
+                                    <th style="width:110px;">固定值</th>
+                                    <th style="width:34px;">%</th>
+                                    <th style="width:44px;"></th>
+                                </tr></thead>
+                                <tbody>
+                                    <tr v-for="(col, i) in selectedExportCols" :key="col.key">
+                                        <td style="color:var(--text-muted); text-align:center;">{{ i+1 }}</td>
+                                        <td style="white-space:nowrap;">
+                                            <button @click="moveExportTop(col)" :disabled="i===0 || activeSource==='enterprise'" title="置顶" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0 2px;color:var(--text-secondary);">⤒</button>
+                                            <button @click="moveExportUp(col)" :disabled="i===0 || activeSource==='enterprise'" title="上移" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0 2px;color:var(--text-secondary);">↑</button>
+                                            <button @click="moveExportDown(col)" :disabled="i===selectedExportCols.length-1 || activeSource==='enterprise'" title="下移" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0 2px;color:var(--text-secondary);">↓</button>
+                                        </td>
+                                        <td>
+                                            <input type="text" v-model="col.display_name" :disabled="activeSource==='enterprise'" :placeholder="col.key" style="width:100%; font-size:12px;" />
+                                            <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">{{ col.key }}<span v-if="fieldHelp[col.key]" class="field-help-icon" :title="fieldHelp[col.key]">?</span><span v-if="col.merge" style="margin-left:4px;font-size:9px;background:#fef3c7;color:#92400e;padding:0 4px;border-radius:3px;">合并</span><span v-else-if="col.custom" style="margin-left:4px;font-size:9px;background:#e0f2fe;color:#0369a1;padding:0 4px;border-radius:3px;">自定义</span></div>
+                                        </td>
+                                        <td><input v-if="col.custom && !col.merge" type="text" v-model="fixedValues[col.key]" placeholder="无数据填充" style="font-size:11px; width:100%;" @change="saveFixedValues" /></td>
+                                        <td style="text-align:center;"><input v-if="col.custom && !col.merge" type="checkbox" v-model="col.is_percent" :disabled="activeSource==='enterprise'" title="按百分比处理：填10=10%，公式按0.1算，导出显示10%" /></td>
+                                        <td style="text-align:center;"><button @click="removeFromExport(col)" :disabled="activeSource==='enterprise'" title="移出导出（回到左侧）" style="color:var(--text-muted);background:none;border:none;cursor:pointer;font-size:13px;">✕</button></td>
+                                    </tr>
+                                    <tr v-if="!selectedExportCols.length"><td colspan="6" style="text-align:center; color:var(--text-muted); padding:28px 12px; font-size:13px;">← 从左侧点选字段加入导出</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
                 <div v-if="activeSource !== 'enterprise'" style="display:flex; align-items:center; gap:8px; margin-top:12px;">
                     <input v-model="newColName.export" type="text" placeholder="输入新字段名称" style="flex:1; padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px;" @keyup.enter="addCustomCol('export')">
@@ -1603,6 +1647,45 @@ createApp({
             }
         };
 
+        // ===== 导出列穿梭框：可选字段池 ↔ 已导出字段 =====
+        const exportSearch = ref('');
+        const availableExportCols = computed(() => exportColItems.value.filter(c => !c.visible && !c._mergeHidden));
+        const selectedExportCols = computed(() => exportColItems.value.filter(c => c.visible && !c._mergeHidden));
+        const filteredAvailableExport = computed(() => {
+            const q = exportSearch.value.trim().toLowerCase();
+            if (!q) return availableExportCols.value;
+            return availableExportCols.value.filter(c => ((c.key || '') + (c.display_name || '')).toLowerCase().includes(q));
+        });
+        const addToExport = (col) => { col.visible = true; };
+        const removeFromExport = (col) => { col.visible = false; };
+        const addAllToExport = () => { exportColItems.value.forEach(c => { if (!c._mergeHidden) c.visible = true; }); };
+        const removeAllFromExport = () => { exportColItems.value.forEach(c => { if (!c._mergeHidden) c.visible = false; }); };
+        const _moveExport = (col, dir) => {
+            const arr = [...exportColItems.value];
+            const vis = arr.map((c, i) => ({ c, i })).filter(x => x.c.visible && !x.c._mergeHidden);
+            const k = vis.findIndex(x => x.c.key === col.key);
+            const t = k + dir;
+            if (k < 0 || t < 0 || t >= vis.length) return;
+            const i1 = vis[k].i, i2 = vis[t].i;
+            [arr[i1], arr[i2]] = [arr[i2], arr[i1]];
+            exportColItems.value = arr;
+        };
+        const moveExportUp = (col) => _moveExport(col, -1);
+        const moveExportDown = (col) => _moveExport(col, 1);
+        const moveExportTop = (col) => {
+            const arr = [...exportColItems.value];
+            const idx = arr.indexOf(col);
+            if (idx < 0) return;
+            arr.splice(idx, 1);
+            const firstVis = arr.findIndex(c => c.visible && !c._mergeHidden);
+            arr.splice(firstVis < 0 ? 0 : firstVis, 0, col);
+            exportColItems.value = arr;
+        };
+        const removeCustomColByKey = (col) => {
+            const idx = exportColItems.value.indexOf(col);
+            if (idx >= 0) removeCustomCol(exportColItems.value, idx);
+        };
+
         // 同步页面列配置到导出列配置（补充导出列中缺少的字段）
         async function syncListToExport() {
             // 以页面列配置为基准，保留导出列中独有的字段（如合并字段）追加到末尾
@@ -1895,6 +1978,37 @@ createApp({
         // ========== API 调用 ==========
 
         // 加载模板列表
+        // ===== 模板下拉：搜索 + 企业/员工分组折叠（超管模板多时快速定位）=====
+        const templateSearch = ref('');
+        const expandedEnts = ref(new Set());
+        const expandedUsers = ref(new Set());
+        const filteredEnterprises = computed(() => {
+            const d = allTemplatesData.value;
+            if (!d || !d.enterprises) return [];
+            const q = templateSearch.value.trim().toLowerCase();
+            if (!q) return d.enterprises;
+            return d.enterprises.map(ent => {
+                if ((ent.enterprise_name || '').toLowerCase().includes(q)) return ent;
+                const tpls = (ent.templates || []).filter(t => (t.name || '').toLowerCase().includes(q));
+                return tpls.length ? { ...ent, templates: tpls } : null;
+            }).filter(Boolean);
+        });
+        const filteredUsers = computed(() => {
+            const d = allTemplatesData.value;
+            if (!d || !d.users) return [];
+            const q = templateSearch.value.trim().toLowerCase();
+            if (!q) return d.users;
+            return d.users.map(u => {
+                if ((u.user_name || '').toLowerCase().includes(q) || (u.enterprise_name || '').toLowerCase().includes(q)) return u;
+                const tpls = (u.templates || []).filter(t => (t.name || '').toLowerCase().includes(q));
+                return tpls.length ? { ...u, templates: tpls } : null;
+            }).filter(Boolean);
+        });
+        const isEntExpanded = (ent) => templateSearch.value.trim() !== '' || expandedEnts.value.has(ent.enterprise_id);
+        const isUserExpanded = (u) => templateSearch.value.trim() !== '' || expandedUsers.value.has(u.user_id);
+        const toggleEnt = (id) => { const s = new Set(expandedEnts.value); s.has(id) ? s.delete(id) : s.add(id); expandedEnts.value = s; };
+        const toggleUser = (id) => { const s = new Set(expandedUsers.value); s.has(id) ? s.delete(id) : s.add(id); expandedUsers.value = s; };
+
         const loadTemplates = async () => {
             try {
                 const resp = await authFetch('/api/insurance/field-config/templates');
@@ -2418,6 +2532,10 @@ createApp({
             formulaError, previewExpression, previewResult,
             insertField, insertOp, openFormulaModal, saveFormula, deleteRule,
             listColConfig, exportColConfig, listColItems, exportColItems, fieldHelp,
+            exportSearch, availableExportCols, selectedExportCols, filteredAvailableExport,
+            templateSearch, filteredEnterprises, filteredUsers, isEntExpanded, isUserExpanded, toggleEnt, toggleUser,
+            addToExport, removeFromExport, addAllToExport, removeAllFromExport,
+            moveExportUp, moveExportDown, moveExportTop, removeCustomColByKey,
             loadColumnConfig, saveColumnConfig, syncExportToList, resetColumnConfig, resetPending, doResetColumn,
             dragState, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd,
             newColName, addCustomCol, removeCustomCol, syncListToExport,
