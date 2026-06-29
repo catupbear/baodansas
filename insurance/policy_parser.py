@@ -856,6 +856,15 @@ def _extract_id_numbers(text: str, text_merged: str, fields: dict):
         if m:
             fields["被保险人身份证号码"] = m.group(1)
 
+    # 港澳/台胞/护照等非身份证证件（证件类型含"港澳/台/护照/通行证"），证件号码是字母+数字（如港澳通行证 H60418651）
+    if "被保险人身份证号码" not in fields:
+        m = re.search(
+            r'被保[险\s]*[人]?[\s\S]{0,60}?证件类型[：:]\s*\S{0,10}?(?:港澳|台湾|台胞|护照|通行证|外国人)[\s\S]{0,40}?证件号码[：:]\s*([A-Za-z]\d{6,10}|[A-Za-z]{1,2}\d{6,9})',
+            text
+        )
+        if m:
+            fields["被保险人身份证号码"] = m.group(1)
+
     # 大家/国寿商业险：名称 XXX 证件号码 XXX\n被保险人（证件号码在上方）
     if "被保险人身份证号码" not in fields:
         for src in [text, text_merged]:
