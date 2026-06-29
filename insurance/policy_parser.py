@@ -1321,6 +1321,8 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
         # 删尾部独立英文水印（前面是中文/空格），但保留紧跟数字或连字符后的字母——
         # 那是地址单元号的一部分（如"A座1701-BCDEF"），不是水印
         addr = re.sub(r'(?<=[一-龥\s])[A-Z]{3,}\s*$', '', addr)
+        # text_merged 合并可能把"保险人"竖排的单字拼到地址尾部（如"6楼B区人"），门牌词后的孤立残字去掉
+        addr = re.sub(r'([区室号楼层座栋元院])[保险人]$', r'\1', addr)
         addr = addr.strip().rstrip('、，,')
         if addr and len(addr) >= 4:
             fields["保司地址"] = addr
