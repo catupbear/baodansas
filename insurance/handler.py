@@ -160,6 +160,7 @@ class InsuranceHandler:
         self._volc_fail_count = 0
         self._volc_fail_threshold = 1  # 失败 1 次即熔断，快速切换百度
         self._volc_circuit_open_until = 0  # 熔断恢复时间戳（time.time()）
+        self._volc_circuit_open_times = []  # 近期熔断发生的时间戳，用于告警降噪（频繁熔断才告警）
 
         # 启动消费者守护线程
         self._worker = threading.Thread(target=self._consume, daemon=True)
@@ -1380,17 +1381,28 @@ class InsuranceHandler:
                     logger.info("火山引擎 OCR 识别成功，文字数=%d", len(text))
                     return text
                 self._volc_fail_count += 1
+                _fail_reason = str(volc_result.get("error", "") or "未知")
                 logger.warning("火山引擎 OCR 识别失败(%d/%d): %s",
                                self._volc_fail_count, self._volc_fail_threshold,
-                               volc_result.get("error", ""))
+                               _fail_reason)
             except Exception as e:
                 self._volc_fail_count += 1
+                _fail_reason = str(e) or "未知异常"
                 logger.error("火山引擎 OCR 调用异常(%d/%d): %s",
                              self._volc_fail_count, self._volc_fail_threshold, e)
             if self._volc_fail_count >= self._volc_fail_threshold:
-                self._volc_circuit_open_until = time.time() + 600
-                logger.warning("火山引擎 OCR 连续失败 %d 次，熔断 10 分钟", self._volc_fail_count)
-                notify_error("OCR引擎", "_run_ocr_engines", f"火山引擎OCR连续失败{self._volc_fail_count}次，已熔断10分钟")
+                now = time.time()
+                self._volc_circuit_open_until = now + 600
+                # 只保留近 30 分钟内的熔断记录，用于降噪：单次熔断属正常降级(百度兜底)，频繁才告警
+                self._volc_circuit_open_times = [t for t in self._volc_circuit_open_times if now - t < 1800]
+                self._volc_circuit_open_times.append(now)
+                trips = len(self._volc_circuit_open_times)
+                logger.warning("火山引擎 OCR 失败熔断 10 分钟（30分钟内第 %d 次），原因: %s", trips, _fail_reason)
+                # 30 分钟内反复熔断(>=3 次)才发钉钉告警，并带上失败原因
+                if trips >= 3:
+                    notify_error("OCR引擎", "_run_ocr_engines",
+                                 f"火山引擎OCR 30分钟内已熔断{trips}次，最近原因: {_fail_reason}",
+                                 "已自动降级百度OCR，识别未中断；请检查火山引擎配额/网络/密钥")
         elif volc_circuit_open:
             logger.info("火山引擎 OCR 熔断中，跳过直接使用百度 OCR")
         if self._baidu_ocr:
