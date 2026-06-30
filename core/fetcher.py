@@ -6,6 +6,7 @@
 import json
 import logging
 import threading
+import time
 
 from core.decryptor import MessageDecryptor
 from core.notify import notify_error
@@ -53,12 +54,23 @@ class MessageFetcher:
         while True:
             logger.info("%s拉取消息, seq=%d, limit=%d", self._log_prefix, seq, self.limit)
 
-            ret, data = self.finance_sdk.get_chat_data(
-                seq, self.limit, self.proxy, self.passwd, self.timeout
-            )
+            # SDK 拉取，偶发网络错误（如 10001）退避重试，仍失败才告警
+            max_attempts = 3
+            ret, data = 1, {}
+            for attempt in range(1, max_attempts + 1):
+                ret, data = self.finance_sdk.get_chat_data(
+                    seq, self.limit, self.proxy, self.passwd, self.timeout
+                )
+                if ret == 0:
+                    break
+                logger.warning("%s拉取消息失败, 错误码: %d (第 %d/%d 次)",
+                               self._log_prefix, ret, attempt, max_attempts)
+                if attempt < max_attempts:
+                    time.sleep(attempt)  # 1s, 2s 递增退避
             if ret != 0:
-                logger.error("%s拉取消息失败, 错误码: %d", self._log_prefix, ret)
-                notify_error("消息拉取", "_do_fetch", f"SDK拉取消息失败, 错误码: {ret}", f"企业: {self.enterprise_name}, seq={seq}")
+                logger.error("%s拉取消息失败, 错误码: %d (已重试 %d 次)",
+                             self._log_prefix, ret, max_attempts)
+                notify_error("消息拉取", "_do_fetch", f"SDK拉取消息失败, 错误码: {ret} (已重试{max_attempts}次)", f"企业: {self.enterprise_name}, seq={seq}")
                 break
 
             chat_list = data.get("chatdata", [])
