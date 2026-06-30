@@ -6681,6 +6681,24 @@ const _app = createApp({
                     allRecords = (listJson.data || listJson).records || [];
                 }
 
+                // 不合并模式：同一辆车的多份保单按险种排序（商业险→交强险→非车险），车与车按上传时间(id)倒序
+                if (!exportMergeByPlate.value) {
+                    const _w = (r) => {
+                        const t = ((r.display_fields || {})['险种'] || '') + '';
+                        if (t.includes('商业')) return 1;
+                        if (t.includes('交强') || t.includes('强制')) return 2;
+                        return 3;
+                    };
+                    const _plate = (r) => ((r.display_fields || {})['车牌'] || r.file_md5 || ('#' + r.id));
+                    const _grpId = {};
+                    allRecords.forEach(r => { const k = _plate(r); if (!(k in _grpId) || r.id > _grpId[k]) _grpId[k] = r.id; });
+                    allRecords = [...allRecords].sort((a, b) => {
+                        const ga = _grpId[_plate(a)], gb = _grpId[_plate(b)];
+                        if (gb !== ga) return gb - ga;   // 车与车：代表id大(最新)在前
+                        return _w(a) - _w(b);            // 车内：险种顺序
+                    });
+                }
+
                 const extraMap = (r) => ({
                     '文件名': r.filename || '',
                     '文档类型': r.doc_category || '',
