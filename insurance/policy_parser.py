@@ -4048,12 +4048,10 @@ def parse_policy_text(text: str) -> Dict[str, Any]:
     extracted = _extract_common_fields(text, company_short, policy_type or "")
     fields.update(extracted)
 
-    # ===== 派生字段（供用户自定义导出列「司机乘客/厂牌车型/车辆性质」直接取用）=====
-    # 司机乘客 = 核定载客数；厂牌车型 = 厂牌型号（同一信息的别名列）
+    # ===== 派生字段（供用户自定义导出列「司机乘客/车辆性质」直接取用）=====
+    # 司机乘客 = 核定载客数（厂牌型号已统一为单一字段，不再派生"厂牌车型"别名）
     if fields.get("核定载客") and not fields.get("司机乘客"):
         fields["司机乘客"] = fields["核定载客"]
-    if fields.get("厂牌型号") and not fields.get("厂牌车型"):
-        fields["厂牌车型"] = fields["厂牌型号"]
     # 车辆性质：按车牌号位数判断（新能源车牌本体比普通多 1 位：
     # 普通「粤B+5位」=7 位 → 燃油；新能源「粤B+6位」=8 位 → 新能源）
     _plate_for_type = (fields.get("车牌号") or "").replace("-", "").replace(" ", "").strip()
