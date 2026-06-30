@@ -1283,9 +1283,11 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
     # 补充地址模式F：签单机构同行的地址（平安车主尊享等：签单机构后公司名 + 地址）
     if "保司地址" not in fields:
         for src in [text, text_merged]:
-            m = re.search(r'签单机构[：:]\s*.+?(?:支公司|分公司)\s+([一-鿿][一-鿿\w、]{6,}?)(?:\s{2,}|\n|出单|$)', src)
+            # 机构名（到 营业部/分公司 等）后跟地址；地址可能跨行带连字符（如"11层T1-\n11-01 D区"），
+            # 用跨行捕获到下一个标签（出单/邮政/业务员等）为界，再去空格换行合并
+            m = re.search(r'签单机构[：:]\s*.+?(?:中心支公司|支公司|分公司|营业部|营业室|营销服务部|营业区)\s+([\s\S]{6,90}?)(?:出单|邮政编码|邮政|业务员|联系电话|服务电话|签单日期|\n\s*\n|$)', src)
             if m:
-                val = m.group(1).strip()
+                val = re.sub(r'\s+', '', m.group(1)).strip('、，, ')
                 if val and len(val) >= 6 and re.search(r'[市区县].*[路街号]|大厦|大楼|中心|栋', val):
                     fields["保司地址"] = val
                     break
@@ -1333,7 +1335,7 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
         # 那是地址单元号的一部分（如"A座1701-BCDEF"），不是水印
         addr = re.sub(r'(?<=[一-龥\s])[A-Z]{3,}\s*$', '', addr)
         # text_merged 合并可能把"保险人"竖排的单字拼到地址尾部（如"6楼B区人"），门牌词后的孤立残字去掉
-        addr = re.sub(r'([区室号楼层座栋元院])[保险人]$', r'\1', addr)
+        addr = re.sub(r'([区室号楼层座栋元院房幢])[保险人]$', r'\1', addr)
         addr = addr.strip().rstrip('、，,')
         if addr and len(addr) >= 4:
             fields["保司地址"] = addr
