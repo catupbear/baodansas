@@ -542,6 +542,13 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
     # ===== 人员信息（投保人先于被保险人，因为部分被保人逻辑依赖投保人） =====
     _extract_proposer(text, text_merged, fields, company_short)
     _extract_insured(text, text_merged, fields, company_short)
+    # 公司投保人尾部被"统一社会信用代码"标签污染：OCR 把公司名与证件类型标签交错，
+    # "…有限公司"的"限公司"被"统一社会信(用代码)"覆盖。仅在能确信(以"有/有限"+标签结尾)时还原
+    _p = fields.get("投保人")
+    if _p:
+        _p2 = re.sub(r'(有|有限)\s*统一社会信用?代?码?$', '有限公司', _p)
+        if _p2 != _p and len(_p2) >= 5:
+            fields["投保人"] = _p2
 
     # ===== 身份证号码（投保人/被保险人） =====
     _extract_id_numbers(text, text_merged, fields)
