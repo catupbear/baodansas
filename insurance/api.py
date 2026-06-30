@@ -1685,6 +1685,8 @@ def update_supported_companies_config():
 
 def _cross_fill_from_siblings(db, record_id: int, file_md5: str, parsed_fields: dict):
     """从同一 PDF（相同 file_md5）的兄弟记录中互补缺失的基础字段"""
+    if not file_md5:  # 空 md5 不能作分组键，否则会把所有空md5记录当成兄弟互相污染
+        return
     fill_fields = ["车牌号", "投保人", "被保险人", "车主", "证件号码",
                    "车架号VIN", "发动机号", "厂牌型号",
                    "保司公司名称", "保司地址"]
@@ -1730,6 +1732,8 @@ def _cross_fill_from_siblings(db, record_id: int, file_md5: str, parsed_fields: 
 
 def _get_sibling_records(db, file_md5: str, exclude_id: int) -> list:
     """查询同一 PDF（相同 file_md5）的其他保单记录摘要，每个 policy_index 只保留最新一条"""
+    if not file_md5:  # 空 md5 不能作分组键
+        return []
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
