@@ -2254,6 +2254,16 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
 def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: str):
     """提取投保人"""
 
+    # 平安车主尊享：表头"投保人姓名 证件类型 证件号码..."后竖排OCR错乱，证件类型(港澳居民来往内地通行证/
+    # 港澳台居民...)被拆成单独一行，真实姓名在其下一行行首("陈志云 往内地通行...")。优先取姓名避免误取证件类型
+    if "投保人" not in fields:
+        m = re.search(r'投保人姓名\s+证件类型[\s\S]{0,80}?(?:港澳居民来|港澳台居民|台湾居民|台胞|外国人)\s*\n\s*([一-鿿]{2,4})(?=\s)', text)
+        if m:
+            val = _clean_person_name(m.group(1))
+            if _is_valid_person(val):
+                fields["投保人"] = val
+                return  # 立即返回，避免后面无守卫的"投保人信息区域标题"分支覆盖成"港澳居民来"
+
     # 紫金驾乘险等：标签"投保人名称"竖排被OCR拆成"投保人名\n<值>\n称："，值夹在标签中间
     if "投保人" not in fields:
         m = re.search(r'投保人名\s*\n\s*([一-鿿·（()）\w]{2,20})\s*\n\s*称\s*[：:]', text)
