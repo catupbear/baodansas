@@ -1102,13 +1102,15 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
         # text_merged 优先：它把跨行/字间空格的中文合并（"管理中\n心"→"管理中心"），地址更完整不易截断
         for src in [text_merged, text]:
             # 地址行尾常跟"邮政编码:xxx"（如平安同行），在邮政编码处截断保留前面地址
-            m = re.search(r'(?<!总)公司地址[：: 　\t]+(.+?)(?:\s*邮政编码|\s+公司网址|\s{2,}|\n|$)', src)
+            m = re.search(r'(?<!总)公司地址(?:及邮编)?[：: 　\t]+(.+?)(?:\s*邮政编码|\s+公司网址|\s{2,}|\n|$)', src)
             if m:
                 val = m.group(1).strip()
+                # 安诚等"公司地址及邮编：…新浩壹都A座1201-9号(518039)"尾部带邮编括号，去掉
+                val = re.sub(r'\s*[（(]\d{6}[)）]\s*$', '', val).strip()
                 # 地址跨行且括号未闭合（如富德"...招商盛世广场C座(\n中国燃气大厦）13层02、03、04单元"）：
                 # 单行会在"C座("处被换行截断，这里重新跨行匹配到"邮政编码/签单日期"边界，去换行空格补全
                 if (val.count('(') + val.count('（')) > (val.count(')') + val.count('）')):
-                    m2 = re.search(r'(?<!总)公司地址[：: 　\t]+([\s\S]{4,120}?)(?:邮政编码|邮编|签单日期)', src)
+                    m2 = re.search(r'(?<!总)公司地址(?:及邮编)?[：: 　\t]+([\s\S]{4,120}?)(?:邮政编码|邮编|签单日期)', src)
                     if m2:
                         val2 = re.sub(r'\s+', '', m2.group(1))
                         if val2:
@@ -2890,6 +2892,7 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
         fields["核定载质量"] = m.group(1) + "千克"
 
     # 使用性质
+    _use_bad = r'(核定|载客|载质量|载人|座位|车架|发动机|识别代码|VIN|车牌|号牌|车辆种类|车辆类型|机动车种类|序号|品牌|厂牌|型号|排\s*量|功率|车辆识别)'
     for p in [
         r"使\s*用\s*性\s*质[：:\s]*(\S+?)(?:\s|$|核定|年平均|机动车种类)",
         r"使\s*用\s*性\s*质\s+(\S+)",
@@ -2899,9 +2902,17 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
             val = m.group(1)
             # 中华联合的"使1用1性1质"清理
             val = re.sub(r'1', '', val)
+            # 表格被 OCR 压平时"使用性质"标签后直接跟下一个表头词（如安诚驾乘险"核定载客人数"），避免误把标签当值
+            if re.match(_use_bad, val):
+                continue
             if len(val) <= 10:
                 fields["使用性质"] = val
                 break
+    # 兜底：表格式保单（驾乘险等）使用性质值与标签错行、无标签锚点，按固定枚举词兜底
+    if "使用性质" not in fields:
+        m = re.search(r"(?<![一-鿿A-Za-z])(非营业|非营运|营业货车|营业客车|营运货车|营运客车|家庭自用|党政机关|出租租赁|城市公交|公路客运)(?![一-鿿])", text)
+        if m:
+            fields["使用性质"] = m.group(1)
 
     # 机动车种类（中华联合等用"车辆类型"）。限定标准车型词结尾，避免"车辆类型"出现在条款里时误取条款文本。
     m = re.search(r"(?:机动车种类|车\s*辆\s*类\s*型)[：:\s]*([^\s、。，；]{0,8}?(?:客车|货车|轿车|挂车|两用车|作业车|特种车|越野车|乘用车|摩托车|汽车))(?:\s|$|[，,、。])", text)
