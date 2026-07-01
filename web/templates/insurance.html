@@ -5312,10 +5312,54 @@ const _app = createApp({
             listEditing.value = '';
         }
 
+        // 合并视图：识别一条源记录的险种
+        function _invKind(rec) {
+            const t = ((rec.display_fields || {})['险种'] || '') + '';
+            if (/交强|强制/.test(t)) return '交强险';
+            if (/商业/.test(t)) return '商业险';
+            return '非车险';
+        }
+        // 合并行的列 → 该存到哪个险种、存成哪个字段
+        function _mergeFieldTarget(col) {
+            const m = col.match(/^(商业险|交强险|非车险)保费$/);
+            if (m) return { kind: m[1], field: '保费' };   // 拆分保费列 → 对应险种的"保费"
+            if (col === '车船税') return { kind: '交强险', field: '车船税' };
+            return { kind: '*', field: col };              // 共有字段 → 三张一起改
+        }
+        // 合并行编辑：定位到真实保单记录后保存（可能多条）
+        async function _saveMergedEdit(record, col, newValue) {
+            const tgt = _mergeFieldTarget(col);
+            let targets = record._children || [];
+            if (tgt.kind !== '*') targets = targets.filter(r => _invKind(r) === tgt.kind);
+            if (!targets.length) {
+                showMessage(`该车牌下没有${tgt.kind}保单，无法保存"${col}"`, false);
+                cancelListEdit(); return;
+            }
+            const ocrField = _colToOcrField[tgt.field] || tgt.field;
+            listEditing.saving = true;
+            try {
+                for (const t of targets) {
+                    const resp = await authFetch(`/api/insurance/records/${t.id}/fields`, {
+                        method: 'PUT', body: JSON.stringify({ fields: { [ocrField]: newValue } }),
+                    });
+                    if (!resp.ok) { showMessage('保存失败', false); return; }
+                }
+                record.display_fields[col] = newValue;
+                targets.forEach(t => { if (t.display_fields) t.display_fields[tgt.field] = newValue; });
+                showMessage('已保存', true);
+            } catch (e) {
+                showMessage('保存失败: ' + e.message, false);
+            } finally {
+                listEditing.saving = false;
+                cancelListEdit();
+            }
+        }
+
         async function saveListEdit(record) {
             if (listEditing.saving) return;
             const col = listEditing.col;
             const newValue = listEditing.value.trim();
+            if (record._merged) { await _saveMergedEdit(record, col, newValue); return; }
             // 映射回 OCR 字段名，如果无映射则直接用列名
             const ocrField = _colToOcrField[col] || col;
 
