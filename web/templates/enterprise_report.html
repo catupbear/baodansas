@@ -27,7 +27,7 @@
         .tip { display: none; position: absolute; background: rgba(30,30,30,0.88); color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 12px; pointer-events: none; white-space: nowrap; z-index: 20; box-shadow: 0 2px 8px rgba(0,0,0,0.18); line-height: 1.8; }
         .state { text-align: center; padding: 80px 24px; color: #9ca3af; }
         @media (max-width: 480px) { .grid { grid-template-columns: repeat(2, 1fr); } }
-        /* 右下角常驻"反馈与建议"浮动按钮 */
+        /* 右下角常驻"反馈与意见"浮动按钮 */
         .fab { position: fixed; right: 18px; bottom: 22px; background: #ea580c; color: #fff; border: none; border-radius: 24px; padding: 12px 18px; font-size: 14px; font-weight: 600; box-shadow: 0 6px 18px rgba(234,88,12,0.42); cursor: pointer; z-index: 50; display: inline-flex; align-items: center; gap: 6px; }
         .fab:active { transform: scale(0.96); }
         .fb-mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 60; align-items: center; justify-content: center; padding: 20px; }
@@ -59,6 +59,19 @@
         .dtbl tbody tr:hover td { background: #faf9f7; }
         .dtbl .rate { color: #ea580c; font-weight: 600; }
         .dtbl .zero { color: #cbd5e1; }
+        .cmp-row { display: flex; align-items: center; gap: 12px; margin: 14px 0; }
+        .cmp-label { width: 92px; font-size: 13.5px; color: #475569; font-weight: 600; flex-shrink: 0; display: flex; align-items: center; gap: 5px; }
+        .cmp-label .ico { font-size: 15px; }
+        .cmp-track { flex: 1; height: 30px; background: #f1f5f9; border-radius: 15px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,.07); }
+        .cmp-bar { height: 100%; border-radius: 15px; width: 0; transition: width 1s cubic-bezier(.22,.61,.36,1); }
+        .cmp-bar.manual { background: linear-gradient(90deg,#cbd5e1,#94a3b8); }
+        .cmp-bar.sys { background: linear-gradient(90deg,#fdba74,#ea580c); box-shadow: 0 2px 10px rgba(234,88,18,.45); }
+        .cmp-time { width: 118px; text-align: right; font-size: 15px; font-weight: 800; flex-shrink: 0; }
+        .sv-hero { text-align: center; padding: 8px 0 22px; }
+        .sv-hero .icon { font-size: 32px; }
+        .sv-save { font-size: 34px; font-weight: 800; margin: 8px 0 4px; background: linear-gradient(90deg,#f97316,#ea580c); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+        .sv-sub { font-size: 13px; color: #6b7280; line-height: 1.7; }
+        .sv-badge { display: inline-block; margin-top: 10px; padding: 6px 18px; background: linear-gradient(90deg,#fff7ed,#ffedd5); color: #c2410c; border: 1px solid #fed7aa; border-radius: 999px; font-size: 13px; font-weight: 700; }
     </style>
 </head>
 <body>
@@ -80,8 +93,30 @@
                 </div>
                 <p style="font-size:12px;color:#9ca3af;margin-top:12px;line-height:1.6;">成功率 =（总量 − 失败）÷ 总量。除「失败」外，需人工补充、非保单均计入成功（非保单数量单列供参考）。<br>非系统问题成功率：文件本身损坏/无法打开导致的失败（非系统识别问题）不计入失败，用于衡量系统实际识别能力。</p>
             </div>
+            <div class="card">
+                <h2><span class="bar"></span>为您节约的时间</h2>
+                <div class="sv-hero">
+                    <div class="icon">⏱️</div>
+                    <div class="sv-sub">本期已自动识别 <b id="sv_n" style="color:#ea580c;">-</b> 份保单，相比人工逐份录入</div>
+                    <div class="sv-save">累计节省 <span id="sv_save">-</span></div>
+                    <div class="sv-badge">⚡ 效率提升 <b>24</b> 倍</div>
+                </div>
+                <div style="max-width:560px;margin:6px auto 0;">
+                    <div class="cmp-row">
+                        <div class="cmp-label"><span class="ico">🖐️</span>人工录入</div>
+                        <div class="cmp-track"><div class="cmp-bar manual" id="sv_bar_manual"></div></div>
+                        <div class="cmp-time" id="sv_manual" style="color:#64748b;">-</div>
+                    </div>
+                    <div class="cmp-row">
+                        <div class="cmp-label"><span class="ico">⚡</span><span style="color:#ea580c;">智能识别</span></div>
+                        <div class="cmp-track"><div class="cmp-bar sys" id="sv_bar_sys"></div></div>
+                        <div class="cmp-time" id="sv_sys" style="color:#ea580c;">-</div>
+                    </div>
+                </div>
+                <p style="font-size:12px;color:#9ca3af;margin-top:18px;line-height:1.6;text-align:center;">按人工处理一份保单约需 2 分钟、系统自动识别约 5 秒估算</p>
+            </div>
             <div class="card" id="failedCard" style="display:none;">
-                <h2><span class="bar" style="background:#dc2626;"></span>识别失败明细 <span id="failedCount" style="font-size:13px;color:#9ca3af;font-weight:400;"></span></h2>
+                <h2><span class="bar" style="background:#dc2626;"></span>识别失败原因排查结果 <span id="failedCount" style="font-size:13px;color:#9ca3af;font-weight:400;"></span></h2>
                 <div id="failedList"></div>
             </div>
             <div class="card">
@@ -105,16 +140,22 @@
                     </table>
                 </div>
             </div>
+            <div class="card" style="text-align:center;padding:28px 20px;background:#F36812;box-shadow:0 4px 16px rgba(243,104,18,0.35);">
+                <div style="font-size:14px;color:#fff;line-height:2;">
+                    如有任何意见或建议，欢迎点击右下角 <b style="color:#fff;">💬 反馈与意见</b> 与我们沟通。<br>
+                    <span style="font-size:17px;font-weight:800;color:#fff;">祝贵司业务蒸蒸日上 🎉</span>
+                </div>
+            </div>
         </div>
         <div id="loading" class="state">加载中…</div>
         <div id="error" class="state" style="display:none;">报告加载失败，链接可能已失效，请联系为您服务的顾问。</div>
     </div>
 
     <!-- 右下角常驻反馈按钮 -->
-    <button class="fab" onclick="openFb()">💬 反馈与建议</button>
+    <button class="fab" onclick="openFb()">💬 反馈与意见</button>
     <div class="fb-mask" id="fbMask">
         <div class="fb-box">
-            <h3>反馈与建议</h3>
+            <h3>反馈与意见</h3>
             <div class="sub">您的意见将帮助我们把产品做得更好</div>
             <textarea id="fbContent" placeholder="欢迎提出您对报告或系统的意见、建议、问题…"></textarea>
             <input id="fbContact" placeholder="联系方式（选填，方便我们回复您）">
@@ -132,6 +173,13 @@
     function token() { return localStorage.getItem('token'); }
     function setText(id, v) { document.getElementById(id).textContent = v; }
     function fmt(n) { return (n == null ? 0 : n).toLocaleString('en-US'); }
+    // 秒数 → 人类可读时长（最多显示两级单位）
+    function fmtDur(sec) {
+        sec = Math.round(sec);
+        if (sec < 60) return sec + ' 秒';
+        if (sec < 3600) { var m = Math.floor(sec / 60), s2 = sec % 60; return m + ' 分' + (s2 ? ' ' + s2 + ' 秒' : ''); }
+        if (sec < 86400) { var h = Math.floor(sec / 3600), m2 = Math.round(sec % 3600 / 60); return h + ' 小时' + (m2 ? ' ' + m2 + ' 分' : ''); }
+        var dd = Math.floor(sec / 86400), hh = Math.round(sec % 86400 / 3600); return dd + ' 天' + (hh ? ' ' + hh + ' 小时' : ''); }
     function esc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
     // 根据报告周期时长决定标题（日报/周报/月度/季度/年度）
@@ -146,7 +194,7 @@
         return '';
     }
 
-    // ===== 反馈与建议 =====
+    // ===== 反馈与意见 =====
     window.openFb = function () { document.getElementById('fbMask').style.display = 'flex'; };
     window.closeFb = function () { document.getElementById('fbMask').style.display = 'none'; };
     window.submitFb = function () {
@@ -195,8 +243,7 @@
         document.getElementById('loading').style.display = 'none';
         document.getElementById('content').style.display = 'block';
         window._reportEntName = d.enterprise_name || '';
-        var label = periodLabel(d.date_start, d.date_end);
-        setText('entName', (d.enterprise_name || '企业') + ' ' + label + '经营报告');
+        setText('entName', (d.enterprise_name || '企业') + ' 午虎AI保单台账系统使用报告');
         setText('period', '报告周期：' + d.date_start + ' ~ ' + d.date_end);
         var s = d.summary || {};
         setText('s_total', fmt(s.total));
@@ -205,6 +252,18 @@
         setText('s_failed', fmt(s.failed));
         setText('s_rate', (s.success_rate != null ? s.success_rate : 0) + '%');
         setText('s_sysrate', (s.sys_success_rate != null ? s.sys_success_rate : 0) + '%');
+        // 节约时间对比：成功识别份数 × (人工2分钟 vs 系统5秒)
+        var svn = Math.max((s.total || 0) - (s.failed || 0), 0);
+        var manualSec = svn * 120, sysSec = svn * 5, saveSec = manualSec - sysSec;
+        setText('sv_n', fmt(svn));
+        setText('sv_manual', fmtDur(manualSec));
+        setText('sv_sys', fmtDur(sysSec));
+        setText('sv_save', fmtDur(saveSec));
+        requestAnimationFrame(function () {
+            document.getElementById('sv_bar_manual').style.width = '100%';
+            var ratio = manualSec > 0 ? (sysSec / manualSec * 100) : 0;
+            document.getElementById('sv_bar_sys').style.width = Math.max(ratio, 2).toFixed(2) + '%';
+        });
         // 识别失败明细
         var fails = d.failed_records || [];
         var fc = document.getElementById('failedCard');

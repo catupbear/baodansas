@@ -565,7 +565,7 @@
                     <p style="font-size:13px;color:#888;margin-bottom:16px;">{{ reportTarget && reportTarget.name }}</p>
                     <div style="font-size:13px;color:#555;margin-bottom:8px;">选择时间范围</div>
                     <div style="display:flex;gap:8px;margin-bottom:14px;">
-                        <button v-for="opt in [{k:'7',l:'近一周'},{k:'30',l:'近一月'},{k:'custom',l:'自定义'}]" :key="opt.k"
+                        <button v-for="opt in [{k:'7',l:'近一周'},{k:'lastmonth',l:'上月'},{k:'custom',l:'自定义'}]" :key="opt.k"
                             @click="reportRange=opt.k; reportLink=''"
                             :style="reportRange===opt.k ? 'flex:1;padding:8px;font-size:13px;background:#ea580c;color:#fff;border:1px solid #ea580c;border-radius:8px;cursor:pointer;' : 'flex:1;padding:8px;font-size:13px;background:#fff;color:#555;border:1px solid #e7e0d8;border-radius:8px;cursor:pointer;'">
                             {{ opt.l }}
@@ -751,9 +751,15 @@ createApp({
             if (reportRange.value === '7') {
                 const s = new Date(today); s.setDate(s.getDate() - 6);
                 start = _fmtDate(s); end = _fmtDate(today);
-            } else if (reportRange.value === '30') {
-                const s = new Date(today); s.setDate(s.getDate() - 29);
-                start = _fmtDate(s); end = _fmtDate(today);
+            } else if (reportRange.value === 'lastmonth') {
+                // 上月：上一个自然月 1 号到最后一天
+                const pad = n => String(n).padStart(2, '0');
+                const m = today.getMonth();               // 0-11，当前月
+                const lm = m === 0 ? 12 : m;              // 上月(1-12)
+                const ly = m === 0 ? today.getFullYear() - 1 : today.getFullYear();
+                const lastDay = new Date(ly, lm, 0).getDate();
+                start = ly + '-' + pad(lm) + '-01';
+                end = ly + '-' + pad(lm) + '-' + pad(lastDay);
             } else {
                 start = reportStart.value; end = reportEnd.value;
                 if (!start || !end) { showToast('请选择起止日期', 'error'); return; }
