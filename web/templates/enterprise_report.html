@@ -163,7 +163,7 @@
         document.getElementById('content').style.display = 'block';
         window._reportEntName = d.enterprise_name || '';
         var label = periodLabel(d.date_start, d.date_end);
-        setText('entName', (d.enterprise_name || '企业') + ' ' + label + '经营报告');
+        setText('entName', label + '经营报告');
         setText('period', '报告周期：' + d.date_start + ' ~ ' + d.date_end);
         var s = d.summary || {};
         setText('s_total', fmt(s.total));
