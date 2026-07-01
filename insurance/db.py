@@ -2091,10 +2091,14 @@ def get_enterprise_report_data(db, enterprise_id: int, date_start: str, date_end
         """, bp)
         failed_records = []
         _FILE_ERR = _re.compile(r'未能提取到任何文字|下载失败|内容为空|无法加载|无法打开|损坏|读取失败|解析失败|PDF')
+        _file_err_cnt = 0
         for r in cur.fetchall():
             ct = r["created_at"]
             _em = r["error_message"] or ""
-            _hint = "文件异常，无法打开" if _FILE_ERR.search(_em) else "识别失败，可重新识别"
+            _is_file_err = bool(_FILE_ERR.search(_em))
+            _hint = "文件异常，无法打开" if _is_file_err else "识别失败，可重新识别"
+            if _is_file_err:
+                _file_err_cnt += 1
             failed_records.append({
                 "id": r["id"],
                 "filename": r["filename"] or "",
@@ -2104,6 +2108,12 @@ def get_enterprise_report_data(db, enterprise_id: int, date_start: str, date_end
                 "sender": r["sender_name"] or "",
                 "cos_url": r["cos_url"] or "",
             })
+
+        # 非系统问题成功率：文件本身损坏/无法打开(非系统识别问题)不计入失败
+        _sys_failed = max(failed - _file_err_cnt, 0)
+        summary["file_error"] = _file_err_cnt
+        summary["system_failed"] = _sys_failed
+        summary["sys_success_rate"] = round((total - _sys_failed) / total * 100, 1) if total else 100.0
 
         return {"summary": summary, "daily": daily, "companies": companies,
                 "policy_types": policy_types, "uploaders": uploaders,

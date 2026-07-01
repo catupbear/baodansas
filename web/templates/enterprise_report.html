@@ -68,8 +68,9 @@
                     <div class="stat"><div class="v muted" id="s_nonpolicy">-</div><div class="l">非保单</div></div>
                     <div class="stat"><div class="v" id="s_failed" style="color:#dc2626;">-</div><div class="l">失败</div></div>
                     <div class="stat"><div class="v rate" id="s_rate">-</div><div class="l">成功率</div></div>
+                    <div class="stat"><div class="v rate" id="s_sysrate">-</div><div class="l">非系统问题成功率</div></div>
                 </div>
-                <p style="font-size:12px;color:#9ca3af;margin-top:12px;line-height:1.6;">成功率 =（总量 − 失败）÷ 总量。除「失败」外，需人工补充、非保单均计入成功（非保单数量单列供参考）。</p>
+                <p style="font-size:12px;color:#9ca3af;margin-top:12px;line-height:1.6;">成功率 =（总量 − 失败）÷ 总量。除「失败」外，需人工补充、非保单均计入成功（非保单数量单列供参考）。<br>非系统问题成功率：文件本身损坏/无法打开导致的失败（非系统识别问题）不计入失败，用于衡量系统实际识别能力。</p>
             </div>
             <div class="card" id="failedCard" style="display:none;">
                 <h2><span class="bar" style="background:#dc2626;"></span>识别失败明细 <span id="failedCount" style="font-size:13px;color:#9ca3af;font-weight:400;"></span></h2>
@@ -185,6 +186,7 @@
         setText('s_nonpolicy', fmt(s.nonpolicy));
         setText('s_failed', fmt(s.failed));
         setText('s_rate', (s.success_rate != null ? s.success_rate : 0) + '%');
+        setText('s_sysrate', (s.sys_success_rate != null ? s.sys_success_rate : 0) + '%');
         // 识别失败明细
         var fails = d.failed_records || [];
         var fc = document.getElementById('failedCard');
