@@ -256,7 +256,7 @@
         // x 轴标签
         ctx.fillStyle = '#9ca3af'; var ls = Math.max(1, Math.floor(daily.length / 7)), last = daily.length - 1;
         daily.forEach(function (d, i) {
-            if (i % ls === 0 || i === last) {
+            if (i === last || (i % ls === 0 && (last - i) >= ls)) {
                 ctx.textAlign = i === 0 ? 'left' : (i === last ? 'right' : 'center');
                 ctx.fillText(d.day.slice(5), X(i), H - 8);
             }
