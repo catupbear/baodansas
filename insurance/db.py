@@ -2016,11 +2016,11 @@ def get_enterprise_report_data(db, enterprise_id: int, date_start: str, date_end
         }
 
         # 2. 每日趋势（按天），并补全无数据的日期为 0
-        _FE = ("(error_message LIKE '%未能提取到任何文字%' OR error_message LIKE '%下载失败%' "
-               "OR error_message LIKE '%内容为空%' OR error_message LIKE '%无法加载%' "
-               "OR error_message LIKE '%无法打开%' OR error_message LIKE '%损坏%' "
-               "OR error_message LIKE '%读取失败%' OR error_message LIKE '%解析失败%' "
-               "OR error_message LIKE '%PDF%')")
+        _FE = ("(error_message LIKE '%%未能提取到任何文字%%' OR error_message LIKE '%%下载失败%%' "
+               "OR error_message LIKE '%%内容为空%%' OR error_message LIKE '%%无法加载%%' "
+               "OR error_message LIKE '%%无法打开%%' OR error_message LIKE '%%损坏%%' "
+               "OR error_message LIKE '%%读取失败%%' OR error_message LIKE '%%解析失败%%' "
+               "OR error_message LIKE '%%PDF%%')")
         cur.execute(f"""
             SELECT DATE(created_at) AS day, COUNT(*) AS total,
               SUM({done} AND is_abnormal=0 AND doc_category='保单') AS success,
