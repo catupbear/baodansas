@@ -5330,12 +5330,21 @@ const _app = createApp({
         async function _saveMergedEdit(record, col, newValue) {
             const tgt = _mergeFieldTarget(col);
             let targets = record._children || [];
-            if (tgt.kind !== '*') targets = targets.filter(r => _invKind(r) === tgt.kind);
+            let saveField = tgt.field;
+            if (tgt.kind !== '*') {
+                const matched = targets.filter(r => _invKind(r) === tgt.kind);
+                if (matched.length) { targets = matched; }
+                else {
+                    // 该车牌没有对应险种保单：存到第一张保单、用原列名(如"交强险保费")做独立字段，
+                    // 合并时"保留其他自定义字段"逻辑会把它带回合并行显示
+                    targets = targets.slice(0, 1); saveField = col;
+                }
+            }
             if (!targets.length) {
-                showMessage(`该车牌下没有${tgt.kind}保单，无法保存"${col}"`, false);
+                showMessage('该车牌下没有任何保单记录，无法保存', false);
                 cancelListEdit(); return;
             }
-            const ocrField = _colToOcrField[tgt.field] || tgt.field;
+            const ocrField = _colToOcrField[saveField] || saveField;
             listEditing.saving = true;
             try {
                 for (const t of targets) {
@@ -5345,7 +5354,7 @@ const _app = createApp({
                     if (!resp.ok) { showMessage('保存失败', false); return; }
                 }
                 record.display_fields[col] = newValue;
-                targets.forEach(t => { if (t.display_fields) t.display_fields[tgt.field] = newValue; });
+                targets.forEach(t => { if (t.display_fields) t.display_fields[saveField] = newValue; });
                 showMessage('已保存', true);
             } catch (e) {
                 showMessage('保存失败: ' + e.message, false);
