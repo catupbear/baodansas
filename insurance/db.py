@@ -1997,7 +1997,17 @@ def get_enterprise_report_data(db, enterprise_id: int, date_start: str, date_end
         success = int(row.get("success") or 0)
         abnormal = int(row.get("abnormal") or 0)
         nonpolicy = int(row.get("nonpolicy") or 0)
-        failed = int(row.get("failed") or 0)
+        # 真失败：排除同文件已有成功记录的（重传/重识别成功的不算最终失败），与失败明细口径一致
+        cur.execute(f"""
+            SELECT COUNT(*) AS c FROM insurance_records r
+            WHERE {base_r} AND r.status='failed'
+              AND NOT EXISTS (
+                SELECT 1 FROM insurance_records r2
+                WHERE r2.enterprise_id = r.enterprise_id AND r2.deleted_at IS NULL AND r2.status='done'
+                  AND ((r.file_md5 IS NOT NULL AND r.file_md5 <> '' AND r2.file_md5 = r.file_md5)
+                       OR (r.filename <> '' AND r2.filename = r.filename)))
+        """, bp)
+        failed = int((cur.fetchone() or {}).get("c") or 0)
         total = success + abnormal + nonpolicy + failed
         summary = {
             "total": total, "success": success, "abnormal": abnormal,
@@ -2069,10 +2079,17 @@ def get_enterprise_report_data(db, enterprise_id: int, date_start: str, date_end
 
         # 6. 失败记录明细（报告页展示"哪几份识别失败了"）
         cur.execute(f"""
-            SELECT id, filename, created_at, error_message, room_name, sender_name
-            FROM insurance_records
-            WHERE {base} AND status='failed'
-            ORDER BY created_at DESC LIMIT 200
+            SELECT r.id, r.filename, r.created_at, r.error_message, r.room_name, r.sender_name
+            FROM insurance_records r
+            WHERE {base_r} AND r.status='failed'
+              AND NOT EXISTS (
+                SELECT 1 FROM insurance_records r2
+                WHERE r2.enterprise_id = r.enterprise_id AND r2.deleted_at IS NULL
+                  AND r2.status='done'
+                  AND ((r.file_md5 IS NOT NULL AND r.file_md5 <> '' AND r2.file_md5 = r.file_md5)
+                       OR (r.filename <> '' AND r2.filename = r.filename))
+              )
+            ORDER BY r.created_at DESC LIMIT 200
         """, bp)
         failed_records = []
         for r in cur.fetchall():
