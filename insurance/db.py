@@ -2016,10 +2016,17 @@ def get_enterprise_report_data(db, enterprise_id: int, date_start: str, date_end
         }
 
         # 2. 每日趋势（按天），并补全无数据的日期为 0
+        _FE = ("(error_message LIKE '%未能提取到任何文字%' OR error_message LIKE '%下载失败%' "
+               "OR error_message LIKE '%内容为空%' OR error_message LIKE '%无法加载%' "
+               "OR error_message LIKE '%无法打开%' OR error_message LIKE '%损坏%' "
+               "OR error_message LIKE '%读取失败%' OR error_message LIKE '%解析失败%' "
+               "OR error_message LIKE '%PDF%')")
         cur.execute(f"""
             SELECT DATE(created_at) AS day, COUNT(*) AS total,
               SUM({done} AND is_abnormal=0 AND doc_category='保单') AS success,
-              SUM(status='failed') AS failed
+              SUM(status='failed') AS failed,
+              SUM({done} AND doc_category<>'保单' AND doc_category<>'') AS nonpolicy,
+              SUM(status='failed' AND {_FE}) AS file_error
             FROM insurance_records
             WHERE {base} AND status NOT IN ('processing','pending','duplicate')
             GROUP BY DATE(created_at)
@@ -2028,15 +2035,20 @@ def get_enterprise_report_data(db, enterprise_id: int, date_start: str, date_end
         for r in cur.fetchall():
             d = r["day"]
             ds = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)
-            dmap[ds] = (int(r["total"] or 0), int(r["success"] or 0), int(r["failed"] or 0))
+            dmap[ds] = (int(r["total"] or 0), int(r["success"] or 0), int(r["failed"] or 0),
+                        int(r["nonpolicy"] or 0), int(r["file_error"] or 0))
         daily = []
         d0 = _dt.datetime.strptime(date_start, "%Y-%m-%d").date()
         d1 = _dt.datetime.strptime(date_end, "%Y-%m-%d").date()
         cd = d0
         while cd <= d1:
             ds = cd.strftime("%Y-%m-%d")
-            t, s, f = dmap.get(ds, (0, 0, 0))
-            daily.append({"day": ds, "total": t, "success": s, "failed": f})
+            t, s, f, np_, fe = dmap.get(ds, (0, 0, 0, 0, 0))
+            _sr = round((t - f) / t * 100, 1) if t else 0.0
+            _ssr = round((t - max(f - fe, 0)) / t * 100, 1) if t else 0.0
+            daily.append({"day": ds, "total": t, "success": s, "failed": f,
+                          "nonpolicy": np_, "file_error": fe,
+                          "success_rate": _sr, "sys_success_rate": _ssr})
             cd += _dt.timedelta(days=1)
 
         # 3. 保司分布（仅成功保单，含保费合计）

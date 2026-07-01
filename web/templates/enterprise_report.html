@@ -51,6 +51,14 @@
         .fr-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; color: #9ca3af; font-size: 12px; margin-top: 7px; }
         .fr-meta span { display: inline-flex; align-items: center; gap: 3px; }
         .fr-err { display: inline-block; color: #dc2626; font-size: 12px; margin-top: 7px; background: #fef2f2; border-radius: 6px; padding: 2px 9px; }
+        .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .dtbl { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+        .dtbl th { color: #6b7280; font-weight: 600; text-align: right; padding: 9px 10px; border-bottom: 2px solid #f0efec; }
+        .dtbl th:first-child, .dtbl td:first-child { text-align: left; }
+        .dtbl td { padding: 9px 10px; border-bottom: 1px solid #f7f6f4; text-align: right; color: #1c1410; }
+        .dtbl tbody tr:hover td { background: #faf9f7; }
+        .dtbl .rate { color: #ea580c; font-weight: 600; }
+        .dtbl .zero { color: #cbd5e1; }
     </style>
 </head>
 <body>
@@ -86,6 +94,15 @@
                 <div class="chart-box">
                     <canvas id="trend"></canvas>
                     <div id="trendTip" class="tip"></div>
+                </div>
+            </div>
+            <div class="card">
+                <h2><span class="bar"></span>每日明细</h2>
+                <div class="tbl-wrap">
+                    <table class="dtbl">
+                        <thead><tr><th>日期</th><th>识别量</th><th>成功</th><th>失败</th><th>非保单</th><th>成功率</th><th>非系统成功率</th></tr></thead>
+                        <tbody id="dailyTable"></tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -212,6 +229,22 @@
         // 趋势口径：成功 = 总量 - 失败（非保单、需人工补充都算成功）
         var daily = d.daily || [];
         daily.forEach(function (x) { x.success = (x.total || 0) - (x.failed || 0); });
+        // 每日明细表格
+        var _tb = document.getElementById('dailyTable');
+        if (_tb) {
+            var _rows = '';
+            daily.forEach(function (x) {
+                var z = function (n) { return (n ? '' : ' class="zero"'); };
+                _rows += '<tr><td>' + esc(x.day) + '</td>'
+                      + '<td' + z(x.total) + '>' + fmt(x.total) + '</td>'
+                      + '<td' + z(x.success) + '>' + fmt(x.success) + '</td>'
+                      + '<td' + z(x.failed) + '>' + fmt(x.failed) + '</td>'
+                      + '<td' + z(x.nonpolicy) + '>' + fmt(x.nonpolicy) + '</td>'
+                      + '<td class="rate">' + (x.success_rate != null ? x.success_rate : 0) + '%</td>'
+                      + '<td class="rate">' + (x.sys_success_rate != null ? x.sys_success_rate : 0) + '%</td></tr>';
+            });
+            _tb.innerHTML = _rows;
+        }
         // 延迟一帧确保 canvas 已布局拿到正确宽度
         requestAnimationFrame(function () { drawTrend(daily); });
     }
