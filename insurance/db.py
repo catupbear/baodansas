@@ -2090,13 +2090,16 @@ def get_enterprise_report_data(db, enterprise_id: int, date_start: str, date_end
             ORDER BY r.created_at DESC LIMIT 200
         """, bp)
         failed_records = []
+        _FILE_ERR = _re.compile(r'未能提取到任何文字|下载失败|内容为空|无法加载|无法打开|损坏|读取失败|解析失败|PDF')
         for r in cur.fetchall():
             ct = r["created_at"]
+            _em = r["error_message"] or ""
+            _hint = "文件异常，无法打开" if _FILE_ERR.search(_em) else "识别失败，可重新识别"
             failed_records.append({
                 "id": r["id"],
                 "filename": r["filename"] or "",
                 "created_at": ct.strftime("%Y-%m-%d %H:%M") if hasattr(ct, "strftime") else str(ct),
-                "error": (r["error_message"] or "")[:120],
+                "error": _hint,
                 "source": r["sender_name"] or r["room_name"] or "",
             })
 
