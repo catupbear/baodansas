@@ -223,6 +223,11 @@ def _require_login():
     # 页面路由不需要鉴权（由前端 JS 处理登录跳转）
     if request.path == "/insurance/settings":
         return
+    # 经营报告推送给客户查看：报告数据(format=json，凭链接签名) 和 反馈接口 不需登录
+    if request.path == "/api/insurance/enterprise-report" and request.args.get("format") == "json":
+        return
+    if request.path == "/api/insurance/report-feedback":
+        return
 
     auth_header = request.headers.get("Authorization", "")
     token = auth_header[7:] if auth_header.startswith("Bearer ") else request.args.get("token")
@@ -3721,21 +3726,21 @@ def _pure_number(s):
     return None
 
 
+_REPORT_SIGN_SALT = "wxbot-report-2026-a7f3k9x2q5"
+
+def _report_sign(eid, ds, de):
+    """报告链接签名：防止随意改 enterprise_id 枚举查看别家报告。"""
+    import hashlib
+    raw = f"{eid}|{ds}|{de}|{_REPORT_SIGN_SALT}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
 @insurance_bp.route("/api/insurance/enterprise-report", methods=["GET"])
-@login_required
 def export_enterprise_report():
     """导出企业经营报告 Excel（仅超管）。
     含：识别量汇总、每日趋势(折线图)、保司/险种分布、上传人排名。
     参数：enterprise_id, date_start(YYYY-MM-DD), date_end, enterprise_name(可选)。"""
     from auth.db import ROLE_SUPER_ADMIN
-    if g.current_user.get("role") != ROLE_SUPER_ADMIN:
-        return jsonify({"code": 403, "msg": "无权限"}), 403
-    try:
-        import openpyxl
-        from openpyxl.chart import LineChart, Reference
-        from openpyxl.styles import Font, PatternFill, Alignment
-    except ImportError:
-        return jsonify({"code": 500, "msg": "缺少 openpyxl 依赖"}), 500
     try:
         enterprise_id = request.args.get("enterprise_id", "").strip()
         date_start = request.args.get("date_start", "").strip()
@@ -3745,10 +3750,12 @@ def export_enterprise_report():
             return jsonify({"code": 400, "msg": "缺少参数"}), 400
 
         from insurance.db import get_enterprise_report_data
-        data = get_enterprise_report_data(_db, int(enterprise_id), date_start, date_end)
 
-        # 网页报告：format=json 时只返回 汇总 + 每日趋势（不含保司/险种/上传排名），供报告页面渲染
+        # 网页报告(format=json)：推送给客户查看，凭链接签名访问、不需登录
         if request.args.get("format") == "json":
+            if request.args.get("sign", "") != _report_sign(enterprise_id, date_start, date_end):
+                return jsonify({"code": 403, "msg": "链接无效或已失效"}), 403
+            data = get_enterprise_report_data(_db, int(enterprise_id), date_start, date_end)
             _nm = ent_name
             if not _nm:
                 try:
@@ -3764,6 +3771,18 @@ def export_enterprise_report():
                 "daily": data.get("daily", []),
                 "failed_records": data.get("failed_records", []),
             }})
+
+        # 以下：生成报告链接 / 导出Excel —— 仅超管（before_request 已验 token 设置 g.current_user）
+        if g.current_user.get("role") != ROLE_SUPER_ADMIN:
+            return jsonify({"code": 403, "msg": "无权限"}), 403
+        # format=link：返回该报告的签名，供前端拼成带签名的分享链接
+        if request.args.get("format") == "link":
+            return jsonify({"code": 0, "data": {"sign": _report_sign(enterprise_id, date_start, date_end)}})
+
+        import openpyxl
+        from openpyxl.chart import LineChart, Reference
+        from openpyxl.styles import Font, PatternFill, Alignment
+        data = get_enterprise_report_data(_db, int(enterprise_id), date_start, date_end)
 
         if not ent_name:
             try:

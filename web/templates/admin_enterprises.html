@@ -759,8 +759,13 @@ createApp({
                 if (!start || !end) { showToast('请选择起止日期', 'error'); return; }
                 if (start > end) { showToast('起始日期不能晚于结束日期', 'error'); return; }
             }
-            // 生成网页版报告链接，显示在弹窗里供复制（不直接打开/下载）
-            reportLink.value = `${window.location.origin}/enterprise-report-view?enterprise_id=${ent.id}&date_start=${start}&date_end=${end}&enterprise_name=${encodeURIComponent(ent.name || '')}`;
+            // 生成带签名的网页报告链接（客户凭链接免登录查看，签名防止改企业ID看别家数据）
+            try {
+                const _r = await authFetch(`/api/insurance/enterprise-report?format=link&enterprise_id=${ent.id}&date_start=${start}&date_end=${end}`);
+                const _j = await _r.json();
+                if (_j.code !== 0) { showToast(_j.msg || '生成失败', 'error'); return; }
+                reportLink.value = `${window.location.origin}/enterprise-report-view?enterprise_id=${ent.id}&date_start=${start}&date_end=${end}&sign=${_j.data.sign}&enterprise_name=${encodeURIComponent(ent.name || '')}`;
+            } catch (e) { showToast('生成失败', 'error'); return; }
             reportCopied.value = false;
         }
         function copyReportLink() {

@@ -90,7 +90,7 @@
             </div>
         </div>
         <div id="loading" class="state">加载中…</div>
-        <div id="error" class="state" style="display:none;">报告加载失败，请确认已登录后重试。</div>
+        <div id="error" class="state" style="display:none;">报告加载失败，链接可能已失效，请联系为您服务的顾问。</div>
     </div>
 
     <!-- 右下角常驻反馈按钮 -->
@@ -111,7 +111,7 @@
 <script>
 (function () {
     var qs = new URLSearchParams(location.search);
-    var eid = qs.get('enterprise_id'), start = qs.get('date_start'), end = qs.get('date_end');
+    var eid = qs.get('enterprise_id'), start = qs.get('date_start'), end = qs.get('date_end'), sign = qs.get('sign') || '';
     function token() { return localStorage.getItem('token'); }
     function setText(id, v) { document.getElementById(id).textContent = v; }
     function fmt(n) { return (n == null ? 0 : n).toLocaleString('en-US'); }
@@ -137,7 +137,7 @@
         if (!content) { alert('请填写反馈内容'); return; }
         var btn = document.getElementById('fbSubmit'); btn.disabled = true; btn.textContent = '提交中…';
         fetch('/api/insurance/report-feedback', {
-            method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (token() || '') },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 content: content,
                 contact: document.getElementById('fbContact').value.trim(),
@@ -160,8 +160,9 @@
 
     function load() {
         var url = '/api/insurance/enterprise-report?format=json&enterprise_id=' + encodeURIComponent(eid) +
-                  '&date_start=' + encodeURIComponent(start) + '&date_end=' + encodeURIComponent(end);
-        fetch(url, { headers: { 'Authorization': 'Bearer ' + token() } })
+                  '&date_start=' + encodeURIComponent(start) + '&date_end=' + encodeURIComponent(end) +
+                  '&sign=' + encodeURIComponent(sign);
+        fetch(url)
             .then(function (r) { return r.json(); })
             .then(function (j) {
                 if (j.code !== 0) throw new Error(j.msg || 'fail');
