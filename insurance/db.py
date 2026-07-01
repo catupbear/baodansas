@@ -668,7 +668,13 @@ def _parsed_fields_to_row(parsed_fields: dict) -> dict:
         if cn_val:
             iso_val = _date_to_iso(cn_val)
             if _re.match(r'\d{4}-\d{2}-\d{2}', iso_val):
-                row[iso_col] = iso_val
+                # 校验是真实有效日期，避免"2026-06-80"这类OCR错值插入DATE列报1292、导致commit失败
+                try:
+                    from datetime import date as _pydate
+                    _pydate(int(iso_val[0:4]), int(iso_val[5:7]), int(iso_val[8:10]))
+                    row[iso_col] = iso_val
+                except ValueError:
+                    pass
     return row
 
 
