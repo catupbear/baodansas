@@ -2078,7 +2078,7 @@ def get_enterprise_report_data(db, enterprise_id: int, date_start: str, date_end
 
         # 6. 失败记录明细（报告页展示"哪几份识别失败了"）
         cur.execute(f"""
-            SELECT r.id, r.filename, r.created_at, r.error_message, r.room_name, r.sender_name
+            SELECT r.id, r.filename, r.created_at, r.error_message, r.room_name, r.sender_name, r.cos_url
             FROM insurance_records r
             WHERE {base_r} AND r.status='failed'
               AND NOT EXISTS (
@@ -2100,7 +2100,9 @@ def get_enterprise_report_data(db, enterprise_id: int, date_start: str, date_end
                 "filename": r["filename"] or "",
                 "created_at": ct.strftime("%Y-%m-%d %H:%M") if hasattr(ct, "strftime") else str(ct),
                 "error": _hint,
-                "source": r["sender_name"] or r["room_name"] or "",
+                "room": r["room_name"] or "",
+                "sender": r["sender_name"] or "",
+                "cos_url": r["cos_url"] or "",
             })
 
         return {"summary": summary, "daily": daily, "companies": companies,

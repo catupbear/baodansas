@@ -42,11 +42,15 @@
         .fb-cancel { background: #f3f4f6; color: #6b7280; }
         .fb-submit { background: #ea580c; color: #fff; }
         .fb-submit:disabled { opacity: 0.6; }
-        .fr { padding: 12px 2px; border-bottom: 1px solid #f3f4f6; }
+        .fr { padding: 14px 2px; border-bottom: 1px solid #f3f4f6; }
         .fr:last-child { border-bottom: none; }
-        .fr .fn { font-size: 13px; font-weight: 600; color: #1c1410; word-break: break-all; }
-        .fr .meta { color: #9ca3af; font-size: 12px; margin-top: 3px; }
-        .fr .err { color: #dc2626; font-size: 12px; margin-top: 3px; word-break: break-all; }
+        .fr-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+        .fr .fn { font-size: 13px; font-weight: 600; color: #1c1410; word-break: break-all; flex: 1; line-height: 1.5; }
+        .fr-preview { flex-shrink: 0; font-size: 12px; color: #ea580c; border: 1px solid #fdba74; border-radius: 6px; padding: 4px 13px; text-decoration: none; white-space: nowrap; }
+        .fr-preview:active { background: #fff7ed; }
+        .fr-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; color: #9ca3af; font-size: 12px; margin-top: 7px; }
+        .fr-meta span { display: inline-flex; align-items: center; gap: 3px; }
+        .fr-err { display: inline-block; color: #dc2626; font-size: 12px; margin-top: 7px; background: #fef2f2; border-radius: 6px; padding: 2px 9px; }
     </style>
 </head>
 <body>
@@ -189,9 +193,16 @@
             document.getElementById('failedCount').textContent = '共 ' + fails.length + ' 份';
             var html = '';
             fails.forEach(function (fr) {
-                html += '<div class="fr"><div class="fn">' + esc(fr.filename || '(无文件名)') + '</div>'
-                      + '<div class="meta">' + esc(fr.created_at || '') + (fr.source ? ' · ' + esc(fr.source) : '') + '</div>'
-                      + (fr.error ? '<div class="err">' + esc(fr.error) + '</div>' : '') + '</div>';
+                var meta = [];
+                if (fr.created_at) meta.push('<span>\uD83D\uDD52 ' + esc(fr.created_at) + '</span>');
+                if (fr.room) meta.push('<span>\uD83D\uDC65 ' + esc(fr.room) + '</span>');
+                if (fr.sender) meta.push('<span>\uD83D\uDC64 ' + esc(fr.sender) + '</span>');
+                html += '<div class="fr">'
+                      + '<div class="fr-top"><div class="fn">' + esc(fr.filename || '(无文件名)') + '</div>'
+                      + (fr.cos_url ? '<a class="fr-preview" href="' + encodeURI(fr.cos_url) + '" target="_blank" rel="noopener">预览</a>' : '') + '</div>'
+                      + (meta.length ? '<div class="fr-meta">' + meta.join('') + '</div>' : '')
+                      + (fr.error ? '<div class="fr-err">' + esc(fr.error) + '</div>' : '')
+                      + '</div>';
             });
             document.getElementById('failedList').innerHTML = html;
         } else { fc.style.display = 'none'; }
