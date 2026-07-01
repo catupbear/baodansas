@@ -5343,5 +5343,34 @@ def api_submit_error_report():
         conn.close()
 
 
+@insurance_bp.route("/api/insurance/report-feedback", methods=["POST"])
+def api_report_feedback():
+    """经营报告页的「反馈与建议」→ 钉钉（复用新保司通知群，不强制登录，便于分享的报告也能反馈）"""
+    try:
+        data = request.get_json(force=True) or {}
+        content = (data.get("content") or "").strip()
+        if not content:
+            return jsonify({"code": 400, "msg": "请填写反馈内容"}), 400
+        _parts = []
+        if data.get("enterprise_name"):
+            _parts.append("企业: " + str(data["enterprise_name"])[:60])
+        elif data.get("enterprise_id"):
+            _parts.append("企业ID=" + str(data["enterprise_id"])[:20])
+        if data.get("contact"):
+            _parts.append("联系方式: " + str(data["contact"])[:60])
+        if data.get("date_start"):
+            _parts.append("报告周期 %s ~ %s" % (data.get("date_start", ""), data.get("date_end", "")))
+        try:
+            from core.notify import notify_feedback
+            ntf = get_insurance_config(_db, "new_company_notify", {}) or {}
+            notify_feedback(content, " | ".join(_parts), ntf.get("webhook", ""), ntf.get("secret", ""))
+        except Exception:
+            logger.exception("报告反馈钉钉通知失败")
+        return jsonify({"code": 0, "msg": "已提交"})
+    except Exception as e:
+        logger.exception("提交报告反馈失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
 # 站内通知（报错列表/未读数/标记已读）已下线：报错反馈改为提交时直接发钉钉群。
 # error_reports 表仍保留入库做存档，但不再提供超管读取/已读接口。

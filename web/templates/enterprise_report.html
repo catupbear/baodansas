@@ -27,6 +27,21 @@
         .tip { display: none; position: absolute; background: rgba(30,30,30,0.88); color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 12px; pointer-events: none; white-space: nowrap; z-index: 20; box-shadow: 0 2px 8px rgba(0,0,0,0.18); line-height: 1.8; }
         .state { text-align: center; padding: 80px 24px; color: #9ca3af; }
         @media (max-width: 480px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+        /* 右下角常驻"反馈与建议"浮动按钮 */
+        .fab { position: fixed; right: 18px; bottom: 22px; background: #ea580c; color: #fff; border: none; border-radius: 24px; padding: 12px 18px; font-size: 14px; font-weight: 600; box-shadow: 0 6px 18px rgba(234,88,12,0.42); cursor: pointer; z-index: 50; display: inline-flex; align-items: center; gap: 6px; }
+        .fab:active { transform: scale(0.96); }
+        .fb-mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 60; align-items: center; justify-content: center; padding: 20px; }
+        .fb-box { background: #fff; width: 100%; max-width: 420px; border-radius: 16px; padding: 22px; box-shadow: 0 10px 40px rgba(0,0,0,0.25); }
+        .fb-box h3 { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+        .fb-box .sub { font-size: 12px; color: #9ca3af; margin-bottom: 14px; }
+        .fb-box textarea { width: 100%; height: 110px; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; font-size: 14px; resize: vertical; font-family: inherit; outline: none; }
+        .fb-box textarea:focus, .fb-box input:focus { border-color: #ea580c; }
+        .fb-box input { width: 100%; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; font-size: 14px; margin-top: 10px; outline: none; }
+        .fb-btns { display: flex; gap: 10px; margin-top: 16px; }
+        .fb-btns button { flex: 1; padding: 11px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; }
+        .fb-cancel { background: #f3f4f6; color: #6b7280; }
+        .fb-submit { background: #ea580c; color: #fff; }
+        .fb-submit:disabled { opacity: 0.6; }
     </style>
 </head>
 <body>
@@ -64,6 +79,21 @@
         <div id="error" class="state" style="display:none;">报告加载失败，请确认已登录后重试。</div>
     </div>
 
+    <!-- 右下角常驻反馈按钮 -->
+    <button class="fab" onclick="openFb()">💬 反馈与建议</button>
+    <div class="fb-mask" id="fbMask">
+        <div class="fb-box">
+            <h3>反馈与建议</h3>
+            <div class="sub">您的意见将帮助我们把产品做得更好</div>
+            <textarea id="fbContent" placeholder="欢迎提出您对报告或系统的意见、建议、问题…"></textarea>
+            <input id="fbContact" placeholder="联系方式（选填，方便我们回复您）">
+            <div class="fb-btns">
+                <button class="fb-cancel" onclick="closeFb()">取消</button>
+                <button class="fb-submit" id="fbSubmit" onclick="submitFb()">提交</button>
+            </div>
+        </div>
+    </div>
+
 <script>
 (function () {
     var qs = new URLSearchParams(location.search);
@@ -71,6 +101,44 @@
     function token() { return localStorage.getItem('token'); }
     function setText(id, v) { document.getElementById(id).textContent = v; }
     function fmt(n) { return (n == null ? 0 : n).toLocaleString('en-US'); }
+
+    // 根据报告周期时长决定标题（日报/周报/月度/季度/年度）
+    function periodLabel(s, e) {
+        if (!s || !e) return '';
+        var days = Math.round((new Date(e.replace(/-/g, '/')) - new Date(s.replace(/-/g, '/'))) / 86400000) + 1;
+        if (days <= 1) return '日';
+        if (days <= 10) return '周';
+        if (days <= 45) return '月度';
+        if (days <= 135) return '季度';
+        if (days <= 400) return '年度';
+        return '';
+    }
+
+    // ===== 反馈与建议 =====
+    window.openFb = function () { document.getElementById('fbMask').style.display = 'flex'; };
+    window.closeFb = function () { document.getElementById('fbMask').style.display = 'none'; };
+    window.submitFb = function () {
+        var content = document.getElementById('fbContent').value.trim();
+        if (!content) { alert('请填写反馈内容'); return; }
+        var btn = document.getElementById('fbSubmit'); btn.disabled = true; btn.textContent = '提交中…';
+        fetch('/api/insurance/report-feedback', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (token() || '') },
+            body: JSON.stringify({
+                content: content,
+                contact: document.getElementById('fbContact').value.trim(),
+                enterprise_id: eid, date_start: start, date_end: end,
+                enterprise_name: (window._reportEntName || '')
+            })
+        }).then(function (r) { return r.json(); }).then(function (j) {
+            btn.disabled = false; btn.textContent = '提交';
+            if (j.code === 0) {
+                alert('感谢您的反馈！我们已收到。');
+                document.getElementById('fbContent').value = '';
+                document.getElementById('fbContact').value = '';
+                closeFb();
+            } else { alert(j.msg || '提交失败，请稍后重试'); }
+        }).catch(function () { btn.disabled = false; btn.textContent = '提交'; alert('提交失败，请稍后重试'); });
+    };
 
     // 趋势图状态（供 tooltip 命中计算）
     var _td = [], _padL = 0, _stepX = 0, _cw = 0;
@@ -93,7 +161,9 @@
     function render(d) {
         document.getElementById('loading').style.display = 'none';
         document.getElementById('content').style.display = 'block';
-        setText('entName', (d.enterprise_name || '企业') + ' 经营报告');
+        window._reportEntName = d.enterprise_name || '';
+        var label = periodLabel(d.date_start, d.date_end);
+        setText('entName', (d.enterprise_name || '企业') + ' ' + label + '经营报告');
         setText('period', '报告周期：' + d.date_start + ' ~ ' + d.date_end);
         var s = d.summary || {};
         setText('s_total', fmt(s.total));

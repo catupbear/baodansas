@@ -188,3 +188,21 @@ def notify_error_report(description: str, detail: str = "", webhook: str = "", s
     threading.Thread(
         target=notifier.send, args=(title, content), daemon=True
     ).start()
+
+
+def notify_feedback(description: str, detail: str = "", webhook: str = "", secret: str = ""):
+    """用户在经营报告页提交「反馈与建议」时通知钉钉群（复用新保司通知群 webhook）。"""
+    if not webhook:
+        return
+    title = "❤ 反馈与建议"
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    lines = [
+        "### 💬 报告反馈与建议",
+        f"- **时间**: {ts}",
+    ]
+    if detail:
+        lines.append(f"- **来源**: {detail[:500]}")
+    lines.append(f"- **内容**: {(description or '')[:1000]}")
+    content = "\n".join(lines)
+    notifier = DingTalkNotifier(webhook, secret)
+    threading.Thread(target=notifier.send, args=(title, content), daemon=True).start()
