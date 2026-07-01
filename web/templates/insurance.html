@@ -7027,14 +7027,21 @@ const _app = createApp({
                 mrows = (j.data && j.data.rows) || [];
             } catch (e) { console.error('按车牌合并失败', e); return; }
             const norm = p => (p || '').replace(/[-\s　]/g, '').toUpperCase();
+            // 合并键：车牌可合并用车牌；新车未上牌(空/新车)兜底用车架号(与后端一致)
+            const mergeKey = df => {
+                const raw = ((df['车牌号'] || df['车牌'] || '') + '').trim();
+                if (raw && raw !== '新车' && raw !== '*-*' && raw !== '*—*') return norm(raw);
+                const vin = ((df['车架号'] || df['车架号VIN'] || '') + '').trim().toUpperCase();
+                return vin ? '__VIN__' + vin : norm(raw);
+            };
             const byPlate = {};
             raw.forEach(r => {
                 const df = r.display_fields || {};
-                const p = norm(df['车牌号'] || df['车牌'] || '');
+                const p = mergeKey(df);
                 (byPlate[p] = byPlate[p] || []).push(r);
             });
             records.value = mrows.map((row, i) => {
-                const p = norm(row['车牌'] || row['车牌号'] || '');
+                const p = mergeKey(row);
                 const children = byPlate[p] || [];
                 return {
                     id: '__merge_' + (p || i),

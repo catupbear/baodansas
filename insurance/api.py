@@ -4154,8 +4154,8 @@ def export_excel():
                 for row in merged_rows:
                     _inject_compulsory_end(row)
 
-                # 3. 排序（按车牌）
-                merged_rows.sort(key=lambda r: r.get("车牌", ""))
+                # 3. 排序（按车牌；新车无牌按车架号兜底排序）
+                merged_rows.sort(key=lambda r: r.get("车牌", "") or r.get("车架号", ""))
 
                 # 合并行重新计算公式：合并行才同时有 商业险保费/交强险保费/非车险保费 拆分列，
                 # 各险种金额、保险公司合计等汇总公式只有在合并行上才能算对。
