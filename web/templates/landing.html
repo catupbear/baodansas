@@ -576,6 +576,7 @@ footer {
   .billing-toggle { width: 100%; justify-content: center; }
   .billing-btn { flex: 1; text-align: center; }
   .cmp-2col { grid-template-columns: 1fr !important; }
+  .cmp-card { padding: 20px !important; }
   .price-val { font-size: 32px; }
 }
 </style>
@@ -643,9 +644,9 @@ footer {
       <h2 class="section-title">用时间说话</h2>
       <p class="section-desc" style="margin:0 auto">同样100张保单，手工录入 vs 午虎AI保单台账</p>
     </div>
-    <div class="reveal reveal-d1" style="margin-top:48px;display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:860px;margin-left:auto;margin-right:auto">
+    <div class="reveal reveal-d1 cmp-2col" style="margin-top:48px;display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:860px;margin-left:auto;margin-right:auto">
       <!-- 手工录入 -->
-      <div style="background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.2);border-radius:16px;padding:32px">
+      <div class="cmp-card" style="background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.2);border-radius:16px;padding:32px">
         <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#ef4444;margin-bottom:20px">✗ 手工录入</div>
         <div style="display:flex;flex-direction:column;gap:18px">
           <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.06)">
@@ -671,7 +672,7 @@ footer {
         </div>
       </div>
       <!-- 午虎AI -->
-      <div style="background:rgba(79,110,247,0.05);border:1px solid rgba(79,110,247,0.25);border-radius:16px;padding:32px;position:relative">
+      <div class="cmp-card" style="background:rgba(79,110,247,0.05);border:1px solid rgba(79,110,247,0.25);border-radius:16px;padding:32px;position:relative">
         <div style="position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--blue),var(--purple));color:#fff;font-size:12px;font-weight:700;padding:4px 16px;border-radius:100px;white-space:nowrap">推荐方案</div>
         <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--blue2);margin-bottom:20px">✓ 午虎AI保单台账</div>
         <div style="display:flex;flex-direction:column;gap:18px">
