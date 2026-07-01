@@ -2004,8 +2004,7 @@ def get_enterprise_report_data(db, enterprise_id: int, date_start: str, date_end
               AND NOT EXISTS (
                 SELECT 1 FROM insurance_records r2
                 WHERE r2.enterprise_id = r.enterprise_id AND r2.deleted_at IS NULL AND r2.status='done'
-                  AND ((r.file_md5 IS NOT NULL AND r.file_md5 <> '' AND r2.file_md5 = r.file_md5)
-                       OR (r.filename <> '' AND r2.filename = r.filename)))
+                  AND (r.file_md5 IS NOT NULL AND r.file_md5 <> '' AND r2.file_md5 = r.file_md5))
         """, bp)
         failed = int((cur.fetchone() or {}).get("c") or 0)
         total = success + abnormal + nonpolicy + failed
@@ -2086,8 +2085,7 @@ def get_enterprise_report_data(db, enterprise_id: int, date_start: str, date_end
                 SELECT 1 FROM insurance_records r2
                 WHERE r2.enterprise_id = r.enterprise_id AND r2.deleted_at IS NULL
                   AND r2.status='done'
-                  AND ((r.file_md5 IS NOT NULL AND r.file_md5 <> '' AND r2.file_md5 = r.file_md5)
-                       OR (r.filename <> '' AND r2.filename = r.filename))
+                  AND (r.file_md5 IS NOT NULL AND r.file_md5 <> '' AND r2.file_md5 = r.file_md5)
               )
             ORDER BY r.created_at DESC LIMIT 200
         """, bp)
