@@ -4059,6 +4059,11 @@ def parse_policy_text(text: str) -> Dict[str, Any]:
         fields["车辆性质"] = "新能源"
     elif len(_plate_for_type) == 7:
         fields["车辆性质"] = "燃油"
+    # 到期月份 = 终保日期(保险止期)的月份，供用户自定义列「到期月份」取用
+    if not fields.get("到期月份"):
+        _mon = re.search(r"\d{4}\s*[年/\-.]\s*(\d{1,2})", fields.get("保险止期") or "")
+        if _mon:
+            fields["到期月份"] = "%d月" % int(_mon.group(1))
 
     # ===== 第四步：险种明细 =====
     lines = text.split("\n")
