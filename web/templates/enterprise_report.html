@@ -42,6 +42,11 @@
         .fb-cancel { background: #f3f4f6; color: #6b7280; }
         .fb-submit { background: #ea580c; color: #fff; }
         .fb-submit:disabled { opacity: 0.6; }
+        .fr { padding: 12px 2px; border-bottom: 1px solid #f3f4f6; }
+        .fr:last-child { border-bottom: none; }
+        .fr .fn { font-size: 13px; font-weight: 600; color: #1c1410; word-break: break-all; }
+        .fr .meta { color: #9ca3af; font-size: 12px; margin-top: 3px; }
+        .fr .err { color: #dc2626; font-size: 12px; margin-top: 3px; word-break: break-all; }
     </style>
 </head>
 <body>
@@ -61,6 +66,10 @@
                     <div class="stat"><div class="v rate" id="s_rate">-</div><div class="l">成功率</div></div>
                 </div>
                 <p style="font-size:12px;color:#9ca3af;margin-top:12px;line-height:1.6;">成功率 =（总量 − 失败）÷ 总量。除「失败」外，需人工补充、非保单均计入成功（非保单数量单列供参考）。</p>
+            </div>
+            <div class="card" id="failedCard" style="display:none;">
+                <h2><span class="bar" style="background:#dc2626;"></span>识别失败明细 <span id="failedCount" style="font-size:13px;color:#9ca3af;font-weight:400;"></span></h2>
+                <div id="failedList"></div>
             </div>
             <div class="card">
                 <h2><span class="bar"></span>识别趋势</h2>
@@ -101,6 +110,7 @@
     function token() { return localStorage.getItem('token'); }
     function setText(id, v) { document.getElementById(id).textContent = v; }
     function fmt(n) { return (n == null ? 0 : n).toLocaleString('en-US'); }
+    function esc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
     // 根据报告周期时长决定标题（日报/周报/月度/季度/年度）
     function periodLabel(s, e) {
@@ -171,6 +181,20 @@
         setText('s_nonpolicy', fmt(s.nonpolicy));
         setText('s_failed', fmt(s.failed));
         setText('s_rate', (s.success_rate != null ? s.success_rate : 0) + '%');
+        // 识别失败明细
+        var fails = d.failed_records || [];
+        var fc = document.getElementById('failedCard');
+        if (fails.length) {
+            fc.style.display = 'block';
+            document.getElementById('failedCount').textContent = '共 ' + fails.length + ' 份';
+            var html = '';
+            fails.forEach(function (fr) {
+                html += '<div class="fr"><div class="fn">' + esc(fr.filename || '(无文件名)') + '</div>'
+                      + '<div class="meta">' + esc(fr.created_at || '') + (fr.source ? ' · ' + esc(fr.source) : '') + '</div>'
+                      + (fr.error ? '<div class="err">' + esc(fr.error) + '</div>' : '') + '</div>';
+            });
+            document.getElementById('failedList').innerHTML = html;
+        } else { fc.style.display = 'none'; }
         // 趋势口径：成功 = 总量 - 失败（非保单、需人工补充都算成功）
         var daily = d.daily || [];
         daily.forEach(function (x) { x.success = (x.total || 0) - (x.failed || 0); });

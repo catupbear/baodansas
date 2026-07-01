@@ -2067,8 +2067,27 @@ def get_enterprise_report_data(db, enterprise_id: int, date_start: str, date_end
                 "success": int(r["success"] or 0),
             })
 
+        # 6. 失败记录明细（报告页展示"哪几份识别失败了"）
+        cur.execute(f"""
+            SELECT id, filename, created_at, error_message, room_name, sender_name
+            FROM insurance_records
+            WHERE {base} AND status='failed'
+            ORDER BY created_at DESC LIMIT 200
+        """, bp)
+        failed_records = []
+        for r in cur.fetchall():
+            ct = r["created_at"]
+            failed_records.append({
+                "id": r["id"],
+                "filename": r["filename"] or "",
+                "created_at": ct.strftime("%Y-%m-%d %H:%M") if hasattr(ct, "strftime") else str(ct),
+                "error": (r["error_message"] or "")[:120],
+                "source": r["sender_name"] or r["room_name"] or "",
+            })
+
         return {"summary": summary, "daily": daily, "companies": companies,
-                "policy_types": policy_types, "uploaders": uploaders}
+                "policy_types": policy_types, "uploaders": uploaders,
+                "failed_records": failed_records}
     finally:
         conn.close()
 

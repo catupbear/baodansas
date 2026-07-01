@@ -3762,6 +3762,7 @@ def export_enterprise_report():
                 "date_start": date_start, "date_end": date_end,
                 "summary": data.get("summary", {}),
                 "daily": data.get("daily", []),
+                "failed_records": data.get("failed_records", []),
             }})
 
         if not ent_name:
