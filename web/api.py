@@ -488,6 +488,12 @@ def update_contact():
                             "UPDATE insurance_records SET sender_name = %s WHERE sender = %s",
                             (name, contact_id)
                         )
+                        # 同步更新账号管理「绑定发送人」的别名(user_sender_binding.sender_name)，
+                        # 使记录页「编辑联系人」与人员管理界面显示一致
+                        cursor.execute(
+                            "UPDATE user_sender_binding SET sender_name = %s WHERE sender = %s",
+                            (name, contact_id)
+                        )
                     conn.commit()
                 finally:
                     conn.close()

@@ -1585,9 +1585,11 @@ def query_insurance_records(
         cursor.execute("SET SESSION MAX_EXECUTION_TIME = 30000")
 
         # 去重模式：按保单号分组，取每组最新记录
+        # 仅「保单」参与按保单号去重；非保单(电子标志/发票等)即便与保单同号也一律保留，
+        # 避免电子标志与其交强保单同号被并成一条、还把真保单挤掉。
         if dedup:
-            # 排除空保单号的记录参与去重
-            dedup_cond = "pf.policy_no IS NOT NULL AND pf.policy_no != ''"
+            # 参与去重的：有保单号 且 文档类型=保单
+            dedup_cond = f"pf.policy_no IS NOT NULL AND pf.policy_no != '' AND {col_prefix}doc_category = '保单'"
             full_where = f"{where_clause} AND {dedup_cond}" if where_clause else f"WHERE {dedup_cond}"
             count_sql = (
                 f"SELECT COUNT(*) as cnt FROM ("
@@ -1596,8 +1598,9 @@ def query_insurance_records(
             )
             cursor.execute(count_sql, params)
             total_dedup = cursor.fetchone()["cnt"]
-            # 加上空保单号的记录数
-            empty_where = f"{where_clause} AND (pf.policy_no IS NULL OR pf.policy_no = '')" if where_clause else "WHERE (pf.policy_no IS NULL OR pf.policy_no = '')"
+            # 其余记录(空保单号，或非保单文档)全部保留，不参与去重
+            _keep_cond = f"(pf.policy_no IS NULL OR pf.policy_no = '' OR {col_prefix}doc_category IS NULL OR {col_prefix}doc_category != '保单')"
+            empty_where = f"{where_clause} AND {_keep_cond}" if where_clause else f"WHERE {_keep_cond}"
             cursor.execute(f"SELECT COUNT(*) as cnt FROM {from_clause} {empty_where}", params)
             total_empty = cursor.fetchone()["cnt"]
             total = total_dedup + total_empty
@@ -2273,9 +2276,11 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
                 w = f"{w} AND {extra_where}" if w else f" WHERE {extra_where}"
             all_params = params + ep
             if dedup:
-                dedup_cond = "pf.policy_no IS NOT NULL AND pf.policy_no != ''"
+                # 仅「保单」参与按保单号去重；非保单(电子标志等)一律保留（与列表口径一致）
+                dedup_cond = f"pf.policy_no IS NOT NULL AND pf.policy_no != '' AND {col_prefix}doc_category = '保单'"
                 fw = f"{w} AND {dedup_cond}" if w else f" WHERE {dedup_cond}"
-                ew = f"{w} AND (pf.policy_no IS NULL OR pf.policy_no = '')" if w else " WHERE (pf.policy_no IS NULL OR pf.policy_no = '')"
+                _keep_cond = f"(pf.policy_no IS NULL OR pf.policy_no = '' OR {col_prefix}doc_category IS NULL OR {col_prefix}doc_category != '保单')"
+                ew = f"{w} AND {_keep_cond}" if w else f" WHERE {_keep_cond}"
                 cursor.execute(
                     f"SELECT COUNT(*) as cnt FROM ("
                     f"  SELECT MAX({col_prefix}id) FROM {from_sql}{fw} GROUP BY pf.policy_no"

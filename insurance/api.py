@@ -67,7 +67,7 @@ from .policy_parser import get_extraction_rules, parse_policy_text, parse_policy
 from .ocr_service import extract_text_from_pdf
 from . import remark_options_db
 from auth.decorators import login_required
-from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, ROLE_EMPLOYEE, ROLE_SALES, get_sender_user_name_map
+from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, ROLE_EMPLOYEE, ROLE_SALES, get_sender_user_name_map, get_sender_alias_map
 from core.notify import notify_error
 
 logger = logging.getLogger(__name__)
@@ -446,6 +446,16 @@ def list_records():
         except Exception:
             logger.debug("获取 sender→用户姓名映射失败，跟单人字段将为空")
 
+        # sender → 绑定别名 映射：管理员在「绑定发送人」设的别名，用于覆盖记录的发送人显示名
+        sender_alias_map = {}
+        try:
+            _sa_key = ("sender_alias_map", ent_id)
+            sender_alias_map, _hit = _cache_get(_sa_key)
+            if not _hit:
+                sender_alias_map = _cache_set(_sa_key, get_sender_alias_map(_db, ent_id), ttl=30)
+        except Exception:
+            logger.debug("获取 sender→绑定别名映射失败，发送人显示名不覆盖")
+
         # 批量查询无 sender 记录的上传用户姓名（避免每条都单独查 DB）
         _upload_user_ids = {r["user_id"] for r in result.get("records", [])
                             if not r.get("sender") and r.get("user_id")}
@@ -508,6 +518,9 @@ def list_records():
                 record["display_fields"]["车牌"] = record["display_fields"]["车牌号"]
             # 实时关联跟单人：通过 sender 查找绑定用户姓名，无 sender 时取上传用户姓名
             sender = record.get("sender", "")
+            # 发送人显示名：若管理员为该 sender 设了绑定别名，用别名覆盖识别时抓取的微信名
+            if sender and sender_alias_map.get(sender):
+                record["sender_name"] = sender_alias_map[sender]
             if sender and sender in sender_name_map:
                 record["display_fields"]["跟单人"] = sender_name_map[sender]
             elif not sender and record.get("user_id"):

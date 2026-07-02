@@ -510,6 +510,35 @@ def get_sender_user_name_map(db, enterprise_id: int = None) -> dict:
         conn.close()
 
 
+def get_sender_alias_map(db, enterprise_id: int = None) -> dict:
+    """
+    查询 sender → 绑定别名(sender_name) 的映射表。
+    管理员在「绑定发送人」处为每个 sender 设置的别名，用于列表/导出时覆盖记录的发送人显示名。
+    仅返回 sender_name 非空的绑定。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        if enterprise_id is not None:
+            cursor.execute(
+                "SELECT sender, sender_name FROM user_sender_binding "
+                "WHERE enterprise_id = %s AND sender_name IS NOT NULL AND sender_name != ''",
+                (enterprise_id,),
+            )
+        else:
+            cursor.execute(
+                "SELECT sender, sender_name FROM user_sender_binding "
+                "WHERE sender_name IS NOT NULL AND sender_name != ''"
+            )
+        return {row["sender"]: row["sender_name"] for row in cursor.fetchall() if row.get("sender_name")}
+    except pymysql.err.ProgrammingError as e:
+        if e.args[0] == 1146:
+            return {}
+        raise
+    finally:
+        conn.close()
+
+
 # ============================================================
 # 短信验证码（sms_verifications）
 # ============================================================
