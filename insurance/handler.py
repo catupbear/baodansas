@@ -489,19 +489,23 @@ class InsuranceHandler:
 
             existing = check_file_md5_exists(self.db, file_md5)
             if existing and existing["id"] != record_id:
-                # 发送人不同时，复制已有识别结果到当前记录（不同人转发同一PDF）
                 existing_full = get_insurance_record(self.db, existing["id"])
-                if existing_full and existing_full.get("sender") != sender:
+                # 用 msg_seq 区分"同一次发送被重复处理" vs "不同次发送(重发)"：
+                #  - 同一条消息(seq 相同)被重复拉取/处理 → 标记 duplicate 跳过，避免同一次发送重复入库；
+                #  - 不同次发送(seq 不同，含同一人不同时段重发、或不同人转发) → 复制识别结果，各留一条可查。
+                _same_msg = bool(existing_full and existing_full.get("msg_seq") and existing_full.get("msg_seq") == seq)
+                if existing_full and not _same_msg:
                     logger.info(
-                        "[COPY] PDF重复但发送人不同(MD5=%s), 原记录id=%d(sender=%s), 当前record_id=%d(sender=%s), 复制识别结果",
-                        file_md5, existing["id"], existing_full.get("sender"), record_id, sender,
+                        "[COPY] PDF重复(不同次发送, MD5=%s), 原记录id=%d(seq=%s,sender=%s), 当前record_id=%d(seq=%s,sender=%s), 复制识别结果",
+                        file_md5, existing["id"], existing_full.get("msg_seq"), existing_full.get("sender"),
+                        record_id, seq, sender,
                     )
                     self._copy_recognition_result(record_id, existing_full, file_md5, config_user_id, config_enterprise_id)
                     return
-                # 同一发送人的重复文件，标记为 duplicate
+                # 同一条消息重复处理，标记为 duplicate
                 logger.info(
-                    "PDF文件重复(MD5=%s), 已有记录id=%d, 当前record_id=%d, 跳过识别",
-                    file_md5, existing["id"], record_id,
+                    "PDF文件重复(同一次发送 seq=%s, MD5=%s), 已有记录id=%d, 当前record_id=%d, 跳过识别",
+                    seq, file_md5, existing["id"], record_id,
                 )
                 update_insurance_record(self.db, record_id, {
                     "status": "duplicate",
