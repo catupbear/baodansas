@@ -636,6 +636,20 @@ footer {
   </div>
 </section>
 
+<!-- PROMO VIDEO -->
+<section class="section" style="padding-top:0;">
+  <div class="section-inner" style="max-width:920px;">
+    <div class="reveal" style="text-align:center;margin-bottom:32px;">
+      <div class="section-eyebrow" style="justify-content:center"><span class="eyebrow-line"></span>产品演示<span class="eyebrow-line"></span></div>
+      <h2 class="section-title">一分钟看懂午虎AI保单台账</h2>
+    </div>
+    <div class="reveal reveal-d1" id="promoWrap" style="position:relative;border-radius:20px;overflow:hidden;background:#000;border:1px solid var(--border);box-shadow:0 24px 80px rgba(0,0,0,0.5);cursor:pointer;">
+      <video id="promoVideo" muted playsinline loop preload="metadata" src="/static/promo.mp4" style="width:100%;display:block;"></video>
+      <div id="promoUnmute" style="position:absolute;right:16px;bottom:16px;display:inline-flex;align-items:center;gap:6px;background:rgba(0,0,0,0.6);backdrop-filter:blur(6px);color:#fff;font-size:13px;font-weight:600;padding:8px 14px;border-radius:100px;pointer-events:none;transition:opacity 0.3s;">🔊 点击取消静音</div>
+    </div>
+  </div>
+</section>
+
 <!-- TIME COMPARISON -->
 <section class="section">
   <div class="section-inner">
@@ -1062,6 +1076,27 @@ window.addEventListener('scroll', () => {
   document.querySelector('nav').style.background =
     window.scrollY > 60 ? 'rgba(6,8,16,0.95)' : 'rgba(6,8,16,0.7)';
 }, { passive: true });
+
+// 宣传视频：滑入自动播放（静音），滑出暂停；点击取消/恢复静音
+(function () {
+  const v = document.getElementById('promoVideo');
+  const wrap = document.getElementById('promoWrap');
+  const hint = document.getElementById('promoUnmute');
+  if (!v || !wrap) return;
+  const vio = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { v.play().catch(() => {}); }
+      else { v.pause(); }
+    });
+  }, { threshold: 0.35 });
+  vio.observe(v);
+  // 点击容器：首次取消静音并从头播放；再次点击切换静音
+  wrap.addEventListener('click', () => {
+    v.muted = !v.muted;
+    if (!v.muted) { v.play().catch(() => {}); if (hint) hint.style.opacity = '0'; }
+    else if (hint) { hint.textContent = '🔇 已静音'; hint.style.opacity = '1'; }
+  });
+})();
 </script>
 </body>
 </html>

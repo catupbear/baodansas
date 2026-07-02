@@ -6214,7 +6214,7 @@ const _app = createApp({
             }
         }
         // 状态 Tab（成功=保单且置信度>=0.5，需人工补充=置信度<0.5，非保单=doc_category非保单）
-        const recordActiveTab = ref('done');
+        const recordActiveTab = ref('all');
         // Tab 统计数来自服务端，不再依赖前端 parsed_fields 计算
         const recordTabs = computed(() => [
             { key: 'all', label: '全部', count: recordStats.total },

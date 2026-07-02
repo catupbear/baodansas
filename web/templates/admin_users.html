@@ -142,6 +142,11 @@
         <nav class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
             <div class="flex items-center space-x-6">
                 <span class="font-semibold text-gray-800">午虎AI保单台账</span>
+                <!-- 内部管理界面醒目标识（仅内部超级管理员可见；白色导航栏用红底白字变体） -->
+                <span v-if="currentUser && currentUser.role === 'super_admin'" style="display:inline-flex;align-items:center;gap:4px;background:#dc2626;color:#fff;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:800;white-space:nowrap;box-shadow:0 2px 8px rgba(220,38,38,0.35);letter-spacing:0.5px;">
+                    <svg style="width:15px;height:15px;flex-shrink:0;" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                    内部管理界面
+                </span>
                 <a href="/insurance" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">保单台账</a>
                 <a href="/admin/enterprises" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">服务企业管理</a>
             </div>
