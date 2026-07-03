@@ -2924,6 +2924,15 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
                         fields["厂牌型号"] = _prev + _next
                         break
 
+    # 华泰驾乘险表格版式错位：品牌型号值被拆成两段，中间夹"品牌型号"标签、座位数、"核定座位数(座)"标签
+    # "车辆信息\n宝马BMW6462ES(BMWX1)多\n品牌型号\n5\n核定座位数(座)\n用途乘用车\n车架号(VIN)"
+    if "厂牌型号" not in fields:
+        _mh = re.search(r'车辆信息\s*\n([^\n]{2,40}?)\s*\n品牌型号\s*\n(\d+)\s*\n核定座位数\s*[（(]\s*座\s*[）)]\s*\n([^\n]{2,20}?)\s*\n车架号', text)
+        if _mh:
+            fields["厂牌型号"] = (_mh.group(1) + _mh.group(3)).strip()
+            if "核定载客" not in fields and int(_mh.group(2)) <= 100:
+                fields["核定载客"] = _mh.group(2) + "人"
+
     # 厂牌型号值含内部空格（北部湾"厂牌型号：东 风日产DFL7151MAK1轿车"，OCR 把双字品牌拆开）：
     # 取到下一字段标签前、去掉内部空格
     _cp = fields.get("厂牌型号", "")
