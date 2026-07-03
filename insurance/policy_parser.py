@@ -2944,11 +2944,16 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
     if m and int(m.group(1)) <= 100:
         fields["核定载客"] = m.group(1) + "人"
     # 无"人"兜底：核定载客/座位数后直接跟数字（太平洋驾乘"核定座位数:5"、人民财产"核定载客 7"、现代"核定载客数 5 投保份数"、浙商"核定载客/载客量 5"）
-    # 校验：数字后紧跟字母判为 OCR 乱码丢弃（太平网约车驾乘"核定座位数：7323ADZ"）；座位数>100 不合理丢弃
     if "核定载客" not in fields:
         m = re.search(r"核\s*定\s*(?:载\s*客\s*/\s*载\s*客\s*量|载\s*客\s*量|载\s*客\s*数?|载\s*人\s*数|座\s*位\s*数?)[：:\s]*(\d+)([A-Za-z]?)", text)
-        if m and not m.group(2) and int(m.group(1)) <= 100:
-            fields["核定载客"] = m.group(1) + "人"
+        if m:
+            _num, _tail = m.group(1), m.group(2)
+            if not _tail and int(_num) <= 100:
+                fields["核定载客"] = _num + "人"
+            elif _tail and len(_num) > 1 and 1 <= int(_num[0]) <= 9:
+                # OCR乱码：座位数后粘连多位数字+字母（太平网约车驾乘"核定座位数：7323ADZ"）
+                # 乘用车驾乘险座位为个位数，取前导那一位数字（7）
+                fields["核定载客"] = _num[0] + "人"
     # 兜底：驾乘险"核定载客人数/被保险人数"表格（国寿等），数字常被 OCR 排到标签
     # 中间或"行驶区域"行（如"核定载客人数\n行驶区域 5\n/被保险人数"）
     if "核定载客" not in fields:
