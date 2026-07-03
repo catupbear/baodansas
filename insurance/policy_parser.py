@@ -583,6 +583,13 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
         m = re.search(r"(?:收费|缴费|收款)确认(?:时间)?[：:\s]*(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日号]?)", text)
         if m:
             fields["收费确认时间"] = m.group(1).strip()
+    # 渤海等格式：标签独占一行"…收费确认时间： No.\n"，值拼在下一行"<保单号><日期时间><No.>"
+    # (如"收费确认时间： No.\n24301038020260149112026-05-1012:40:26264301005822156")。
+    # 日期的连字符是唯一锚点，用 [\dA-Za-z]*? 跳过前面的保单号。
+    if not fields.get("收费确认时间"):
+        m = re.search(r"收费确认时间[：:\s]*(?:No\.?\s*)?\n?\s*[\dA-Za-z]*?(\d{4}-\d{1,2}-\d{1,2})\s?(\d{1,2}:\d{1,2}:\d{1,2})", text)
+        if m:
+            fields["收费确认时间"] = m.group(1).strip() + " " + m.group(2).strip()
 
     # ===== 销售渠道 =====
     m = re.search(r"销售渠道[：:].*?√(\S+)", text)
