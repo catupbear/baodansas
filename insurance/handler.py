@@ -926,6 +926,25 @@ class InsuranceHandler:
         history = find_records_by_plate(self.db, plate, exclude_id=record_id)
         if not history:
             return
+        # 同车牌但车架号不同 = 不同车辆（套牌/换牌重号），跳过互补，避免张冠李戴
+        # （如粤BNN599 既是全球鹰的宝骏，又是华诺旅游的海格客车，投保人/车主完全不同）
+        cur_vin = (parsed_fields.get("车架号VIN", "") or "").strip()
+        if len(cur_vin) >= 10:
+            _filtered = []
+            for rec in history:
+                hf = rec.get("parsed_fields") or {}
+                if isinstance(hf, str):
+                    try:
+                        hf = json.loads(hf) or {}
+                    except (TypeError, json.JSONDecodeError, ValueError):
+                        hf = {}
+                hv = (hf.get("车架号VIN", "") or "").strip()
+                if len(hv) >= 10 and hv != cur_vin:
+                    continue  # 车架号明确不同，判为不同车辆
+                _filtered.append(rec)
+            history = _filtered
+            if not history:
+                return
         self._apply_cross_fill(parsed_fields, history, record_id,
                                self.CROSS_FILL_FIELDS, "同车牌", plate)
 
