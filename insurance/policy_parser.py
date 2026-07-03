@@ -2999,6 +2999,11 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
         val = m.group(1)
         val = re.sub(r'1', '', val)
         fields["机动车种类"] = val
+    # 前海联合等：机动车种类用座位分类"6座以下"/"6座及以上"，非标准车型词
+    if "机动车种类" not in fields:
+        m = re.search(r"机动车种类[：:\s]*(\d+\s*座(?:及以上|以上|以下|以内))", text)
+        if m:
+            fields["机动车种类"] = re.sub(r'\s+', '', m.group(1))
 
     # 初次登记日期：兼容"初次登记日期"/"登记日期"/"登 记 日 期"（字间空格），
     # 日期支持"2011年11月15日"与"2015-02-13"两种格式
