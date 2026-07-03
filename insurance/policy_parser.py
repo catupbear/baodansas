@@ -1116,9 +1116,13 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
     if "保司地址" not in fields:
         # text_merged 优先：它把跨行/字间空格的中文合并（"管理中\n心"→"管理中心"），地址更完整不易截断
         for src in [text_merged, text]:
+            _matched = False
             # 地址行尾常跟"邮政编码:xxx"（如平安同行），在邮政编码处截断保留前面地址
-            m = re.search(r'(?<!总)公司地址(?:及邮编)?[：: 　\t]+(.+?)(?:\s*邮\s*政?\s*编|\s*(?:公司)?网址|\s*报案|\s*[保险人]?\s*联系|\s*(?:服务)?电话|\s*销售|\s*核保|\s*经办|\s*客服|\s*服务热线|\s{2,}|\n|$)', src)
-            if m:
+            # 用 finditer 遍历所有"公司地址"：太平交强险等"代理人名称：…龙岗分公司 地址：…"在 text_merged
+            # 里被合并成"…分公司地址：…"会误命中代理人地址，故跳过匹配位置前含"代理"的（代理人地址非保险人地址）
+            for m in re.finditer(r'(?<!总)公司地址(?:及邮编)?[：: 　\t]+(.+?)(?:\s*邮\s*政?\s*编|\s*(?:公司)?网址|\s*报案|\s*[保险人]?\s*联系|\s*(?:服务)?电话|\s*销售|\s*核保|\s*经办|\s*客服|\s*服务热线|\s{2,}|\n|$)', src):
+                if '代理' in src[max(0, m.start() - 25):m.start()]:
+                    continue
                 val = m.group(1).strip()
                 # 安诚等"公司地址及邮编：…新浩壹都A座1201-9号(518039)"尾部带邮编括号，去掉
                 val = re.sub(r'\s*[（(]\d{6}[)）]\s*$', '', val).strip()
@@ -1135,7 +1139,10 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
                         and not re.search(r'^联系电话|^公司名称|^邮政编码', val)
                         and not re.search(r'签单日期|公司主页|公司网址', val)):
                     fields["保司地址"] = val
+                    _matched = True
                     break
+            if _matched:
+                break
 
     # OCR 竖排"邮政编码"标签与地址尾号、邮编交错（浙商"…3209、邮3政21编0 码:518040"，
     # 即 邮+3 政+21 编+0 码+518040）：剥离交错的"邮政编码"标签，保留其间的地址数字(3210)、丢弃末尾邮编
