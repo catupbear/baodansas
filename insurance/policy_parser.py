@@ -2864,8 +2864,9 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
             fields["车架号VIN"] = m.group(1)
 
     # 发动机号
+    # 阳光交强险等竖排水印(SALI等字母)散插进标签："发 S 动机号 L4111213" —— 标签字符间容忍单个水印字母
     for p in [
-        r"发\s*动\s*机\s*号[码：:\s]*([A-Za-z0-9]+)",
+        r"发\s*[A-Za-z]?\s*动\s*[A-Za-z]?\s*机\s*[A-Za-z]?\s*号[码]?[：:\s]*([A-Za-z0-9]+)",
         r"发动机号码[：:\s]*(\S+)",
     ]:
         m = re.search(p, text)
