@@ -1155,6 +1155,17 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
             if _cand and _addr_m.replace(' ', '').startswith(_cand.replace(' ', '')) and len(_cand.replace(' ', '')) < len(_addr_m.replace(' ', '')):
                 fields["保司地址"] = _cand
 
+    # 人保等：公司地址被英文水印(如INDIGO)+竖排"保险人"水印打断成两段
+    # ("...宝安公路管理中\nINDIGO\n保 心15楼1501...")，直接从原文重组完整地址覆盖被截断的结果
+    _pm = re.search(
+        r'(?<!总)公司地址[：:]\s*([一-鿿\d、\-－]+?)\s*\n(?:[A-Za-z][A-Za-z\s]*\n)?[一-鿿]\s+'
+        r'([一-鿿\d、\-－]*(?:楼|室|号|层|单元|栋|座|幢)[\dA-Za-z、\-－]*)',
+        text)
+    if _pm and re.search(r'[市区县]', _pm.group(1)):
+        _full = _pm.group(1) + _pm.group(2)
+        if len(_full) > len(fields.get("保司地址", "")):
+            fields["保司地址"] = _full
+
     # 平安等格式：街道地址在"公司名称:"下方单独一行，"公司地址:"标签只有邮编
     if "保司地址" not in fields:
         for i, line in enumerate(lines):
