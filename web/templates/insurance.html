@@ -3812,7 +3812,7 @@ const _app = createApp({
         const dashboardData = ref(null);
         const dashboardLoading = ref(false);
         const dashboardDays = ref(30);
-        const dashboardPeriod = ref('30');
+        const dashboardPeriod = ref('today');
         const periodOptions = [
             { label: '今日',   value: 'today' },
             { label: '昨天',   value: 'yesterday' },
@@ -3823,7 +3823,7 @@ const _app = createApp({
         ];
         const periodLabel = computed(() => {
             const opt = periodOptions.find(o => o.value === dashboardPeriod.value);
-            return opt ? opt.label : '近30天';
+            return opt ? opt.label : '今日';
         });
         const dashboardEnterprise = ref('');
         const dashboardCompany = ref('');
