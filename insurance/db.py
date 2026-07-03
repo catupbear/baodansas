@@ -1593,7 +1593,7 @@ def query_insurance_records(
             full_where = f"{where_clause} AND {dedup_cond}" if where_clause else f"WHERE {dedup_cond}"
             count_sql = (
                 f"SELECT COUNT(*) as cnt FROM ("
-                f"  SELECT MAX({col_prefix}id) FROM {from_clause} {full_where} GROUP BY pf.policy_no, {col_prefix}msg_seq"
+                f"  SELECT MAX({col_prefix}id) FROM {from_clause} {full_where} GROUP BY pf.policy_no, DATE({col_prefix}created_at)"
                 f") t"
             )
             cursor.execute(count_sql, params)
@@ -1660,7 +1660,7 @@ def query_insurance_records(
             id_sql = (
                 f"SELECT t.id FROM ("
                 f"SELECT MAX({col_prefix}id) as id FROM {from_clause} {full_where} "
-                f"GROUP BY pf.policy_no, {col_prefix}msg_seq "
+                f"GROUP BY pf.policy_no, DATE({col_prefix}created_at) "
                 f"UNION ALL "
                 f"SELECT {col_prefix}id FROM {from_clause} {empty_where}"
                 f") t LEFT JOIN insurance_policy_fields pf2 ON t.id = pf2.record_id "
@@ -2283,7 +2283,7 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
                 ew = f"{w} AND {_keep_cond}" if w else f" WHERE {_keep_cond}"
                 cursor.execute(
                     f"SELECT COUNT(*) as cnt FROM ("
-                    f"  SELECT MAX({col_prefix}id) FROM {from_sql}{fw} GROUP BY pf.policy_no, {col_prefix}msg_seq"
+                    f"  SELECT MAX({col_prefix}id) FROM {from_sql}{fw} GROUP BY pf.policy_no, DATE({col_prefix}created_at)"
                     f") t", all_params)
                 c1 = cursor.fetchone()["cnt"]
                 cursor.execute(f"SELECT COUNT(*) as cnt FROM {from_sql}{ew}", all_params)
