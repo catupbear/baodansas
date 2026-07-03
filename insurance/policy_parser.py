@@ -3839,6 +3839,12 @@ def _extract_sign_date(text: str, fields: dict, company_short: str):
         if m:
             fields["签单日期"] = m.group(1)
 
+    # 兜底：前海联合承运人责任险等 — 保单无独立签单日期，正文"以生效日期为准 精确到日即可"
+    # 用保险起期（生效日期，已是日精度）作为签单日期
+    if "签单日期" not in fields and company_short == "前海联合" and fields.get("保险起期"):
+        fields["签单日期"] = fields["保险起期"]
+        return
+
     # 兜底：平安等格式 — 无签单日期，用"收费确认时间"或"投保确认时间"替代
     # "收费确认时间： 2026年5月6日14:45时" / "投保确认时间： 2026年5月6日14:45时"
     if "签单日期" not in fields:
