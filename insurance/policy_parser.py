@@ -572,7 +572,7 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
     # "2026-06-2311:16" 的情况，以及 2026/06/23 10:12:55、2026年06月23日10时12分 等格式）
     # 标签兼容：收费确认时间 / 缴费确认时间 / 收款确认（阳光交强险用"收款确认"，无"时间"后缀，且日期与时分常粘连如 2026-07-0119:14:29）
     m = re.search(
-        r"(?:收费|缴费|收款|支付|保费)确认(?:时间)?[：:\s]*(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日号]?)\s*(\d{1,2}[：:时]\d{1,2}(?:[：:分]\d{1,2})?[分秒]?)",
+        r"(?:收费|缴费|收款|支付|保费|收付)确认(?:时间)?[：:\s]*(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日号]?)\s*(\d{1,2}[：:时]\d{1,2}(?:[：:分]\d{1,2})?[分秒]?)",
         text,
     )
     if m:
@@ -580,7 +580,7 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
         fields["收费确认时间"] = m.group(1).strip() + " " + m.group(2).strip()
     else:
         # 兜底：只有日期没时间
-        m = re.search(r"(?:收费|缴费|收款|支付|保费)确认(?:时间)?[：:\s]*(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日号]?)", text)
+        m = re.search(r"(?:收费|缴费|收款|支付|保费|收付)确认(?:时间)?[：:\s]*(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日号]?)", text)
         if m:
             fields["收费确认时间"] = m.group(1).strip()
     # 渤海等格式：标签独占一行"…收费确认时间： No.\n"，值拼在下一行"<保单号><日期时间><No.>"
@@ -1144,6 +1144,16 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
         _addr_pc = re.sub(r'邮\s*(\d*)\s*政\s*(\d*)\s*编\s*(\d*)\s*码?\s*[:：]?\s*\d*.*$',
                           lambda m: m.group(1) + m.group(2) + m.group(3), _addr_pc)
         fields["保司地址"] = _addr_pc.rstrip('、，, ')
+
+    # 合并文本把地址与下一行(公司名残段/竖排水印/电话)粘连时(如人寿"…B座6楼圳市分公司罗湖支公司保险95519")：
+    # 若非合并原文能给出以强终止词(楼/号/室/座…)结尾、且是当前值前缀的更短地址，优先用它（不影响真正跨行地址）
+    _addr_m = fields.get("保司地址", "")
+    if _addr_m:
+        _mnm = re.search(r'(?<!总)公司地址(?:及邮编)?[：: 　\t]+([^\n]{6,60}?(?:号|楼|层|室|座|栋|幢|单元|大厦|大楼|中心|广场|房)(?:\d+)?)\s*(?:\n|$)', text)
+        if _mnm:
+            _cand = _mnm.group(1).strip()
+            if _cand and _addr_m.replace(' ', '').startswith(_cand.replace(' ', '')) and len(_cand.replace(' ', '')) < len(_addr_m.replace(' ', '')):
+                fields["保司地址"] = _cand
 
     # 平安等格式：街道地址在"公司名称:"下方单独一行，"公司地址:"标签只有邮编
     if "保司地址" not in fields:
