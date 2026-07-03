@@ -1197,6 +1197,14 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
             if val and len(val) >= 4 and re.search(r'[市区].{2,}[街路号大厦广场楼栋座]', val):
                 fields["保司地址"] = val
 
+    # 剥离地址尾部混入的竖排水印残字（如永诚"…411号对人"的"对人"、"保险人"的"人"等）：
+    # 仅当地址主体有效(市/区县 + 号/室/层等终止词)且尾部是紧跟终止词的 1-3 个水印字时剥离
+    _addr_wm = fields.get("保司地址", "")
+    if _addr_wm and re.search(r'[市区县].*(?:号|室|层|楼|栋|座|幢|单元|大厦|中心|广场|大楼)', _addr_wm):
+        _addr_wm2 = re.sub(r'(?<=[号室层楼栋座幢厦心场区元])[保险人若对查询关尽注享我快们捷承]{1,3}$', '', _addr_wm)
+        if _addr_wm2 != _addr_wm and len(_addr_wm2) >= 6:
+            fields["保司地址"] = _addr_wm2
+
     # 联系电话：从"联系电话："标签附近提取（如95312）
     if "保司联系电话" not in fields:
         for i, line in enumerate(lines):
