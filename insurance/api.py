@@ -479,15 +479,20 @@ def list_records():
         _ent_ids = {r.get("enterprise_id") for r in result.get("records", [])
                     if r.get("enterprise_id")}
         _ent_name_map: dict = {}
+        # TZ-008(鹏杰华智能)专属：车牌为空时用车架号(VIN)填入车牌显示
+        _tz008_ids: set = set()
         if _ent_ids:
             try:
                 _conn = _db.pool.connection()
                 try:
                     _cur = _conn.cursor(pymysql.cursors.DictCursor)
                     _ph = ",".join(["%s"] * len(_ent_ids))
-                    _cur.execute(f"SELECT id, name FROM enterprises WHERE id IN ({_ph})", list(_ent_ids))
+                    _cur.execute(f"SELECT id, name, enterprise_no FROM enterprises WHERE id IN ({_ph})", list(_ent_ids))
                     for _row in _cur.fetchall():
                         _ent_name_map[_row["id"]] = _row.get("name") or ""
+                        _eno = re.sub(r"[^A-Za-z0-9]", "", (_row.get("enterprise_no") or "")).upper()
+                        if _eno == "TZ008":
+                            _tz008_ids.add(_row["id"])
                 finally:
                     _conn.close()
             except Exception:
@@ -516,6 +521,11 @@ def list_records():
             # 历史记录兼容：车牌号→车牌（旧映射配置未包含此规则时遗留）
             if not record["display_fields"].get("车牌") and record["display_fields"].get("车牌号"):
                 record["display_fields"]["车牌"] = record["display_fields"]["车牌号"]
+            # TZ-008 专属：车牌仍为空时，用车架号(VIN)填入车牌（未上牌车按车架号当车牌用）
+            if record.get("enterprise_id") in _tz008_ids and not record["display_fields"].get("车牌"):
+                _tz_vin = record["display_fields"].get("车架号") or record["display_fields"].get("车架号VIN")
+                if _tz_vin:
+                    record["display_fields"]["车牌"] = _tz_vin
             # 实时关联跟单人：通过 sender 查找绑定用户姓名，无 sender 时取上传用户姓名
             sender = record.get("sender", "")
             # 发送人显示名：若管理员为该 sender 设了绑定别名，用别名覆盖识别时抓取的微信名
