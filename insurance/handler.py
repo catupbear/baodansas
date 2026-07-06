@@ -324,6 +324,32 @@ class InsuranceHandler:
 
         return matched
 
+    def _notify_fail_to_group(self, roomid: str, room_name: str, sender: str,
+                              sender_name: str, filename: str):
+        """
+        保单识别失败时，通过 FlowBot 向监控群发送提示并 @ 发送人。
+
+        仅在「监控群」内启用，且需在配置 flowbot_fail_notify 中开启并填入 robot_id。
+        旁路通知：任何异常只记日志，绝不影响识别主流程。
+        """
+        try:
+            cfg = get_insurance_config(self.db, "flowbot_fail_notify", {}) or {}
+            if not cfg.get("enabled") or not cfg.get("robot_id"):
+                return
+            if not room_name:
+                logger.info("识别失败群通知跳过：无群名 roomid=%s filename=%s", roomid, filename)
+                return
+            # 仅监控群启用：命中监控配置才通知
+            if not self._get_matched_monitors(roomid, sender):
+                return
+            from insurance.flowbot_notify import send_flowbot_group_message
+            msg = (cfg.get("template")
+                   or "⚠️ 文档识别异常\n文件：{filename}\n请检查文档是否清晰完整后重新发送")
+            msg = msg.replace("{filename}", filename or "未知文件")
+            send_flowbot_group_message(room_name, sender_name, msg, cfg["robot_id"])
+        except Exception as e:
+            logger.warning("识别失败群通知发送失败（不影响主流程）: %s", e)
+
     # ------------------------------------------------------------------ #
     # 队列投递
     # ------------------------------------------------------------------ #
@@ -545,6 +571,8 @@ class InsuranceHandler:
                     "error_message": err_msg[:500],
                     "cos_url": cos_url,
                 })
+                # 真识别失败：向监控群发送提示并 @ 发送人
+                self._notify_fail_to_group(roomid, room_name, sender, sender_name, filename)
                 return
 
             policies = ocr_result.get("policies", [])
@@ -718,6 +746,8 @@ class InsuranceHandler:
                 })
             except Exception as ue:
                 logger.error("更新失败状态时出错: %s", ue)
+            # 真识别失败（处理异常）：向监控群发送提示并 @ 发送人
+            self._notify_fail_to_group(roomid, room_name, sender, sender_name, filename)
         finally:
             # 释放内存
             del pdf_bytes
