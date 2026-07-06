@@ -660,6 +660,10 @@ class InsuranceHandler:
                 self._cross_fill_by_vin(parsed_fields, cur_record_id)
                 self._cross_fill_by_person(parsed_fields, cur_record_id)
 
+                # 6b. TZ-008 专属：车牌为空时用车架号填入车牌号（持久化）
+                from insurance.db import apply_tz008_plate_fallback
+                apply_tz008_plate_fallback(self.db, parsed_fields, config_enterprise_id)
+
                 # 7. 字段映射
                 company_short = parsed_fields.get("保险公司简称", "")
                 mapped_fields = apply_mapping(parsed_fields, company_short)

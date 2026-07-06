@@ -1741,6 +1741,52 @@ def get_insurance_config(db, key: str, default=None):
         conn.close()
 
 
+_TZ008_ENTERPRISE_IDS = None
+
+
+def get_tz008_enterprise_ids(db) -> set:
+    """返回企业编号为 TZ-008 的 enterprise_id 集合（进程内缓存，编号极少变动）。"""
+    global _TZ008_ENTERPRISE_IDS
+    if _TZ008_ENTERPRISE_IDS is not None:
+        return _TZ008_ENTERPRISE_IDS
+    ids = set()
+    try:
+        conn = db.pool.connection()
+        try:
+            cur = conn.cursor(pymysql.cursors.DictCursor)
+            cur.execute("SELECT id, enterprise_no FROM enterprises")
+            for r in cur.fetchall():
+                eno = _re.sub(r"[^A-Za-z0-9]", "", (r.get("enterprise_no") or "")).upper()
+                if eno == "TZ008":
+                    ids.add(r["id"])
+        finally:
+            conn.close()
+    except Exception:
+        logger.debug("查询 TZ-008 企业失败")
+        return set()
+    _TZ008_ENTERPRISE_IDS = ids
+    return ids
+
+
+def apply_tz008_plate_fallback(db, fields: dict, enterprise_id) -> bool:
+    """
+    TZ-008(鹏杰华智能)专属：车牌号为空(或"暂未上牌")且有车架号(VIN)时，用 VIN 填入车牌号。
+    在写入路径(识别/重新识别)调用以持久化，使列表/详情/导出/合并各处一致。返回是否改动。
+    """
+    if enterprise_id is None:
+        return False
+    plate = (fields.get("车牌号") or "").strip()
+    if plate and plate != "暂未上牌":
+        return False
+    vin = (fields.get("车架号VIN") or "").strip()
+    if len(vin) < 10:
+        return False
+    if enterprise_id not in get_tz008_enterprise_ids(db):
+        return False
+    fields["车牌号"] = vin
+    return True
+
+
 def set_insurance_config(db, key: str, value):
     """
     设置配置项（存在则更新，不存在则插入）。

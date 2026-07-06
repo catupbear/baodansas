@@ -2392,6 +2392,9 @@ def reocr_record(record_id):
             pf = policy.get("fields") or {}
             _handler._cross_fill_by_plate(pf, rec_id)
             _handler._cross_fill_by_person(pf, rec_id)
+            # TZ-008 专属：车牌为空时用车架号填入车牌号（持久化）
+            from insurance.db import apply_tz008_plate_fallback
+            apply_tz008_plate_fallback(_db, pf, record.get("enterprise_id"))
             cs = pf.get("保险公司简称", "")
             mf = apply_mapping(pf, cs)
             doc_cat = policy.get("doc_category", "")
@@ -2477,6 +2480,8 @@ def reocr_record(record_id):
             )
             _handler._cross_fill_by_plate(pf, record_id)
             _handler._cross_fill_by_person(pf, record_id)
+            from insurance.db import apply_tz008_plate_fallback
+            apply_tz008_plate_fallback(_db, pf, record.get("enterprise_id"))
             cs = pf.get("保险公司简称", "")
             mf = apply_mapping(pf, cs)
             extra_record = {
