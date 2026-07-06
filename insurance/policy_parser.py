@@ -3606,7 +3606,8 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
 
     # 华泰驾乘险格式："自2026年05月27日00:00:时起（北京时间）至2027年05月26日 24:00:时止（北京时间）"
     # 起/止后跟"（北京时间）"等注释文字
-    m = re.search(r"保险期间.*?自?\s*(\d{4}年\d{1,2}月\d{1,2}日)\s*[\d:时分秒]+\s*起.*?[至到]\s*(\d{4}年\d{1,2}月\d{1,2}日)", period_text, re.DOTALL)
+    # 终保日期"日"设为可选：OCR 可能把日与时间粘连吞掉"日"（华泰"...07月2823:59:59时止"）
+    m = re.search(r"保险期间.*?自?\s*(\d{4}年\d{1,2}月\d{1,2}日?)\s*[\d:时分秒]+\s*起.*?[至到]\s*(\d{4}年\d{1,2}月\d{1,2}日?)", period_text, re.DOTALL)
     if m:
         fields["保险起期"] = m.group(1)
         fields["保险止期"] = m.group(2)
