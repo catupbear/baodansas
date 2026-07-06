@@ -4086,6 +4086,8 @@ def export_excel():
                     return True
 
                 # 1. 按车牌分组，不可合并的记录单独作为独立行
+                #    车牌为空/新车但有车架号时，用车架号(VIN)作分组键兜底——与去重/前端合并键一致，
+                #    避免"未上牌新车"的商业险+驾乘险因空车牌各自单独成行、显示成多组重复。
                 plate_groups = {}
                 standalone_rows = []
                 for inv in invoices:
@@ -4093,12 +4095,15 @@ def export_excel():
                     if has_config and not skip_config:
                         fields = apply_user_config_to_fields(user_config, fields)
                     plate = fields.get("车牌", "") or fields.get("车牌号", "") or ""
-                    if not _plate_mergeable(plate):
+                    if _plate_mergeable(plate):
+                        group_key = plate.strip()
+                    else:
+                        _vin = (fields.get("车架号", "") or fields.get("车架号VIN", "") or "").strip()
+                        group_key = "__VIN__" + _vin.upper() if len(_vin) >= 10 else None
+                    if group_key is None:
                         standalone_rows.append(fields)
                     else:
-                        if plate not in plate_groups:
-                            plate_groups[plate] = []
-                        plate_groups[plate].append(fields)
+                        plate_groups.setdefault(group_key, []).append(fields)
 
                 # 2. 合并每组
                 merged_rows = []
