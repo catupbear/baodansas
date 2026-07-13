@@ -18,14 +18,13 @@ FLOWBOT_API = "https://flowbot.feiliu.run/api/sendTask"
 _TYPE_TEXT = 50009  # 文字（支持 atList @人）
 
 
-def send_flowbot_group_message(group_name: str, wechat_name: str,
-                               message: str, robot_id: str) -> bool:
+def send_flowbot_group_message(group_name: str, wechat_name, message: str, robot_id: str) -> bool:
     """
-    通过 FlowBot 向指定微信群发送一条文字消息（可 @ 人）。
+    通过 FlowBot 向指定微信群发送一条文字消息（可 @ 一人或多人）。
 
     Args:
         group_name:  目标群名称（FlowBot 按名称模糊定位群）
-        wechat_name: 要 @ 的成员微信名（空则不 @）
+        wechat_name: 要 @ 的成员微信名；单人传字符串，多人传列表（空/None 则不 @）
         message:     消息正文
         robot_id:    FlowBot 机器人 ID（台账专用，不同于报价系统）
 
@@ -37,7 +36,10 @@ def send_flowbot_group_message(group_name: str, wechat_name: str,
                        group_name, robot_id)
         return False
 
-    at_list = [wechat_name] if wechat_name else []
+    if isinstance(wechat_name, (list, tuple)):
+        at_list = [n for n in wechat_name if n]
+    else:
+        at_list = [wechat_name] if wechat_name else []
     task_list = [{
         "type": _TYPE_TEXT,
         "atList": at_list,
@@ -54,8 +56,8 @@ def send_flowbot_group_message(group_name: str, wechat_name: str,
         )
         result = resp.json()
         if result.get("code") == 200:
-            logger.info("✅ 已发送识别失败群通知到【%s】@%s: %s",
-                        group_name, wechat_name or "-", message)
+            logger.info("✅ 已发送群通知到【%s】@%s: %s",
+                        group_name, "、".join(at_list) or "-", message)
             return True
         logger.warning("⚠ 识别失败群通知发送失败: %s", result)
         return False

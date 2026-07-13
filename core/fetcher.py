@@ -425,8 +425,10 @@ class MessageFetcher:
         """群内"发送台账+今日/本周/本月"文本 -> 生成保单台账Excel，
         上传COS后经FlowBot发到该群并@发送人。
 
-        仅对监控群、且发送人在 user_sender_binding 绑定过账号时生效；
-        未绑定的发送人静默忽略（不回复任何内容，避免群内被无关消息刷屏）。
+        仅对监控群生效；发送人需能解析出所属账号——优先用其个人绑定
+        （user_sender_binding），否则退回监控配置/该企业自己的 enterprise 账号
+        （企业管理员一般不建个人绑定，这层兜底让企业管理员本人也能直接触发）。
+        两者都解析不出时静默忽略（不回复任何内容，避免群内被无关消息刷屏）。
         任何环节异常都只记日志，绝不影响消息处理主流程。
         """
         handler = getattr(self, "insurance_handler", None)
@@ -469,8 +471,17 @@ class MessageFetcher:
                 config_user_id = bound["user_id"]
                 if not config_enterprise_id and bound.get("enterprise_id"):
                     config_enterprise_id = bound["enterprise_id"]
+            # 兜底：企业管理员一般不建 sender 绑定（绑定主要给员工用），
+            # 监控配置也常只挂了 enterprise_id、没挂具体 user_id。
+            # 此时只要能确定是哪家企业的群，就用该企业自己的 enterprise 账号身份导出。
+            if not config_user_id and config_enterprise_id:
+                from auth.db import list_users
+                ent_users = [u for u in list_users(handler.db, role="enterprise", parent_id=config_enterprise_id)
+                             if u.get("enabled")]
+                if ent_users:
+                    config_user_id = ent_users[0]["id"]
             if not config_user_id:
-                logger.info("台账导出命令：sender=%s 未绑定账号，忽略 seq=%d", sender, seq)
+                logger.info("台账导出命令：sender=%s 未绑定账号且找不到所属企业账号，忽略 seq=%d", sender, seq)
                 return
 
             sender_name = ""
