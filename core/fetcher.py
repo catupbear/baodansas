@@ -382,6 +382,9 @@ class MessageFetcher:
 
             # 检查是否为"政策报价"文本（车牌+商业/交强/驾意），按车牌回填政策字段
             self._check_policy_fill_trigger(msg_seq, parsed)
+
+            # 检查是否为"发送台账XX"命令文本，命中则导出台账Excel并发回群里@发送人
+            self._check_ledger_export_trigger(msg_seq, parsed)
         except json.JSONDecodeError as e:
             logger.error("%s消息JSON解析失败, seq=%d: %s", self._log_prefix, msg_seq, e)
             notify_error("消息解析", "_process_item", f"JSON解析失败, seq={msg_seq}", str(e))
@@ -417,6 +420,103 @@ class MessageFetcher:
                 logger.info("政策回填: seq=%d room=%s 命中%d条 %s", seq, roomid, cnt, info)
         except Exception as e:
             logger.error("政策回填异常 seq=%d: %s", seq, e, exc_info=True)
+
+    def _check_ledger_export_trigger(self, seq: int, parsed: dict):
+        """群内"发送台账+今日/本周/本月"文本 -> 生成保单台账Excel，
+        上传COS后经FlowBot发到该群并@发送人。
+
+        仅对监控群、且发送人在 user_sender_binding 绑定过账号时生效；
+        未绑定的发送人静默忽略（不回复任何内容，避免群内被无关消息刷屏）。
+        任何环节异常都只记日志，绝不影响消息处理主流程。
+        """
+        handler = getattr(self, "insurance_handler", None)
+        if not handler:
+            return
+        if parsed.get("msgtype", "") != "text":
+            return
+        roomid = parsed.get("roomid", "")
+        if not roomid:
+            return
+        watch = handler.get_watch_config()
+        if roomid not in watch.get("rooms", []):
+            return
+        _content = parsed.get("content", {}) or {}
+        text = _content.get("text") or _content.get("content") or ""
+        if not text:
+            return
+
+        from insurance.ledger_export import match_ledger_trigger
+        period = match_ledger_trigger(text)
+        if not period:
+            return
+
+        sender = parsed.get("from", "")
+        try:
+            # 解析绑定账号：与保单识别共用的"监控配置 + sender 绑定"解析链路
+            matched_monitors = handler._get_matched_monitors(roomid, sender)
+            config_user_id = None
+            config_enterprise_id = None
+            for m in matched_monitors:
+                if m.get("user_id"):
+                    config_user_id = m["user_id"]
+                if m.get("enterprise_id"):
+                    config_enterprise_id = m["enterprise_id"]
+                if config_user_id:
+                    break
+            from auth.db import get_binding_by_sender
+            bound = get_binding_by_sender(handler.db, sender, config_enterprise_id)
+            if bound:
+                config_user_id = bound["user_id"]
+                if not config_enterprise_id and bound.get("enterprise_id"):
+                    config_enterprise_id = bound["enterprise_id"]
+            if not config_user_id:
+                logger.info("台账导出命令：sender=%s 未绑定账号，忽略 seq=%d", sender, seq)
+                return
+
+            sender_name = ""
+            room_name = ""
+            if handler.contacts:
+                try:
+                    sender_name = handler.contacts.get_name(sender) or ""
+                except Exception:
+                    pass
+                try:
+                    room_name = handler.contacts.get_room_name(roomid) or ""
+                except Exception:
+                    pass
+
+            from insurance.db import get_insurance_config
+            cfg = get_insurance_config(handler.db, "flowbot_fail_notify", {}) or {}
+            robot_id = cfg.get("robot_id")
+            if not robot_id or not room_name:
+                logger.info("台账导出命令：缺少 robot_id 或群名，跳过 seq=%d room=%s", seq, roomid)
+                return
+
+            from insurance.ledger_export import export_ledger_via_binding
+            from insurance.flowbot_notify import send_flowbot_group_message
+
+            excel_bytes, filename, count = export_ledger_via_binding(
+                handler.db, config_user_id, config_enterprise_id, period)
+
+            if not excel_bytes:
+                send_flowbot_group_message(room_name, sender_name, f"【保单台账】{period}暂无保单数据", robot_id)
+                return
+
+            if not handler.cos_storage:
+                logger.warning("台账导出：cos_storage 未配置，无法上传文件 seq=%d", seq)
+                return
+            cos_key_suffix = f"ledger_exports/{int(time.time())}_{sender}.xlsx"
+            url = handler.cos_storage.upload_bytes(excel_bytes, cos_key_suffix)
+            if not url:
+                logger.warning("台账导出：上传COS失败 seq=%d", seq)
+                return
+
+            msg = f"【保单台账导出】{filename}\n共 {count} 条\n下载链接（请尽快下载）：\n{url}"
+            send_flowbot_group_message(room_name, sender_name, msg, robot_id)
+            logger.info("台账导出命令处理完成: seq=%d room=%s sender=%s period=%s count=%d",
+                        seq, roomid, sender, period, count)
+        except Exception as e:
+            logger.error("台账导出命令处理异常 seq=%d: %s", seq, e, exc_info=True)
 
     def _check_insurance_trigger(self, seq: int, msg_data: dict, parsed: dict):
         """检查是否需要触发保单识别（支持群聊 + 私聊）"""

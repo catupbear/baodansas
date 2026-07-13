@@ -66,6 +66,7 @@ from .field_mapping import (
 from .policy_parser import get_extraction_rules, parse_policy_text, parse_policy_text_multi, get_policy_type_code
 from .ocr_service import extract_text_from_pdf
 from . import remark_options_db
+from . import internal_notes_db
 from auth.decorators import login_required
 from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, ROLE_EMPLOYEE, ROLE_SALES, get_sender_user_name_map, get_sender_alias_map
 from core.notify import notify_error
@@ -338,6 +339,11 @@ def list_records():
     ocr_engine = request.args.get("ocr_engine", "")
     doc_category = request.args.get("doc_category", "")
     is_abnormal = request.args.get("is_abnormal", "")
+    review_status = request.args.get("review_status", "")
+    if g.current_user.get("role") != "super_admin":
+        review_status = ""  # 核对状态筛选仅超管可用，防止非超管借此推断内部备注情况
+        # 注：此处用字面量而非 ROLE_SUPER_ADMIN 名字，因本函数体后段有局部 `from auth.db import ROLE_SUPER_ADMIN`
+        # （第373行附近，早于此处执行会导致 UnboundLocalError：Python 视其为函数局部名）
     company_short = request.args.get("company_short", "")
     policy_type = request.args.get("policy_type", "")
     date_start = request.args.get("date_start", "")
@@ -408,6 +414,7 @@ def list_records():
             end_date_start=end_date_start,
             end_date_end=end_date_end,
             dedup=dedup,
+            review_status=review_status,
             sort_by=sort_by,
             sort_order=sort_order,
         )
@@ -541,6 +548,21 @@ def list_records():
             for ts_field in ("created_at", "updated_at"):
                 if record.get(ts_field) and not isinstance(record[ts_field], str):
                     record[ts_field] = str(record[ts_field])
+
+        # 内部管理备注摘要注入（仅超管可见；其他角色不返回该字段）
+        try:
+            from flask import g as _g
+            if _g.current_user.get("role") == ROLE_SUPER_ADMIN:
+                _recs = result.get("records", [])
+                _note_map = internal_notes_db.get_summaries(
+                    _db, [r.get("id") for r in _recs if r.get("id")])
+                for r in _recs:
+                    r["internal_note"] = _note_map.get(r.get("id")) or {
+                        "count": 0, "latest": "", "latest_attribution": "",
+                        "latest_at": "", "reviewed_today": False,
+                    }
+        except Exception:
+            logger.debug("注入内部备注摘要失败", exc_info=True)
 
         # 同车牌互补：保司信息 + 车主 + 证件号码 + 签单日期 + 业务员
         # pool 结构：{车牌: {"name", "addr", "owner", "id_no", "sign_date", "salesperson"}}
@@ -1227,6 +1249,57 @@ def undo_mark_record_normal(record_id):
         return jsonify({"code": 0, "msg": "已撤销标记"})
     except Exception as e:
         logger.exception("撤销标记失败 record_id=%d", record_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/records/<int:record_id>/internal-notes", methods=["GET"])
+def list_internal_notes(record_id):
+    """获取某保单的内部管理备注（每日追加日志，最新在前）。仅超级管理员。"""
+    _require_login()
+    from flask import g
+    if g.current_user.get("role") != ROLE_SUPER_ADMIN:
+        return jsonify({"code": 403, "msg": "无权限"}), 403
+    try:
+        notes = internal_notes_db.list_notes(_db, record_id)
+        return jsonify({"code": 0, "data": {"notes": notes}})
+    except Exception as e:
+        logger.exception("获取内部备注失败 record_id=%d", record_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/records/<int:record_id>/internal-notes", methods=["POST"])
+def add_internal_note(record_id):
+    """追加一条内部管理备注。仅超级管理员。body: {content, attribution}"""
+    _require_login()
+    from flask import g
+    if g.current_user.get("role") != ROLE_SUPER_ADMIN:
+        return jsonify({"code": 403, "msg": "无权限"}), 403
+    try:
+        record = get_insurance_record(_db, record_id)
+        if not record:
+            return jsonify({"code": 404, "msg": "记录不存在"}), 404
+        data = request.get_json(force=True) or {}
+        content = (data.get("content") or "").strip()
+        attribution = (data.get("attribution") or "").strip()
+        if not content:
+            return jsonify({"code": 400, "msg": "请填写备注内容"}), 400
+        uid = g.current_user.get("user_id")
+        # 操作人姓名：服务端按 user_id 查 users 表（同库），避免前端伪造
+        author_name = ""
+        try:
+            from auth.db import get_user_by_id
+            _u = get_user_by_id(_db, uid)
+            author_name = (_u or {}).get("name") or ""
+        except Exception:
+            pass
+        note_id = internal_notes_db.add_note(
+            _db, record_id, content, attribution, author_id=uid, author_name=author_name)
+        notes = internal_notes_db.list_notes(_db, record_id)
+        summary = internal_notes_db.get_summaries(_db, [record_id]).get(record_id)
+        return jsonify({"code": 0, "msg": "已添加", "data": {
+            "note_id": note_id, "notes": notes, "summary": summary}})
+    except Exception as e:
+        logger.exception("添加内部备注失败 record_id=%d", record_id)
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
@@ -3911,6 +3984,52 @@ def export_enterprise_report():
         return jsonify({"code": 500, "msg": f"导出失败: {e}"}), 500
 
 
+def _sanitize_filename_part(s: str, max_len: int = 40) -> str:
+    """去除文件名非法字符，限制长度，避免企业名/标签里混入特殊符号导致下载失败。"""
+    s = re.sub(r'[\\/:*?"<>|]', "_", (s or "").strip())
+    return s[:max_len] or "未命名"
+
+
+def _resolve_export_enterprise_name(body: dict) -> str:
+    """
+    解析导出文件名用的企业名称：
+    - 超管：按其筛选的 enterprise_id 取企业名，未筛选（数据混合多家企业）则用"全部企业"
+    - 其他角色（企业/员工/销售）：固定为自己所属企业，不信任前端传参
+    """
+    role = g.current_user.get("role")
+    if role == ROLE_SUPER_ADMIN:
+        eid = body.get("enterprise_id")
+        if not eid:
+            return "全部企业"
+        try:
+            from auth.db import get_enterprise_by_id
+            ent = get_enterprise_by_id(_db, int(eid))
+            return ent.get("name") or ent.get("phone") or f"企业{eid}" if ent else f"企业{eid}"
+        except Exception:
+            return "全部企业"
+    from auth.db import get_user_by_id, get_enterprise_by_id
+    user = get_user_by_id(_db, g.current_user["user_id"])
+    eid = user.get("parent_id") if user else None
+    if not eid:
+        return "企业"
+    ent = get_enterprise_by_id(_db, eid)
+    return (ent.get("name") if ent else "") or "企业"
+
+
+def _build_export_filename(body: dict, export_label: str) -> str:
+    """按「企业名称_导出类型_时间周期.xlsx」规则生成导出文件名。"""
+    from datetime import datetime
+    ent_name = _sanitize_filename_part(_resolve_export_enterprise_name(body))
+    label = _sanitize_filename_part(export_label)
+    date_start = (body.get("date_start") or "").strip()[:10]
+    date_end = (body.get("date_end") or "").strip()[:10]
+    if date_start or date_end:
+        period = f"{date_start or date_end}_{date_end or date_start}"
+    else:
+        period = datetime.now().strftime("%Y%m%d_%H%M")
+    return f"{ent_name}_{label}_{period}.xlsx"
+
+
 @insurance_bp.route("/api/insurance/export/excel", methods=["POST"])
 def export_excel():
     """
@@ -3946,6 +4065,7 @@ def export_excel():
             field_names = list(OUTPUT_COLUMNS)
         export_type = body.get("export_type", "success")  # "success" 或 "failed"
         sheet_name = body.get("sheet_name", "保单数据")
+        export_label = (body.get("export_label") or sheet_name or "保单导出").strip()
 
         if not invoices:
             return jsonify({"code": 400, "msg": "没有可导出的数据"}), 400
@@ -4277,10 +4397,7 @@ def export_excel():
         wb.save(output)
         output.seek(0)
 
-        from datetime import datetime
-        time_str = datetime.now().strftime("%Y%m%d_%H%M")
-        user_name = g.current_user.get("name", "") or g.current_user.get("username", "")
-        download_name = f"{user_name}_保单导出_{sheet_name}_{time_str}.xlsx" if user_name else f"保单导出_{sheet_name}_{time_str}.xlsx"
+        download_name = _build_export_filename(body, export_label)
         return send_file(
             output,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

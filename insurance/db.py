@@ -433,6 +433,21 @@ def init_insurance_tables(db):
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户报错反馈'
         """)
 
+        # 内部管理备注表(仅超管,每日追加日志) —— 见 insurance/internal_notes_db.py
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS insurance_internal_notes (
+                id          BIGINT PRIMARY KEY AUTO_INCREMENT,
+                record_id   INT NOT NULL COMMENT '关联 insurance_records.id',
+                content     TEXT COMMENT '备注内容',
+                attribution VARCHAR(16) NOT NULL DEFAULT '' COMMENT '问题归属: our_pending/our_fixed/customer/空',
+                author_id   INT DEFAULT NULL COMMENT '操作人 user_id',
+                author_name VARCHAR(64) DEFAULT NULL COMMENT '操作人姓名',
+                created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_notes_record (record_id),
+                KEY idx_notes_record_day (record_id, created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='保单内部管理备注(仅超管,每日追加日志)'
+        """)
+
         conn.commit()
         logger.info("保单识别数据库表初始化完成（DDL）")
     finally:
@@ -1419,6 +1434,7 @@ def query_insurance_records(
     end_date_start: str = "",
     end_date_end: str = "",
     dedup: bool = False,
+    review_status: str = "",
     sort_by: str = "",
     sort_order: str = "desc",
 ) -> dict:
@@ -1502,6 +1518,17 @@ def query_insurance_records(
         conditions.append(f"{col_prefix}is_abnormal = 1")
     elif is_abnormal == "0":
         conditions.append(f"{col_prefix}is_abnormal = 0")
+    # 核对状态：今日未核对 = 当天无任何内部管理备注；今日已核对 = 当天有备注（配合异常单每日核对）
+    if review_status == "unreviewed":
+        conditions.append(
+            f"NOT EXISTS (SELECT 1 FROM insurance_internal_notes n "
+            f"WHERE n.record_id = {col_prefix}id AND DATE(n.created_at) = CURDATE())"
+        )
+    elif review_status == "reviewed":
+        conditions.append(
+            f"EXISTS (SELECT 1 FROM insurance_internal_notes n "
+            f"WHERE n.record_id = {col_prefix}id AND DATE(n.created_at) = CURDATE())"
+        )
     if company_short:
         conditions.append(f"{col_prefix}company_short = %s")
         params.append(company_short)
