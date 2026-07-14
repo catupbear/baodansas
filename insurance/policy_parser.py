@@ -3557,7 +3557,19 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
     _lines = text.split('\n')
     for _i, _line in enumerate(_lines):
         if '保险期间' in _line and '交强险' not in _line:
-            # 在标签后5行内搜索两个连续的日期行
+            # 若"保险期间"所在行本身就带"至/到"且已含两个日期（如国寿驾乘险
+            # "保险期间 自2026年6月13日零时起，至2027年6月12日二十四时止。"），
+            # 说明起止日期同行给出，必须直接取这两个，不能再往下扫描其它行——
+            # 否则会扫到下方无关的"保险费交付日期"之类字段，把止期错配成缴费截止日
+            # （曾实测：粤B166JA 国寿驾乘险止期被误抽成"保险费交付日期"的次日，
+            # 差了整整一年）
+            _same_line_dates = re.findall(r'(\d{4}年\d{1,2}月\d{1,2}日)', _line)
+            if len(_same_line_dates) >= 2 and re.search(r'[至到]', _line):
+                fields["保险起期"] = _same_line_dates[0]
+                fields["保险止期"] = _same_line_dates[1]
+                fields["保险期间"] = f"{_same_line_dates[0]} 至 {_same_line_dates[1]}"
+                return
+            # 在标签后5行内搜索两个连续的日期行（真正的"无至分隔、日期各占一行"格式）
             _dates = []
             for _j in range(_i, min(_i + 5, len(_lines))):
                 _m = re.search(r'(\d{4}年\d{1,2}月\d{1,2}日)', _lines[_j])
@@ -4230,9 +4242,16 @@ def parse_policy_text(text: str) -> Dict[str, Any]:
 # 注意：险种名与"保险单"之间可能有版本号、空格等，用 .{0,30}? 宽松匹配
 _POLICY_HEADER_PATTERNS = [
     # 交强险标题行："机动车交通事故责任强制保险单" 或 "...强制保险 保险单（电子保单）"
-    (r"交通事故责任强制保险[^，。,;；\n]{0,20}?(?:电子保险单|电子保单|保\s*单|单)", "compulsory"),
+    # 注意：收尾不能允许裸露的单个"单"字——"...费率告知单""...强制保险单（电子保单）"这类
+    # 封面/附页标题也会以"单"收尾，裸字符分支会把这些无关页面误判成新保单起点（2026-07-14实测
+    # 命中过两次：一次告知单附页、一次封面水印页，都把真正的保单正文挤到了别的record里）
+    # 裸"单"只允许零间隔紧跟（"...保险单"是最常见的真实写法——前缀已吃掉"保险"，
+    # 剩下单独一个"单"字）；有间隔(1~19字符)时必须落在真正的"电子保险单/电子保单/保单"
+    # 词上，不能是任意文字+单（避免把"...费率浮动及代收车船税款告知单"这类附页标题、
+    # "...单（电子保单）"以外的无关封面文字误判成保单标题；2026-07-14两次实测教训）
+    (r"交通事故责任强制保险(?:单|[^，。,;；\n]{1,19}?(?:电子保险单|电子保单|保\s*单))", "compulsory"),
     # 紫金等无"责任"字的交强险标题："机动车交通事故强制保险单（电子保单）"
-    (r"交通事故强制保险[^，。,;；\n]{0,20}?(?:电子保险单|电子保单|保\s*单|单)", "compulsory"),
+    (r"交通事故强制保险(?:单|[^，。,;；\n]{1,19}?(?:电子保险单|电子保单|保\s*单))", "compulsory"),
     # 商业险标题行："机动车商业保险保险单（电子保单）"
     (r"(?:新能源汽车|机动车|特种车)(?:辆)?(?:商业保险|综合险)[^，。,;；\n]{0,20}?(?:电子保险单|电子保单|保险单|保\s*单)", "commercial"),
     # 驾乘/意外险标题行："机动车驾乘人员人身意外伤害保险（2022 版）电子保险单"
@@ -4400,8 +4419,14 @@ def parse_policy_text_multi(text: str) -> List[Dict[str, Any]]:
         # 清除页码标记后再解析
         clean_segment = re.sub(r'\[PAGE:\d+\]\n?', '', segment)
         policy = parse_policy_text(clean_segment)
-        # 只保留有效的保单（有字段且置信度>0）
-        if policy.get("fields") and policy.get("confidence", 0) > 0:
+        # 只保留有效的保单：字段非空+置信度>0 之外，再叠加一道核心字段护栏——
+        # 车牌号/被保险人/保险起期/保险止期/保单号 至少命中2项才算数，防止标题正则
+        # 误判出的封面/告知单等垃圾页面（confidence可能仍>0）被当成一份独立保单入库
+        _core_hits = sum(
+            1 for _k in ("车牌号", "被保险人", "保险起期", "保险止期", "保单号")
+            if policy.get("fields", {}).get(_k)
+        )
+        if policy.get("fields") and policy.get("confidence", 0) > 0 and _core_hits >= 2:
             policy["page_range"] = page_range
             policies.append(policy)
 

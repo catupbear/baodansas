@@ -989,15 +989,65 @@ def save_column_config(db, config_type: str, scope: str, scope_id, columns: list
         conn.close()
 
 
+# 标准版模板：与"宝能前海"企业线上实际启用的字段范围一致(2026-07-14整理进客户文档时确认)
+_STANDARD_TEMPLATE_COLUMNS = [
+    {"key": "承保公司", "visible": True, "order": 0, "display_name": "承保公司"},
+    {"key": "保单号", "visible": True, "order": 1, "display_name": "保单号"},
+    {"key": "险种", "visible": True, "order": 2, "display_name": "险种"},
+    {"key": "车牌", "visible": True, "order": 3, "display_name": "车牌"},
+    {"key": "投保人", "visible": True, "order": 4, "display_name": "投保人"},
+    {"key": "被保人", "visible": True, "order": 5, "display_name": "被保人"},
+    {"key": "签单日期", "visible": True, "order": 6, "display_name": "签单日期"},
+    {"key": "起保日期", "visible": True, "order": 7, "display_name": "起保日期"},
+    {"key": "终保日期", "visible": True, "order": 8, "display_name": "终保日期"},
+    {"key": "保费", "visible": True, "order": 9, "display_name": "保费"},
+    {"key": "费率", "visible": True, "order": 10, "display_name": "费率", "custom": True, "is_percent": False},
+    {"key": "佣金", "visible": True, "order": 11, "display_name": "佣金", "custom": True, "is_percent": False},
+    {"key": "跟单人利润", "visible": True, "order": 12, "display_name": "跟单人利润", "custom": True, "is_percent": False},
+    {"key": "出单渠道", "visible": True, "order": 13, "display_name": "出单渠道", "custom": True, "is_percent": False},
+]
+
+# 完整版模板额外字段：DEFAULT_COLUMNS 之外、OUTPUT_COLUMNS 里的手动填写/扩展类字段
+_FULL_TEMPLATE_EXTRA_COLUMNS = [
+    ("佣金率", "佣金率"), ("佣金", "佣金"), ("采购费率", "采购费率"),
+    ("公司利润", "公司利润"), ("跟单人利润", "跟单人利润"),
+    ("出单渠道", "出单渠道"), ("保司联系电话", "保司联系电话"),
+]
+
+
+def _build_standard_template_columns():
+    import copy
+    return copy.deepcopy(_STANDARD_TEMPLATE_COLUMNS)
+
+
+def _build_full_template_columns():
+    import copy
+    cols = []
+    for c in copy.deepcopy(DEFAULT_COLUMNS):
+        c["visible"] = True
+        cols.append(c)
+    next_order = len(cols)
+    for key, display_name in _FULL_TEMPLATE_EXTRA_COLUMNS:
+        cols.append({"key": key, "visible": True, "order": next_order, "display_name": display_name})
+        next_order += 1
+    return cols
+
+
 def init_enterprise_default_template(db, enterprise_id: int):
-    """新建企业时初始化默认导出列配置：包含全部识别字段（都勾选导出）。"""
+    """
+    新建企业时初始化导出列配置：默认模板(全部识别字段,兼容原有逻辑)之外，
+    额外初始化"标准版"(常用14字段)和"完整版"(全部46字段)两套可选模板，
+    企业管理员可在字段配置页切换使用。
+    """
     import copy
     cols = []
     for c in copy.deepcopy(DEFAULT_COLUMNS):
         c["visible"] = True
         cols.append(c)
     save_column_config(db, "export_columns", "enterprise", enterprise_id, cols)
-    logger.info("企业 %s 默认导出模板已初始化（全字段导出，共 %d 列）", enterprise_id, len(cols))
+    save_column_config(db, "export_columns", "enterprise", enterprise_id, _build_standard_template_columns(), template_name="标准版")
+    save_column_config(db, "export_columns", "enterprise", enterprise_id, _build_full_template_columns(), template_name="完整版")
+    logger.info("企业 %s 默认导出模板已初始化（默认模板 + 标准版 + 完整版）", enterprise_id)
 
 
 def delete_column_config(db, config_type: str, scope: str, scope_id):

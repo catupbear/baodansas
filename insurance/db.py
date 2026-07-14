@@ -182,17 +182,28 @@ def init_insurance_tables(db):
             )
         """)
         # 关联表索引（常用查询字段）
-        for idx_sql in [
-            "CREATE UNIQUE INDEX idx_pf_record_id ON insurance_policy_fields(record_id)",
-            "CREATE INDEX idx_pf_policy_no ON insurance_policy_fields(policy_no)",
-            "CREATE INDEX idx_pf_plate_no ON insurance_policy_fields(plate_no)",
-            "CREATE INDEX idx_pf_company_short ON insurance_policy_fields(company_short)",
-            "CREATE INDEX idx_pf_applicant ON insurance_policy_fields(applicant)",
-            "CREATE INDEX idx_pf_insured ON insurance_policy_fields(insured)",
-            "CREATE INDEX idx_pf_start_date_iso ON insurance_policy_fields(start_date_iso)",
-            "CREATE INDEX idx_pf_sign_date_iso ON insurance_policy_fields(sign_date_iso)",
-            "CREATE INDEX idx_pf_end_date_iso ON insurance_policy_fields(end_date_iso)",
-        ]:
+        _pf_indexes = {
+            "idx_pf_record_id": "CREATE UNIQUE INDEX idx_pf_record_id ON insurance_policy_fields(record_id)",
+            "idx_pf_policy_no": "CREATE INDEX idx_pf_policy_no ON insurance_policy_fields(policy_no)",
+            "idx_pf_plate_no": "CREATE INDEX idx_pf_plate_no ON insurance_policy_fields(plate_no)",
+            "idx_pf_company_short": "CREATE INDEX idx_pf_company_short ON insurance_policy_fields(company_short)",
+            "idx_pf_applicant": "CREATE INDEX idx_pf_applicant ON insurance_policy_fields(applicant)",
+            "idx_pf_insured": "CREATE INDEX idx_pf_insured ON insurance_policy_fields(insured)",
+            "idx_pf_start_date_iso": "CREATE INDEX idx_pf_start_date_iso ON insurance_policy_fields(start_date_iso)",
+            "idx_pf_sign_date_iso": "CREATE INDEX idx_pf_sign_date_iso ON insurance_policy_fields(sign_date_iso)",
+            "idx_pf_end_date_iso": "CREATE INDEX idx_pf_end_date_iso ON insurance_policy_fields(end_date_iso)",
+        }
+        try:
+            cursor.execute(
+                "SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS "
+                "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='insurance_policy_fields'"
+            )
+            _existing_indexes = {r[0] for r in cursor.fetchall()}
+        except Exception:
+            _existing_indexes = set()  # 探测失败时保守回退到原逐条尝试
+        for idx_name, idx_sql in _pf_indexes.items():
+            if idx_name in _existing_indexes:
+                continue
             try:
                 cursor.execute(idx_sql)
             except Exception:
@@ -308,13 +319,27 @@ def init_insurance_tables(db):
                 pass
 
         # 迁移：将已有 VARCHAR(500) 列改为 TEXT，避免行大小超限
+        # insured/applicant 建了索引(idx_pf_insured/idx_pf_applicant)，TEXT列做索引
+        # 必须指定前缀长度，MODIFY 在当前索引存在时必然失败——不放进重试名单，
+        # 避免每次worker启动都去抢一次注定失败的表级锁（2026-07-14锁雪崩故障根因之一）
         _pf_to_text = [
-            "insured", "applicant", "owner", "vehicle_model",
+            "owner", "vehicle_model",
             "insurance_period", "sales_channel", "agency",
             "salesperson", "dispute_resolution", "creator", "handler",
             "insurer_name", "insurer_address",
         ]
-        for col in _pf_to_text:
+        try:
+            cursor.execute(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='insurance_policy_fields' "
+                "AND DATA_TYPE != 'text' AND COLUMN_NAME IN (%s)"
+                % ",".join(["%s"] * len(_pf_to_text)),
+                _pf_to_text,
+            )
+            _cols_need_migration = {r[0] for r in cursor.fetchall()}
+        except Exception:
+            _cols_need_migration = set(_pf_to_text)  # 探测失败时保守回退到原逐列尝试
+        for col in _cols_need_migration:
             try:
                 cursor.execute(
                     f"ALTER TABLE insurance_policy_fields MODIFY {col} TEXT"
@@ -911,8 +936,25 @@ def backfill_records_by_sources(db, room_ids: list, user_ids: list,
     回填历史保单记录的 user_id 和 enterprise_id。
     根据监控配置的群聊/私聊来源匹配 insurance_records 中的记录并更新。
     返回受影响的行数。
+
+    â ï¸ 只在 new_user_id/new_enterprise_id 显式给出真实值时才写入对应列，
+    传 None 表示"这次不改这一列"、不会清空已有值。以前的实现无条件把两列一起 SET，
+    导致监控配置只绑了企业没绑具体员工时，保存/编辑该配置会把这个群/私聊范围内全部
+    记录的 user_id 强制清空——即使这些记录本来是通过更精细的 sender 级绑定(user_sender_binding)
+    正确关联到了具体员工，也会被这个更粗粒度的群级回填覆盖掉。2026-07-14 因为这个bug
+    连续两次误清空了 24081+661 条记录的 user_id，历史上7月1号也发生过一次(17481条)。
     """
     if not room_ids and not user_ids:
+        return 0
+    set_clauses = []
+    set_params = []
+    if new_user_id is not None:
+        set_clauses.append("user_id = %s")
+        set_params.append(new_user_id)
+    if new_enterprise_id is not None:
+        set_clauses.append("enterprise_id = %s")
+        set_params.append(new_enterprise_id)
+    if not set_clauses:
         return 0
     conn = db.pool.connection()
     try:
@@ -928,8 +970,8 @@ def backfill_records_by_sources(db, room_ids: list, user_ids: list,
             conditions.append(f"(sender IN ({ph}) AND (roomid IS NULL OR roomid = ''))")
             params.extend(user_ids)
         where = " OR ".join(conditions)
-        sql = f"UPDATE insurance_records SET user_id = %s, enterprise_id = %s WHERE ({where})"
-        cursor.execute(sql, [new_user_id, new_enterprise_id] + params)
+        sql = f"UPDATE insurance_records SET {', '.join(set_clauses)} WHERE ({where})"
+        cursor.execute(sql, set_params + params)
         conn.commit()
         affected = cursor.rowcount
         if affected > 0:
@@ -1087,6 +1129,7 @@ def update_insurance_record(db, record_id: int, updates: dict):
         )
 
         # 同步关联表（parsed_fields 有更新时）
+        _synced_plate_vin_ent = None
         if "parsed_fields" in updates:
             pf_sync = updates["parsed_fields"]
             if isinstance(pf_sync, str):
@@ -1097,11 +1140,42 @@ def update_insurance_record(db, record_id: int, updates: dict):
             if isinstance(pf_sync, dict) and pf_sync:
                 try:
                     _upsert_policy_fields(cursor, record_id, pf_sync)
+                    _synced_plate_vin_ent = (
+                        pf_sync.get("车牌号", ""), pf_sync.get("车架号VIN", ""),
+                    )
                 except Exception as e:
                     logger.warning("同步关联表失败(update), record_id=%d: %s", record_id, e)
 
         conn.commit()
         logger.debug("保单记录已更新, id=%d, 字段=%s", record_id, list(updates.keys()))
+
+        # 实时同步续保任务快照（重新识别/手动编辑字段等改了保单期限时，不必等下一次定时扫描）。
+        # 后台线程异步执行：update_insurance_record 是全部保单落库的必经之路(不只是"重新识别"，
+        # 每条新收到的保单消息都会走)，同步内联调用会给这张已经高频读写的表每次都额外多绑
+        # 几条查询/更新，加重锁竞争；放到独立线程里跑，不占用主事务/主请求的时间和锁持有窗口
+        # （2026-07-14锁雪崩故障的放大因素之一）。本地导入避免循环依赖：main.py 顶层
+        # import insurance.db，而 renewal_task_scan.py 顶层又 import main，模块级 import 会互相卡死。
+        if _synced_plate_vin_ent is not None:
+            _sync_ent_id = None
+            try:
+                cursor.execute("SELECT enterprise_id FROM insurance_records WHERE id=%s", (record_id,))
+                _ent_row = cursor.fetchone()
+                _sync_ent_id = _ent_row["enterprise_id"] if _ent_row else None
+            except Exception as e:
+                logger.warning("查询企业ID失败(续保任务同步前置), record_id=%d: %s", record_id, e)
+            if _sync_ent_id:
+                def _bg_sync_renewal_task(_plate, _vin, _ent_id, _rid):
+                    try:
+                        import renewal_task_scan
+                        renewal_task_scan.sync_customer_task(db, _plate, _vin, _ent_id)
+                    except Exception as e:
+                        logger.warning("实时同步续保任务失败, record_id=%d: %s", _rid, e)
+                import threading as _threading
+                _threading.Thread(
+                    target=_bg_sync_renewal_task,
+                    args=(_synced_plate_vin_ent[0], _synced_plate_vin_ent[1], _sync_ent_id, record_id),
+                    daemon=True,
+                ).start()
     finally:
         conn.close()
 

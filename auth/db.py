@@ -301,7 +301,7 @@ def update_enterprise(db, enterprise_id: int, data: dict):
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        allowed = {"name", "enterprise_no", "contact_person", "contact_phone", "enabled", "merge_by_plate", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at", "referrer_id", "survey_token", "survey_data"}
+        allowed = {"name", "enterprise_no", "contact_person", "contact_phone", "enabled", "merge_by_plate", "renewal_enabled", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at", "referrer_id", "survey_token", "survey_data"}
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
             return
@@ -416,11 +416,8 @@ def get_bindings_by_user(db, user_id: int) -> list:
         conn.close()
 
 
-def get_binding_by_sender(db, sender: str, enterprise_id: int = None) -> dict | None:
-    """
-    按 sender 查找绑定的用户。
-    如果传了 enterprise_id 则精确匹配，否则先匹配 enterprise_id 为 NULL 的全局绑定。
-    """
+def _get_binding_by_sender_once(db, sender: str, enterprise_id: int = None) -> dict | None:
+    """单次查询，供 get_binding_by_sender 调用（含重试时复用）。"""
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -445,6 +442,29 @@ def get_binding_by_sender(db, sender: str, enterprise_id: int = None) -> dict | 
         raise
     finally:
         conn.close()
+
+
+def get_binding_by_sender(db, sender: str, enterprise_id: int = None) -> dict | None:
+    """
+    按 sender 查找绑定的用户。
+    如果传了 enterprise_id 则精确匹配，否则先匹配 enterprise_id 为 NULL 的全局绑定。
+
+    2026-07-14：曾出现过一段时间内大批量已绑定sender的查询全部返回空（无异常日志、
+    重启服务后自愈，怀疑连接池给到了异常/过期连接）导致对应记录user_id未正确关联，
+    事后手动回填过497条历史数据。这里加一次"空结果时用全新连接重试"的保险，命中
+    不一致时打WARNING留痕，方便下次复现时第一时间定位，不改变正常场景下的行为。
+    """
+    result = _get_binding_by_sender_once(db, sender, enterprise_id)
+    if result is None:
+        retry_result = _get_binding_by_sender_once(db, sender, enterprise_id)
+        if retry_result is not None:
+            logger.warning(
+                "get_binding_by_sender: sender=%s(enterprise_id=%s) 首次查询为空但重试后命中"
+                "(user_id=%s)——疑似连接池返回了异常连接，本次已用重试结果",
+                sender, enterprise_id, retry_result.get("user_id"),
+            )
+            return retry_result
+    return result
 
 
 def set_user_bindings(db, user_id: int, senders: list, enterprise_id: int = None):

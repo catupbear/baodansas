@@ -23,6 +23,8 @@ from insurance.db import init_insurance_tables
 from insurance.monitor_config_db import init_monitor_config_table, migrate_from_watch_list
 from insurance.handler import InsuranceHandler
 from insurance.api import insurance_bp, init_insurance_api
+from insurance.renewal_db import init_renewal_tables
+from insurance.renewal_api import renewal_bp, init_renewal_api
 from quote.handler import QuoteHandler
 from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table, init_sms_verification_table, init_referral_columns, init_is_sales_column, init_enterprise_plan_column, init_wallet_tables, init_activated_column
 from auth.jwt_utils import init_jwt
@@ -133,6 +135,11 @@ def create_app(config: dict) -> Flask:
     )
     init_insurance_api(db, handler=insurance_handler, contacts=contacts)
     app.register_blueprint(insurance_bp)
+
+    # 初始化续保任务模块
+    init_renewal_tables(db)
+    init_renewal_api(db, cos_storage=cos_storage)
+    app.register_blueprint(renewal_bp)
 
     # 初始化保险报价模块
     quote_handler = QuoteHandler(
@@ -318,6 +325,9 @@ def create_app(config: dict) -> Flask:
                 extra_contacts.set_cache_prefix(cb_corpid)
                 extra_contacts.set_fallback_contacts(contacts)  # 跨企业群回退到主企业查询
                 extra_contacts.start_auto_resolve(interval=300)
+                # 绑定本企业专属通讯录到 fetcher（群消息触发的功能，如台账导出，
+                # 需要按消息实际所属企业解析群名，不能只用主企业 contacts）
+                extra_fetcher.contacts = extra_contacts
 
                 def make_notify(f):
                     def notify():
@@ -383,6 +393,9 @@ def create_app(config: dict) -> Flask:
 
         # 将 insurance_handler 绑定到 fetcher（用于自动触发）
         fetcher.insurance_handler = insurance_handler
+        # 绑定主企业通讯录到 fetcher（与 extra_fetcher.contacts 对称，群消息触发的
+        # 功能统一从 self.contacts 取，不必区分主/额外企业）
+        fetcher.contacts = contacts
 
         # 将 quote_handler 绑定到 fetcher（用于自动触发报价）
         fetcher.quote_handler = quote_handler

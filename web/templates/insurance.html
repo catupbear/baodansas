@@ -152,15 +152,22 @@
             .nav-hamburger { display:inline-flex; }
         }
 
-        /* 字段说明「?」图标 */
+        /* 字段说明「!」图标(悬浮框已改用teleport+JS定位，见 .field-help-tooltip-float) */
+        .field-help-wrap { position: relative; display: inline-block; }
         .field-help-icon {
             display: inline-flex; align-items: center; justify-content: center;
             width: 14px; height: 14px; margin-left: 3px; vertical-align: middle;
             border-radius: 50%; background: #cbd5e1; color: #fff;
             font-size: 10px; font-weight: 700; line-height: 1;
-            cursor: help; user-select: none;
+            cursor: pointer; user-select: none;
         }
         .field-help-icon:hover { background: #f97316; }
+        .field-help-tooltip-float {
+            position: fixed; background: #1f2937; color: #fff; padding: 7px 10px;
+            border-radius: 6px; font-size: 12px; font-weight: 400; line-height: 1.5;
+            white-space: normal; width: 230px; z-index: 99999; text-align: left;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.3); pointer-events: none;
+        }
 
         /* 保司标签 */
         .company-tag {
@@ -186,11 +193,13 @@
 
         /* 顶层页面 Tab */
         .page-tab-btn {
-            padding: 8px 20px; font-size: 14px; font-weight: 600;
+            padding: 6px 12px; font-size: 12px; font-weight: 600;
             border-radius: 8px;
-            color: var(--text-muted);
+            color: rgba(255,255,255,0.85);
             transition: all 0.2s ease; cursor: pointer;
             background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
+            display: inline-flex; align-items: center; justify-content: center;
+            box-sizing: border-box;
         }
         .page-tab-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
         .page-tab-btn.active { background: rgba(255,255,255,0.25); color: #fff; border-color: rgba(255,255,255,0.4); }
@@ -230,22 +239,23 @@
         .records-table th { white-space: nowrap; }
         .records-table td { white-space: normal; word-break: break-all; }
         .records-table th {
-            position: sticky; top: 0; z-index: 2;
+            position: sticky; top: 0; z-index: 12;
             background: var(--surface-secondary);
             font-weight: 600; color: var(--text-secondary);
         }
+        .records-table thead { position: relative; z-index: 15; }
         /* 勾选列固定 */
         .records-table th.sticky-col-check,
         .records-table td.sticky-col-check {
             position: sticky; left: 0; z-index: 1;
         }
-        .records-table th.sticky-col-check { z-index: 3; }
+        .records-table th.sticky-col-check { z-index: 16; }
         /* 冻结列通用样式 */
         .records-table th.frozen-col,
         .records-table td.frozen-col {
             position: sticky; z-index: 1;
         }
-        .records-table th.frozen-col { z-index: 3; background: var(--surface-secondary) !important; }
+        .records-table th.frozen-col { z-index: 16; background: var(--surface-secondary) !important; }
         .records-table td.frozen-col { background: var(--surface) !important; }
         /* 最后一个冻结列右边框 */
         .records-table th.frozen-col-last,
@@ -258,6 +268,16 @@
         .records-table tbody tr:hover td.sticky-col-check,
         .records-table tbody tr:hover td.frozen-col { background: var(--primary-bg) !important; }
         .records-table tbody tr:hover { background: var(--primary-bg) !important; }
+        /* 操作列固定在勾选框列右侧(最左侧区域) */
+        .records-table th.action-col-sticky,
+        .records-table td.action-col-sticky {
+            position: sticky; left: 40px; z-index: 1;
+            width: 280px; min-width: 280px; max-width: 280px;
+            border-right: 2px solid var(--border-light);
+        }
+        .records-table th.action-col-sticky { z-index: 16; background: var(--surface-secondary) !important; }
+        .records-table td.action-col-sticky { background: var(--surface) !important; }
+        .records-table tbody tr:hover td.action-col-sticky { background: var(--primary-bg) !important; }
 
         /* 列宽拖拽手柄（th 已是 position:sticky，本身即可作为 handle 的定位上下文，不要再覆盖成 relative，否则表头无法吸顶） */
         .col-resize-handle {
@@ -393,18 +413,16 @@
                     </span>
                 </div>
                 <!-- 页面级 Tab 切换（桌面端显示） -->
-                <div v-if="!notActivated" class="hidden sm:flex items-center gap-1 ml-4">
+                <div v-if="!notActivated" class="hidden sm:flex items-center gap-2 ml-4">
                     <button @click="pageTab = 'records'; loadRecords(); loadRecordCompanies()" :class="pageTab === 'records' ? 'active' : ''" class="page-tab-btn">
-                        识别记录
-                    </button>
-                    <button @click="pageTab = 'upload'" :class="pageTab === 'upload' ? 'active' : ''" class="page-tab-btn">
-                        手动上传
+                        首页（台账记录）
                     </button>
                     <button v-if="isSuperAdmin" @click="pageTab = 'dashboard'; loadDashboard()" :class="pageTab === 'dashboard' ? 'active' : ''" class="page-tab-btn">
                         数据看板
                     </button>
-                    <button v-if="isSuperAdmin" @click="pageTab = 'companies'; loadSupportedCompanies()" :class="pageTab === 'companies' ? 'active' : ''" class="page-tab-btn">
-                        保司数据
+                    <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="openRenewalTab()" :class="pageTab === 'renewal' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;position:relative;">
+                        续保管理系统<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
+                        <span v-if="renewalBadgeCount > 0" style="position:absolute;top:-8px;right:-8px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.35);border:2px solid #c2410c;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
                     </button>
                 </div>
                 <!-- 未激活：工作台入口（点击提示联系管理员激活） -->
@@ -572,22 +590,18 @@
                 <button @click="pageTab='records';loadRecords();loadRecordCompanies();mobileMenuOpen=false"
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;margin-bottom:3px;"
                         :style="pageTab==='records'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
-                    识别记录
-                </button>
-                <button @click="pageTab='upload';mobileMenuOpen=false"
-                        style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;margin-bottom:3px;"
-                        :style="pageTab==='upload'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
-                    手动上传
+                    首页（台账记录）
                 </button>
                 <button v-if="isSuperAdmin" @click="pageTab='dashboard';loadDashboard();mobileMenuOpen=false"
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
                         :style="pageTab==='dashboard'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
                     数据看板
                 </button>
-                <button v-if="isSuperAdmin" @click="pageTab='companies';loadSupportedCompanies();mobileMenuOpen=false"
-                        style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
-                        :style="pageTab==='companies'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
-                    保司数据
+                <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="openRenewalTab();mobileMenuOpen=false"
+                        style="display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
+                        :style="pageTab==='renewal'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
+                    <span>续保管理系统<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span></span>
+                    <span v-if="renewalBadgeCount > 0" style="min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
                 </button>
             </div>
             <!-- 未激活：工作台入口 -->
@@ -1380,6 +1394,10 @@
         <div v-if="dashboardLoading" class="flex items-center justify-center py-24 text-gray-400 text-sm">加载中...</div>
         <div v-else-if="dashboardData">
 
+            <div class="flex items-center justify-end mb-2">
+                <button v-if="isSuperAdmin" @click="pageTab = 'companies'; loadSupportedCompanies()" class="btn btn-outline" style="padding:10px 20px;font-size:15px;font-weight:600;">保司数据 →</button>
+            </div>
+
             <!-- 时间范围切换 -->
             <div class="mb-4">
                 <!-- 时间按钮行（可横向滚动） -->
@@ -1632,6 +1650,134 @@
                         </tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- ========== 续保提醒 Tab ========== -->
+    <main v-if="pageTab === 'renewal' && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5">
+        <!-- 导入引导提示条 -->
+        <div class="card p-4 flex items-center justify-between flex-wrap gap-3" style="background:linear-gradient(to right,#fff7ed,#fffbeb);">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl">💡</span>
+                <div>
+                    <p class="text-sm font-medium text-orange-800">续保提醒功能限时免费开放，先用起来！</p>
+                    <p class="text-xs text-orange-600">如需导入往年台账或保单，可联系客服协助</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button v-if="isSuperAdmin" @click="openRenewalConfig()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">⚙ 设置</button>
+                <button @click="openRenewalQr()" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">导入往年保单</button>
+            </div>
+        </div>
+
+        <!-- 统计卡片 -->
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div class="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
+                <div class="text-2xl font-bold text-red-600">{{ renewalStats.overdue }}</div>
+                <div class="text-xs text-red-400 mt-1">已过期未处理</div>
+            </div>
+            <div class="bg-orange-50 border border-orange-200 rounded-xl p-3 text-center">
+                <div class="text-2xl font-bold text-orange-600">{{ renewalStats.due_7d }}</div>
+                <div class="text-xs text-orange-400 mt-1">7天内到期</div>
+            </div>
+            <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-center">
+                <div class="text-2xl font-bold text-yellow-600">{{ renewalStats.due_this_month }}</div>
+                <div class="text-xs text-yellow-400 mt-1">本月到期</div>
+            </div>
+            <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
+                <div class="text-2xl font-bold text-blue-600">{{ renewalStats.due_next_month }}</div>
+                <div class="text-xs text-blue-400 mt-1">下月到期</div>
+            </div>
+            <div class="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+                <div class="text-2xl font-bold text-green-600">{{ renewalStats.won_this_month }}</div>
+                <div class="text-xs text-green-400 mt-1">本月已成交</div>
+            </div>
+        </div>
+
+        <!-- 筛选栏 -->
+        <div class="card p-3">
+            <div class="flex flex-wrap items-center gap-2">
+                <select v-model="renewalFilter.status" @change="loadRenewalList()"
+                        class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white cursor-pointer">
+                    <option value="">全部状态</option>
+                    <option value="pending">待跟进</option>
+                    <option value="following">跟进中</option>
+                    <option value="won">已成交</option>
+                    <option value="lost">已流失</option>
+                    <option value="expired">已过期</option>
+                </select>
+                <select v-if="currentUser.role === 'enterprise'" v-model="renewalFilter.assignee" @change="loadRenewalList()"
+                        class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white cursor-pointer">
+                    <option value="">全部跟进人</option>
+                    <option v-for="a in renewalAssigneesList" :key="a.id" :value="a.id">{{ a.name || a.id }}</option>
+                </select>
+                <input type="date" v-model="renewalFilter.date_start" @change="loadRenewalList()"
+                       class="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+                <span class="text-xs text-gray-400">至</span>
+                <input type="date" v-model="renewalFilter.date_end" @change="loadRenewalList()"
+                       class="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+                <input type="text" v-model="renewalFilter.keyword" @keyup.enter="loadRenewalList()" placeholder="搜索车牌/被保人/投保人..."
+                       class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 flex-1 min-w-[180px]">
+                <button @click="loadRenewalList()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">筛选</button>
+                <span class="flex-1"></span>
+                <button v-if="(isSuperAdmin || currentUser.role === 'enterprise') && renewalSelectedIds.length"
+                        @click="openBatchAssign()" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">
+                    批量分配({{ renewalSelectedIds.length }})
+                </button>
+                <button v-if="isSuperAdmin" @click="triggerRenewalScan()" :disabled="renewalScanning"
+                        class="btn btn-outline" style="padding:6px 14px;font-size:13px;">
+                    {{ renewalScanning ? '扫描中...' : '手动扫描' }}
+                </button>
+                <button @click="exportRenewalList()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">导出Excel</button>
+            </div>
+        </div>
+
+        <!-- 任务列表 -->
+        <div class="card table-card" style="display:flex;flex-direction:column;max-height:calc(100vh - 340px);">
+            <div v-if="renewalLoading" class="text-center py-12 text-gray-400">加载中...</div>
+            <div v-else-if="!renewalTasks.length" class="text-center py-12 text-gray-400">暂无续保任务</div>
+            <div v-else class="table-scroll-wrapper" style="flex:1;min-height:0;">
+                <table class="records-table text-left">
+                    <thead>
+                        <tr>
+                            <th v-if="isSuperAdmin || currentUser.role === 'enterprise'" style="min-width:36px;">
+                                <input type="checkbox" :checked="renewalAllSelected" @change="toggleRenewalSelectAll">
+                            </th>
+                            <th>车牌号</th><th>被保险人</th><th>承保公司</th><th>险种</th>
+                            <th>到期日</th><th>剩余天数</th><th>上期保费</th><th>跟进人</th><th>状态</th><th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="t in renewalTasks" :key="t.id" :class="t.hint_record_id ? 'bg-blue-50/40' : ''">
+                            <td v-if="isSuperAdmin || currentUser.role === 'enterprise'">
+                                <input type="checkbox" :value="t.id" v-model="renewalSelectedIds">
+                            </td>
+                            <td class="font-medium text-gray-800">{{ t.plate_no || t.vin || '—' }}</td>
+                            <td>{{ t.insured || '—' }}</td>
+                            <td>{{ t.company_short || '—' }}</td>
+                            <td>{{ t.policy_type || '—' }}</td>
+                            <td>{{ t.end_date }}</td>
+                            <td>
+                                <span :class="renewalDaysLeftClass(t)">{{ renewalDaysLeftText(t) }}</span>
+                            </td>
+                            <td>{{ t.total_premium || '—' }}</td>
+                            <td>{{ t.assignee_name || '未分配' }}</td>
+                            <td><span class="text-xs px-2 py-0.5 rounded-full" :style="renewalStatusStyle(t.status)">{{ renewalStatusLabel(t.status) }}</span></td>
+                            <td>
+                                <button v-if="t.primary_record_id" @click="previewRenewalTaskFile(t.primary_record_id)" class="btn btn-outline" style="padding:3px 10px;font-size:11px;margin-right:4px;">预览</button>
+                                <button @click="openRenewalDetail(t)" class="btn btn-outline" style="padding:3px 10px;font-size:11px;">跟进</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div v-if="renewalPagination.total > 0" class="px-4 py-3 border-t flex items-center justify-between" style="flex-shrink:0;background:#fff;">
+                <span class="text-xs text-gray-400">共 {{ renewalPagination.total }} 条，第 {{ renewalPagination.page }} / {{ renewalPagination.pages }} 页</span>
+                <div class="flex items-center gap-1">
+                    <button class="pagination-btn" :disabled="renewalPagination.page<=1" @click="gotoRenewalPage(renewalPagination.page-1)">上一页</button>
+                    <button class="pagination-btn" :disabled="renewalPagination.page>=renewalPagination.pages" @click="gotoRenewalPage(renewalPagination.page+1)">下一页</button>
+                </div>
             </div>
         </div>
     </main>
@@ -1932,6 +2078,12 @@
                 </button>
                 <!-- 操作按钮 -->
                 <div class="ml-auto flex items-center gap-2 record-actions">
+                    <button @click="pageTab = 'upload'" class="btn btn-primary" style="padding:6px 14px;font-size:13px;" title="手动上传">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                        </svg>
+                        <span class="btn-label">手动上传</span>
+                    </button>
                     <button @click="exportRecordsExcel" class="btn btn-success" style="padding:6px 14px;font-size:13px;" title="导出Excel">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
@@ -1986,9 +2138,12 @@
                             <th class="sticky-col-check" style="min-width:40px;">
                                 <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" class="cursor-pointer">
                             </th>
+                            <th class="action-col-sticky" style="min-width:280px;">操作</th>
                             <template v-for="(col, colIdx) in visibleListColumns" :key="col.key">
                                 <!-- 所属企业（仅超管可见，置于承保公司列前） -->
-                                <th v-if="isSuperAdmin && col.key === '承保公司'" class="text-gray-600 font-medium" style="min-width:90px;">所属企业</th>
+                                <th v-if="isSuperAdmin && col.key === '承保公司'" class="text-gray-600 font-medium" style="min-width:90px;">所属企业<span v-if="fieldHelp['所属企业']" class="field-help-icon"
+                                    @mouseenter="showFieldHelp($event, '所属企业')" @mouseleave="hideFieldHelp()"
+                                    @click.stop="pinFieldHelp($event, '所属企业')">!</span></th>
                                 <th :class="[
                                         col.frozen ? 'frozen-col' : '',
                                         col.frozen && col.key === frozenColStyles._lastFrozenKey ? 'frozen-col-last' : ''
@@ -1996,7 +2151,9 @@
                                     class="text-gray-600 font-medium"
                                     :style="getColStyle(col)">
                                     {{ col.display_name }}
-                                    <span v-if="fieldHelp[col.key]" class="field-help-icon" :title="fieldHelp[col.key]">?</span>
+                                    <span v-if="fieldHelp[col.key]" class="field-help-icon"
+                                          @mouseenter="showFieldHelp($event, col.key)" @mouseleave="hideFieldHelp()"
+                                          @click.stop="pinFieldHelp($event, col.key)">!</span>
                                     <span class="col-resize-handle"
                                           @mousedown.prevent="startColResize($event, col)"></span>
                                 </th>
@@ -2004,7 +2161,6 @@
                             <th v-if="isSuperAdmin" style="min-width:70px;">识别方式</th>
                             <th v-if="isSuperAdmin" style="min-width:60px;">置信度</th>
                             <th v-if="isSuperAdmin" style="min-width:220px;">内部备注</th>
-                            <th style="min-width:160px;">操作</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2014,6 +2170,72 @@
                             <!-- 选择框 -->
                             <td class="sticky-col-check">
                                 <input type="checkbox" :value="record.id" v-model="selectedRecordIds" class="cursor-pointer">
+                            </td>
+                            <!-- 操作 -->
+                            <td class="action-col-sticky">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <!-- 合并行：展开/收起该车牌明细 -->
+                                    <button v-if="record._merged" @click="record._expanded = !record._expanded"
+                                            class="btn btn-outline" style="padding:3px 8px;font-size:11px;">
+                                        {{ record._expanded ? '收起' : '展开' }} {{ record._children ? record._children.length : 0 }} 条
+                                    </button>
+                                    <template v-if="!record._merged">
+                                    <!-- 预览文件 -->
+                                    <button v-if="record.cos_url" @click="previewRecord(record)"
+                                            class="btn btn-outline" style="padding:3px 8px;font-size:11px;">
+                                        预览
+                                    </button>
+                                    <!-- 查看详情（暂时隐藏）
+                                    <button @click="openRecordDetail(record)"
+                                            class="btn btn-outline" style="padding:3px 8px;font-size:11px;">
+                                        详情
+                                    </button> -->
+                                    <!-- 重新识别（已完成或失败的记录，含有无COS URL的情况） -->
+                                    <button v-if="record.status === 'done' || record.status === 'success' || record.status === 'failed'"
+                                            @click="reocrRecord(record)"
+                                            :disabled="record._reocring"
+                                            class="btn btn-primary" style="padding:3px 8px;font-size:11px;">
+                                        {{ record._reocring ? '识别中...' : '重新识别' }}
+                                    </button>
+                                    <!-- 重新上传保单（失败且无COS URL） -->
+                                    <label v-if="record.status === 'failed' && !record.cos_url"
+                                           class="btn" style="padding:3px 8px;font-size:11px;background:#f97316;color:#fff;border:1px solid #ea580c;cursor:pointer;">
+                                        {{ record._reuploading ? '上传中...' : '重新上传' }}
+                                        <input type="file" accept=".pdf" style="display:none;" @change="reuploadRecord(record, $event)" :disabled="record._reuploading">
+                                    </label>
+                                    <!-- 标记正常（需人工补充记录） -->
+                                    <button v-if="record.is_abnormal && !record.abnormal_override_reason"
+                                            @click="openMarkNormal(record)"
+                                            class="btn" style="padding:3px 8px;font-size:11px;background:#fef3c7;border:1px solid #fbbf24;color:#92400e;">
+                                        标记正常
+                                    </button>
+                                    <!-- 已标记正常，显示撤销 -->
+                                    <span v-if="record.abnormal_override_reason"
+                                          class="inline-flex items-center gap-1 text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+                                        已标记正常
+                                        <button @click="undoMarkNormal(record)" class="text-gray-400 hover:text-red-500 cursor-pointer" title="撤销标记">&times;</button>
+                                    </span>
+                                    <!-- 同步钉钉（已注释）
+                                    <button v-if="record.status === 'done' || record.status === 'success'"
+                                            @click="syncRecordToDingtalk(record)"
+                                            :disabled="record._syncing"
+                                            class="btn btn-warning" style="padding:3px 8px;font-size:11px;">
+                                        {{ record._syncing ? '同步中...' : (record.dingtalk_synced ? '更新同步' : '同步') }}
+                                    </button>
+                                    -->
+                                    <!-- 删除（仅超级管理员） -->
+                                    <button v-if="isSuperAdmin"
+                                            @click="openDeleteRecord(record)"
+                                            class="btn" style="padding:3px 8px;font-size:11px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;">
+                                        删除
+                                    </button>
+                                    <!-- 报错 -->
+                                    <button @click="openErrorReport(record)"
+                                            class="btn" style="padding:3px 8px;font-size:11px;background:#fef9c3;border:1px solid #fde047;color:#854d0e;">
+                                        报错
+                                    </button>
+                                    </template>
+                                </div>
                             </td>
                             <!-- 动态列（按列配置渲染） -->
                             <template v-for="(col, colIdx) in visibleListColumns" :key="col.key">
@@ -2168,72 +2390,6 @@
                                     </button>
                                 </div>
                             </td>
-                            <!-- 操作 -->
-                            <td>
-                                <div class="flex items-center gap-1.5">
-                                    <!-- 合并行：展开/收起该车牌明细 -->
-                                    <button v-if="record._merged" @click="record._expanded = !record._expanded"
-                                            class="btn btn-outline" style="padding:3px 8px;font-size:11px;">
-                                        {{ record._expanded ? '收起' : '展开' }} {{ record._children ? record._children.length : 0 }} 条
-                                    </button>
-                                    <template v-if="!record._merged">
-                                    <!-- 预览文件 -->
-                                    <button v-if="record.cos_url" @click="previewRecord(record)"
-                                            class="btn btn-outline" style="padding:3px 8px;font-size:11px;">
-                                        预览
-                                    </button>
-                                    <!-- 查看详情（暂时隐藏）
-                                    <button @click="openRecordDetail(record)"
-                                            class="btn btn-outline" style="padding:3px 8px;font-size:11px;">
-                                        详情
-                                    </button> -->
-                                    <!-- 重新识别（已完成或失败的记录，含有无COS URL的情况） -->
-                                    <button v-if="record.status === 'done' || record.status === 'success' || record.status === 'failed'"
-                                            @click="reocrRecord(record)"
-                                            :disabled="record._reocring"
-                                            class="btn btn-primary" style="padding:3px 8px;font-size:11px;">
-                                        {{ record._reocring ? '识别中...' : '重新识别' }}
-                                    </button>
-                                    <!-- 重新上传保单（失败且无COS URL） -->
-                                    <label v-if="record.status === 'failed' && !record.cos_url"
-                                           class="btn" style="padding:3px 8px;font-size:11px;background:#f97316;color:#fff;border:1px solid #ea580c;cursor:pointer;">
-                                        {{ record._reuploading ? '上传中...' : '重新上传' }}
-                                        <input type="file" accept=".pdf" style="display:none;" @change="reuploadRecord(record, $event)" :disabled="record._reuploading">
-                                    </label>
-                                    <!-- 标记正常（需人工补充记录） -->
-                                    <button v-if="record.is_abnormal && !record.abnormal_override_reason"
-                                            @click="openMarkNormal(record)"
-                                            class="btn" style="padding:3px 8px;font-size:11px;background:#fef3c7;border:1px solid #fbbf24;color:#92400e;">
-                                        标记正常
-                                    </button>
-                                    <!-- 已标记正常，显示撤销 -->
-                                    <span v-if="record.abnormal_override_reason"
-                                          class="inline-flex items-center gap-1 text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
-                                        已标记正常
-                                        <button @click="undoMarkNormal(record)" class="text-gray-400 hover:text-red-500 cursor-pointer" title="撤销标记">&times;</button>
-                                    </span>
-                                    <!-- 同步钉钉（已注释）
-                                    <button v-if="record.status === 'done' || record.status === 'success'"
-                                            @click="syncRecordToDingtalk(record)"
-                                            :disabled="record._syncing"
-                                            class="btn btn-warning" style="padding:3px 8px;font-size:11px;">
-                                        {{ record._syncing ? '同步中...' : (record.dingtalk_synced ? '更新同步' : '同步') }}
-                                    </button>
-                                    -->
-                                    <!-- 删除（仅超级管理员） -->
-                                    <button v-if="isSuperAdmin"
-                                            @click="openDeleteRecord(record)"
-                                            class="btn" style="padding:3px 8px;font-size:11px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;">
-                                        删除
-                                    </button>
-                                    <!-- 报错 -->
-                                    <button @click="openErrorReport(record)"
-                                            class="btn" style="padding:3px 8px;font-size:11px;background:#fef9c3;border:1px solid #fde047;color:#854d0e;">
-                                        报错
-                                    </button>
-                                    </template>
-                                </div>
-                            </td>
                         </tr>
                         <!-- 合并行展开：显示该车牌的原始记录明细（可单条预览/重新识别） -->
                         <tr v-if="record._merged && record._expanded" :key="record.id + '_detail'">
@@ -2351,6 +2507,157 @@
         </div>
     </transition>
 
+    <!-- 续保任务详情弹窗 -->
+    <transition name="fade">
+        <div v-if="renewalDetailVisible" class="fixed inset-0 modal-mask flex items-center justify-center" style="z-index:60;"
+             @click.self="renewalDetailVisible = false">
+            <div class="bg-white rounded-xl shadow-2xl" style="width:600px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column;" @click.stop>
+                <div class="px-5 py-4 border-b flex items-center justify-between">
+                    <div>
+                        <h3 class="text-base font-semibold text-gray-800">{{ renewalDetailTask.plate_no || renewalDetailTask.vin }} — {{ renewalDetailTask.insured }}</h3>
+                        <p class="text-xs text-gray-400 mt-0.5">{{ renewalDetailTask.company_short }} · {{ renewalDetailTask.policy_type }} · 到期：{{ renewalDetailTask.end_date }}</p>
+                    </div>
+                    <button @click="renewalDetailVisible = false" class="text-gray-400 hover:text-gray-600 text-xl leading-none cursor-pointer">&times;</button>
+                </div>
+
+                <div v-if="renewalDetailTask.hint_record_id" class="mx-5 mt-3 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-between text-sm flex-wrap gap-2">
+                    <span class="text-blue-700">🔔 检测到疑似续保新单（止期 {{ renewalDetailTask.hint_end_date }}），是否标记已成交？</span>
+                    <div class="flex gap-2 flex-shrink-0">
+                        <button @click="changeRenewalStatus('won', '检测到续保新单，确认已成交')" class="text-xs px-2 py-1 rounded bg-blue-600 text-white cursor-pointer">标记已成交</button>
+                        <button @click="dismissRenewalHint()" class="text-xs px-2 py-1 rounded border border-gray-300 text-gray-500 cursor-pointer">忽略</button>
+                    </div>
+                </div>
+
+                <div class="px-5 pt-3 flex items-center gap-2 flex-wrap">
+                    <span class="text-xs px-2 py-0.5 rounded-full" :style="renewalStatusStyle(renewalDetailTask.status)">{{ renewalStatusLabel(renewalDetailTask.status) }}</span>
+                    <button v-if="renewalDetailTask.status !== 'won'" @click="changeRenewalStatus('won')"
+                            class="text-xs px-2.5 py-1 rounded border border-green-300 text-green-700 hover:bg-green-50 cursor-pointer">标记已成交</button>
+                    <button v-if="renewalDetailTask.status !== 'lost'" @click="changeRenewalStatus('lost')"
+                            class="text-xs px-2.5 py-1 rounded border border-gray-300 text-gray-500 hover:bg-gray-50 cursor-pointer">标记已流失</button>
+                    <span class="flex-1"></span>
+                    <select v-if="isSuperAdmin || currentUser.role === 'enterprise'" v-model="renewalDetailAssignee" @change="assignRenewalDetail()"
+                            class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white cursor-pointer">
+                        <option value="">分配跟进人...</option>
+                        <option v-for="a in renewalAssigneesList" :key="a.id" :value="a.id">{{ a.name || a.id }}</option>
+                    </select>
+                </div>
+
+                <div class="px-5 py-3 border-b">
+                    <h5 class="text-sm font-semibold text-gray-600 mb-2">📋 历史保单（{{ renewalHistory.length }}）</h5>
+                    <div class="space-y-1.5 text-xs max-h-32 overflow-y-auto">
+                        <div v-if="!renewalHistory.length" class="text-gray-300 text-center py-2">暂无历史记录</div>
+                        <div v-for="h in renewalHistory" :key="h.record_id" class="flex justify-between items-center bg-gray-50 rounded-lg px-2 py-1.5">
+                            <span>{{ h.start_date }} ~ {{ h.end_date }}</span>
+                            <span class="text-gray-500 flex items-center gap-2">
+                                {{ h.company_short }} · {{ h.policy_type }} · {{ h.total_premium }}
+                                <button @click="previewRenewalTaskFile(h.record_id)" class="text-orange-600 hover:underline cursor-pointer">预览</button>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="px-5 py-3 border-b">
+                    <textarea v-model="renewalNoteContent" rows="2" placeholder="输入跟进内容..."
+                              class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"></textarea>
+                    <div class="flex items-center justify-between mt-2">
+                        <div class="flex items-center gap-2 text-xs text-gray-400">
+                            <label>下次提醒：</label>
+                            <input type="date" v-model="renewalNextRemindAt" class="border rounded px-2 py-1 text-xs">
+                        </div>
+                        <button @click="submitRenewalFollowup" :disabled="renewalNoteSaving || !renewalNoteContent.trim()"
+                                class="btn btn-primary" style="padding:6px 16px;font-size:13px;">
+                            {{ renewalNoteSaving ? '提交中...' : '提交跟进' }}
+                        </button>
+                    </div>
+                </div>
+
+                <div class="px-5 py-3 overflow-y-auto" style="flex:1;min-height:80px;">
+                    <h5 class="text-sm font-semibold text-gray-600 mb-2">📝 跟进记录</h5>
+                    <div v-if="!renewalFollowups.length" class="text-center text-gray-400 text-sm py-6">暂无跟进记录</div>
+                    <div v-for="f in renewalFollowups" :key="f.id" class="py-2 border-b border-gray-100">
+                        <div class="flex items-center gap-2 text-xs text-gray-400 mb-1 flex-wrap">
+                            <span>{{ f.created_at }}</span>
+                            <span v-if="f.operator_name" class="text-gray-500">· {{ f.operator_name }}</span>
+                            <span class="text-[10px] px-1.5 rounded bg-gray-100 text-gray-500">{{ renewalActionLabel(f.action) }}</span>
+                        </div>
+                        <div class="text-sm text-gray-700" style="white-space:pre-wrap;">{{ f.content }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </transition>
+
+    <!-- 续保任务批量分配弹窗 -->
+    <transition name="fade">
+        <div v-if="renewalBatchAssignVisible" class="fixed inset-0 modal-mask flex items-center justify-center" style="z-index:65;"
+             @click.self="renewalBatchAssignVisible = false">
+            <div class="bg-white rounded-xl shadow-2xl" style="width:360px;max-width:90vw;" @click.stop>
+                <div class="px-5 py-4 border-b flex items-center justify-between">
+                    <h3 class="text-base font-semibold text-gray-800">批量分配跟进人（{{ renewalSelectedIds.length }}条）</h3>
+                    <button @click="renewalBatchAssignVisible = false" class="text-gray-400 hover:text-gray-600 text-xl leading-none cursor-pointer">&times;</button>
+                </div>
+                <div class="px-5 py-4">
+                    <select v-model="renewalBatchAssignee" class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white cursor-pointer">
+                        <option value="">选择跟进人...</option>
+                        <option v-for="a in renewalAssigneesList" :key="a.id" :value="a.id">{{ a.name || a.id }}</option>
+                    </select>
+                </div>
+                <div class="px-5 py-3 border-t flex justify-end gap-2">
+                    <button @click="renewalBatchAssignVisible = false" class="btn btn-outline" style="padding:6px 16px;font-size:13px;">取消</button>
+                    <button @click="submitBatchAssign" :disabled="!renewalBatchAssignee" class="btn btn-primary" style="padding:6px 16px;font-size:13px;">确认分配</button>
+                </div>
+            </div>
+        </div>
+    </transition>
+
+    <!-- 续保客服二维码弹窗 -->
+    <transition name="fade">
+        <div v-if="renewalQrVisible" class="fixed inset-0 modal-mask flex items-center justify-center" style="z-index:65;"
+             @click.self="renewalQrVisible = false">
+            <div class="bg-white rounded-2xl shadow-2xl text-center" style="width:340px;max-width:90vw;padding:24px;" @click.stop>
+                <div class="text-4xl mb-3">📱</div>
+                <h4 class="text-lg font-bold text-gray-800 mb-2">扫码联系客服</h4>
+                <p class="text-sm text-gray-500 mb-4">提供您的往年保单台账（Excel）或保单PDF，<br>我们将协助为您导入续保管理系统</p>
+                <div class="w-40 h-40 mx-auto rounded-xl flex items-center justify-center bg-gray-50 border-2 border-dashed border-gray-200 overflow-hidden">
+                    <img v-if="renewalQrUrl" :src="renewalQrUrl" style="width:100%;height:100%;object-fit:contain;">
+                    <span v-else class="text-gray-400 text-xs">二维码未设置</span>
+                </div>
+                <button @click="renewalQrVisible = false" class="mt-4 text-sm text-gray-400 hover:text-gray-600 cursor-pointer">关闭</button>
+            </div>
+        </div>
+    </transition>
+
+    <!-- 续保提醒设置弹窗（仅超管） -->
+    <transition name="fade">
+        <div v-if="renewalConfigVisible" class="fixed inset-0 modal-mask flex items-center justify-center" style="z-index:65;"
+             @click.self="renewalConfigVisible = false">
+            <div class="bg-white rounded-xl shadow-2xl" style="width:380px;max-width:90vw;" @click.stop>
+                <div class="px-5 py-4 border-b flex items-center justify-between">
+                    <h3 class="text-base font-semibold text-gray-800">续保提醒设置</h3>
+                    <button @click="renewalConfigVisible = false" class="text-gray-400 hover:text-gray-600 text-xl leading-none cursor-pointer">&times;</button>
+                </div>
+                <div class="px-5 py-4 space-y-4">
+                    <div>
+                        <label class="text-xs text-gray-500 block mb-1">提醒窗口天数（未来多少天内到期纳入扫描）</label>
+                        <input type="number" v-model.number="renewalWindowDaysInput" class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500 block mb-1">客服二维码（平台统一一张，所有企业共用）</label>
+                        <div class="w-24 h-24 rounded-lg border border-gray-200 flex items-center justify-center overflow-hidden mb-2">
+                            <img v-if="renewalQrUrl" :src="renewalQrUrl" style="width:100%;height:100%;object-fit:contain;">
+                            <span v-else class="text-gray-300 text-xs">未设置</span>
+                        </div>
+                        <input type="file" accept="image/*" @change="uploadRenewalQrcode" class="text-xs">
+                    </div>
+                </div>
+                <div class="px-5 py-3 border-t flex justify-end gap-2">
+                    <button @click="renewalConfigVisible = false" class="btn btn-outline" style="padding:6px 16px;font-size:13px;">取消</button>
+                    <button @click="saveRenewalConfig" class="btn btn-primary" style="padding:6px 16px;font-size:13px;">保存</button>
+                </div>
+            </div>
+        </div>
+    </transition>
+
     <!-- 内部管理备注弹窗（仅超管，每日追加日志） -->
     <transition name="fade">
         <div v-if="internalNotesVisible" class="fixed inset-0 modal-mask flex items-center justify-center" style="z-index:60;"
@@ -2368,6 +2675,14 @@
                     <textarea v-model="internalNoteContent" rows="2"
                               placeholder="说明异常原因：是我方问题就写修复情况，是客户问题就说明..."
                               class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"></textarea>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="text-xs text-gray-400">常用语句：</span>
+                        <button v-for="phrase in internalNoteQuickPhrases" :key="phrase"
+                                @click="appendInternalNotePhrase(phrase)"
+                                class="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 cursor-pointer">
+                            {{ phrase }}
+                        </button>
+                    </div>
                     <div class="flex items-center gap-2 flex-wrap">
                         <button v-for="opt in attrOptions" :key="opt.val"
                                 @click="internalNoteAttr = (internalNoteAttr === opt.val ? '' : opt.val)"
@@ -2859,17 +3174,34 @@
                         </label>
                         <span style="font-size:11px; color:#94a3b8;">同车牌多保单合并为一行</span>
                     </div>
-                    <!-- 导出模式切换 -->
-                    <div class="flex items-center gap-2">
-                        <button @click="exportCustomMode = false"
-                                :class="['px-3 py-1.5 text-sm rounded-lg transition-colors cursor-pointer', !exportCustomMode ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200']">
+                    <!-- 导出模式切换：默认模板 / 命名模板(标准版/完整版/自定义保存的模板) / 自定义勾选 -->
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <button @click="selectExportDefault()"
+                                :class="['px-3 py-1.5 text-sm rounded-lg transition-colors cursor-pointer', (!exportCustomMode && !exportSelectedTemplateName) ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200']">
                             默认模板
                         </button>
-                        <button @click="exportCustomMode = true"
+                        <button v-for="tpl in exportTemplateList" :key="tpl" @click="selectExportTemplate(tpl)"
+                                :class="['px-3 py-1.5 text-sm rounded-lg transition-colors cursor-pointer', exportSelectedTemplateName === tpl ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200']">
+                            {{ tpl }}
+                        </button>
+                        <button @click="exportCustomMode = true; exportSelectedTemplateName = ''; exportSelectedOtherTemplate = ''"
                                 :class="['px-3 py-1.5 text-sm rounded-lg transition-colors cursor-pointer', exportCustomMode ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200']">
                             自定义
                         </button>
-                        <span v-if="!exportCustomMode" class="text-xs text-gray-400">按导出列配置导出</span>
+                        <span v-if="!exportCustomMode && !exportSelectedTemplateName" class="text-xs text-gray-400">按导出列配置导出</span>
+                    </div>
+                    <!-- 超管专用：选择其它企业保存过的模板(如各企业自己的标准版/完整版) -->
+                    <div v-if="isSuperAdmin && exportOtherEnterpriseTemplates.length" class="flex items-center gap-2">
+                        <span class="text-xs text-gray-400 whitespace-nowrap">其它企业模板：</span>
+                        <select v-model="exportSelectedOtherTemplate" @change="selectExportOtherTemplate()"
+                                class="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white flex-1">
+                            <option value="">选择企业的模板...</option>
+                            <optgroup v-for="ent in exportOtherEnterpriseTemplates" :key="ent.enterprise_id" :label="ent.enterprise_name">
+                                <option v-for="tpl in ent.templates" :key="tpl.name" :value="ent.enterprise_id + '::' + tpl.name">
+                                    {{ tpl.name }}
+                                </option>
+                            </optgroup>
+                        </select>
                     </div>
                     <!-- 自定义模式：显示字段勾选 -->
                     <template v-if="exportCustomMode">
@@ -3534,7 +3866,7 @@
             <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
             </svg>
-            <span style="font-size:10px;font-weight:500;">识别记录</span>
+            <span style="font-size:10px;font-weight:500;">首页</span>
         </button>
         <button v-if="!notActivated" @click="pageTab='upload'"
                 style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;"
@@ -3586,6 +3918,13 @@
           </button>
         </div>
       </div>
+    </teleport>
+
+    <!-- 字段说明悬浮框：teleport到body，避免被表格sticky列/行的层叠上下文遮挡 -->
+    <teleport to="body">
+        <div v-if="activeFieldHelpKey" class="field-help-tooltip-float" :style="tooltipFloatStyle">
+            {{ fieldHelp[activeFieldHelpKey] }}
+        </div>
     </teleport>
 
 </div>
@@ -4361,8 +4700,80 @@ const _app = createApp({
         ]);
         // 字段数据来源说明（鼠标悬停在「?」上查看，面向普通用户）
         const fieldHelp = ref({
-            '保司（带地区）': '系统自动生成：从保单里识别承保公司，并从保司地址中提取所在城市，拼成"城市+保司"，例如"深圳平安"。识别不到地址时只显示保司名称；若设置了保司简称，会用简称替换。',
+            "文件名": "保单文件本身的名称（文件上传时的原始文件名）",
+            "文档类型": "这份文件是\"保单\"还是\"投保单\"（系统根据文件标题自动判断）",
+            "状态": "这条记录当前的处理状态（系统处理进度，如已完成、处理中等）",
+            "创建时间": "系统收到这份文件的时间（文件上传/接收的时间）",
+            "识别时间": "系统完成识别处理的时间（识别处理完成的时间）",
+            "群名": "文件所在的微信群名称（发送该文件的微信群）",
+            "发送人": "在群里发送这份文件的人（发送该文件的微信联系人）",
+            "承保公司": "出具这份保单的保险公司（保单上\"保险公司/承保公司\"处的名称）",
+            "保单号": "保单的唯一编号（保单上\"保险单号/保单号\"处的编号）",
+            "险种": "保单的险种类型（交强险、商业险、驾乘意外险等）（根据保单标题及险种名称自动归类）",
+            "车牌": "被保险机动车号牌号码（保单上\"号牌号码/车牌号\"处）",
+            "投保人": "签订保险合同、缴纳保费的一方（保单上\"投保人\"处）",
+            "被保人": "受保险保障的一方（可能与投保人相同）（保单上\"被保险人\"处）",
+            "车主": "车辆登记的所有人（保单上\"车主/所有人\"处）",
+            "签单日期": "保单出具的日期（保单上\"签单日期/出单日期\"处）",
+            "起保日期": "保险开始生效的日期（保单上\"保险期间\"的起始日期）",
+            "终保日期": "保险到期的日期（保单上\"保险期间\"的结束日期）",
+            "保费": "保费总额（保单上\"保险费合计\"处）",
+            "业务员": "经办本单的保险公司业务人员（保单上\"业务员/代理人\"处）",
+            "跟单人": "负责跟进这个客户的业务人员（系统根据发送保单的微信自动匹配，也可手动填写）",
+            "车船税": "随保单一起代收的车船税（保单上\"车船税\"处）",
+            "被保险人身份证号码": "被保险人的证件号码（保单上被保险人信息处的证件号码）",
+            "投保人身份证号码": "投保人的证件号码（保单上投保人信息处的证件号码）",
+            "车架号": "车辆识别代码（VIN码）（保单上\"车架号/识别代码\"处）",
+            "厂牌型号": "车辆的品牌与型号（保单上\"厂牌型号\"处）",
+            "发动机号": "车辆发动机编号（保单上\"发动机号\"处）",
+            "使用性质": "车辆的使用性质，如家庭自用、营业等（保单上\"使用性质\"处）",
+            "机动车种类": "车辆分类，如客车、货车等（保单上\"机动车种类\"处）",
+            "核定载质量": "车辆核定载重（货车适用）（保单上\"核定载质量\"处）",
+            "初次登记日期": "车辆首次登记上牌的日期（保单上\"初次登记日期\"处）",
+            "司机乘客": "核定载客人数（与保单上\"核定载客\"一致）",
+            "不含税保费": "保费中不含税的部分（保单上\"不含税保费\"处）",
+            "增值税额": "保费中的增值税金额（保单上\"增值税额\"处）",
+            "保司公司名称": "承保公司的完整分支机构名称（保单底部\"保险人\"信息处）",
+            "保司地址": "承保分支机构的地址（保单底部\"保险人\"地址处）",
+            "保司联系电话": "承保分支机构的联系电话（保单底部\"保险人\"联系电话处）",
+            "保司（带地区）": "承保公司名称前加上所在城市，方便按地区查看（系统根据保司地址自动生成）",
+            "交强到期时间": "同一车牌交强险的到期时间，方便核对续保（系统自动从同一车牌的交强险保单中取出）",
+            "收费确认时间": "保费收讫确认的时间（保单上\"收费确认时间\"处）",
+            "到期月份": "保单到期所在的月份，方便按月查看（系统根据到期日期自动生成）",
+            "车辆性质": "车辆是燃油车还是新能源车（系统根据车牌号自动判断）",
+            "出单渠道": "这份保单的销售/中介渠道（保单上\"销售渠道\"或\"中介机构\"处）",
+            "佣金率": "业务佣金比例（保单上没有此项，需要手动填写）",
+            "佣金": "业务佣金金额（保单上没有此项，需要手动填写）",
+            "采购费率": "内部采购成本费率（保单上没有此项，需要手动填写）",
+            "公司利润": "这份保单为公司带来的利润（保单上没有此项，需要手动填写）",
+            "跟单人利润": "跟单人对应的利润分成（保单上没有此项，需要手动填写）",
+            "所属企业": "这条记录归属的企业账号（按上传该保单的微信身份自动关联到对应企业）"
         });
+        // 字段说明悬浮框：teleport到body用fixed定位，脱离表格sticky列/行层叠上下文，
+        // 避免像之前纯CSS方案那样被表体的冻结列/操作列盖住(2026-07-14连续两次z-index调整都没能解决)
+        const pinnedFieldHelp = ref('');
+        const activeFieldHelpKey = ref('');
+        const tooltipFloatStyle = ref({});
+        function showFieldHelp(e, key) {
+            if (pinnedFieldHelp.value) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            tooltipFloatStyle.value = { top: (rect.bottom + 6) + 'px', left: Math.max(8, rect.left - 100) + 'px' };
+            activeFieldHelpKey.value = key;
+        }
+        function hideFieldHelp() {
+            if (pinnedFieldHelp.value) return;
+            activeFieldHelpKey.value = '';
+        }
+        function pinFieldHelp(e, key) {
+            if (pinnedFieldHelp.value === key) {
+                pinnedFieldHelp.value = '';
+                activeFieldHelpKey.value = '';
+            } else {
+                pinnedFieldHelp.value = key;
+                showFieldHelp(e, key);
+            }
+        }
+        document.addEventListener('click', () => { pinnedFieldHelp.value = ''; activeFieldHelpKey.value = ''; });
         // 列配置（从后端 list_records 返回）
         const listColumnConfig = ref([]);
         // 计算实际显示的列（按 order 排序，只取 visible 的）
@@ -4380,7 +4791,7 @@ const _app = createApp({
         // 冻结列样式：所有标记 frozen 的列依次堆叠到左侧
         const frozenColStyles = computed(() => {
             const styles = {};
-            let left = 40; // 复选框列宽度
+            let left = 40 + 280; // 复选框列宽度(40) + 操作列宽度(280，紧跟在复选框后面固定显示)
             const cols = visibleListColumns.value;
             const frozenKeys = [];
             for (const col of cols) {
@@ -5958,6 +6369,10 @@ const _app = createApp({
         const exportAvailableFields = ref([]);
         const exportMergeByPlate = ref(false);   // 按车牌合并开关
         const exportCustomMode = ref(false);     // 导出模式：false=默认模板, true=自定义
+        const exportTemplateList = ref([]);      // 可选的命名导出模板列表(标准版/完整版/自定义模板等)
+        const exportSelectedTemplateName = ref(''); // 当前选中的命名模板(空=用默认/当前生效模板)
+        const exportOtherEnterpriseTemplates = ref([]); // 超管专用：其它企业的可选模板(按企业分组)
+        const exportSelectedOtherTemplate = ref(''); // 下拉框当前选中值，格式 '企业id::模板名'
         const exportPendingType = ref('');       // 'success'|'abnormal'|'nonpolicy'|'failed'|'records'
         const exportPendingData = ref(null);     // 暂存导出数据
         const exportPendingFileName = ref('');
@@ -5975,6 +6390,62 @@ const _app = createApp({
 
         function toggleAllExportFields(e) {
             exportSelectedFields.value = e.target.checked ? [...exportAvailableFields.value] : [];
+        }
+
+        // 加载可选的命名导出模板列表(标准版/完整版/自定义模板等)，供导出弹窗按模板选择列
+        async function loadExportTemplateList() {
+            try {
+                const resp = await authFetch('/api/insurance/field-config/templates');
+                const data = await resp.json();
+                if (data.code === 0) {
+                    const names = (data.data.my || []).map(t => t.name).filter(n => n !== '默认模板');
+                    exportTemplateList.value = names;
+                    // 超管额外可选：其它企业保存过的模板(如各企业自己的标准版/完整版)
+                    if (isSuperAdmin.value && data.data.all && data.data.all.enterprises) {
+                        exportOtherEnterpriseTemplates.value = data.data.all.enterprises.filter(e => e.templates && e.templates.length);
+                    } else {
+                        exportOtherEnterpriseTemplates.value = [];
+                    }
+                    exportSelectedOtherTemplate.value = '';
+                }
+            } catch (e) { /* 模板列表加载失败不影响默认/自定义两种模式使用 */ }
+        }
+
+        // 按命名模板选择导出列：拉取该模板配置，取其中勾选(visible)的列作为导出列
+        // targetScope/targetScopeId：超管跨企业选择其它企业模板时传，走field-config接口的"代管模式"
+        async function selectExportTemplate(name, targetScope, targetScopeId) {
+            exportCustomMode.value = false;
+            exportSelectedTemplateName.value = name;
+            if (!targetScope) exportSelectedOtherTemplate.value = '';
+            try {
+                let url = '/api/insurance/field-config?template=' + encodeURIComponent(name);
+                if (targetScope) url += '&target_scope=' + targetScope + '&target_scope_id=' + targetScopeId;
+                const resp = await authFetch(url);
+                const data = await resp.json();
+                if (data.code === 0) {
+                    const colsEntry = (data.data.export_columns || []).find(x => x.key === 'columns');
+                    const cols = (colsEntry && Array.isArray(colsEntry.value)) ? colsEntry.value : [];
+                    const visibleCols = cols.filter(c => c.visible).sort((a, b) => (a.order || 0) - (b.order || 0));
+                    exportSelectedFields.value = visibleCols.map(c => c.key);
+                }
+            } catch (e) {
+                showMessage('模板加载失败: ' + e.message, false);
+            }
+        }
+
+        // 超管在下拉框选择"其它企业的模板"
+        function selectExportOtherTemplate() {
+            const val = exportSelectedOtherTemplate.value;
+            if (!val) return;
+            const [entId, tplName] = val.split('::');
+            selectExportTemplate(tplName, 'enterprise', entId);
+        }
+
+        // 切回"默认模板"(当前生效模板，服务端按active template解析)
+        function selectExportDefault() {
+            exportCustomMode.value = false;
+            exportSelectedTemplateName.value = '';
+            exportSelectedOtherTemplate.value = '';
         }
 
         // 计算手动上传导出的数据条数
@@ -5999,7 +6470,7 @@ const _app = createApp({
         async function confirmExport() {
             exportModalVisible.value = false;
             const type = exportPendingType.value;
-            const selectedCols = exportCustomMode.value ? exportSelectedFields.value : null;
+            const selectedCols = (exportCustomMode.value || exportSelectedTemplateName.value) ? exportSelectedFields.value : null;
             const merge = exportMergeByPlate.value;
 
             if (type === 'records') {
@@ -6773,6 +7244,7 @@ const _app = createApp({
         async function exportRecordsExcel() {
             exportPendingType.value = 'records';
             exportCustomMode.value = false; // 默认使用模板模式
+            exportSelectedTemplateName.value = '';
             const dynamicCols = visibleListColumns.value.map(c => c.key);
             const seen = new Set();
             const allCols = [...recordExtraColumns, ...dynamicCols].filter(c => { if (seen.has(c)) return false; seen.add(c); return true; });
@@ -6784,6 +7256,7 @@ const _app = createApp({
                 const mergeData = await mergeResp.json();
                 if (mergeData.code === 0) exportMergeByPlate.value = mergeData.data.enabled;
             } catch (e) { /* ignore */ }
+            loadExportTemplateList();
             exportModalVisible.value = true;
         }
 
@@ -7450,6 +7923,398 @@ const _app = createApp({
             }
         }
 
+
+        // ===== 续保提醒（CRM式续保任务管理） =====
+        const renewalStats = ref({ overdue: 0, due_7d: 0, due_30d: 0, due_this_month: 0, due_next_month: 0, won_this_month: 0 });
+        const renewalBadgeCount = computed(() => (renewalStats.value.overdue || 0) + (renewalStats.value.due_30d || 0));
+        const renewalTasks = ref([]);
+        const renewalLoading = ref(false);
+        const renewalFilter = ref({ status: '', assignee: '', date_start: '', date_end: '', keyword: '' });
+        const renewalPagination = ref({ page: 1, page_size: 20, total: 0, pages: 1 });
+        const renewalSelectedIds = ref([]);
+        const renewalAssigneesList = ref([]);
+        const renewalScanning = ref(false);
+        const renewalDetailVisible = ref(false);
+        const renewalDetailTask = ref({});
+        const renewalDetailAssignee = ref('');
+        const renewalHistory = ref([]);
+        const renewalFollowups = ref([]);
+        const renewalNoteContent = ref('');
+        const renewalNextRemindAt = ref('');
+        const renewalNoteSaving = ref(false);
+        const renewalBatchAssignVisible = ref(false);
+        const renewalBatchAssignee = ref('');
+        const renewalQrVisible = ref(false);
+        const renewalQrUrl = ref('');
+        const renewalConfigVisible = ref(false);
+        const renewalWindowDaysInput = ref(90);
+
+        const renewalAllSelected = computed(() =>
+            renewalTasks.value.length > 0 && renewalTasks.value.every(t => renewalSelectedIds.value.includes(t.id))
+        );
+
+        function openRenewalTab() {
+            pageTab.value = 'renewal';
+            loadRenewalStats();
+            loadRenewalList();
+            if (currentUser.value && currentUser.value.role === 'enterprise') {
+                loadRenewalAssignees(currentUser.value.id);
+            }
+        }
+
+        async function loadRenewalStats() {
+            try {
+                const resp = await authFetch('/api/renewal/stats');
+                const data = await resp.json();
+                if (data.code === 0) renewalStats.value = data.data;
+            } catch (e) { /* 看板统计静默失败，不打扰主流程 */ }
+        }
+
+        async function loadRenewalList() {
+            renewalLoading.value = true;
+            try {
+                const params = new URLSearchParams({
+                    page: renewalPagination.value.page,
+                    page_size: renewalPagination.value.page_size,
+                    status: renewalFilter.value.status,
+                    assignee: renewalFilter.value.assignee,
+                    date_start: renewalFilter.value.date_start,
+                    date_end: renewalFilter.value.date_end,
+                    keyword: renewalFilter.value.keyword,
+                });
+                const resp = await authFetch(`/api/renewal/list?${params}`);
+                const data = await resp.json();
+                if (data.code === 0) {
+                    renewalTasks.value = data.data.tasks;
+                    renewalPagination.value.total = data.data.total;
+                    renewalPagination.value.pages = data.data.pages;
+                    renewalPagination.value.page = data.data.page;
+                    renewalSelectedIds.value = [];
+                } else {
+                    showMessage(data.msg || '加载失败', false);
+                }
+            } catch (e) {
+                showMessage(`加载失败: ${e.message}`, false);
+            } finally {
+                renewalLoading.value = false;
+            }
+        }
+
+        function gotoRenewalPage(p) {
+            if (p < 1 || p > renewalPagination.value.pages) return;
+            renewalPagination.value.page = p;
+            loadRenewalList();
+        }
+
+        async function loadRenewalAssignees(enterpriseId) {
+            try {
+                const params = enterpriseId ? `?enterprise_id=${enterpriseId}` : '';
+                const resp = await authFetch(`/api/renewal/assignees${params}`);
+                const data = await resp.json();
+                if (data.code === 0) renewalAssigneesList.value = data.data.assignees;
+            } catch (e) { /* 可分配人员列表静默失败 */ }
+        }
+
+        // 预览续保任务关联的原始保单文件（复用识别记录Tab的 previewRecord 全套预览逻辑）
+        async function previewRenewalTaskFile(recordId) {
+            if (!recordId) { showMessage('该记录暂无可预览的原始文件', false); return; }
+            try {
+                const resp = await authFetch(`/api/insurance/records/${recordId}`);
+                const json = await resp.json();
+                if (json.code === 0 && json.data) {
+                    previewRecord(json.data);
+                } else {
+                    showMessage(json.msg || '加载预览失败', false);
+                }
+            } catch (e) {
+                showMessage(`加载预览失败: ${e.message}`, false);
+            }
+        }
+
+        function toggleRenewalSelectAll() {
+            if (renewalAllSelected.value) {
+                renewalSelectedIds.value = [];
+            } else {
+                renewalSelectedIds.value = renewalTasks.value.map(t => t.id);
+            }
+        }
+
+        function renewalDaysLeftClass(t) {
+            if (t.status === 'won' || t.status === 'lost') return 'text-gray-400';
+            const days = Math.ceil((new Date(t.end_date) - new Date()) / 86400000);
+            if (days < 0) return 'text-red-600 font-semibold';
+            if (days <= 7) return 'text-orange-600 font-semibold';
+            return 'text-gray-600';
+        }
+
+        function renewalDaysLeftText(t) {
+            const days = Math.ceil((new Date(t.end_date) - new Date()) / 86400000);
+            if (days < 0) return `已过期${-days}天`;
+            if (days === 0) return '今日到期';
+            return `距到期还剩${days}天`;
+        }
+
+        const RENEWAL_STATUS_STYLES = {
+            pending: 'background:#fef3c7;color:#b45309;',
+            following: 'background:#dbeafe;color:#1d4ed8;',
+            won: 'background:#dcfce7;color:#15803d;',
+            lost: 'background:#f3f4f6;color:#6b7280;',
+            expired: 'background:#fee2e2;color:#b91c1c;',
+        };
+        const RENEWAL_STATUS_LABELS = {
+            pending: '待跟进', following: '跟进中', won: '已成交', lost: '已流失', expired: '已过期',
+        };
+        function renewalStatusStyle(status) { return RENEWAL_STATUS_STYLES[status] || ''; }
+        function renewalStatusLabel(status) { return RENEWAL_STATUS_LABELS[status] || status; }
+        function renewalActionLabel(action) {
+            return { followup: '跟进', assign: '分配', status_change: '状态变更' }[action] || action;
+        }
+
+        async function openRenewalDetail(t) {
+            renewalDetailVisible.value = true;
+            renewalDetailTask.value = t;
+            renewalDetailAssignee.value = t.assignee || '';
+            renewalHistory.value = [];
+            renewalFollowups.value = [];
+            renewalNoteContent.value = '';
+            renewalNextRemindAt.value = '';
+            if (currentUser.value && currentUser.value.role === 'super_admin' && !renewalAssigneesList.value.length) {
+                await loadRenewalAssignees(t.enterprise_id);
+            }
+            try {
+                const resp = await authFetch(`/api/renewal/detail/${t.id}`);
+                const data = await resp.json();
+                if (data.code === 0) {
+                    renewalDetailTask.value = data.data.task;
+                    renewalDetailAssignee.value = data.data.task.assignee || '';
+                    renewalHistory.value = data.data.history;
+                    renewalFollowups.value = data.data.followups;
+                } else {
+                    showMessage(data.msg || '加载详情失败', false);
+                }
+            } catch (e) {
+                showMessage(`加载详情失败: ${e.message}`, false);
+            }
+        }
+
+        async function refreshRenewalDetail() {
+            const id = renewalDetailTask.value.id;
+            if (!id) return;
+            try {
+                const resp = await authFetch(`/api/renewal/detail/${id}`);
+                const data = await resp.json();
+                if (data.code === 0) {
+                    renewalDetailTask.value = data.data.task;
+                    renewalHistory.value = data.data.history;
+                    renewalFollowups.value = data.data.followups;
+                }
+            } catch (e) { /* 忽略，用户可手动重开详情弹窗 */ }
+        }
+
+        async function submitRenewalFollowup() {
+            if (!renewalNoteContent.value.trim()) return;
+            renewalNoteSaving.value = true;
+            try {
+                const resp = await authFetch('/api/renewal/followup', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        task_id: renewalDetailTask.value.id,
+                        content: renewalNoteContent.value.trim(),
+                        next_remind_at: renewalNextRemindAt.value || null,
+                    }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    renewalNoteContent.value = '';
+                    renewalNextRemindAt.value = '';
+                    showMessage('已添加跟进记录', true);
+                    await refreshRenewalDetail();
+                    loadRenewalList();
+                } else {
+                    showMessage(data.msg || '提交失败', false);
+                }
+            } catch (e) {
+                showMessage(`提交失败: ${e.message}`, false);
+            } finally {
+                renewalNoteSaving.value = false;
+            }
+        }
+
+        async function changeRenewalStatus(status, remark) {
+            try {
+                const resp = await authFetch('/api/renewal/status', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_id: renewalDetailTask.value.id, status, remark: remark || '' }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showMessage('状态已更新', true);
+                    await refreshRenewalDetail();
+                    loadRenewalList();
+                    loadRenewalStats();
+                } else {
+                    showMessage(data.msg || '更新失败', false);
+                }
+            } catch (e) {
+                showMessage(`更新失败: ${e.message}`, false);
+            }
+        }
+
+        function dismissRenewalHint() {
+            changeRenewalStatus(renewalDetailTask.value.status, '忽略续保检测提示');
+        }
+
+        async function assignRenewalDetail() {
+            if (!renewalDetailAssignee.value) return;
+            try {
+                const resp = await authFetch('/api/renewal/assign', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_ids: [renewalDetailTask.value.id], assignee: renewalDetailAssignee.value }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showMessage('已分配跟进人', true);
+                    await refreshRenewalDetail();
+                    loadRenewalList();
+                } else {
+                    showMessage(data.msg || '分配失败', false);
+                }
+            } catch (e) {
+                showMessage(`分配失败: ${e.message}`, false);
+            }
+        }
+
+        function openBatchAssign() {
+            if (!renewalSelectedIds.value.length) return;
+            renewalBatchAssignee.value = '';
+            renewalBatchAssignVisible.value = true;
+        }
+
+        async function submitBatchAssign() {
+            if (!renewalBatchAssignee.value) return;
+            try {
+                const resp = await authFetch('/api/renewal/assign', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_ids: renewalSelectedIds.value, assignee: renewalBatchAssignee.value }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showMessage(data.msg || '已分配', true);
+                    renewalBatchAssignVisible.value = false;
+                    loadRenewalList();
+                } else {
+                    showMessage(data.msg || '分配失败', false);
+                }
+            } catch (e) {
+                showMessage(`分配失败: ${e.message}`, false);
+            }
+        }
+
+        async function triggerRenewalScan() {
+            renewalScanning.value = true;
+            try {
+                const resp = await authFetch('/api/renewal/scan', { method: 'POST' });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    const s = data.data || {};
+                    showMessage(`扫描完成：新增/更新${s.upserted || 0}条，过期${s.expired || 0}条`, true);
+                    loadRenewalStats();
+                    loadRenewalList();
+                } else {
+                    showMessage(data.msg || '扫描失败', false);
+                }
+            } catch (e) {
+                showMessage(`扫描失败: ${e.message}`, false);
+            } finally {
+                renewalScanning.value = false;
+            }
+        }
+
+        async function exportRenewalList() {
+            try {
+                const params = new URLSearchParams({
+                    status: renewalFilter.value.status,
+                    assignee: renewalFilter.value.assignee,
+                    date_start: renewalFilter.value.date_start,
+                    date_end: renewalFilter.value.date_end,
+                    keyword: renewalFilter.value.keyword,
+                });
+                const resp = await authFetch(`/api/renewal/export?${params}`);
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    showMessage(err.msg || '导出失败', false);
+                    return;
+                }
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = _filenameFromResponse(resp, '续保任务.xlsx');
+                a.click(); URL.revokeObjectURL(url);
+            } catch (e) {
+                showMessage(`导出失败: ${e.message}`, false);
+            }
+        }
+
+        async function loadRenewalConfig() {
+            try {
+                const resp = await authFetch('/api/renewal/config');
+                const data = await resp.json();
+                if (data.code === 0) {
+                    renewalQrUrl.value = data.data.qrcode_url || '/static/img/wechat_qr.png?v=2';
+                    renewalWindowDaysInput.value = data.data.window_days || 90;
+                }
+            } catch (e) { /* 配置读取静默失败 */ }
+        }
+
+        async function openRenewalQr() {
+            if (!renewalQrUrl.value) await loadRenewalConfig();
+            renewalQrVisible.value = true;
+        }
+
+        async function openRenewalConfig() {
+            await loadRenewalConfig();
+            renewalConfigVisible.value = true;
+        }
+
+        async function saveRenewalConfig() {
+            try {
+                const resp = await authFetch('/api/renewal/config', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ window_days: renewalWindowDaysInput.value }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showMessage('已保存', true);
+                    renewalConfigVisible.value = false;
+                } else {
+                    showMessage(data.msg || '保存失败', false);
+                }
+            } catch (e) {
+                showMessage(`保存失败: ${e.message}`, false);
+            }
+        }
+
+        async function uploadRenewalQrcode(e) {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            const form = new FormData();
+            form.append('file', file);
+            try {
+                const resp = await authFetch('/api/renewal/qrcode/upload', { method: 'POST', body: form });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    renewalQrUrl.value = data.data.url;
+                    showMessage('二维码已更新', true);
+                } else {
+                    showMessage(data.msg || '上传失败', false);
+                }
+            } catch (e2) {
+                showMessage(`上传失败: ${e2.message}`, false);
+            } finally {
+                e.target.value = '';
+            }
+        }
+
         // ===== 内部管理备注（仅超管，每日追加日志） =====
         const internalNotesVisible = ref(false);
         const internalNotesRecord = ref(null);
@@ -7464,6 +8329,15 @@ const _app = createApp({
         ];
         function attrLabel(v) { const o = attrOptions.find(x => x.val === v); return o ? o.label : ''; }
         function attrColor(v) { const o = attrOptions.find(x => x.val === v); return o ? o.color : '#9ca3af'; }
+        // 内部备注常用语句：点击追加到说明文本框，不覆盖已输入内容
+        const internalNoteQuickPhrases = [
+            '保单无投保人', '新车无车牌', '保单无被保险人',
+            '文件模糊无法识别', '保单号缺失', '非保单文件',
+        ];
+        function appendInternalNotePhrase(phrase) {
+            const cur = internalNoteContent.value.trim();
+            internalNoteContent.value = cur ? (cur + '，' + phrase) : phrase;
+        }
         async function openInternalNotes(record) {
             internalNotesRecord.value = record;
             internalNoteContent.value = '';
@@ -7668,6 +8542,7 @@ const _app = createApp({
             // 默认筛选今天（同步，无 IO）+ 同步触发统计数（与 loadRecords 并行）
             setDateShortcut('today');
                        // 并行加载所有初始化数据（任一失败不影响其他）
+            const _renewalNavRoles = ['super_admin','enterprise','employee'];
             await Promise.allSettled([
                 authFetch('/api/insurance/config/status').then(r => r.json()).then(d => { configStatus.value = d; }),
                 loadTargets(),
@@ -7676,6 +8551,7 @@ const _app = createApp({
                 loadRoomList(),
                 openDB(),
                 loadQuota(),
+                (currentUser.value && _renewalNavRoles.includes(currentUser.value.role)) ? loadRenewalStats() : Promise.resolve(),
             ]);
             // 不阻塞页面显示的后台任务
             loadRecordCompanies();
@@ -7715,7 +8591,7 @@ const _app = createApp({
             extractionRules, loadExtractionRules,
             rawTextVisible, rawTextContent, rawTextFileName,
             successResults, abnormalResults, nonPolicyResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal, getPolicyHint, getRecordHint, getFailHint,
-            outputColumns, listColumnConfig, visibleListColumns, fieldHelp, frozenColStyles, getColStyle, startColResize, getMappedValue, getDocCategory, docCategories,
+            outputColumns, listColumnConfig, visibleListColumns, fieldHelp, pinnedFieldHelp, activeFieldHelpKey, tooltipFloatStyle, showFieldHelp, hideFieldHelp, pinFieldHelp, frozenColStyles, getColStyle, startColResize, getMappedValue, getDocCategory, docCategories,
             isLoadingFiles, loadingFileCount, loadingFileTotal, loadingPercent,
             handleFileSelect, handleDrop, removeFile, clearFiles,
             previewFile, previewResultFile, showRawText,
@@ -7729,6 +8605,8 @@ const _app = createApp({
             addColumn, removeColumn, startRenameCol, finishRenameCol, onNewColFieldChange,
             // 导出列选择
             exportModalVisible, exportSelectedFields, exportAvailableFields, exportMergeByPlate, exportPendingType, exportCustomMode,
+            exportTemplateList, exportSelectedTemplateName, loadExportTemplateList, selectExportTemplate, selectExportDefault,
+            exportOtherEnterpriseTemplates, exportSelectedOtherTemplate, selectExportOtherTemplate,
             isAllExportFieldsSelected, toggleAllExportFields, confirmExport,
             batchExportVisible, batchExportTotal, batchExportRanges, executeBatchExport,
             batchDlVisible, batchDlTotal, batchDlRanges, executeBatchDownload,
@@ -7754,6 +8632,14 @@ const _app = createApp({
             markNormalVisible, markNormalRecord, markNormalReason, markNormalSaving, getQuickReasons, openMarkNormal, confirmMarkNormal, undoMarkNormal,
             internalNotesVisible, internalNotesRecord, internalNotesList, internalNoteContent, internalNoteAttr,
             internalNoteSaving, recordReviewStatusFilter, attrOptions, attrLabel, attrColor, openInternalNotes, submitInternalNote,
+            internalNoteQuickPhrases, appendInternalNotePhrase,
+            renewalStats, renewalBadgeCount, renewalTasks, renewalLoading, renewalFilter, renewalPagination, renewalSelectedIds,
+            renewalAssigneesList, renewalScanning, renewalAllSelected, openRenewalTab, loadRenewalStats, loadRenewalList, gotoRenewalPage,
+            toggleRenewalSelectAll, renewalDaysLeftClass, renewalDaysLeftText, renewalStatusStyle, renewalStatusLabel, renewalActionLabel,
+            renewalDetailVisible, renewalDetailTask, renewalDetailAssignee, renewalHistory, renewalFollowups, renewalNoteContent,
+            renewalNextRemindAt, renewalNoteSaving, openRenewalDetail, submitRenewalFollowup, changeRenewalStatus, dismissRenewalHint, assignRenewalDetail,
+            renewalBatchAssignVisible, renewalBatchAssignee, openBatchAssign, submitBatchAssign, triggerRenewalScan, exportRenewalList,
+            renewalQrVisible, renewalQrUrl, renewalConfigVisible, renewalWindowDaysInput, openRenewalQr, openRenewalConfig, saveRenewalConfig, uploadRenewalQrcode, previewRenewalTaskFile,
             deleteRecordVisible, deleteRecordTarget, deleteRecordSaving, openDeleteRecord, confirmDeleteRecord,
             editingField, editingValue, fieldSaving, startEditField, cancelEditField, saveEditField, isManualField, isDateField,
             listEditing, startListEdit, cancelListEdit, saveListEdit,
