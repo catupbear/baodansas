@@ -12,6 +12,7 @@ import json
 import logging
 import re
 import time
+import uuid
 
 import pymysql
 import pymysql.cursors
@@ -796,8 +797,11 @@ def list_records():
             if record.get("display_fields") is not None:
                 if record.get("created_at") and "创建时间" not in record["display_fields"]:
                     record["display_fields"]["创建时间"] = str(record["created_at"])
-                if record.get("updated_at") and "识别时间" not in record["display_fields"]:
-                    record["display_fields"]["识别时间"] = str(record["updated_at"])
+                # 识别时间：优先用首次识别成功完成时间(first_recognized_at)，重新识别不会覆盖它；
+                # 老记录/异常情况兜底回退到updated_at
+                _recog_time = record.get("first_recognized_at") or record.get("updated_at")
+                if _recog_time and "识别时间" not in record["display_fields"]:
+                    record["display_fields"]["识别时间"] = str(_recog_time)
             if has_config and record.get("display_fields"):
                 # 传入手动修改字段列表，避免公式覆盖用户手动编辑的值
                 _mf = record.get("manual_fields")
@@ -941,7 +945,7 @@ def get_record(record_id):
                 except (TypeError, json.JSONDecodeError):
                     pass
         # 时间戳转字符串
-        for ts_field in ("created_at", "updated_at"):
+        for ts_field in ("created_at", "updated_at", "first_recognized_at"):
             if record.get(ts_field) and not isinstance(record[ts_field], str):
                 record[ts_field] = str(record[ts_field])
 
@@ -1693,6 +1697,67 @@ def list_record_companies():
 # 支持保司统计缓存（后端5分钟缓存，避免频繁查库）
 _company_cache = {"data": None, "time": 0}
 _COMPANY_CACHE_TTL = 300  # 5分钟
+
+
+_DEFAULT_MANUAL_SECTIONS = [
+    {
+        "id": "welcome",
+        "title": "欢迎使用",
+        "content": "# 欢迎使用午虎AI保单台账\n\n这是使用手册，内部超级管理员可以点击右上角「编辑」按钮修改这里的内容。\n\n左侧是章节目录，点击可以切换查看。",
+    },
+]
+
+
+@insurance_bp.route("/api/insurance/manual", methods=["GET"])
+def get_manual():
+    """获取使用手册章节内容（登录即可查看，编辑需内部超管权限）"""
+    sections = get_insurance_config(_db, "help_manual_sections", None)
+    if not sections:
+        sections = _DEFAULT_MANUAL_SECTIONS
+    return jsonify({"code": 0, "data": {"sections": sections}})
+
+
+@insurance_bp.route("/api/insurance/manual", methods=["POST"])
+def save_manual():
+    """保存使用手册章节内容（仅内部超级管理员）"""
+    user = g.current_user
+    if not user or user.get("role") != "super_admin":
+        return jsonify({"code": 403, "msg": "仅内部超级管理员可编辑使用手册"}), 403
+    data = request.get_json(force=True) or {}
+    sections = data.get("sections")
+    if not isinstance(sections, list):
+        return jsonify({"code": 400, "msg": "参数格式错误"}), 400
+    for s in sections:
+        if not isinstance(s, dict) or "title" not in s or "content" not in s:
+            return jsonify({"code": 400, "msg": "章节格式错误，需包含 title 和 content"}), 400
+    set_insurance_config(_db, "help_manual_sections", sections)
+    return jsonify({"code": 0, "msg": "保存成功"})
+
+
+@insurance_bp.route("/api/insurance/manual/upload-image", methods=["POST"])
+def upload_manual_image():
+    """使用手册编辑：上传插图，返回可直接用于 Markdown 的图片URL（仅内部超级管理员）"""
+    user = g.current_user
+    if not user or user.get("role") != "super_admin":
+        return jsonify({"code": 403, "msg": "仅内部超级管理员可上传图片"}), 403
+    if not _handler or not _handler.cos_storage:
+        return jsonify({"code": 503, "msg": "云存储未初始化"}), 503
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"code": 400, "msg": "缺少文件"}), 400
+    ext = (f.filename.rsplit(".", 1)[-1] if "." in f.filename else "png").lower()
+    if ext not in ("png", "jpg", "jpeg", "gif", "webp"):
+        return jsonify({"code": 400, "msg": "仅支持 png/jpg/jpeg/gif/webp 格式图片"}), 400
+    try:
+        data = f.read()
+        cos_key = f"manual/upload_{uuid.uuid4().hex}.{ext}"
+        url = _handler.cos_storage.upload_bytes(data, cos_key)
+        if not url:
+            return jsonify({"code": 500, "msg": "上传失败"}), 500
+        return jsonify({"code": 0, "data": {"url": url}})
+    except Exception as e:
+        logger.exception("使用手册图片上传失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
 
 
 @insurance_bp.route("/api/insurance/supported-companies", methods=["GET"])

@@ -450,7 +450,7 @@
                     💎 购买套餐
                 </button>
                 <!-- 使用手册（所有角色可见，含内部超管） -->
-                <a href="https://docs.wuhuxiche.com/help.pdf" target="_blank" rel="noopener"
+                <a href="/manual"
                    class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 12px;font-size:12px;text-decoration:none;"
                    title="使用手册">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -623,7 +623,7 @@
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;color:#b45309;font-weight:700;border:none;background:#fffbeb;cursor:pointer;margin-bottom:3px;">
                     💎 购买套餐
                 </button>
-                <a href="https://docs.wuhuxiche.com/help.pdf" target="_blank" rel="noopener" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">📖 使用手册</a>
+                <a href="/manual" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">📖 使用手册</a>
                 <a v-if="!notActivated" href="/insurance/settings" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">系统设置</a>
                 <a v-if="currentUser && currentUser.role==='super_admin'" href="/admin/enterprises" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">服务企业管理</a>
                 <button @click="profileVisible=true;loadQuota();mobileMenuOpen=false"
@@ -1666,11 +1666,17 @@
                 </div>
             </div>
             <div class="flex items-center gap-2">
+                <button v-if="!isSuperAdmin && !renewalInfoRevealed" @click="enableRenewalFeature()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">
+                    开启功能
+                </button>
                 <button v-if="isSuperAdmin" @click="openRenewalConfig()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">⚙ 设置</button>
                 <button @click="openRenewalQr()" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">导入往年保单</button>
             </div>
         </div>
 
+        <!-- 未显示完整信息时，整个统计/筛选/列表区域磨砂遮罩，只有顶部的开关按钮可正常操作 -->
+        <div :style="(renewalInfoRevealed || isSuperAdmin) ? '' : 'filter: blur(6px); pointer-events: none; user-select: none;'"
+             style="transition: filter 0.15s;" class="space-y-5">
         <!-- 统计卡片 -->
         <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div class="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
@@ -1753,8 +1759,8 @@
                             <td v-if="isSuperAdmin || currentUser.role === 'enterprise'">
                                 <input type="checkbox" :value="t.id" v-model="renewalSelectedIds">
                             </td>
-                            <td class="font-medium text-gray-800">{{ t.plate_no || t.vin || '—' }}</td>
-                            <td>{{ t.insured || '—' }}</td>
+                            <td class="font-medium text-gray-800">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.plate_no || t.vin || '—') : maskPlateNo(t.plate_no || t.vin) || '—' }}</td>
+                            <td>{{ (renewalInfoRevealed || isSuperAdmin) ? (t.insured || '—') : maskPersonName(t.insured) || '—' }}</td>
                             <td>{{ t.company_short || '—' }}</td>
                             <td>{{ t.policy_type || '—' }}</td>
                             <td>{{ t.end_date }}</td>
@@ -1762,7 +1768,7 @@
                                 <span :class="renewalDaysLeftClass(t)">{{ renewalDaysLeftText(t) }}</span>
                             </td>
                             <td>{{ t.total_premium || '—' }}</td>
-                            <td>{{ t.assignee_name || '未分配' }}</td>
+                            <td>{{ (renewalInfoRevealed || isSuperAdmin) ? (t.assignee_name || '未分配') : (t.assignee_name ? maskPersonName(t.assignee_name) : '未分配') }}</td>
                             <td><span class="text-xs px-2 py-0.5 rounded-full" :style="renewalStatusStyle(t.status)">{{ renewalStatusLabel(t.status) }}</span></td>
                             <td>
                                 <button v-if="t.primary_record_id" @click="previewRenewalTaskFile(t.primary_record_id)" class="btn btn-outline" style="padding:3px 10px;font-size:11px;margin-right:4px;">预览</button>
@@ -1779,6 +1785,7 @@
                     <button class="pagination-btn" :disabled="renewalPagination.page>=renewalPagination.pages" @click="gotoRenewalPage(renewalPagination.page+1)">下一页</button>
                 </div>
             </div>
+        </div>
         </div>
     </main>
 
@@ -2514,7 +2521,7 @@
             <div class="bg-white rounded-xl shadow-2xl" style="width:600px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column;" @click.stop>
                 <div class="px-5 py-4 border-b flex items-center justify-between">
                     <div>
-                        <h3 class="text-base font-semibold text-gray-800">{{ renewalDetailTask.plate_no || renewalDetailTask.vin }} — {{ renewalDetailTask.insured }}</h3>
+                        <h3 class="text-base font-semibold text-gray-800">{{ (renewalInfoRevealed || isSuperAdmin) ? (renewalDetailTask.plate_no || renewalDetailTask.vin) : maskPlateNo(renewalDetailTask.plate_no || renewalDetailTask.vin) }} — {{ (renewalInfoRevealed || isSuperAdmin) ? renewalDetailTask.insured : maskPersonName(renewalDetailTask.insured) }}</h3>
                         <p class="text-xs text-gray-400 mt-0.5">{{ renewalDetailTask.company_short }} · {{ renewalDetailTask.policy_type }} · 到期：{{ renewalDetailTask.end_date }}</p>
                     </div>
                     <button @click="renewalDetailVisible = false" class="text-gray-400 hover:text-gray-600 text-xl leading-none cursor-pointer">&times;</button>
@@ -2882,7 +2889,8 @@
                     正在下载: {{ downloadTask.currentFile || '准备中...' }}
                 </template>
                 <template v-else-if="downloadTask.status === 'done'">
-                    <span style="color:#16a34a;">打包完成，正在下载 ZIP...</span>
+                    <span v-if="!downloadTask.fileSaved" style="color:#16a34a;">打包完成，正在下载 ZIP...</span>
+                    <span v-else style="color:#16a34a;">下载完成</span>
                 </template>
                 <template v-else-if="downloadTask.status === 'error'">
                     <span style="color:#dc2626;">下载失败: {{ downloadTask.error }}</span>
@@ -3688,7 +3696,7 @@
                         </div>
                         <div>
                             <label class="text-xs text-gray-500 font-medium">识别时间</label>
-                            <p class="text-sm text-gray-800 mt-0.5">{{ (currentRecord?.display_fields && currentRecord.display_fields['识别时间']) || formatTime(currentRecord?.updated_at) }}</p>
+                            <p class="text-sm text-gray-800 mt-0.5">{{ (currentRecord?.display_fields && currentRecord.display_fields['识别时间']) || formatTime(currentRecord?.first_recognized_at || currentRecord?.updated_at) }}</p>
                         </div>
                         <div v-if="currentRecord?.error_message">
                             <label class="text-xs text-gray-500 font-medium">错误信息</label>
@@ -3946,6 +3954,21 @@ async function authFetch(url, options = {}) {
     if (resp.status === 401) { doLogout(); throw new Error('未登录'); }
     return resp;
 }
+// 续保到期提醒推送里的免登录链接：URL带token时直接写入本地登录态，
+// 随后把token从地址栏去掉（history.replaceState，不产生新的历史记录），
+// 避免这个有效期7天的登录凭证留在浏览器地址栏/历史记录里
+(function () {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get('token');
+    if (urlToken) {
+        localStorage.setItem('token', urlToken);
+        localStorage.removeItem('user');
+        params.delete('token');
+        const newSearch = params.toString();
+        const newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '') + window.location.hash;
+        window.history.replaceState({}, '', newUrl);
+    }
+})();
 // 进入页面检查登录
 if (!checkAuth()) throw new Error('redirect');
 
@@ -4592,7 +4615,7 @@ const _app = createApp({
                     '文档类型': rec.doc_category || '',
                     '状态': statusLabel(rec.status),
                     '创建时间': (rec.display_fields && rec.display_fields['创建时间']) || rec.created_at || '',
-                    '识别时间': (rec.display_fields && rec.display_fields['识别时间']) || rec.updated_at || '',
+                    '识别时间': (rec.display_fields && rec.display_fields['识别时间']) || rec.first_recognized_at || rec.updated_at || '',
                     '群名': rec.room_name || rec.roomid || '',
                     '发送人': rec.sender_name || rec.sender || '',
                 };
@@ -5645,23 +5668,36 @@ const _app = createApp({
                     // 更新本地数据
                     previewAutoRecord.value.parsed_fields = json.data.parsed_fields;
                     previewAutoRecord.value.manual_fields = json.data.manual_fields;
-                    // 同步更新记录列表中的数据（含公式重算后的 display_fields）
-                    const idx = records.value.findIndex(r => r.id === previewAutoRecord.value.id);
-                    if (idx !== -1) {
-                        records.value[idx].parsed_fields = json.data.parsed_fields;
-                        records.value[idx].manual_fields = json.data.manual_fields;
-                        if (json.data.display_fields) {
-                            if (!records.value[idx].display_fields) records.value[idx].display_fields = {};
-                            const editedField = fieldName;
-                            records.value[idx].display_fields[editedField] = newValue;
-                            const returned = json.data.display_fields;
+                    // 同步刷新公式重算后的 display_fields：既要更新记录列表（关闭弹窗后能看到），
+                    // 也要更新 previewAutoRecord 本身（弹窗还开着的情况下，如"结算金额"这类由
+                    // 交强/商业/驾意比例算出来的公式字段要立刻跟着变，不能等用户关闭弹窗/刷新页面才刷新）
+                    if (json.data.display_fields) {
+                        const editedField = fieldName;
+                        const returned = json.data.display_fields;
+                        const _mergeInto = (target) => {
+                            target[editedField] = newValue;
                             for (const [k, v] of Object.entries(returned)) {
                                 if (v !== '' && v !== null && v !== undefined) {
-                                    records.value[idx].display_fields[k] = v;
-                                } else if (k === editedField || !records.value[idx].display_fields[k]) {
-                                    records.value[idx].display_fields[k] = v;
+                                    target[k] = v;
+                                } else if (k === editedField || !target[k]) {
+                                    target[k] = v;
                                 }
                             }
+                        };
+                        if (!previewAutoRecord.value.display_fields) previewAutoRecord.value.display_fields = {};
+                        _mergeInto(previewAutoRecord.value.display_fields);
+                        const idx = records.value.findIndex(r => r.id === previewAutoRecord.value.id);
+                        if (idx !== -1) {
+                            records.value[idx].parsed_fields = json.data.parsed_fields;
+                            records.value[idx].manual_fields = json.data.manual_fields;
+                            if (!records.value[idx].display_fields) records.value[idx].display_fields = {};
+                            _mergeInto(records.value[idx].display_fields);
+                        }
+                    } else {
+                        const idx = records.value.findIndex(r => r.id === previewAutoRecord.value.id);
+                        if (idx !== -1) {
+                            records.value[idx].parsed_fields = json.data.parsed_fields;
+                            records.value[idx].manual_fields = json.data.manual_fields;
                         }
                     }
                 } else {
@@ -5859,9 +5895,36 @@ const _app = createApp({
                         method: 'PUT', body: JSON.stringify({ fields: { [ocrField]: newValue } }),
                     });
                     if (!resp.ok) { showMessage('保存失败', false); return; }
+                    const j = await resp.json();
+                    if (j.code === 0 && j.data && j.data.display_fields && t.display_fields) {
+                        // 用后端返回的最新 display_fields 整体覆盖这条子记录，保证下面重新合并时用的是最新数据
+                        Object.assign(t.display_fields, j.data.display_fields);
+                    }
                 }
                 record.display_fields[col] = newValue;
                 targets.forEach(t => { if (t.display_fields) t.display_fields[saveField] = newValue; });
+
+                // 交强/商业/驾意比例等跨险种公式字段（如"结算金额"）：单条子记录自己算出来的只是
+                // 局部结果（该记录自身险种的保费×自己的比例，其余险种按0算），不是合并行真正需要
+                // 展示的合计值。必须用这条车牌/车架号下的全部子记录重新走一次合并接口才能拿到正确
+                // 合计——不然这类字段只能等用户手动刷新页面（触发全表重新合并）才会显示对的数
+                const children = record._children || [];
+                if (children.length) {
+                    try {
+                        const invoices = children.map(c => ({ fields: c.display_fields || {}, id: c.id, file_name: c.filename }));
+                        const mresp = await authFetch('/api/insurance/export/excel', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ invoices, merge_by_plate: true, return_json: true, config_applied: true, export_type: 'success' })
+                        });
+                        const mj = await mresp.json();
+                        const mrows = (mj.data && mj.data.rows) || [];
+                        if (mrows.length) {
+                            Object.assign(record.display_fields, mrows[0]);
+                        }
+                    } catch (e) {
+                        console.error('合并行重算失败', e);
+                    }
+                }
                 showMessage('已保存', true);
             } catch (e) {
                 showMessage('保存失败: ' + e.message, false);
@@ -6880,11 +6943,26 @@ const _app = createApp({
         // 批量失败明细弹窗
         const batchFailModal = reactive({ visible: false, errors: [] });
 
+        // 展开勾选里的合并伪行为真实子记录id（批量导出原文件/批量重新识别都需要真实记录，
+        // 合并伪行的id是"__merge_xxx"，数据库里不存在这条记录）
+        function _expandMergedSelection(ids) {
+            const expanded = [];
+            for (const id of ids) {
+                const rec = records.value.find(r => r.id === id);
+                if (rec && rec._merged) {
+                    (rec._children || []).forEach(c => expanded.push(c.id));
+                } else {
+                    expanded.push(id);
+                }
+            }
+            return expanded;
+        }
+
         // 批量重新识别（逐条处理，实时进度）：有勾选按勾选，否则按当前筛选条件全部处理
         async function batchReocrSync() {
             if (batchProcessing.value) return;
             try {
-                let ids = [...selectedRecordIds.value];
+                let ids = _expandMergedSelection(selectedRecordIds.value);
 
                 // 没有勾选时，按当前筛选条件查询全部记录
                 if (!ids.length) {
@@ -7072,7 +7150,7 @@ const _app = createApp({
 
         // 收集批量下载的ID列表
         async function collectBatchDownloadIds() {
-            let ids = [...selectedRecordIds.value];
+            let ids = _expandMergedSelection(selectedRecordIds.value);
             if (!ids.length) {
                 showMessage('正在查询符合条件的记录...', true);
                 const params = new URLSearchParams({ page: 1, page_size: 10000 });
@@ -7124,7 +7202,7 @@ const _app = createApp({
                 visible: true, collapsed: false, status: 'processing',
                 total: ids.length, current: 0, success: 0, failed: 0,
                 currentFile: '正在启动...', taskId: '', error: '',
-                lastIds: [...ids], batchLabel,
+                lastIds: [...ids], batchLabel, fileSaved: false,
             });
 
             const resp = await authFetch('/api/insurance/batch-download/start', {
@@ -7212,6 +7290,11 @@ const _app = createApp({
                 URL.revokeObjectURL(url);
             } catch (e) {
                 showMessage('下载文件失败: ' + e.message, false);
+            } finally {
+                // ZIP 已经交给浏览器保存（resp.blob() 已读完整个文件），"正在下载 ZIP"这句话
+                // 到这里才算真正结束——之前 status 一变成 done 就立刻显示这句话，但触发下载是
+                // 异步、没等它跑完，导致文件其实早就存到本地了，文案却一直卡在"正在下载"
+                downloadTask.fileSaved = true;
             }
         }
 
@@ -7337,7 +7420,7 @@ const _app = createApp({
                     '文档类型': r.doc_category || '',
                     '状态': statusLabel(r.status),
                     '创建时间': (r.display_fields && r.display_fields['创建时间']) || r.created_at || '',
-                    '识别时间': (r.display_fields && r.display_fields['识别时间']) || r.updated_at || '',
+                    '识别时间': (r.display_fields && r.display_fields['识别时间']) || r.first_recognized_at || r.updated_at || '',
                     '群名': r.room_name || r.roomid || '',
                     '发送人': r.sender_name || r.sender || '',
                 });
@@ -7608,21 +7691,27 @@ const _app = createApp({
                 mrows = (j.data && j.data.rows) || [];
             } catch (e) { console.error('按车牌合并失败', e); return; }
             const norm = p => (p || '').replace(/[-\s　]/g, '').toUpperCase();
-            // 合并键：车牌可合并用车牌；新车未上牌(空/新车)兜底用车架号(与后端一致)
+            // 合并键：车牌可合并用车牌；新车未上牌(空/新车)兜底用车架号(与后端一致，要求长度>=10
+            // 才当真车架号用，避免误把截断/识别失败的短字符串当车架号)；车牌和车架号都无效时，
+            // 绝不能再退回用车牌原始值(如"新车")当键——那样会把互不相关的一大堆车全部错误合并
+            // 成一组（曾经出现过"新车+空车架号"的记录被合并成大几十条一组的bug）。改用保单号兜底，
+            // 保单号也没有的话，各自独立展示（宁可拆开也不能错误合并）。
             const mergeKey = df => {
                 const raw = ((df['车牌号'] || df['车牌'] || '') + '').trim();
                 if (raw && raw !== '新车' && raw !== '*-*' && raw !== '*—*') return norm(raw);
                 const vin = ((df['车架号'] || df['车架号VIN'] || '') + '').trim().toUpperCase();
-                return vin ? '__VIN__' + vin : norm(raw);
+                if (vin.length >= 10) return '__VIN__' + vin;
+                const policyNo = ((df['保单号'] || '') + '').trim();
+                return policyNo ? '__POLICY__' + policyNo : null;
             };
             const byPlate = {};
             raw.forEach(r => {
                 const df = r.display_fields || {};
-                const p = mergeKey(df);
+                const p = mergeKey(df) || ('__ID__' + r.id);
                 (byPlate[p] = byPlate[p] || []).push(r);
             });
             records.value = mrows.map((row, i) => {
-                const p = mergeKey(row);
+                const p = mergeKey(row) || ('__ROW__' + i);
                 const children = byPlate[p] || [];
                 return {
                     id: '__merge_' + (p || i),
@@ -7925,6 +8014,17 @@ const _app = createApp({
 
 
         // ===== 续保提醒（CRM式续保任务管理） =====
+        // 敏感信息默认打码，用户每次进入页面需自行打开开关才显示完整信息（不记忆，刷新重置为隐藏）
+        const renewalInfoRevealed = ref(false);
+        function maskPersonName(v) {
+            if (!v) return v;
+            return v.charAt(0) + '**';
+        }
+        function maskPlateNo(v) {
+            if (!v) return v;
+            if (v.length <= 3) return v.charAt(0) + '*'.repeat(v.length - 1);
+            return v.slice(0, 2) + '*'.repeat(v.length - 3) + v.slice(-1);
+        }
         const renewalStats = ref({ overdue: 0, due_7d: 0, due_30d: 0, due_this_month: 0, due_next_month: 0, won_this_month: 0 });
         const renewalBadgeCount = computed(() => (renewalStats.value.overdue || 0) + (renewalStats.value.due_30d || 0));
         const renewalTasks = ref([]);
@@ -7966,8 +8066,28 @@ const _app = createApp({
             try {
                 const resp = await authFetch('/api/renewal/stats');
                 const data = await resp.json();
-                if (data.code === 0) renewalStats.value = data.data;
+                if (data.code === 0) {
+                    renewalStats.value = data.data;
+                    // 用企业实际的开关状态初始化磨砂/打码显示，而不是每次都默认隐藏——
+                    // 已经点过"开启功能"的企业，之后每次进来都应该直接显示完整信息
+                    if (data.data.renewal_enabled) renewalInfoRevealed.value = true;
+                }
             } catch (e) { /* 看板统计静默失败，不打扰主流程 */ }
+        }
+
+        // 客户自助开启续保提醒功能：既解除页面磨砂/打码，也会让后台真正开始推送到期提醒
+        async function enableRenewalFeature() {
+            try {
+                const resp = await authFetch('/api/renewal/enable', { method: 'POST' });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    renewalInfoRevealed.value = true;
+                } else {
+                    showMessage(data.msg || '开启失败', false);
+                }
+            } catch (e) {
+                showMessage('开启失败: ' + e.message, false);
+            }
         }
 
         async function loadRenewalList() {
@@ -8539,10 +8659,14 @@ const _app = createApp({
                     localStorage.setItem('user', JSON.stringify(currentUser.value));
                 }
             } catch (e) {}
+            // 续保到期提醒推送链接：?tab=renewal 直接跳转到续保管理系统页，不用手动点导航
+            if (new URLSearchParams(window.location.search).get('tab') === 'renewal') {
+                openRenewalTab();
+            }
             // 默认筛选今天（同步，无 IO）+ 同步触发统计数（与 loadRecords 并行）
             setDateShortcut('today');
                        // 并行加载所有初始化数据（任一失败不影响其他）
-            const _renewalNavRoles = ['super_admin','enterprise','employee'];
+            const _renewalNavRoles = ['super_admin', 'enterprise', 'employee'];
             await Promise.allSettled([
                 authFetch('/api/insurance/config/status').then(r => r.json()).then(d => { configStatus.value = d; }),
                 loadTargets(),
@@ -8633,6 +8757,7 @@ const _app = createApp({
             internalNotesVisible, internalNotesRecord, internalNotesList, internalNoteContent, internalNoteAttr,
             internalNoteSaving, recordReviewStatusFilter, attrOptions, attrLabel, attrColor, openInternalNotes, submitInternalNote,
             internalNoteQuickPhrases, appendInternalNotePhrase,
+            renewalInfoRevealed, maskPersonName, maskPlateNo, enableRenewalFeature,
             renewalStats, renewalBadgeCount, renewalTasks, renewalLoading, renewalFilter, renewalPagination, renewalSelectedIds,
             renewalAssigneesList, renewalScanning, renewalAllSelected, openRenewalTab, loadRenewalStats, loadRenewalList, gotoRenewalPage,
             toggleRenewalSelectAll, renewalDaysLeftClass, renewalDaysLeftText, renewalStatusStyle, renewalStatusLabel, renewalActionLabel,

@@ -1,0 +1,403 @@
+{% raw %}<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>使用手册</title>
+    <script src="/static/vue.global.prod.js"></script>
+    <link href="/static/tailwind.min.css" rel="stylesheet">
+    <script src="/static/quill.min.js"></script>
+    <link href="/static/quill.snow.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #c2410c;
+            --primary-light: #ea580c;
+            --primary-bg: #fff7ed;
+            --surface: #ffffff;
+            --border: #e7e0d8;
+            --text-primary: #1c1410;
+            --text-secondary: #57534e;
+            --text-muted: #a8a29e;
+        }
+        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        [v-cloak] { display: none; }
+        body { background: #faf8f5; margin: 0; }
+
+        .nav-header {
+            background: linear-gradient(135deg, #7c2d12 0%, #c2410c 50%, #ea580c 100%);
+            color: #fff;
+            position: sticky;
+            top: 0;
+            z-index: 30;
+            height: 56px;
+            box-sizing: border-box;
+        }
+        .layout {
+            display: flex;
+            max-width: 1280px;
+            margin: 0 auto;
+            min-height: calc(100vh - 56px);
+        }
+        .sidebar {
+            width: 260px;
+            flex-shrink: 0;
+            border-right: 1px solid var(--border);
+            background: var(--surface);
+            padding: 20px 12px;
+            position: sticky;
+            top: 56px;
+            align-self: flex-start;
+            max-height: calc(100vh - 56px);
+            overflow-y: auto;
+        }
+        .sidebar-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 9px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            margin-bottom: 2px;
+            user-select: none;
+        }
+        .sidebar-item:hover { background: var(--primary-bg); color: var(--primary); }
+        .sidebar-item.active { background: var(--primary-bg); color: var(--primary); font-weight: 600; }
+        .sidebar-item.top-level { font-weight: 600; }
+        .sidebar-children { overflow: hidden; }
+        .group-toggle { width: 16px; flex-shrink: 0; text-align: center; color: var(--text-muted); transition: transform .15s; font-size: 11px; }
+        .group-toggle.collapsed { transform: rotate(-90deg); }
+        .content-area {
+            flex: 1;
+            padding: 32px 48px;
+            min-width: 0;
+        }
+        .markdown-body h1 { font-size: 26px; font-weight: 700; margin: 0 0 16px; color: var(--text-primary); }
+        .markdown-body h2 { font-size: 20px; font-weight: 700; margin: 28px 0 12px; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+        .markdown-body h3 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; color: var(--text-primary); }
+        .markdown-body p { line-height: 1.75; color: var(--text-secondary); margin: 10px 0; }
+        .markdown-body ul, .markdown-body ol { padding-left: 22px; color: var(--text-secondary); line-height: 1.75; margin: 10px 0; }
+        .markdown-body li { margin: 4px 0; }
+        .markdown-body code { background: #f3f0eb; padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #b45309; }
+        .markdown-body pre { background: #1c1410; color: #f5f0eb; padding: 14px 16px; border-radius: 8px; overflow-x: auto; margin: 14px 0; }
+        .markdown-body pre code { background: none; color: inherit; padding: 0; }
+        .markdown-body a { color: var(--primary); text-decoration: underline; }
+        .markdown-body blockquote { border-left: 3px solid var(--primary-light); padding: 4px 16px; color: var(--text-muted); margin: 14px 0; }
+        .markdown-body table { border-collapse: collapse; margin: 14px 0; width: 100%; }
+        .markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: 8px 12px; font-size: 13px; text-align: left; }
+        .markdown-body th { background: var(--primary-bg); }
+        .markdown-body img { max-width: 100%; border-radius: 8px; display: block; margin: 8px 0; }
+
+        .btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; font-weight: 500; cursor: pointer; transition: all .15s; border: 1px solid transparent; }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: var(--primary-light); }
+        .btn-outline { background: #fff; border-color: var(--border); color: var(--text-secondary); }
+        .btn-outline:hover { background: var(--primary-bg); border-color: var(--primary-light); color: var(--primary); }
+
+        .section-drag { cursor: grab; color: var(--text-muted); }
+
+        /* 编辑区：改用 Quill 富文本编辑器，工具栏支持标题/加粗/颜色/列表/对齐/引用/代码块/链接/图片等 */
+        .quill-wrap { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #fff; }
+        .quill-wrap .ql-toolbar.ql-snow { border: none; border-bottom: 1px solid var(--border); background: #faf8f5; }
+        .quill-wrap .ql-container.ql-snow { border: none; font-family: inherit; font-size: 14px; }
+        .quill-wrap .ql-editor { min-height: 60vh; line-height: 1.75; color: var(--text-secondary); }
+        .quill-wrap .ql-editor h1 { font-size: 26px; font-weight: 700; color: var(--text-primary); }
+        .quill-wrap .ql-editor h2 { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+        .quill-wrap .ql-editor h3 { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+        .quill-wrap .ql-editor img { max-width: 100%; border-radius: 8px; }
+
+        @media (max-width: 768px) {
+            .layout { flex-direction: column; }
+            .sidebar { width: auto; border-right: none; border-bottom: 1px solid var(--border); position: static; max-height: none; overflow-y: visible; }
+            .content-area { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+<div id="app" v-cloak>
+    <div class="nav-header" style="padding:0 24px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <a href="/insurance" style="color:#fff;text-decoration:none;display:flex;align-items:center;gap:6px;font-size:14px;opacity:.9;">
+                <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                返回
+            </a>
+            <span style="font-size:15px;font-weight:600;">📖 使用手册</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+            <template v-if="isSuperAdmin">
+                <template v-if="!editMode">
+                    <button class="btn btn-outline" style="padding:6px 14px;font-size:13px;background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);" @click="enterEditMode">✎ 编辑</button>
+                </template>
+                <template v-else>
+                    <button class="btn btn-outline" style="padding:6px 14px;font-size:13px;background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);" @click="cancelEdit">取消</button>
+                    <button class="btn btn-primary" style="padding:6px 14px;font-size:13px;" :disabled="saving" @click="saveManual">{{ saving ? '保存中...' : '保存' }}</button>
+                </template>
+            </template>
+        </div>
+    </div>
+
+    <div class="layout">
+        <!-- 左侧目录：按标题里的编号(如"1."/"1.2")自动分组，顶层可折叠 -->
+        <div class="sidebar">
+            <template v-for="g in groupedSections" :key="g.header.id">
+                <div class="sidebar-item top-level" :class="{active: activeId === g.header.id}"
+                     @click="selectSection(g.header.id)">
+                    <span class="group-toggle" :class="{collapsed: isGroupCollapsed(g.header.id)}"
+                          v-if="g.children.length" @click.stop="toggleGroup(g.header.id)">▾</span>
+                    <span v-else style="width:16px;flex-shrink:0;"></span>
+                    <span style="flex:1;">{{ g.header.title || '(未命名章节)' }}</span>
+                    <template v-if="editMode">
+                        <button v-if="sectionIndex(g.header.id) > 0" class="section-drag" title="上移" @click.stop="moveSection(sectionIndex(g.header.id), -1)">↑</button>
+                        <button v-if="sectionIndex(g.header.id) < sections.length - 1" class="section-drag" title="下移" @click.stop="moveSection(sectionIndex(g.header.id), 1)">↓</button>
+                        <button style="color:#dc2626;" title="删除章节" @click.stop="removeSection(sectionIndex(g.header.id))">✕</button>
+                    </template>
+                </div>
+                <div v-if="g.children.length && !isGroupCollapsed(g.header.id)" class="sidebar-children">
+                    <div v-for="c in g.children" :key="c.id" class="sidebar-item" :class="{active: activeId === c.id}"
+                         style="padding-left:26px;" @click="selectSection(c.id)">
+                        <span style="flex:1;">{{ c.title || '(未命名章节)' }}</span>
+                        <template v-if="editMode">
+                            <button v-if="sectionIndex(c.id) > 0" class="section-drag" title="上移" @click.stop="moveSection(sectionIndex(c.id), -1)">↑</button>
+                            <button v-if="sectionIndex(c.id) < sections.length - 1" class="section-drag" title="下移" @click.stop="moveSection(sectionIndex(c.id), 1)">↓</button>
+                            <button style="color:#dc2626;" title="删除章节" @click.stop="removeSection(sectionIndex(c.id))">✕</button>
+                        </template>
+                    </div>
+                </div>
+            </template>
+            <button v-if="editMode" class="btn btn-outline" style="width:100%;justify-content:center;padding:8px;font-size:13px;margin-top:8px;" @click="addSection">+ 新增章节</button>
+        </div>
+
+        <!-- 右侧内容 -->
+        <div class="content-area">
+            <div v-if="!activeSection" style="color:var(--text-muted);text-align:center;padding:60px 0;">暂无内容</div>
+            <template v-else>
+                <template v-if="!editMode">
+                    <div class="markdown-body" v-html="activeSection.content"></div>
+                </template>
+                <template v-else>
+                    <input v-model="activeSection.title" placeholder="章节标题"
+                           style="width:100%;font-size:20px;font-weight:700;border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:12px;outline:none;">
+                    <!-- Quill 富文本编辑区：工具栏自带插入图片按钮，图片上传走后端接口 -->
+                    <div class="quill-wrap">
+                        <div ref="editorEl"></div>
+                    </div>
+                </template>
+            </template>
+        </div>
+    </div>
+</div>
+
+<script>
+function getToken() { return localStorage.getItem('token'); }
+function checkAuth() { if (!getToken()) { window.location.href = '/login'; return false; } return true; }
+async function authFetch(url, options = {}) {
+    if (!options.headers) options.headers = {};
+    options.headers['Authorization'] = 'Bearer ' + getToken();
+    if (!options.headers['Content-Type'] && !(options.body instanceof FormData)) {
+        options.headers['Content-Type'] = 'application/json';
+    }
+    const resp = await fetch(url, options);
+    if (resp.status === 401) { localStorage.removeItem('token'); localStorage.removeItem('user'); window.location.href = '/login'; throw new Error('未登录'); }
+    return resp;
+}
+if (!checkAuth()) throw new Error('redirect');
+
+const { createApp, ref, computed, onMounted, nextTick } = Vue;
+
+createApp({
+    setup() {
+        const currentUser = ref(null);
+        const isSuperAdmin = computed(() => currentUser.value && currentUser.value.role === 'super_admin');
+
+        const sections = ref([]);
+        const activeId = ref('');
+        const editMode = ref(false);
+        const saving = ref(false);
+        let sectionsBackup = null;
+
+        const activeSection = computed(() => sections.value.find(s => s.id === activeId.value) || null);
+
+        function _genId() {
+            return 's' + Math.random().toString(36).slice(2, 10);
+        }
+        function sectionIndex(id) {
+            return sections.value.findIndex(s => s.id === id);
+        }
+
+        // 目录分组：标题形如"1.2 xxx"(编号里有两段数字)的算子章节，归到最近一个
+        // 顶层章节(标题形如"1. xxx"，编号只有一段)下面，供左侧目录做折叠展示
+        const groupedSections = computed(() => {
+            const groups = [];
+            let current = null;
+            for (const s of sections.value) {
+                const isSub = /^\d+\.\d/.test((s.title || '').trim());
+                if (isSub && current) {
+                    current.children.push(s);
+                } else {
+                    current = { header: s, children: [] };
+                    groups.push(current);
+                }
+            }
+            return groups;
+        });
+        const collapsedGroups = ref({});
+        function isGroupCollapsed(id) { return !!collapsedGroups.value[id]; }
+        function toggleGroup(id) {
+            collapsedGroups.value = { ...collapsedGroups.value, [id]: !collapsedGroups.value[id] };
+        }
+
+        async function loadManual() {
+            try {
+                const resp = await authFetch('/api/insurance/manual');
+                const j = await resp.json();
+                if (j.code === 0) {
+                    sections.value = j.data.sections || [];
+                    if (sections.value.length) activeId.value = sections.value[0].id;
+                }
+            } catch (e) { console.error('加载使用手册失败', e); }
+        }
+
+        // Quill 富文本编辑器：切章节/进入编辑前把数据"读"进编辑器，输入时"写"回数据模型。
+        // editMode切换时 v-else 整块DOM会被销毁重建，所以 quill 实例也要跟着置空重新初始化。
+        const editorEl = ref(null);
+        let quill = null;
+        const TOOLBAR_OPTIONS = [
+            [{ header: [1, 2, 3, false] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ color: [] }, { background: [] }],
+            [{ list: 'ordered' }, { list: 'bullet' }],
+            [{ indent: '-1' }, { indent: '+1' }],
+            [{ align: [] }],
+            ['blockquote', 'code-block'],
+            ['link', 'image'],
+            ['clean'],
+        ];
+        function quillImageHandler() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/png,image/jpeg,image/gif,image/webp';
+            input.onchange = async () => {
+                const file = input.files && input.files[0];
+                if (!file || !quill) return;
+                const range = quill.getSelection(true) || { index: quill.getLength() };
+                try {
+                    const fd = new FormData();
+                    fd.append('file', file);
+                    const resp = await authFetch('/api/insurance/manual/upload-image', { method: 'POST', body: fd });
+                    const j = await resp.json();
+                    if (j.code === 0 && j.data && j.data.url) {
+                        quill.insertEmbed(range.index, 'image', j.data.url, 'user');
+                        quill.setSelection(range.index + 1);
+                    } else {
+                        alert(j.msg || '图片上传失败');
+                    }
+                } catch (err) {
+                    alert('图片上传失败: ' + err.message);
+                }
+            };
+            input.click();
+        }
+        function initQuill() {
+            if (quill || !editorEl.value) return;
+            quill = new Quill(editorEl.value, {
+                theme: 'snow',
+                modules: { toolbar: TOOLBAR_OPTIONS },
+            });
+            quill.getModule('toolbar').addHandler('image', quillImageHandler);
+            quill.on('text-change', () => {
+                if (activeSection.value) activeSection.value.content = quill.root.innerHTML;
+            });
+        }
+        function loadEditorFromModel() {
+            if (quill) quill.root.innerHTML = (activeSection.value && activeSection.value.content) || '';
+        }
+        function syncEditorToModel() {
+            if (quill && activeSection.value) activeSection.value.content = quill.root.innerHTML;
+        }
+
+        function selectSection(id) {
+            if (editMode.value) {
+                syncEditorToModel();
+                activeId.value = id;
+                nextTick(loadEditorFromModel);
+            } else {
+                activeId.value = id;
+            }
+        }
+
+        function enterEditMode() {
+            sectionsBackup = JSON.parse(JSON.stringify(sections.value));
+            editMode.value = true;
+            nextTick(() => { initQuill(); loadEditorFromModel(); });
+        }
+        function cancelEdit() {
+            sections.value = sectionsBackup || sections.value;
+            editMode.value = false;
+            quill = null;
+        }
+        function addSection() {
+            syncEditorToModel();
+            const s = { id: _genId(), title: '新章节', content: '' };
+            sections.value.push(s);
+            activeId.value = s.id;
+            nextTick(loadEditorFromModel);
+        }
+        function removeSection(idx) {
+            if (!confirm('确定删除这个章节？')) return;
+            const removingActive = sections.value[idx].id === activeId.value;
+            sections.value.splice(idx, 1);
+            if (removingActive) {
+                activeId.value = sections.value.length ? sections.value[0].id : '';
+                nextTick(loadEditorFromModel);
+            }
+        }
+        function moveSection(idx, dir) {
+            const target = idx + dir;
+            if (target < 0 || target >= sections.value.length) return;
+            const arr = sections.value;
+            [arr[idx], arr[target]] = [arr[target], arr[idx]];
+        }
+        async function saveManual() {
+            syncEditorToModel();
+            saving.value = true;
+            try {
+                const resp = await authFetch('/api/insurance/manual', {
+                    method: 'POST',
+                    body: JSON.stringify({ sections: sections.value }),
+                });
+                const j = await resp.json();
+                if (j.code === 0) {
+                    editMode.value = false;
+                    sectionsBackup = null;
+                    quill = null;
+                } else {
+                    alert(j.msg || '保存失败');
+                }
+            } catch (e) {
+                alert('保存失败: ' + e.message);
+            } finally {
+                saving.value = false;
+            }
+        }
+
+        onMounted(async () => {
+            try {
+                const meResp = await authFetch('/api/auth/me');
+                const meData = await meResp.json();
+                if (meData.code === 0 && meData.data) currentUser.value = meData.data;
+            } catch (e) {}
+            await loadManual();
+        });
+
+        return {
+            currentUser, isSuperAdmin, sections, activeId, activeSection, sectionIndex,
+            groupedSections, isGroupCollapsed, toggleGroup,
+            editMode, saving, selectSection, enterEditMode, cancelEdit, addSection, removeSection, moveSection, saveManual,
+            editorEl,
+        };
+    }
+}).mount('#app');
+</script>
+</body>
+</html>{% endraw %}

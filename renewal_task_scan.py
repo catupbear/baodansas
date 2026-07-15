@@ -39,8 +39,9 @@ EXPIRE_AFTER_DAYS = 30  # 到期后超过这么多天未成交/未流失，自�
 def _fetch_window_records(db, today):
     """
     查窗口内(今天-30, 今天+90)的保单记录，含企业/车牌/VIN等聚合所需字段。
-    只处理 enterprises.renewal_enabled=1 的企业——续保提醒功能按企业单独开关，
-    未开启的企业不参与扫描/推送（2026-07-14 加入，避免功能默认对所有企业生效）。
+    只处理 users.renewal_enabled=1 的账号跟单的保单——续保提醒功能按个人账号自助开启，
+    不是按企业；同企业下没开的员工，他跟单的保单不参与扫描/推送（2026-07-15 从企业级
+    改为账号级，几个人开就只影响这几个人自己的数据）。
     """
     conn = db.pool.connection()
     try:
@@ -51,12 +52,12 @@ def _fetch_window_records(db, today):
                    pf.policy_type, pf.end_date_iso, pf.total_premium
             FROM insurance_records r
             JOIN insurance_policy_fields pf ON r.id = pf.record_id
-            JOIN enterprises e ON e.id = r.enterprise_id
+            JOIN users u ON u.id = r.user_id
             WHERE r.deleted_at IS NULL
               AND r.status = 'done'
               AND r.doc_category = '保单'
               AND r.enterprise_id IS NOT NULL
-              AND e.renewal_enabled = 1
+              AND u.renewal_enabled = 1
               AND pf.end_date_iso IS NOT NULL
               AND pf.end_date_iso BETWEEN %s AND %s
             ORDER BY r.id DESC
@@ -193,7 +194,7 @@ def _detect_renewal_hints(db, enterprise_id_scope=None):
     return hint_count
 
 
-def sync_customer_task(db, plate_no, vin, enterprise_id):
+def sync_customer_task(db, plate_no, vin, enterprise_id, user_id=None):
     """
     单客户级实时同步（供"重新识别"/手动编辑字段等场景调用，不必等下一次全量扫描）。
     customer_key 取值与批量扫描一致：车牌优先，否则VIN(大写)。
@@ -213,10 +214,13 @@ def sync_customer_task(db, plate_no, vin, enterprise_id):
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        # 续保提醒按企业单独开关，未开启的企业不参与实时同步(与批量扫描的过滤口径保持一致)
-        cursor.execute("SELECT renewal_enabled FROM enterprises WHERE id = %s", (enterprise_id,))
-        _ent = cursor.fetchone()
-        if not _ent or not _ent.get("renewal_enabled"):
+        # 续保提醒按个人账号自助开关，不是按企业(与批量扫描的过滤口径保持一致)——触发这次
+        # 同步的那条记录如果没有绑定跟单人、或跟单人没开，不参与实时同步
+        if not user_id:
+            return
+        cursor.execute("SELECT renewal_enabled FROM users WHERE id = %s", (user_id,))
+        _u = cursor.fetchone()
+        if not _u or not _u.get("renewal_enabled"):
             return
         cursor.execute("""
             SELECT r.id AS record_id, r.enterprise_id, r.sender, r.sender_name,

@@ -391,7 +391,6 @@
                                 <button @click="openPlanModal(ent)" class="op-btn orange">开通</button>
                                 <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled?'amber':'green']">{{ ent.enabled?'禁用':'启用' }}</button>
                                 <button @click="toggleMerge(ent)" :class="['op-btn', ent.merge_by_plate?'orange on':'gray']">车牌合并{{ ent.merge_by_plate?'✓':'' }}</button>
-                                <button @click="toggleRenewalEnabled(ent)" :class="['op-btn', ent.renewal_enabled?'orange on':'gray']">续保提醒{{ ent.renewal_enabled?'✓':'' }}</button>
                                 <button @click="openSurveyModal(ent)" class="op-btn purple">信息收集</button>
                                 <button @click="confirmDelete(ent)" class="op-btn red">删除</button>
                             </div>
@@ -1090,25 +1089,6 @@ createApp({
             }
         }
 
-        async function toggleRenewalEnabled(ent) {
-            const nv = ent.renewal_enabled ? 0 : 1;
-            try {
-                const resp = await authFetch('/api/auth/enterprises/' + ent.id, {
-                    method: 'PUT',
-                    body: JSON.stringify({ renewal_enabled: nv }),
-                });
-                const data = await resp.json();
-                if (data.code === 0) {
-                    ent.renewal_enabled = nv;
-                    showToast((nv ? '已开启' : '已关闭') + '「' + ent.name + '」续保提醒功能');
-                } else {
-                    showToast(data.msg || '操作失败', 'error');
-                }
-            } catch (e) {
-                showToast('网络错误', 'error');
-            }
-        }
-
         function logout() { doLogout(); }
 
         // 进入某企业的人员/监控（三级目录：服务企业管理 > 企业 > 人员/监控）
@@ -1132,7 +1112,7 @@ createApp({
             openCreateModal, openEditModal, closeModal, submitForm,
             showPlanModal, planEditEnt, planForm, planFormError, planSubmitting, planCurrentExpiry,
             openPlanModal, closePlanModal, submitPlanForm,
-            toggleEnabled, toggleMerge, toggleRenewalEnabled, logout, toast, formatTime, gotoMembers, gotoMonitor,
+            toggleEnabled, toggleMerge, logout, toast, formatTime, gotoMembers, gotoMonitor,
             deleteTarget, deleting, confirmDelete, doDelete,
             showReportModal, reportTarget, reportRange, reportStart, reportEnd, reportSubmitting,
             reportLink, reportCopied, copyReportLink,

@@ -187,7 +187,7 @@ def _is_valid_person(val: str) -> bool:
     val_no_paren = re.sub(r'[（(][^）)]*[）)]$', '', val)
     # 含"(地名)"的企业名（如"中设(深圳)设备检验检测"）也视为公司名
     has_location_paren = bool(re.search(r'[\u4e00-\u9fff][（(][\u4e00-\u9fff]{2,4}[）)][\u4e00-\u9fff]', val))
-    if re.search(r'公司|集团|合伙|工厂|商行|服务行|经营行|贸易行|百货行|批发行|五金行|建材行|机电行|文具行|商贸|车行(?!驶)|车队|事务所|经营部|经营店|经销商|专营店|服务部|加工厂|养殖场|合作社|研究院|研究所|设计院|分院|医院|卫生院|学院|小学|中学|大学|幼儿园|学校|村民委员会|居民委员会|村委会|居委会|管理处|中心|个体工商户|协会|商会|学会|联合会|促进会|基金会', val) or val_no_paren.endswith(('店', '厂', '铺')) or has_location_paren:
+    if re.search(r'公司|集团|合伙|工厂|商行|服务行|经营行|贸易行|百货行|批发行|批发部|五金行|建材行|机电行|文具行|商贸|车行(?!驶)|车队|事务所|经营部|经营店|经销商|专营店|服务部|加工厂|养殖场|合作社|研究院|研究所|设计院|分院|医院|卫生院|学院|小学|中学|大学|幼儿园|学校|村民委员会|居民委员会|村委会|居委会|管理处|中心|个体工商户|协会|商会|学会|联合会|促进会|基金会', val) or val_no_paren.endswith(('店', '厂', '铺')) or has_location_paren:
         # 公司名允许长一些，但不能超过 30 字
         # 排除含动词/条款用语/保险术语的句子片段（如"向本公司提出的申请"）
         if re.search(r'提出|提供|负责|承担|向.*公司|本公司.*的|申请|告知|声明|附加.*险|附加.*费|损失费|保险费|约定|载明', val):
@@ -285,17 +285,24 @@ def _identify_company(text: str) -> Dict[str, str]:
     """
     result = {}
 
-    # 先处理公司名中可能存在的字间空格
-    company_text = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2',
-                          re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', text))
+    # 先处理公司名中可能存在的字间空格；但保司全称常以"xx公司"结尾、紧跟着的下一个
+    # 字段刚好是"公司地址/公司网址"标签时，两个"公司"中间的分隔空格不能被这条规则一起吃掉
+    # ——否则"xx支公司 公司地址：..."会被误粘成"xx支公司公司地址：..."，导致后面按空格
+    # 切分公司名称的正则失效，整个保司名称抽取为空（2026-07-14实测"阳光农业相互保险公司"案例）
+    company_text = re.sub(r'([\u4e00-\u9fff])\s+(?!公司(?:地址|网址))([\u4e00-\u9fff])', r'\1\2',
+                          re.sub(r'([\u4e00-\u9fff])\s+(?!公司(?:地址|网址))([\u4e00-\u9fff])', r'\1\2', text))
 
     # 方式1："公司名称："或"承保公司为："格式
     m = re.search(r"(?:公司名称|承保公司为?)[：:\s]*\n?\s*(.+?)(?:\s+公司(?:地址|网址)|\s{2,}|$)", company_text)
     if m:
         val = m.group(1).strip()
         if len(val) > 6:
-            val = re.sub(r'(公司|营业部|服务部|业务部|支公司).*', r'\1', val)
-            result["保险公司"] = val
+            val2 = re.sub(r'(公司|营业部|服务部|业务部|支公司).*', r'\1', val)
+            # 个别文档OCR把公司全称末尾的"司"字物理挪到了很远的地方(与地址等信息交错)，
+            # 导致这里截出来的名字缺最后一个字、不是以"公司/营业部/..."正常结尾——
+            # 这种情况宁可不用，交给方式2按已知保司名单兜底匹配，避免存下一个读不通的残缺名字
+            if val2.endswith(('公司', '营业部', '服务部', '业务部', '支公司')):
+                result["保险公司"] = val2
 
     # 方式2：遍历公司基础名称列表匹配
     if "保险公司" not in result:
@@ -1376,7 +1383,14 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
     if fields.get("保司公司名称"):
         name = fields["保司公司名称"]
         name = re.sub(r'\s*(?:邮政编码|邮编|邮\s*编)[：:\s]*\d+.*$', '', name)
-        name = re.sub(r'\s*(?:签单日期|服务热线|联系电话|电话|公司网址|公司主页|网址)[：:].*$', '', name)
+        # 部分保单加粗文字被OCR识别成每个字重复一遍(如"客服服务热线"被识别成"客客服服服服务务热热线线"，
+        # 与本文档标题"华华安安好好运运来来..."同一类问题)，导致下面这些关键词按原样匹配不到、
+        # 清理不掉、粘在公司名称后面。用"每个字可以出现1~2次"的容错写法兼容这种情况。
+        _dup_kw = '|'.join(
+            ''.join(f'{re.escape(_c)}{{1,2}}' for _c in _kw)
+            for _kw in ('签单日期', '客服服务热线', '服务热线', '客服', '联系电话', '电话', '公司网址', '公司主页', '网址')
+        )
+        name = re.sub(r'\s*(?:' + _dup_kw + r')[：:]{1,2}.*$', '', name)
         name = name.strip().rstrip('、，,')
         if name and len(name) >= 4:
             fields["保司公司名称"] = name
@@ -1818,11 +1832,11 @@ def _extract_insured_pingan(text: str, text_merged: str, fields: dict):
     # "被保 正式名称: 深圳市义奇和乐科技有限公 证件类型: ...\n险人 司\n信息 ..."
     # 需要从"正式名称:"到"证件类型"之间提取公司名，并拼接下一行的残余部分
     for i, line in enumerate(lines):
-        m = re.search(r"被保\s*正式名称[：:]\s*(.+?)(?:\s+证件类型)", line)
+        m = re.search(r"被保\s*(?:正式名称|姓\s*名)[：:]\s*(.+?)(?:\s+证件类型)", line)
         if m:
             val = m.group(1).strip()
-            # 如果公司名不完整（不以"公司/集团/商行/店"等结尾），尝试从下一行拼接
-            if val and not re.search(r'(?:公司|集团|商行|商贸|店|工厂|事务所)$', val):
+            # 如果公司名不完整（不以"公司/集团/商行/店/批发部"等结尾），尝试从下一行拼接
+            if val and not re.search(r'(?:公司|集团|商行|商贸|店|工厂|事务所|批发部)$', val):
                 for j in range(i + 1, min(i + 3, len(lines))):
                     next_line = lines[j].strip()
                     # 下一行开头可能有"险人"等干扰，提取第一个有意义的中文片段
@@ -1830,10 +1844,10 @@ def _extract_insured_pingan(text: str, text_merged: str, fields: dict):
                     for part in parts:
                         # 尝试拼接每个片段，看是否能组成完整公司名
                         candidate = val + part
-                        if re.search(r'(?:公司|集团|商行|商贸|店|工厂|事务所)$', candidate):
+                        if re.search(r'(?:公司|集团|商行|商贸|店|工厂|事务所|批发部)$', candidate):
                             val = candidate
                             break
-                    if re.search(r'(?:公司|集团|商行|商贸|店|工厂|事务所)$', val):
+                    if re.search(r'(?:公司|集团|商行|商贸|店|工厂|事务所|批发部)$', val):
                         break
             val = _clean_person_name(val)
             if _is_valid_person(val):
@@ -2495,6 +2509,15 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
                 fields["投保人"] = val
                 return
 
+    # 建工责任险等格式：表格标签"投保人名称"与公司名之间无任何分隔（无空格无冒号），
+    # 紧跟着的"联系电话"充当右边界（如"投保人名称湛江市恒实建筑工程有限公司联系电话1847..."）
+    m = re.search(r'投保人名称([\u4e00-\u9fff][\u4e00-\u9fff\w（()）)]*?(?:公司|集团|合伙))(?:联系电话|$)', text)
+    if m:
+        val = _clean_person_name(m.group(1))
+        if _is_valid_person(val):
+            fields["投保人"] = val
+            return
+
     # 华安等格式：表格标签"投保 名 称"或"投保人名称"后跟公司名（无冒号分隔）
     for src in [text_merged, text]:
         m = re.search(r'投保(?:人)?\s*名\s*称\s+([一-鿿][一-鿿\w（()）)]+)', src)
@@ -2878,7 +2901,7 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
     for p in [
         # 优先取整段（厂牌型号 → 下一个字段标签之前），修复值含内部空格被 \S+ 截断的情况：
         # 太平洋"厂牌型号 奔驰BENZ G500越野车 核定载客"，旧规则在空格处截成"奔驰BENZ"。
-        r"厂\s*牌\s*型\s*号[：:\s]+([^\n]{2,40}?)\s*(?:核\s*定\s*载|发\s*动\s*机|排\s*量|(?:使用|营业|营运)性质|机动车种类|识别代码|车架号|绝对免赔|初?次?登\s*记\s*日\s*期|VIN)",
+        r"厂\s*牌\s*型\s*号[：:\s]+([^\n]{2,40}?)\s*(?:核\s*定\s*载|发\s*动\s*机|排\s*量|(?:使用|营业|营运)性质|机动车种类|识别代码|车架号|绝对免赔|初?次?登\s*记\s*日\s*期|号\s*牌|车\s*牌|VIN)",
         # 厂牌型号值独占一行、后面直接换行（雷克萨斯LEXUS ES200轿车 / 保时捷PORSCHE TAYCAN纯电动轿车）
         r"厂\s*牌\s*型\s*号[：:\s]+([^\n]{2,40}?)\s*(?:\n|$)",
         r"厂\s*牌\s*型\s*号[：:\s]*(\S+)",

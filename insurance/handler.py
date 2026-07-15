@@ -24,13 +24,14 @@ from insurance.db import (
     get_insurance_record,
     save_insurance_record,
     set_insurance_config,
+    soft_delete_record,
     update_insurance_record,
 )
 from insurance.monitor_config_db import get_enabled_monitor_configs
 from insurance.field_mapping import apply_mapping
 from insurance.ocr_service import extract_text_from_pdf_bytes
 from insurance.policy_parser import parse_policy_text, parse_policy_text_multi, _find_policy_boundaries
-from core.notify import notify_error, notify_new_company
+from core.notify import notify_error, notify_new_company, notify_duplicate_policy
 
 logger = logging.getLogger(__name__)
 
@@ -479,6 +480,26 @@ class InsuranceHandler:
             except Exception as e:
                 logger.warning("配额检查失败，继续处理: %s", e)
 
+        # 3.5 二次保险：万一有其他并发路径(如手动补扫接口和启动补扫同时触发)绕过了启动锁，
+        # 这里再兜底查一次"这条消息是否已经有记录"，命中就直接跳过、不再重复创建
+        # （2026-07-15，配合main.py启动补拉/补扫的命名锁，双重防止重复记录）
+        try:
+            _seq_conn = self.db.pool.connection()
+            try:
+                _seq_cursor = _seq_conn.cursor(pymysql.cursors.DictCursor)
+                _seq_cursor.execute(
+                    "SELECT id FROM insurance_records WHERE msg_seq = %s AND policy_index = 1 LIMIT 1",
+                    (seq,),
+                )
+                _dup = _seq_cursor.fetchone()
+            finally:
+                _seq_conn.close()
+            if _dup:
+                logger.info("跳过重复处理: seq=%s 已存在记录 id=%s", seq, _dup["id"])
+                return
+        except Exception as e:
+            logger.warning("重复消息检查失败，继续处理: %s", e)
+
         # 4. 创建初始记录（状态: processing）
         initial_record = {
             "msg_seq": seq,
@@ -518,15 +539,22 @@ class InsuranceHandler:
                 existing_full = get_insurance_record(self.db, existing["id"])
                 # 用 msg_seq 区分"同一次发送被重复处理" vs "不同次发送(重发)"：
                 #  - 同一条消息(seq 相同)被重复拉取/处理 → 标记 duplicate 跳过，避免同一次发送重复入库；
-                #  - 不同次发送(seq 不同，含同一人不同时段重发、或不同人转发) → 复制识别结果，各留一条可查。
+                #  - 不同次发送(seq 不同，含同一人不同时段重发、或不同人转发) → 复制识别结果。
                 _same_msg = bool(existing_full and existing_full.get("msg_seq") and existing_full.get("msg_seq") == seq)
                 if existing_full and not _same_msg:
+                    _same_enterprise = (
+                        existing_full.get("enterprise_id") is not None
+                        and config_enterprise_id is not None
+                        and existing_full.get("enterprise_id") == config_enterprise_id
+                    )
                     logger.info(
-                        "[COPY] PDF重复(不同次发送, MD5=%s), 原记录id=%d(seq=%s,sender=%s), 当前record_id=%d(seq=%s,sender=%s), 复制识别结果",
+                        "[COPY] PDF重复(不同次发送, MD5=%s), 原记录id=%d(seq=%s,sender=%s), 当前record_id=%d(seq=%s,sender=%s), 同企业=%s, 复制识别结果",
                         file_md5, existing["id"], existing_full.get("msg_seq"), existing_full.get("sender"),
-                        record_id, seq, sender,
+                        record_id, seq, sender, _same_enterprise,
                     )
                     self._copy_recognition_result(record_id, existing_full, file_md5, config_user_id, config_enterprise_id)
+                    if _same_enterprise:
+                        self._replace_duplicate_within_enterprise(existing_full, file_md5, record_id, sender_name, room_name)
                     return
                 # 同一条消息重复处理，标记为 duplicate
                 logger.info(
@@ -1285,6 +1313,62 @@ class InsuranceHandler:
             logger.info("反向互补后重新同步钉钉: record_id=%d", record_id)
         except Exception as e:
             logger.warning("反向互补后重新同步钉钉失败: record_id=%d, %s", record_id, e)
+
+    # ------------------------------------------------------------------ #
+    # 重复 PDF 不同发送人：复制识别结果
+    # ------------------------------------------------------------------ #
+
+    def _replace_duplicate_within_enterprise(self, existing_full: dict, file_md5: str,
+                                              new_record_id: int, new_sender_name: str, new_room_name: str):
+        """
+        同企业内不同员工(或同员工)重复发送同一份保单：只保留最后发送的这一条。
+        软删除旧记录(含同一份PDF的所有兄弟保单记录)，并发钉钉群通知。
+        """
+        try:
+            old_msg_seq = existing_full.get("msg_seq")
+            old_ids = [existing_full["id"]]
+            if file_md5 and old_msg_seq:
+                conn = self.db.pool.connection()
+                try:
+                    cursor = conn.cursor(pymysql.cursors.DictCursor)
+                    cursor.execute(
+                        "SELECT id FROM insurance_records WHERE file_md5 = %s AND msg_seq = %s AND deleted_at IS NULL",
+                        (file_md5, old_msg_seq),
+                    )
+                    old_ids = [r["id"] for r in cursor.fetchall()] or old_ids
+                finally:
+                    conn.close()
+
+            for oid in old_ids:
+                soft_delete_record(self.db, oid)
+            logger.info(
+                "[REPLACE] 同企业重复保单，已软删除旧记录 %s，保留最新记录 record_id=%d",
+                old_ids, new_record_id,
+            )
+
+            enterprise_name = ""
+            eid = existing_full.get("enterprise_id")
+            if eid:
+                try:
+                    from auth.db import get_enterprise_by_id
+                    ent = get_enterprise_by_id(self.db, eid)
+                    enterprise_name = (ent or {}).get("name", "")
+                except Exception:
+                    pass
+
+            notify_duplicate_policy(
+                enterprise_name,
+                existing_full.get("filename", ""),
+                existing_full.get("sender_name") or existing_full.get("sender", ""),
+                existing_full.get("room_name", ""),
+                new_sender_name or "",
+                new_room_name or "",
+                old_ids,
+                new_record_id,
+            )
+        except Exception:
+            logger.exception("同企业重复保单替换处理失败, existing_id=%s, new_record_id=%d",
+                              existing_full.get("id"), new_record_id)
 
     # ------------------------------------------------------------------ #
     # 重复 PDF 不同发送人：复制识别结果

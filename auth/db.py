@@ -169,7 +169,7 @@ def update_user(db, user_id: int, data: dict):
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        allowed = {"name", "role", "parent_id", "enabled", "is_sales", "sales_type", "activated"}
+        allowed = {"name", "role", "parent_id", "enabled", "is_sales", "sales_type", "activated", "renewal_enabled"}
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
             return
@@ -722,6 +722,27 @@ def init_is_sales_column(db):
                 logger.info("users 表添加列 %s 完成", col)
             except Exception:
                 pass
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def init_users_renewal_column(db):
+    """为 users 表添加 renewal_enabled 字段（幂等迁移）。
+    续保提醒功能改为按个人账号自助开启（不是按企业），每个员工/企业管理员账号
+    自己点"开启功能"才会：(1) 自己的续保管理系统页面解除磨砂/打码 (2) 自己跟单的保单
+    才会参与续保任务扫描和到期提醒推送。互不影响，同企业下没开的员工不受影响。"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "ALTER TABLE users ADD COLUMN renewal_enabled TINYINT NOT NULL DEFAULT 0 "
+                "COMMENT '是否已自助开启续保提醒功能(按账号，非按企业)'"
+            )
+            logger.info("users 表添加列 renewal_enabled 完成")
+        except Exception:
+            pass  # 列已存在，跳过
         conn.commit()
     finally:
         conn.close()

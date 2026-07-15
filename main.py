@@ -26,7 +26,7 @@ from insurance.api import insurance_bp, init_insurance_api
 from insurance.renewal_db import init_renewal_tables
 from insurance.renewal_api import renewal_bp, init_renewal_api
 from quote.handler import QuoteHandler
-from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table, init_sms_verification_table, init_referral_columns, init_is_sales_column, init_enterprise_plan_column, init_wallet_tables, init_activated_column
+from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table, init_sms_verification_table, init_referral_columns, init_is_sales_column, init_enterprise_plan_column, init_wallet_tables, init_activated_column, init_users_renewal_column
 from auth.jwt_utils import init_jwt
 from auth.decorators import init_auth_decorators
 from auth.api import auth_bp, init_auth_api
@@ -101,6 +101,7 @@ def create_app(config: dict) -> Flask:
     init_is_sales_column(db)
     init_activated_column(db)
     init_enterprise_plan_column(db)
+    init_users_renewal_column(db)
     init_wallet_tables(db)
 
     # 初始化短信模块
@@ -174,6 +175,11 @@ def create_app(config: dict) -> Flask:
         # 邀请有礼功能暂时下线：重定向到首页（恢复时改回 render_template("invite.html")）
         return redirect("/insurance")
         # return render_template("invite.html")
+
+    # 使用手册（左侧目录的文档风格页面，内部超管可编辑）
+    @app.route("/manual")
+    def manual_page():
+        return render_template("manual.html")
 
     # 监控配置管理
     @app.route("/monitor-config")
@@ -413,31 +419,54 @@ def create_app(config: dict) -> Flask:
         }
 
         # 启动时在后台补拉中断期间的消息 + 补扫漏掉的保单 PDF
+        #
+        # gunicorn 是多worker(-w 2)，每个worker进程都会各自完整跑一遍app初始化，包括这段启动
+        # 补拉/补扫逻辑；如果不加锁，两个worker会同时各自补扫到"同一条漏处理的消息"、同时把它
+        # 排进各自worker独立的内存队列处理，二者都还没来得及看到对方刚创建的记录就都通过了
+        # MD5去重检查，最终各自落库一条'done'记录——这就是历史上大量重复保单记录(3500+组、
+        # 5700+条)的根因。用 MySQL 命名锁保证同一时刻只有一个worker真正执行补拉/补扫，
+        # 抢不到锁的worker直接跳过，从根上避免这个竞态（2026-07-15）。
         def _startup_catch_up():
+            lock_conn = db.pool.connection()
+            got_lock = False
             try:
-                # 主企业补拉
-                logger.info("[车物家] 启动补拉：开始拉取中断期间的历史消息...")
-                fetcher.fetch_new_messages()
-                logger.info("[车物家] 启动补拉完成，开始补扫漏掉的保单 PDF...")
-                fetcher.rescan_missed_insurance(lookback_days=5)
-                logger.info("[车物家] 启动补扫完成")
-
-                # 额外企业补拉 + 补扫
-                for ef in extra_fetchers:
-                    logger.info("[%s] 启动补拉：开始拉取中断期间的历史消息...", ef["name"])
-                    ef["fetcher"].fetch_new_messages()
-                    logger.info("[%s] 启动补拉完成，开始补扫漏掉的保单 PDF...", ef["name"])
-                    ef["fetcher"].rescan_missed_insurance(lookback_days=5)
-                    logger.info("[%s] 启动补扫完成", ef["name"])
-
-                # 预热报价绑定列表缓存
+                lock_cursor = lock_conn.cursor()
+                lock_cursor.execute("SELECT GET_LOCK('wxbot_startup_catchup', 0)")
+                got_lock = lock_cursor.fetchone()[0] == 1
+                if not got_lock:
+                    logger.info("启动补拉/补扫：其他worker进程正在执行，本进程跳过（避免多worker重复补扫产生重复记录）")
+                    return
                 try:
-                    bindings = quote_handler.binding_service.get_bindings()
-                    logger.info("报价模块就绪：绑定列表 %d 条", len(bindings))
+                    # 主企业补拉
+                    logger.info("[车物家] 启动补拉：开始拉取中断期间的历史消息...")
+                    fetcher.fetch_new_messages()
+                    logger.info("[车物家] 启动补拉完成，开始补扫漏掉的保单 PDF...")
+                    fetcher.rescan_missed_insurance(lookback_days=5)
+                    logger.info("[车物家] 启动补扫完成")
+
+                    # 额外企业补拉 + 补扫
+                    for ef in extra_fetchers:
+                        logger.info("[%s] 启动补拉：开始拉取中断期间的历史消息...", ef["name"])
+                        ef["fetcher"].fetch_new_messages()
+                        logger.info("[%s] 启动补拉完成，开始补扫漏掉的保单 PDF...", ef["name"])
+                        ef["fetcher"].rescan_missed_insurance(lookback_days=5)
+                        logger.info("[%s] 启动补扫完成", ef["name"])
+
+                    # 预热报价绑定列表缓存
+                    try:
+                        bindings = quote_handler.binding_service.get_bindings()
+                        logger.info("报价模块就绪：绑定列表 %d 条", len(bindings))
+                    except Exception as e:
+                        logger.warning("报价绑定列表预热失败: %s", e)
                 except Exception as e:
-                    logger.warning("报价绑定列表预热失败: %s", e)
-            except Exception as e:
-                logger.error("启动补拉/补扫失败: %s", e)
+                    logger.error("启动补拉/补扫失败: %s", e)
+            finally:
+                try:
+                    if got_lock:
+                        lock_cursor.execute("SELECT RELEASE_LOCK('wxbot_startup_catchup')")
+                except Exception:
+                    pass
+                lock_conn.close()
 
         threading.Thread(target=_startup_catch_up, daemon=True).start()
 

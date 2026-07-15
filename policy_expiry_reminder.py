@@ -19,6 +19,8 @@ from storage.db import Database  # noqa: E402
 from core.contacts import ContactsManager  # noqa: E402
 from insurance.db import get_insurance_config  # noqa: E402
 from insurance.flowbot_notify import send_flowbot_group_message  # noqa: E402
+from auth.jwt_utils import generate_token, init_jwt  # noqa: E402
+from auth.db import get_user_by_id  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,6 +33,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 REMIND_WINDOW_DAYS = 30
+BASE_URL = "https://wxbot.wuhuxiche.com"
 
 
 def ensure_reminder_log_table(db):
@@ -57,19 +60,24 @@ def fetch_expiring_records(db):
     查未来 REMIND_WINDOW_DAYS 天内(含今天)到期、今天还没提醒过的保单。
     同一 policy_no 只保留 record_id 最大(最新，覆盖"重新识别"产生的旧记录)的一条；
     空 policy_no 各自独立，不参与去重（与台账去重口径一致）。
+    只推送 users.renewal_enabled=1 的账号跟单(insurance_records.user_id)的保单——续保提醒
+    功能改为客户按个人账号自助开启（不是按企业），跟单人自己没点"开启功能"之前，他跟单的
+    保单不推送到期提醒；同企业下其他已开启的员工不受影响（2026-07-15 从企业级改为账号级）。
     """
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute("""
-            SELECT r.id AS record_id, r.roomid, r.sender, r.sender_name,
+            SELECT r.id AS record_id, r.roomid, r.sender, r.sender_name, r.user_id,
                    pf.plate_no, pf.policy_no, pf.policy_type, pf.end_date_iso
             FROM insurance_records r
             JOIN insurance_policy_fields pf ON r.id = pf.record_id
+            JOIN users u ON u.id = r.user_id
             WHERE r.deleted_at IS NULL
               AND r.status = 'done'
               AND r.doc_category = '保单'
               AND r.roomid IS NOT NULL AND r.roomid != ''
+              AND u.renewal_enabled = 1
               AND pf.end_date_iso IS NOT NULL
               AND pf.end_date_iso BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
               AND NOT EXISTS (
@@ -111,30 +119,73 @@ def mark_reminded(db, record_ids):
         conn.close()
 
 
-def _resolve_sender_name(contacts, sender, stored_name):
-    """优先用落库快照昵称；快照为空或等于原始ID(未解析成功)时才实时兜底查一次。"""
-    if stored_name and stored_name != sender:
-        return stored_name
-    if not contacts:
-        return stored_name or sender
-    try:
-        resolved = contacts.get_name(sender) or ""
-        return resolved or stored_name or sender
-    except Exception as e:
-        logger.warning("实时解析发送人昵称失败 sender=%s: %s", sender, e)
-        return stored_name or sender
-
-
-def main():
-    cfg = load_config("/home/wxbot/config.yaml")
-    db = Database(cfg["mysql"], main_corpid=cfg["wecom"]["corpid"])
-    contacts = ContactsManager(
+def _build_contacts_instances(cfg, db):
+    """
+    构造「主企业 + 全部额外企业」的 ContactsManager 实例列表，与 main.py 里
+    Flask app 启动时的路由方式保持一致。群/保单可能属于任意一个企业的监控群，
+    只用主企业通讯录会导致跨企业的群/发送人解析失败（退化成原始ID）。
+    """
+    main_contacts = ContactsManager(
         corpid=cfg["wecom"]["corpid"],
         secret=cfg["wecom"]["secret"],
         db=db,
         external_secret=cfg["wecom"].get("external_secret", ""),
         enterprise_name="车物家",
     )
+    instances = [main_contacts]
+    for cb in cfg.get("extra_callbacks", []):
+        cb_corpid = cb.get("corpid", cfg["wecom"]["corpid"])
+        cb_secret = cb.get("secret", "")
+        if not cb_secret or cb_corpid == cfg["wecom"]["corpid"]:
+            continue
+        extra_contacts = ContactsManager(
+            corpid=cb_corpid,
+            secret=cb_secret,
+            db=db,
+            external_secret=cb.get("external_secret", ""),
+            enterprise_name=cb.get("name", cb_corpid),
+        )
+        extra_contacts.set_cache_prefix(cb_corpid)
+        extra_contacts.set_fallback_contacts(main_contacts)
+        instances.append(extra_contacts)
+    return instances
+
+
+def _resolve_room_name(instances, roomid):
+    """依次尝试每个企业的通讯录解析群名，取第一个成功且不等于roomid本身的结果。"""
+    for c in instances:
+        try:
+            name = c.get_room_name(roomid) or ""
+        except Exception as e:
+            logger.warning("解析群名失败(企业=%s) roomid=%s: %s", c.enterprise_name, roomid, e)
+            continue
+        # get_room_name 解析失败时会把 roomid 原样返回兜底，这种"退化值"不能当真群名用
+        if name and name != roomid:
+            return name
+    return ""
+
+
+def _resolve_sender_name(instances, sender, stored_name):
+    """优先用落库快照昵称；快照为空或等于原始ID(未解析成功)时依次尝试各企业通讯录兜底。"""
+    if stored_name and stored_name != sender:
+        return stored_name
+    for c in instances:
+        try:
+            resolved = c.get_name(sender) or ""
+        except Exception as e:
+            logger.warning("实时解析发送人昵称失败(企业=%s) sender=%s: %s", c.enterprise_name, sender, e)
+            continue
+        if resolved and resolved != sender:
+            return resolved
+    return stored_name or sender
+
+
+def main():
+    cfg = load_config("/home/wxbot/config.yaml")
+    db = Database(cfg["mysql"], main_corpid=cfg["wecom"]["corpid"])
+    jwt_secret = cfg.get("jwt_secret", "") or get_insurance_config(db, "jwt_secret", "")
+    init_jwt(jwt_secret)
+    contacts_instances = _build_contacts_instances(cfg, db)
 
     ensure_reminder_log_table(db)
 
@@ -156,11 +207,7 @@ def main():
 
     total_sent_record_ids = []
     for roomid, items in by_room.items():
-        try:
-            room_name = contacts.get_room_name(roomid) or ""
-        except Exception as e:
-            logger.warning("解析群名失败 roomid=%s: %s", roomid, e)
-            room_name = ""
+        room_name = _resolve_room_name(contacts_instances, roomid)
         if not room_name:
             logger.warning("群名解析为空，跳过 roomid=%s（%d条待提醒）", roomid, len(items))
             continue
@@ -174,7 +221,7 @@ def main():
         at_names = []
         for sender, plist in by_sender.items():
             plist.sort(key=lambda x: x["end_date_iso"])
-            sender_name = _resolve_sender_name(contacts, sender, plist[0].get("sender_name") or "")
+            sender_name = _resolve_sender_name(contacts_instances, sender, plist[0].get("sender_name") or "")
             at_names.append(sender_name)
             lines.append(f"@{sender_name}")
             for r in plist:
@@ -184,6 +231,16 @@ def main():
                 end_str = r["end_date_iso"].strftime("%Y-%m-%d")
                 due_str = "今天到期" if days_left == 0 else f"还{days_left}天到期"
                 lines.append(f"{plate} {ptype} {due_str}({end_str})")
+            # 免登录直达链接：带这个跟单人自己账号的登录token，点开直接进续保管理系统页面
+            _uid = plist[0].get("user_id")
+            if _uid:
+                try:
+                    _u = get_user_by_id(db, _uid)
+                    if _u:
+                        _tk = generate_token(_uid, _u.get("phone", ""), _u.get("role", ""))
+                        lines.append(f"👉 点击查看续保详情：{BASE_URL}/insurance?tab=renewal&token={_tk}")
+                except Exception as e:
+                    logger.warning("生成续保免登录链接失败, sender=%s: %s", sender, e)
             lines.append("")
 
         message = "\n".join(lines).rstrip()

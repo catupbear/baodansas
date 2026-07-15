@@ -128,12 +128,46 @@ def _apply_explicit_assignee_filter(assignee_ids, explicit_assignee):
 # 看板统计
 # ============================================================
 
+def _get_renewal_enabled(user_id) -> bool:
+    """查该账号是否已自助开启续保提醒功能（users.renewal_enabled，按个人账号，非按企业）"""
+    if not user_id:
+        return False
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT renewal_enabled FROM users WHERE id = %s", (user_id,))
+        row = cursor.fetchone()
+        return bool(row and row.get("renewal_enabled"))
+    finally:
+        conn.close()
+
+
 @renewal_bp.route("/stats", methods=["GET"])
 @login_required
 def get_stats():
     enterprise_id, assignee_ids = _resolve_scope()
     stats = rdb.get_stats(_db, enterprise_id=enterprise_id, assignee_ids=assignee_ids)
+    # 内部超管始终视为已开启（不受自助开关限制）；其他角色按「自己账号」的开关状态返回——
+    # 同企业下不同员工各自独立，一个人开了不影响其他人，供前端决定页面默认是否磨砂/打码、
+    # "开启功能"按钮要不要显示
+    stats["renewal_enabled"] = True if g.current_user["role"] == ROLE_SUPER_ADMIN else _get_renewal_enabled(g.current_user["user_id"])
     return jsonify({"code": 0, "data": stats})
+
+
+@renewal_bp.route("/enable", methods=["POST"])
+@login_required
+def enable_renewal():
+    """
+    客户自助开启续保提醒功能：按账号(user_id)开启，不是按企业——点击"开启功能"后，只有
+    这个账号自己的页面解除磨砂/打码，也只有这个账号跟单(insurance_records.user_id)的保单
+    才会参与续保任务扫描(renewal_task_scan.py)和到期提醒推送(policy_expiry_reminder.py)，
+    同企业下没开的其他员工不受影响。
+    """
+    if g.current_user["role"] == ROLE_SUPER_ADMIN:
+        return jsonify({"code": 0, "msg": "内部超管无需开启"})
+    from auth.db import update_user
+    update_user(_db, g.current_user["user_id"], {"renewal_enabled": 1})
+    return jsonify({"code": 0, "msg": "已开启"})
 
 
 # ============================================================

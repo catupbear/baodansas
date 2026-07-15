@@ -5,6 +5,7 @@
 
 import json
 import logging
+from datetime import datetime
 
 import pymysql
 import pymysql.cursors
@@ -40,6 +41,28 @@ _CN_DATE_TO_DATE = (
 
 # JSON 字段列表，保存时自动序列化，读取时由调用方自行处理
 _JSON_FIELDS = {"parsed_fields", "mapped_fields", "display_fields", "manual_fields"}
+
+# 部分企业不需要系统自动识别某些字段，只允许人工手动填写；
+# 已被标记为手动修改过的字段(manual_fields)不受影响，保留用户填写的值。
+# key: enterprise_id
+DISABLED_AUTO_PARSED_FIELDS_BY_ENTERPRISE = {
+    24: {"业务员", "销售渠道"},  # 文十七科技有限公司：业务员/出单渠道 只允许手动填写
+}
+# 对应上面 parsed_fields 字段映射后的输出列名（"业务员"映射后仍叫"业务员"，"销售渠道"映射后叫"出单渠道"）
+DISABLED_AUTO_OUTPUT_FIELDS_BY_ENTERPRISE = {
+    24: {"业务员", "出单渠道"},
+}
+
+
+def _strip_disabled_fields(d: dict, disabled_keys, manual_fields) -> dict:
+    """剔除企业配置里不需要系统自动识别的字段，但保留用户手动修改过的字段值。"""
+    if not disabled_keys or not isinstance(d, dict):
+        return d
+    manual_set = set(manual_fields) if manual_fields else set()
+    to_strip = set(disabled_keys) - manual_set
+    if not to_strip:
+        return d
+    return {k: v for k, v in d.items() if k not in to_strip}
 
 # ------------------------------------------------------------------ #
 # 保单字段关联表：OCR 字段名 → 数据库列名 映射
@@ -375,6 +398,7 @@ def init_insurance_tables(db):
             ("page_range", "VARCHAR(255) DEFAULT '' COMMENT '提取数据来源页码范围（如1-2）'"),
             ("ocr_text", "LONGTEXT COMMENT 'OCR识别原文（pdfplumber+ocr模式下保存OCR文本）'"),
             ("deleted_at", "DATETIME DEFAULT NULL COMMENT '软删除时间（非NULL表示已删除，列表/统计默认过滤）'"),
+            ("first_recognized_at", "DATETIME DEFAULT NULL COMMENT '首次识别成功完成时间（重新识别不覆盖，updated_at会被重新识别刷新）'"),
         ]
         for col_name, col_def in new_columns:
             try:
@@ -989,6 +1013,18 @@ def save_insurance_record(db, record: dict) -> int:
     """
     data = dict(record)
 
+    # 按企业配置剔除不需要系统自动识别的字段（如文十七的 业务员/出单渠道），新记录尚无手动字段
+    _eid0 = data.get("enterprise_id")
+    _disabled_pf0 = DISABLED_AUTO_PARSED_FIELDS_BY_ENTERPRISE.get(_eid0)
+    _disabled_out0 = DISABLED_AUTO_OUTPUT_FIELDS_BY_ENTERPRISE.get(_eid0)
+    if _disabled_pf0 or _disabled_out0:
+        if isinstance(data.get("parsed_fields"), dict):
+            data["parsed_fields"] = _strip_disabled_fields(data["parsed_fields"], _disabled_pf0, [])
+        if isinstance(data.get("mapped_fields"), dict):
+            data["mapped_fields"] = _strip_disabled_fields(data["mapped_fields"], _disabled_out0, [])
+        if isinstance(data.get("display_fields"), dict):
+            data["display_fields"] = _strip_disabled_fields(data["display_fields"], _disabled_out0, [])
+
     # 自动填充 company_short
     if "company_short" not in data or not data["company_short"]:
         cs = _extract_company_short(data)
@@ -1011,6 +1047,11 @@ def save_insurance_record(db, record: dict) -> int:
     )
     data["is_abnormal"] = 1 if abnormal else 0
     data["hint"] = hint
+
+    # 首次识别完成时间：仅在插入时状态已经是done才落（如"手动上传"一次性写入的场景）；
+    # 正常流程是先插入processing、再由update_insurance_record补done，走下面COALESCE分支
+    if data.get("status") == "done" and not data.get("first_recognized_at"):
+        data["first_recognized_at"] = datetime.now()
 
     # 自动计算 display_fields（映射后的展示字段）
     if isinstance(pf, dict) and pf:
@@ -1060,6 +1101,37 @@ def update_insurance_record(db, record_id: int, updates: dict):
     updates 中若包含 dict/list 类型的值，自动 json.dumps 序列化。
     updated_at 由 MySQL ON UPDATE CURRENT_TIMESTAMP 自动维护。
     """
+    # 按企业配置剔除不需要系统自动识别的字段（如文十七的 业务员/出单渠道），
+    # 已手动修改过的字段(manual_fields)不受影响，保留用户填写的值。
+    if "parsed_fields" in updates or "mapped_fields" in updates or "display_fields" in updates:
+        _conn0 = db.pool.connection()
+        try:
+            _c0 = _conn0.cursor(pymysql.cursors.DictCursor)
+            _c0.execute("SELECT enterprise_id, manual_fields FROM insurance_records WHERE id = %s", (record_id,))
+            _row0 = _c0.fetchone() or {}
+        finally:
+            _conn0.close()
+        _eid1 = updates.get("enterprise_id", _row0.get("enterprise_id"))
+        _manual_raw1 = _row0.get("manual_fields")
+        if isinstance(_manual_raw1, str):
+            try:
+                _manual_fields1 = json.loads(_manual_raw1) if _manual_raw1 else []
+            except (TypeError, json.JSONDecodeError):
+                _manual_fields1 = []
+        else:
+            _manual_fields1 = _manual_raw1 or []
+
+        _disabled_pf1 = DISABLED_AUTO_PARSED_FIELDS_BY_ENTERPRISE.get(_eid1)
+        _disabled_out1 = DISABLED_AUTO_OUTPUT_FIELDS_BY_ENTERPRISE.get(_eid1)
+        if _disabled_pf1 or _disabled_out1:
+            updates = dict(updates)
+            if "parsed_fields" in updates and isinstance(updates["parsed_fields"], dict):
+                updates["parsed_fields"] = _strip_disabled_fields(updates["parsed_fields"], _disabled_pf1, _manual_fields1)
+            if "mapped_fields" in updates and isinstance(updates["mapped_fields"], dict):
+                updates["mapped_fields"] = _strip_disabled_fields(updates["mapped_fields"], _disabled_out1, _manual_fields1)
+            if "display_fields" in updates and isinstance(updates["display_fields"], dict):
+                updates["display_fields"] = _strip_disabled_fields(updates["display_fields"], _disabled_out1, _manual_fields1)
+
     data = {}
     for k, v in updates.items():
         if isinstance(v, (dict, list)):
@@ -1123,6 +1195,11 @@ def update_insurance_record(db, record_id: int, updates: dict):
             set_clause = ", ".join([f"{k} = %s" for k in data.keys()])
             values = list(data.values()) + [record_id]
 
+        if data.get("status") == "done":
+            # COALESCE：仅当当前值为NULL(从未识别成功过)才写入，重新识别不会覆盖首次识别时间
+            set_clause += ", first_recognized_at = COALESCE(first_recognized_at, %s)"
+            values.insert(-1, datetime.now())
+
         cursor.execute(
             f"UPDATE insurance_records SET {set_clause} WHERE id = %s",
             values
@@ -1157,23 +1234,25 @@ def update_insurance_record(db, record_id: int, updates: dict):
         # import insurance.db，而 renewal_task_scan.py 顶层又 import main，模块级 import 会互相卡死。
         if _synced_plate_vin_ent is not None:
             _sync_ent_id = None
+            _sync_user_id = None
             try:
-                cursor.execute("SELECT enterprise_id FROM insurance_records WHERE id=%s", (record_id,))
+                cursor.execute("SELECT enterprise_id, user_id FROM insurance_records WHERE id=%s", (record_id,))
                 _ent_row = cursor.fetchone()
                 _sync_ent_id = _ent_row["enterprise_id"] if _ent_row else None
+                _sync_user_id = _ent_row["user_id"] if _ent_row else None
             except Exception as e:
                 logger.warning("查询企业ID失败(续保任务同步前置), record_id=%d: %s", record_id, e)
             if _sync_ent_id:
-                def _bg_sync_renewal_task(_plate, _vin, _ent_id, _rid):
+                def _bg_sync_renewal_task(_plate, _vin, _ent_id, _uid, _rid):
                     try:
                         import renewal_task_scan
-                        renewal_task_scan.sync_customer_task(db, _plate, _vin, _ent_id)
+                        renewal_task_scan.sync_customer_task(db, _plate, _vin, _ent_id, _uid)
                     except Exception as e:
                         logger.warning("实时同步续保任务失败, record_id=%d: %s", _rid, e)
                 import threading as _threading
                 _threading.Thread(
                     target=_bg_sync_renewal_task,
-                    args=(_synced_plate_vin_ent[0], _synced_plate_vin_ent[1], _sync_ent_id, record_id),
+                    args=(_synced_plate_vin_ent[0], _synced_plate_vin_ent[1], _sync_ent_id, _sync_user_id, record_id),
                     daemon=True,
                 ).start()
     finally:
@@ -1784,7 +1863,7 @@ def query_insurance_records(
                 "r2.dingtalk_synced, r2.status, r2.source, r2.created_at, r2.updated_at, "
                 "r2.company_short, r2.is_abnormal, r2.hint, r2.display_fields, r2.manual_fields, "
                 "r2.abnormal_override_reason, r2.user_id, r2.file_md5, r2.error_message, "
-                "r2.enterprise_id, "
+                "r2.enterprise_id, r2.first_recognized_at, "
                 "pf3.owner AS _pf_owner"
             )
             cursor.execute(
