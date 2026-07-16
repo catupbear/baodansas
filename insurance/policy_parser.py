@@ -548,9 +548,10 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
     _extract_policy_no(text, fields, company_short, policy_type)
 
     # ===== 投保确认码 =====
-    m = re.search(r"(?:投保)?确认码[：:\s]*(\S+)", text)
+    # OCR 偶尔在确认码中间插入一个空格（如"V 0201HNIC..."），容忍一处空格后拼回
+    m = re.search(r"(?:投保)?确认码[：:\s]*([A-Za-z0-9]+(?:[^\S\n][A-Za-z0-9]{2,})?)", text)
     if m:
-        fields["投保确认码"] = m.group(1)
+        fields["投保确认码"] = re.sub(r'\s+', '', m.group(1))
 
     # ===== 人员信息（投保人先于被保险人，因为部分被保人逻辑依赖投保人） =====
     _extract_proposer(text, text_merged, fields, company_short)
@@ -628,7 +629,14 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
     # ===== 其他 =====
     m = re.search(r"争议解决方式[：:\s]*(\S+)", text)
     if m:
-        fields["争议解决方式"] = m.group(1)
+        _val = m.group(1)
+        # 仅当结果被截成孤零零1个汉字时（如"诉 讼"被截成"诉"），才尝试往后拼一个字补全——
+        # 有些保司这里写的是"依法向人民法院起诉"这类完整长句，不能动，只处理这一种截断模式
+        if len(_val) == 1 and re.match(r'[一-鿿]', _val):
+            _m2 = re.search(re.escape(_val) + r"[^\S\n]([一-鿿])(?:\s|$)", text)
+            if _m2:
+                _val = _val + _m2.group(1)
+        fields["争议解决方式"] = _val
 
     # 匹配"制单："或"制单人："，排除"制单时间"
     # 制单人：按行匹配，排除"监制"等干扰
@@ -636,6 +644,12 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
         m = re.search(r"制单(?:人)?(?!时间)[：:][^\S\n]*(\S+?)(?:\s|$)", _line)
         if m:
             _val = m.group(1).lstrip("：:")
+            # 姓名被OCR拆成"姓 名"两段时（如"钟 雅婷"）拼回——仅当结果孤零零1个汉字才处理，
+            # 平安等保司这里填的是"HPIPW-00925"这类系统单据编号，不是姓名，不能被这条误伤
+            if _val and len(_val) == 1 and re.match(r'[一-鿿]', _val):
+                _m2 = re.search(re.escape(_val) + r"[^\S\n]([一-鿿]+)", _line)
+                if _m2:
+                    _val = _val + _m2.group(1)
             if _val and _val not in ("：", ":") and "监制" not in _val:
                 fields["制单人"] = _val
                 break
@@ -3610,9 +3624,11 @@ def _extract_tax(text: str, fields: dict):
     # 处理OCR将"车船税"拆到多行的情况（如"车\n船 合计...元）\n税"）
     # 提取"车"开头到"税"结束的区域，合并为单行后追加到 tax_text 供正则匹配
     # [￥¥Y] 兼容OCR将¥识别为Y的情况
-    m_tax_block = re.search(r"车\n.*?船\s*合计.*?[（(]\s*[￥¥Y][：:\s]*([\d,.]+)\s*(?:元)?[)）].*?\n\s*税", tax_text, re.DOTALL)
+    # OCR 偶尔在金额小数点前后插入一个空格（如"300. 00"或"0 .00"），数字模式两侧都容忍
+    _NUM = r"[\d,]+\s*\.\s*\d+|[\d,]+"
+    m_tax_block = re.search(r"车\n.*?船\s*合计.*?[（(]\s*[￥¥Y][：:\s]*(" + _NUM + r")\s*(?:元)?[)）].*?\n\s*税", tax_text, re.DOTALL)
     if m_tax_block:
-        val = m_tax_block.group(1).strip().replace(",", "")
+        val = re.sub(r'\s+', '', m_tax_block.group(1)).replace(",", "")
         try:
             amt = float(val)
             if amt >= 0:
@@ -3624,18 +3640,18 @@ def _extract_tax(text: str, fields: dict):
     tax_text_clean = re.sub(r'保险费[+＋及]车船税合计.*', '', tax_text)
     for p in [
         # 车船税...合计...（￥/Y：XXX 元）— Y兼容OCR将¥识别为Y
-        r"车\s*船\s*税[\s\S]*?合计.*?[（(]\s*[￥¥Y][：:\s]*([\d,.]+)\s*(?:元)?[)）]",
-        r"车\s*船\s*税[\s\S]*?合计.*?([\d,.]+)\s*元",
+        r"车\s*船\s*税[\s\S]*?合计.*?[（(]\s*[￥¥Y][：:\s]*(" + _NUM + r")\s*(?:元)?[)）]",
+        r"车\s*船\s*税[\s\S]*?合计.*?(" + _NUM + r")\s*元",
         # 平安格式：合计(人民币大写)：...( ￥ XXX 元)（排除"保险费合计"）
-        r"(?<!保险费)合计\s*[（(]人民币大写[)）][：:\s]*.*?[（(\s]+[￥¥Y][：:\s]*([\d,.]+)\s*元",
+        r"(?<!保险费)合计\s*[（(]人民币大写[)）][：:\s]*.*?[（(\s]+[￥¥Y][：:\s]*(" + _NUM + r")\s*元",
         # 车船税...合计...￥/Y（可能跨行）：金额
-        r"车\s*船\s*税[\s\S]*?合计[^￥¥Y]*?[￥¥Y]\s*[：:\s]*\n?\s*([\d,.]+)",
+        r"车\s*船\s*税[\s\S]*?合计[^￥¥Y]*?[￥¥Y]\s*[：:\s]*\n?\s*(" + _NUM + r")",
         # 兜底：当年应缴
-        r"当年应缴\s*[（(\s]*[￥¥Y]?[：:\s]*([\d,.]+)\s*(?:元)?",
+        r"当年应缴\s*[（(\s]*[￥¥Y]?[：:\s]*(" + _NUM + r")\s*(?:元)?",
     ]:
         m = re.search(p, tax_text_clean)
         if m:
-            val = m.group(1).strip().replace(",", "")
+            val = re.sub(r'\s+', '', m.group(1)).replace(",", "")
             try:
                 amt = float(val)
                 if amt >= 0:
