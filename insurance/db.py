@@ -520,8 +520,9 @@ def init_insurance_tables(db):
                 """)
                 if bc.rowcount:
                     logger.info("回填 company_short %d 条", bc.rowcount)
+                backfill_conn.commit()
             except Exception:
-                pass
+                backfill_conn.rollback()
 
             # 回填 is_abnormal
             try:
@@ -560,7 +561,9 @@ def init_insurance_tables(db):
                         updated += 1
                 if updated:
                     logger.info("回填 is_abnormal %d 条", updated)
+                backfill_conn.commit()
             except Exception:
+                backfill_conn.rollback()
                 logger.exception("回填 is_abnormal 失败")
 
             # 反向修正：已标记异常的记录按当前模板重新计算
@@ -608,7 +611,9 @@ def init_insurance_tables(db):
                         )
                 if reverted:
                     logger.info("反向修正 is_abnormal 1→0 %d 条（模板不再要求该字段）", reverted)
+                backfill_conn.commit()
             except Exception:
+                backfill_conn.rollback()
                 logger.exception("反向修正 is_abnormal 失败")
 
             # 修正已标记正常但 is_abnormal 仍为 1 的历史数据
@@ -623,7 +628,9 @@ def init_insurance_tables(db):
                 fixed = bc.rowcount
                 if fixed:
                     logger.info("修正已标记正常但 is_abnormal=1 的记录 %d 条", fixed)
+                backfill_conn.commit()
             except Exception:
+                backfill_conn.rollback()
                 logger.exception("修正 abnormal_override 失败")
 
             # 回填 display_fields
@@ -652,7 +659,9 @@ def init_insurance_tables(db):
                     backfilled += 1
                 if backfilled:
                     logger.info("回填 display_fields %d 条", backfilled)
+                backfill_conn.commit()
             except Exception:
+                backfill_conn.rollback()
                 logger.exception("回填 display_fields 失败")
 
             # 回填 display_fields 中缺少的车主字段
@@ -668,7 +677,9 @@ def init_insurance_tables(db):
                 """)
                 if bc.rowcount:
                     logger.info("回填 display_fields 车主字段 %d 条", bc.rowcount)
+                backfill_conn.commit()
             except Exception:
+                backfill_conn.rollback()
                 logger.exception("回填 display_fields 车主字段失败")
 
             # 回填 insurance_policy_fields
@@ -697,10 +708,11 @@ def init_insurance_tables(db):
                         logger.warning("回填 policy_fields 失败, record_id=%s: %s", rid, e)
                 if backfilled_pf:
                     logger.info("回填 insurance_policy_fields %d 条", backfilled_pf)
+                backfill_conn.commit()
             except Exception:
+                backfill_conn.rollback()
                 logger.exception("回填 insurance_policy_fields 失败")
 
-            backfill_conn.commit()
             logger.info("保单数据回填完成")
         except Exception:
             logger.exception("保单数据回填异常")
