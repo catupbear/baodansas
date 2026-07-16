@@ -259,15 +259,14 @@ function getToken() { return localStorage.getItem('token'); }
 function checkAuth() { if (!getToken()) { window.location.href = '/login'; return false; } return true; }
 async function authFetch(url, options = {}) {
     if (!options.headers) options.headers = {};
-    options.headers['Authorization'] = 'Bearer ' + getToken();
+    const token = getToken();
+    if (token) options.headers['Authorization'] = 'Bearer ' + token;
     if (!options.headers['Content-Type'] && !(options.body instanceof FormData)) {
         options.headers['Content-Type'] = 'application/json';
     }
-    const resp = await fetch(url, options);
-    if (resp.status === 401) { localStorage.removeItem('token'); localStorage.removeItem('user'); window.location.href = '/login'; throw new Error('未登录'); }
-    return resp;
+    return fetch(url, options);
 }
-if (!checkAuth()) throw new Error('redirect');
+// 使用手册允许未登录访问（编辑相关功能已经用 isSuperAdmin 单独控制显示/隐藏，未登录看不到编辑入口）
 
 const { createApp, ref, computed, onMounted, nextTick } = Vue;
 

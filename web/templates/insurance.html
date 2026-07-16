@@ -450,7 +450,7 @@
                     💎 购买套餐
                 </button>
                 <!-- 使用手册（暂时只对内部超管可见，客户端隐藏） -->
-                <a v-if="isSuperAdmin" href="/manual"
+                <a v-if="isSuperAdmin" href="/help"
                    class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 12px;font-size:12px;text-decoration:none;"
                    title="使用手册">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -623,7 +623,7 @@
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;color:#b45309;font-weight:700;border:none;background:#fffbeb;cursor:pointer;margin-bottom:3px;">
                     💎 购买套餐
                 </button>
-                <a v-if="isSuperAdmin" href="/manual" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">📖 使用手册</a>
+                <a v-if="isSuperAdmin" href="/help" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">📖 使用手册</a>
                 <a v-if="!notActivated" href="/insurance/settings" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">系统设置</a>
                 <a v-if="currentUser && currentUser.role==='super_admin'" href="/admin/customers" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">客户管理</a>
                 <button @click="profileVisible=true;loadQuota();mobileMenuOpen=false"

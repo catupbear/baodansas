@@ -230,6 +230,9 @@ def _require_login():
         return
     if request.path == "/api/insurance/report-feedback":
         return
+    # 使用手册查看不需要登录(公开给潜在客户/未注册用户看)，编辑/传图仍需登录+内部超管(各自接口内部再判断)
+    if request.path == "/api/insurance/manual" and request.method == "GET":
+        return
 
     auth_header = request.headers.get("Authorization", "")
     token = auth_header[7:] if auth_header.startswith("Bearer ") else request.args.get("token")

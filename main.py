@@ -179,7 +179,7 @@ def create_app(config: dict) -> Flask:
         # return render_template("invite.html")
 
     # 使用手册（左侧目录的文档风格页面，内部超管可编辑）
-    @app.route("/manual")
+    @app.route("/help")
     def manual_page():
         return render_template("manual.html")
 
