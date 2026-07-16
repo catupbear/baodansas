@@ -3317,6 +3317,14 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
                         break
                 break
     if "车主" not in fields:
+        # 国任等提示语句格式："本保单项下投保人为【何卫】，行驶证车主为【广东捷利信设备维修
+        # 有限公司】"，用全角方括号包裹值，不是常见的"标签：值"结构
+        m = re.search(r"行驶证车主为[【\[]([^】\]]{2,30})[】\]]", text)
+        if m:
+            val = _clean_person_name(m.group(1))
+            if _is_valid_person(val):
+                fields["车主"] = val
+    if "车主" not in fields:
         for p in [
             r"(?:行驶证)?车主(?:\s*名称)?[：:\s]+(\S+?)(?:\s|$|投保人)",
             r"车主\s+(\S+?)(?:\s|$)",
