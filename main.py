@@ -128,6 +128,10 @@ def create_app(config: dict) -> Flask:
     init_api(db, contacts=contacts, cos_storage=cos_storage)
     app.register_blueprint(api_bp)
 
+    # 初始化统一群信息表（数据由独立进程 task_group_sync.py 维护，web 只读）
+    from storage.group_db import init_group_table
+    init_group_table(db)
+
     # 初始化保单识别模块
     init_insurance_tables(db)
     init_monitor_config_table(db)

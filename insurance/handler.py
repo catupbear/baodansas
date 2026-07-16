@@ -432,6 +432,14 @@ class InsuranceHandler:
                 sender_name = self.contacts.get_name(sender) or ""
             except Exception as e:
                 logger.warning("获取发送人姓名失败: %s", e)
+        # 群名优先查统一群信息表（task_group_sync 独立任务维护，命中则无 API 调用）
+        if roomid:
+            try:
+                from storage.group_db import get_group_name_map
+                room_name = get_group_name_map(self.db, [roomid]).get(roomid, "")
+            except Exception as e:
+                logger.warning("查询统一群信息表失败: %s", e)
+        if not room_name and self.contacts:
             try:
                 room_name = self.contacts.get_room_name(roomid) or ""
             except Exception as e:

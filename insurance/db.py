@@ -1893,8 +1893,12 @@ def query_insurance_records(
         if id_rows:
             ids = [r["id"] for r in id_rows]
             placeholders = ",".join(["%s"] * len(ids))
+            # 群名以统一群信息表 wecom_groups 为准（群改名后历史记录自动显示新名），
+            # 未同步到的用入库时固化的 room_name 兜底
             select_cols = (
-                "r2.id, r2.roomid, r2.room_name, r2.sender, r2.sender_name, "
+                "r2.id, r2.roomid, "
+                "COALESCE(NULLIF(g.name, ''), r2.room_name) AS room_name, "
+                "r2.sender, r2.sender_name, "
                 "r2.filename, r2.cos_url, r2.ocr_engine, r2.doc_category, r2.confidence, "
                 "r2.dingtalk_synced, r2.status, r2.source, r2.created_at, r2.updated_at, "
                 "r2.company_short, r2.is_abnormal, r2.hint, r2.display_fields, r2.manual_fields, "
@@ -1905,6 +1909,7 @@ def query_insurance_records(
             cursor.execute(
                 f"SELECT {select_cols} FROM insurance_records r2 "
                 f"LEFT JOIN insurance_policy_fields pf3 ON r2.id = pf3.record_id "
+                f"LEFT JOIN wecom_groups g ON g.roomid = r2.roomid "
                 f"WHERE r2.id IN ({placeholders}) ORDER BY {final_order}",
                 ids
             )

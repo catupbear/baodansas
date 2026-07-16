@@ -3240,8 +3240,8 @@ def reload_ocr():
 def get_rooms():
     """
     获取可监控的对象列表（群聊 + 私聊联系人）。
-    先用 LEFT JOIN contacts_cache 快速查出已缓存的名称，
-    再对未缓存的项补调通讯录 API 并写入缓存（下次就快了）。
+    群名以统一群信息表 wecom_groups 为权威来源（task_group_sync 独立任务维护），
+    过渡期回退 contacts_cache 旧缓存；不再现场调企微 API（接口毫秒级返回）。
     返回: {"rooms": [...], "users": [...]}
     """
     try:
@@ -3249,13 +3249,15 @@ def get_rooms():
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-            # 群聊列表
+            # 群聊列表：wecom_groups 优先，contacts_cache 兜底
             cursor.execute("""
-                SELECT m.roomid AS id, c.name AS cached_name
+                SELECT m.roomid AS id,
+                       COALESCE(NULLIF(g.name, ''), NULLIF(NULLIF(c.name, '__unresolvable__'), '')) AS cached_name
                 FROM (
                     SELECT DISTINCT roomid FROM messages
                     WHERE roomid IS NOT NULL AND roomid != ''
                 ) m
+                LEFT JOIN wecom_groups g ON g.roomid = m.roomid
                 LEFT JOIN contacts_cache c ON c.id = m.roomid
                 ORDER BY m.roomid
             """)
@@ -3275,19 +3277,12 @@ def get_rooms():
         finally:
             conn.close()
 
-        # 对未缓存的项补调通讯录 API（会自动写入缓存）
-        rooms = []
-        for r in room_rows:
-            name = r["cached_name"]
-            # 过滤不可解析标记
-            if name == "__unresolvable__":
-                name = None
-            if not name and _contacts:
-                try:
-                    name = _contacts.get_room_name(r["id"])
-                except Exception:
-                    pass
-            rooms.append({"id": r["id"], "name": name or r["id"], "type": "room"})
+        # 群名已在 SQL 里从 wecom_groups/contacts_cache 取好，都没有的显示 roomid
+        # （由 task_group_sync 独立任务负责解析，这里不再现场调企微 API）
+        rooms = [
+            {"id": r["id"], "name": r["cached_name"] or r["id"], "type": "room"}
+            for r in room_rows
+        ]
 
         users = []
         for u in user_rows:
@@ -3340,8 +3335,18 @@ def get_monitored_rooms():
                 uname = u.get("name") if isinstance(u, dict) else None
                 if uid:
                     users[uid] = uname or users.get(uid) or uid
-        # 配置里多数只存 id，用 contacts_cache 补真实群名/人名
-        ids = list(rooms.keys()) + list(users.keys())
+        # 群名以统一群信息表 wecom_groups 为准（task_group_sync 维护，群改名会自动更新）；
+        # 配置里固化的旧 name 仅在 wecom_groups 没有时作兜底
+        if rooms:
+            try:
+                from storage.group_db import get_group_name_map
+                gm = get_group_name_map(_db, list(rooms.keys()))
+                for rid, gname in gm.items():
+                    rooms[rid] = gname
+            except Exception:
+                logger.warning("查询统一群信息表失败，群名使用配置内固化值", exc_info=True)
+        # 人名（及 wecom_groups 还没解析到的群）继续用 contacts_cache 补
+        ids = [rid for rid in rooms if rooms[rid] == rid] + list(users.keys())
         if ids:
             conn = _db.pool.connection()
             try:
