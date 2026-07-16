@@ -2384,7 +2384,7 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
 
     # 安盛天平格式："姓名：何洪坤；身份证号"
     # 排除"联系人姓名"等非被保险人标签
-    m = re.search(r"(?<!联系人)(?<!联系)(?<!经办人)姓名[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:[；;]|身份证|\s)", text)
+    m = re.search(r"(?<!联系人)(?<!联系)(?<!经办人)(?<!代理人)姓名[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:[；;]|身份证|\s)", text)
     if m:
         val = _clean_person_name(m.group(1))
         if _is_valid_person(val):
