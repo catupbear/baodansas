@@ -164,8 +164,9 @@
                     <svg style="width:15px;height:15px;flex-shrink:0;" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
                     内部管理界面
                 </span>
-                <a href="/insurance" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">保单台账</a>
-                <a href="/admin/enterprises" class="hidden sm:inline text-sm text-orange-600 font-medium">服务企业管理</a>
+                <a href="/insurance" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">首页（台账记录）</a>
+                <a href="/admin/customers" class="hidden sm:inline text-sm text-gray-500 hover:text-orange-600">客户管理</a>
+                <a href="/admin/enterprises" class="hidden sm:inline text-sm text-orange-600 font-medium">客户系统配置</a>
             </div>
             <div class="flex items-center space-x-4">
                 <div class="hidden sm:flex items-center space-x-4">
@@ -183,8 +184,9 @@
         </nav>
         <!-- 移动端菜单面板 -->
         <div v-if="mobileMenuOpen" class="sm:hidden bg-white border-b border-gray-200 px-4 py-3 space-y-2">
-            <a href="/insurance" class="block text-sm text-gray-600 py-2">保单台账</a>
-            <a href="/admin/enterprises" class="block text-sm text-gray-600 py-2">服务企业管理</a>
+            <a href="/insurance" class="block text-sm text-gray-600 py-2">首页（台账记录）</a>
+            <a href="/admin/customers" class="block text-sm text-gray-600 py-2">客户管理</a>
+            <a href="/admin/enterprises" class="block text-sm text-gray-600 py-2">客户系统配置</a>
             <hr class="border-gray-100">
             <div class="flex items-center justify-between py-2">
                 <span class="text-sm text-gray-500">{{ currentUser.name || currentUser.phone }}</span>
@@ -208,14 +210,7 @@
                     </div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center;">
-                    <a href="/admin/users?role=super_admin" class="btn btn-outline" style="font-size:13px;color:#7c3aed;border-color:#c4b5fd;text-decoration:none;">内部账号</a>
-                    <a href="/admin/users?enterprise_id=__none__" class="btn btn-outline" style="font-size:13px;color:#374151;border-color:#e7e0d8;text-decoration:none;">未分组账号</a>
-                    <button @click="openCreateModal" class="btn btn-primary">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                        </svg>
-                        添加企业
-                    </button>
+                    <a href="/admin/customers" class="btn btn-outline" style="font-size:13px;color:#374151;border-color:#e7e0d8;text-decoration:none;">← 返回客户管理</a>
                 </div>
             </div>
 
@@ -235,8 +230,7 @@
                                 <th style="min-width:110px;text-align:center;">本月识别量</th>
                                 <th style="min-width:105px;text-align:center;">人员管理</th>
                                 <th style="min-width:105px;text-align:center;">监控设置</th>
-                                <th style="min-width:60px;">推荐人</th>
-                                <th style="min-width:50px;">状态</th>
+                                                                <th style="min-width:50px;">状态</th>
                                 <th style="min-width:90px;">创建时间</th>
                                 <th style="min-width:150px;">操作</th>
                             </tr>
@@ -329,13 +323,6 @@
                                     </div>
                                 </td>
 
-                                <!-- 推荐人 -->
-                                <td style="font-size:12px;color:#57534e;">
-                                    <span v-if="ent.referrer_name">{{ ent.referrer_name }}</span>
-                                    <button v-else @click="openSetReferrer(ent)" style="font-size:11px;color:#f97316;background:none;border:1px dashed #fed7aa;border-radius:4px;padding:2px 6px;cursor:pointer;">设置</button>
-                                    <button v-if="ent.referrer_name" @click="openSetReferrer(ent)" style="margin-left:4px;font-size:11px;color:#9ca3af;background:none;border:none;cursor:pointer;">改</button>
-                                </td>
-
                                 <!-- 状态 -->
                                 <td>
                                     <span class="badge" :class="ent.enabled ? 'badge-green' : 'badge-gray'">
@@ -354,7 +341,7 @@
                                         <button @click="openPlanModal(ent)" class="op-btn orange">开通</button>
                                         <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled ? 'amber' : 'green']">{{ ent.enabled ? '禁用' : '启用' }}</button>
                                         <button @click="toggleMerge(ent)" :class="['op-btn', ent.merge_by_plate ? 'orange on' : 'gray']" title="开启后该企业识别记录默认按车牌合并显示">车牌合并{{ ent.merge_by_plate ? '✓' : '' }}</button>
-                                        <button @click="openSurveyModal(ent)" class="op-btn purple">信息收集</button>
+                                        
                                         <button @click="confirmDelete(ent)" class="op-btn red">删除</button>
                                     </div>
                                 </td>
@@ -381,7 +368,6 @@
                                 <div class="ec-item"><div class="k">本月识别</div><div class="vv">{{ ent.plan_type ? (ent.monthly_pdf_usage || 0) + ' 次' : '暂未开通套餐' }}</div></div>
                                 <div class="ec-item"><div class="k">状态</div><div class="vv"><span :style="{color: ent.enabled?'#059669':'#dc2626'}">{{ ent.enabled?'启用':'禁用' }}</span></div></div>
                                 <div class="ec-item"><div class="k">人员 / 群</div><div class="vv">{{ ent.member_count||0 }} 人 · {{ ent.monitor_count||0 }} 群</div></div>
-                                <div class="ec-item"><div class="k">推荐人</div><div class="vv">{{ ent.referrer_name || '—' }}</div></div>
                             </div>
                             <div class="ec-ops">
                                 <button @click="openEditModal(ent)" class="op-btn gray">编辑</button>
@@ -391,7 +377,7 @@
                                 <button @click="openPlanModal(ent)" class="op-btn orange">开通</button>
                                 <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled?'amber':'green']">{{ ent.enabled?'禁用':'启用' }}</button>
                                 <button @click="toggleMerge(ent)" :class="['op-btn', ent.merge_by_plate?'orange on':'gray']">车牌合并{{ ent.merge_by_plate?'✓':'' }}</button>
-                                <button @click="openSurveyModal(ent)" class="op-btn purple">信息收集</button>
+                                
                                 <button @click="confirmDelete(ent)" class="op-btn red">删除</button>
                             </div>
                         </div>
@@ -1102,6 +1088,10 @@ createApp({
         onMounted(() => {
             if (checkAuth()) {
                 ready.value = true;
+                const _params = new URLSearchParams(window.location.search);
+                const _presetSearch = _params.get('search');
+                if (_presetSearch) entSearch.value = _presetSearch;
+                if (_params.get('create') === '1') openCreateModal();
                 fetchEnterprises();
             }
         });

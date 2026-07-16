@@ -16,10 +16,10 @@
             --surface: #ffffff;
             --border: #e7e0d8;
             --text-primary: #1c1410;
-            --text-secondary: #57534e;
+            --text-secondary: #44403c;
             --text-muted: #a8a29e;
         }
-        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; box-sizing: border-box; }
         [v-cloak] { display: none; }
         body { background: #faf8f5; margin: 0; }
 
@@ -34,27 +34,36 @@
         }
         .layout {
             display: flex;
-            max-width: 1280px;
+            max-width: 1320px;
             margin: 0 auto;
             min-height: calc(100vh - 56px);
         }
         .sidebar {
-            width: 260px;
+            width: 272px;
             flex-shrink: 0;
             border-right: 1px solid var(--border);
             background: var(--surface);
-            padding: 20px 12px;
+            padding: 18px 12px;
             position: sticky;
             top: 56px;
             align-self: flex-start;
             max-height: calc(100vh - 56px);
             overflow-y: auto;
         }
+        .search-box { position: relative; margin-bottom: 14px; padding: 0 2px; }
+        .search-box svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--text-muted); pointer-events: none; }
+        .search-input {
+            width: 100%; height: 34px; padding: 0 10px 0 32px;
+            border: 1px solid var(--border); border-radius: 8px;
+            font-size: 13px; outline: none; background: #faf8f5;
+            transition: border-color .15s, background .15s;
+        }
+        .search-input:focus { border-color: var(--primary-light); background: #fff; }
         .sidebar-item {
             display: flex;
             align-items: center;
-            gap: 6px;
-            padding: 9px 12px;
+            gap: 7px;
+            padding: 9px 10px;
             border-radius: 8px;
             font-size: 14px;
             color: var(--text-secondary);
@@ -65,29 +74,55 @@
         .sidebar-item:hover { background: var(--primary-bg); color: var(--primary); }
         .sidebar-item.active { background: var(--primary-bg); color: var(--primary); font-weight: 600; }
         .sidebar-item.top-level { font-weight: 600; }
+        .sidebar-icon { font-size: 15px; flex-shrink: 0; width: 18px; text-align: center; }
         .sidebar-children { overflow: hidden; }
         .group-toggle { width: 16px; flex-shrink: 0; text-align: center; color: var(--text-muted); transition: transform .15s; font-size: 11px; }
         .group-toggle.collapsed { transform: rotate(-90deg); }
+        .no-result { padding: 30px 12px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
         .content-area {
             flex: 1;
-            padding: 32px 48px;
+            padding: 30px 52px 60px;
             min-width: 0;
+            max-width: 860px;
         }
-        .markdown-body h1 { font-size: 26px; font-weight: 700; margin: 0 0 16px; color: var(--text-primary); }
-        .markdown-body h2 { font-size: 20px; font-weight: 700; margin: 28px 0 12px; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-        .markdown-body h3 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; color: var(--text-primary); }
-        .markdown-body p { line-height: 1.75; color: var(--text-secondary); margin: 10px 0; }
-        .markdown-body ul, .markdown-body ol { padding-left: 22px; color: var(--text-secondary); line-height: 1.75; margin: 10px 0; }
-        .markdown-body li { margin: 4px 0; }
+        .breadcrumb { font-size: 13px; color: var(--text-muted); margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
+        .breadcrumb .sep { color: #d6d0c8; }
+        .breadcrumb .current { color: var(--text-secondary); font-weight: 500; }
+
+        .markdown-body h1 { font-size: 26px; font-weight: 700; margin: 0 0 18px; color: var(--text-primary); letter-spacing: -0.01em; }
+        .markdown-body h2 { font-size: 19px; font-weight: 700; margin: 32px 0 14px; color: var(--text-primary); padding-bottom: 9px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+        .markdown-body h3 { font-size: 15.5px; font-weight: 600; margin: 22px 0 8px; color: var(--text-primary); }
+        .markdown-body p { line-height: 1.8; color: var(--text-secondary); margin: 12px 0; font-size: 14.5px; }
+        .markdown-body ul, .markdown-body ol { padding-left: 22px; color: var(--text-secondary); line-height: 1.8; margin: 12px 0; font-size: 14.5px; }
+        .markdown-body li { margin: 5px 0; }
+        .markdown-body li::marker { color: var(--primary-light); }
         .markdown-body code { background: #f3f0eb; padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #b45309; }
         .markdown-body pre { background: #1c1410; color: #f5f0eb; padding: 14px 16px; border-radius: 8px; overflow-x: auto; margin: 14px 0; }
         .markdown-body pre code { background: none; color: inherit; padding: 0; }
         .markdown-body a { color: var(--primary); text-decoration: underline; }
         .markdown-body blockquote { border-left: 3px solid var(--primary-light); padding: 4px 16px; color: var(--text-muted); margin: 14px 0; }
-        .markdown-body table { border-collapse: collapse; margin: 14px 0; width: 100%; }
-        .markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: 8px 12px; font-size: 13px; text-align: left; }
-        .markdown-body th { background: var(--primary-bg); }
-        .markdown-body img { max-width: 100%; border-radius: 8px; display: block; margin: 8px 0; }
+        .markdown-body table { border-collapse: collapse; margin: 16px 0; width: 100%; font-size: 13.5px; }
+        .markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: 9px 12px; text-align: left; }
+        .markdown-body th { background: var(--primary-bg); font-weight: 600; color: var(--text-primary); }
+        .markdown-body img { max-width: 100%; border-radius: 10px; display: block; margin: 14px 0; border: 1px solid var(--border); }
+        .markdown-body strong { color: var(--text-primary); font-weight: 700; }
+
+        /* 提示卡片：tip(操作技巧)/note(说明)/warning(注意事项)，内容里直接用这几个 class */
+        .markdown-body .callout { border-radius: 10px; padding: 14px 16px; margin: 18px 0; display: flex; gap: 10px; font-size: 14px; line-height: 1.75; }
+        .markdown-body .callout .callout-icon { flex-shrink: 0; font-size: 17px; line-height: 1.75; }
+        .markdown-body .callout-tip { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+        .markdown-body .callout-note { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+        .markdown-body .callout-warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+        .markdown-body .callout p { margin: 0; color: inherit; }
+        .markdown-body .callout strong { color: inherit; }
+
+        .article-footer { display: flex; justify-content: space-between; gap: 14px; margin-top: 44px; padding-top: 22px; border-top: 1px solid var(--border); }
+        .nav-card { flex: 1; max-width: 48%; border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; text-decoration: none; transition: all .15s; display: block; }
+        .nav-card:hover { border-color: var(--primary-light); background: var(--primary-bg); }
+        .nav-card .label { font-size: 11.5px; color: var(--text-muted); margin-bottom: 4px; }
+        .nav-card .title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+        .nav-card.next { text-align: right; margin-left: auto; }
 
         .btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; font-weight: 500; cursor: pointer; transition: all .15s; border: 1px solid transparent; }
         .btn-primary { background: var(--primary); color: #fff; }
@@ -110,7 +145,9 @@
         @media (max-width: 768px) {
             .layout { flex-direction: column; }
             .sidebar { width: auto; border-right: none; border-bottom: 1px solid var(--border); position: static; max-height: none; overflow-y: visible; }
-            .content-area { padding: 20px; }
+            .content-area { padding: 20px; max-width: none; }
+            .article-footer { flex-direction: column; }
+            .nav-card { max-width: none; }
         }
     </style>
 </head>
@@ -123,6 +160,11 @@
                 返回
             </a>
             <span style="font-size:15px;font-weight:600;">📖 使用手册</span>
+            <!-- 内部管理界面醒目标识（仅内部超级管理员可见；深色渐变导航栏用白底红字变体，跟保单台账页一致） -->
+            <span v-if="isSuperAdmin" style="display:inline-flex;align-items:center;gap:4px;background:#fff;color:#dc2626;border-radius:8px;padding:5px 12px;font-size:13px;font-weight:800;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,0.22);letter-spacing:0.5px;border:2px solid #fecaca;">
+                <svg style="width:16px;height:16px;flex-shrink:0;" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                内部管理界面
+            </span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
             <template v-if="isSuperAdmin">
@@ -138,14 +180,19 @@
     </div>
 
     <div class="layout">
-        <!-- 左侧目录：按标题里的编号(如"1."/"1.2")自动分组，顶层可折叠 -->
+        <!-- 左侧目录：搜索过滤 + 按标题里的编号(如"1."/"1.2")自动分组，顶层可折叠 -->
         <div class="sidebar">
-            <template v-for="g in groupedSections" :key="g.header.id">
+            <div class="search-box">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"/></svg>
+                <input v-model="sidebarSearch" type="text" class="search-input" placeholder="搜索使用手册…">
+            </div>
+            <template v-for="g in filteredGroupedSections" :key="g.header.id">
                 <div class="sidebar-item top-level" :class="{active: activeId === g.header.id}"
                      @click="selectSection(g.header.id)">
-                    <span class="group-toggle" :class="{collapsed: isGroupCollapsed(g.header.id)}"
+                    <span class="group-toggle" :class="{collapsed: !sidebarSearch && isGroupCollapsed(g.header.id)}"
                           v-if="g.children.length" @click.stop="toggleGroup(g.header.id)">▾</span>
                     <span v-else style="width:16px;flex-shrink:0;"></span>
+                    <span class="sidebar-icon">{{ groupIcon(g.header.id) }}</span>
                     <span style="flex:1;">{{ g.header.title || '(未命名章节)' }}</span>
                     <template v-if="editMode">
                         <button v-if="sectionIndex(g.header.id) > 0" class="section-drag" title="上移" @click.stop="moveSection(sectionIndex(g.header.id), -1)">↑</button>
@@ -153,9 +200,9 @@
                         <button style="color:#dc2626;" title="删除章节" @click.stop="removeSection(sectionIndex(g.header.id))">✕</button>
                     </template>
                 </div>
-                <div v-if="g.children.length && !isGroupCollapsed(g.header.id)" class="sidebar-children">
+                <div v-if="g.children.length && (sidebarSearch || !isGroupCollapsed(g.header.id))" class="sidebar-children">
                     <div v-for="c in g.children" :key="c.id" class="sidebar-item" :class="{active: activeId === c.id}"
-                         style="padding-left:26px;" @click="selectSection(c.id)">
+                         style="padding-left:34px;" @click="selectSection(c.id)">
                         <span style="flex:1;">{{ c.title || '(未命名章节)' }}</span>
                         <template v-if="editMode">
                             <button v-if="sectionIndex(c.id) > 0" class="section-drag" title="上移" @click.stop="moveSection(sectionIndex(c.id), -1)">↑</button>
@@ -165,6 +212,7 @@
                     </div>
                 </div>
             </template>
+            <div v-if="!filteredGroupedSections.length" class="no-result">没有找到相关内容</div>
             <button v-if="editMode" class="btn btn-outline" style="width:100%;justify-content:center;padding:8px;font-size:13px;margin-top:8px;" @click="addSection">+ 新增章节</button>
         </div>
 
@@ -173,7 +221,25 @@
             <div v-if="!activeSection" style="color:var(--text-muted);text-align:center;padding:60px 0;">暂无内容</div>
             <template v-else>
                 <template v-if="!editMode">
+                    <div class="breadcrumb" v-if="breadcrumb">
+                        <span>{{ breadcrumb.groupTitle }}</span>
+                        <template v-if="breadcrumb.childTitle">
+                            <span class="sep">›</span>
+                            <span class="current">{{ breadcrumb.childTitle }}</span>
+                        </template>
+                    </div>
                     <div class="markdown-body" v-html="activeSection.content"></div>
+                    <div class="article-footer">
+                        <a v-if="prevSection" class="nav-card" href="javascript:void(0)" @click="selectSection(prevSection.id)">
+                            <div class="label">← 上一篇</div>
+                            <div class="title">{{ prevSection.title }}</div>
+                        </a>
+                        <span v-else></span>
+                        <a v-if="nextSection" class="nav-card next" href="javascript:void(0)" @click="selectSection(nextSection.id)">
+                            <div class="label">下一篇 →</div>
+                            <div class="title">{{ nextSection.title }}</div>
+                        </a>
+                    </div>
                 </template>
                 <template v-else>
                     <input v-model="activeSection.title" placeholder="章节标题"
@@ -214,6 +280,7 @@ createApp({
         const activeId = ref('');
         const editMode = ref(false);
         const saving = ref(false);
+        const sidebarSearch = ref('');
         let sectionsBackup = null;
 
         const activeSection = computed(() => sections.value.find(s => s.id === activeId.value) || null);
@@ -241,11 +308,50 @@ createApp({
             }
             return groups;
         });
+        // 搜索过滤：标题命中就保留分组（分组标题命中→保留全部子项；否则只保留命中的子项）
+        const filteredGroupedSections = computed(() => {
+            const q = sidebarSearch.value.trim().toLowerCase();
+            if (!q) return groupedSections.value;
+            const out = [];
+            for (const g of groupedSections.value) {
+                const headerMatch = (g.header.title || '').toLowerCase().includes(q);
+                const children = headerMatch ? g.children : g.children.filter(c => (c.title || '').toLowerCase().includes(q));
+                if (headerMatch || children.length) out.push({ header: g.header, children });
+            }
+            return out;
+        });
         const collapsedGroups = ref({});
         function isGroupCollapsed(id) { return !!collapsedGroups.value[id]; }
         function toggleGroup(id) {
             collapsedGroups.value = { ...collapsedGroups.value, [id]: !collapsedGroups.value[id] };
         }
+
+        // 侧边栏分组图标（按章节id映射，找不到用默认📄）
+        const GROUP_ICONS = {
+            'field-desc': '📊', 'login': '🚀', 'records-list': '📋', 'preview': '🔍',
+            'abnormal': '🛠️', 'manual-upload': '📤', 'system-settings': '⚙️',
+        };
+        function groupIcon(id) { return GROUP_ICONS[id] || '📄'; }
+
+        // 面包屑：显示当前所属分组标题，若是子章节再显示子标题
+        const breadcrumb = computed(() => {
+            if (!activeId.value) return null;
+            for (const g of groupedSections.value) {
+                if (g.header.id === activeId.value) return { groupTitle: g.header.title, childTitle: '' };
+                const child = g.children.find(c => c.id === activeId.value);
+                if (child) return { groupTitle: g.header.title, childTitle: child.title };
+            }
+            return null;
+        });
+        // 上一篇/下一篇：按 sections 扁平顺序（跟目录展示顺序一致）
+        const prevSection = computed(() => {
+            const idx = sectionIndex(activeId.value);
+            return idx > 0 ? sections.value[idx - 1] : null;
+        });
+        const nextSection = computed(() => {
+            const idx = sectionIndex(activeId.value);
+            return idx >= 0 && idx < sections.value.length - 1 ? sections.value[idx + 1] : null;
+        });
 
         async function loadManual() {
             try {
@@ -298,6 +404,72 @@ createApp({
             };
             input.click();
         }
+        // Quill 内核不认识 <table> 标签(没有注册对应的Blot)，一旦把含表格的HTML交给它
+        // (无论是初始化时赋值innerHTML，还是用户编辑触发text-change)，表格会被直接吃掉、
+        // 保存后整段表格数据就没了(2026-07-15 实测踩过一次坑：编辑"台账所有数据说明"章节，
+        // 保存后47行字段说明表整个消失)。这里在喂给Quill之前把<table>整体"冻结"成一段
+        // 占位文字，Quill只会当成普通文字对待、不会拆解破坏；读回来的时候再把占位文字"解冻"
+        // 换回原始表格HTML，表格本身自始至终不经过Quill的DOM解析。
+        let frozenTables = [];
+        function freezeTablesForEdit(html) {
+            frozenTables = [];
+            return (html || '').replace(/<table[\s\S]*?<\/table>/g, (m) => {
+                const idx = frozenTables.length;
+                frozenTables.push(m);
+                return `<p>📋[[TABLE_PLACEHOLDER_${idx}]]（此处是表格，编辑器暂不支持表格编辑，保存后会自动还原原表格，请勿删除或修改这行文字）</p>`;
+            });
+        }
+        function thawTablesAfterEdit(html) {
+            return (html || '').replace(/\[\[TABLE_PLACEHOLDER_(\d+)\]\]/g, (m, idx) => {
+                const table = frozenTables[Number(idx)];
+                return table !== undefined ? table : m;
+            }).replace(/<p>📋(<table[\s\S]*?<\/table>)（此处是表格，编辑器暂不支持表格编辑，保存后会自动还原原表格，请勿删除或修改这行文字）<\/p>/g, '$1');
+        }
+        // 提示卡片(.callout div)跟表格是同一类坑：Quill 不认识自定义 <div class="callout..">
+        // 包装结构，交给它就会被拆解丢掉外层div和class。用同样的"冻结成占位文字/解冻换回"办法保护。
+        let frozenCallouts = [];
+        function freezeCalloutsForEdit(html) {
+            frozenCallouts = [];
+            return (html || '').replace(/<div class="callout callout-\w+">[\s\S]*?<\/div>\s*<\/div>/g, (m) => {
+                const idx = frozenCallouts.length;
+                frozenCallouts.push(m);
+                return `<p>💠[[CALLOUT_PLACEHOLDER_${idx}]]（此处是提示卡片，编辑器暂不支持编辑，保存后会自动还原，请勿删除或修改这行文字）</p>`;
+            });
+        }
+        function thawCalloutsAfterEdit(html) {
+            return (html || '').replace(/\[\[CALLOUT_PLACEHOLDER_(\d+)\]\]/g, (m, idx) => {
+                const c = frozenCallouts[Number(idx)];
+                return c !== undefined ? c : m;
+            }).replace(/<p>💠(<div class="callout callout-\w+">[\s\S]*?<\/div>\s*<\/div>)（此处是提示卡片，编辑器暂不支持编辑，保存后会自动还原，请勿删除或修改这行文字）<\/p>/g, '$1');
+        }
+        function freezeForEdit(html) { return freezeCalloutsForEdit(freezeTablesForEdit(html)); }
+        function thawAfterEdit(html) { return thawTablesAfterEdit(thawCalloutsAfterEdit(html)); }
+        // 直接粘贴截图(Ctrl+V)时，Quill 默认会把图片内嵌成一大段 base64 塞进内容里
+        // (跟点工具栏"插入图片"按钮走 COS 上传是两条不同的路)，导致内容体积暴涨到几十上百KB、
+        // 页面加载明显变慢(2026-07-15 实测："查看台账与导出Excel"章节被粘贴过两张图，
+        // content从1KB膨胀到191KB)。这里监听粘贴事件，把粘贴进来的 base64 图片异步上传到COS、
+        // 再把 src 换成正式URL，效果上跟点按钮插入图片一致。
+        async function uploadPastedBase64Images() {
+            if (!quill) return;
+            const imgs = quill.root.querySelectorAll('img[src^="data:image"]');
+            if (!imgs.length) return;
+            for (const img of imgs) {
+                const src = img.getAttribute('src');
+                try {
+                    const blob = await (await fetch(src)).blob();
+                    const fd = new FormData();
+                    fd.append('file', blob, 'pasted.png');
+                    const resp = await authFetch('/api/insurance/manual/upload-image', { method: 'POST', body: fd });
+                    const j = await resp.json();
+                    if (j.code === 0 && j.data && j.data.url) {
+                        img.setAttribute('src', j.data.url);
+                    }
+                } catch (err) {
+                    console.error('粘贴图片上传失败', err);
+                }
+            }
+            if (activeSection.value) activeSection.value.content = thawAfterEdit(quill.root.innerHTML);
+        }
         function initQuill() {
             if (quill || !editorEl.value) return;
             quill = new Quill(editorEl.value, {
@@ -305,15 +477,26 @@ createApp({
                 modules: { toolbar: TOOLBAR_OPTIONS },
             });
             quill.getModule('toolbar').addHandler('image', quillImageHandler);
+            quill.root.addEventListener('paste', () => {
+                setTimeout(uploadPastedBase64Images, 50);
+            });
             quill.on('text-change', () => {
-                if (activeSection.value) activeSection.value.content = quill.root.innerHTML;
+                if (activeSection.value) activeSection.value.content = thawAfterEdit(quill.root.innerHTML);
             });
         }
         function loadEditorFromModel() {
-            if (quill) quill.root.innerHTML = (activeSection.value && activeSection.value.content) || '';
+            if (!quill) return;
+            const html = freezeForEdit(activeSection.value && activeSection.value.content);
+            // 用 clipboard.convert() 把HTML转成Quill自己的Delta模型再setContents，
+            // 不要直接赋值 quill.root.innerHTML：直接赋值只是绕过Quill写了一段DOM，
+            // Quill内部的Delta状态并不知道这段内容，用户一开始编辑(哪怕只是点一下光标)，
+            // Quill做内部一致性重建时就会把它不认识的结构(列表<ul>/<ol>等)直接吃掉。
+            // (2026-07-15 实测：'需人工补充保单处理'章节的两处列表就是这样丢的)
+            const delta = quill.clipboard.convert(html);
+            quill.setContents(delta, 'silent');
         }
         function syncEditorToModel() {
-            if (quill && activeSection.value) activeSection.value.content = quill.root.innerHTML;
+            if (quill && activeSection.value) activeSection.value.content = thawAfterEdit(quill.root.innerHTML);
         }
 
         function selectSection(id) {
@@ -323,6 +506,7 @@ createApp({
                 nextTick(loadEditorFromModel);
             } else {
                 activeId.value = id;
+                nextTick(() => window.scrollTo({ top: 0, behavior: 'instant' }));
             }
         }
 
@@ -392,7 +576,8 @@ createApp({
 
         return {
             currentUser, isSuperAdmin, sections, activeId, activeSection, sectionIndex,
-            groupedSections, isGroupCollapsed, toggleGroup,
+            groupedSections, filteredGroupedSections, sidebarSearch, isGroupCollapsed, toggleGroup, groupIcon,
+            breadcrumb, prevSection, nextSection,
             editMode, saving, selectSection, enterEditMode, cancelEdit, addSection, removeSection, moveSection, saveManual,
             editorEl,
         };

@@ -26,7 +26,7 @@ from insurance.api import insurance_bp, init_insurance_api
 from insurance.renewal_db import init_renewal_tables
 from insurance.renewal_api import renewal_bp, init_renewal_api
 from quote.handler import QuoteHandler
-from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table, init_sms_verification_table, init_referral_columns, init_is_sales_column, init_enterprise_plan_column, init_wallet_tables, init_activated_column, init_users_renewal_column
+from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table, init_sms_verification_table, init_referral_columns, init_is_sales_column, init_enterprise_plan_column, init_wallet_tables, init_activated_column, init_users_renewal_column, init_enterprise_follow_status_column, init_enterprise_remark_column
 from auth.jwt_utils import init_jwt
 from auth.decorators import init_auth_decorators
 from auth.api import auth_bp, init_auth_api
@@ -102,6 +102,8 @@ def create_app(config: dict) -> Flask:
     init_activated_column(db)
     init_enterprise_plan_column(db)
     init_users_renewal_column(db)
+    init_enterprise_follow_status_column(db)
+    init_enterprise_remark_column(db)
     init_wallet_tables(db)
 
     # 初始化短信模块
@@ -191,7 +193,12 @@ def create_app(config: dict) -> Flask:
     def training_page():
         return render_template("training.html")
 
-    # 企业管理（超管专属，前端校验权限）
+    # 客户管理（销售跟进视图，超管专属，前端校验权限）
+    @app.route("/admin/customers")
+    def admin_customers_page():
+        return render_template("customers.html")
+
+    # 企业管理（超管专属，前端校验权限；现在是「客户管理」里每个客户下的详细管理入口）
     @app.route("/admin/enterprises")
     def admin_enterprises_page():
         return render_template("admin_enterprises.html")

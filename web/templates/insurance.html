@@ -449,8 +449,8 @@
                         title="购买套餐">
                     💎 购买套餐
                 </button>
-                <!-- 使用手册（所有角色可见，含内部超管） -->
-                <a href="/manual"
+                <!-- 使用手册（暂时只对内部超管可见，客户端隐藏） -->
+                <a v-if="isSuperAdmin" href="/manual"
                    class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 12px;font-size:12px;text-decoration:none;"
                    title="使用手册">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -467,14 +467,14 @@
                     </svg>
                     系统设置
                 </a>
-                <!-- 服务企业管理（超管可见） -->
-                <a v-if="currentUser && currentUser.role === 'super_admin'" href="/admin/enterprises"
+                <!-- 客户管理（原"服务企业管理"，现在是销售跟进入口，超管可见） -->
+                <a v-if="currentUser && currentUser.role === 'super_admin'" href="/admin/customers"
                    class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;text-decoration:none;"
-                   title="服务企业管理">
+                   title="客户管理">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
                     </svg>
-                    服务企业管理
+                    客户管理
                 </a>
                 <!-- 个人中心 -->
                 <button @click="profileVisible = true; loadQuota()" class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;" title="个人中心">
@@ -623,9 +623,9 @@
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;color:#b45309;font-weight:700;border:none;background:#fffbeb;cursor:pointer;margin-bottom:3px;">
                     💎 购买套餐
                 </button>
-                <a href="/manual" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">📖 使用手册</a>
+                <a v-if="isSuperAdmin" href="/manual" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">📖 使用手册</a>
                 <a v-if="!notActivated" href="/insurance/settings" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">系统设置</a>
-                <a v-if="currentUser && currentUser.role==='super_admin'" href="/admin/enterprises" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">服务企业管理</a>
+                <a v-if="currentUser && currentUser.role==='super_admin'" href="/admin/customers" style="display:block;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;text-decoration:none;margin-bottom:3px;">客户管理</a>
                 <button @click="profileVisible=true;loadQuota();mobileMenuOpen=false"
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;color:#374151;border:none;background:none;cursor:pointer;margin-bottom:3px;">
                     个人中心 · {{ currentUser ? (currentUser.name || currentUser.phone) : '' }}<span v-if="roleLabel" style="margin-left:6px;background:#f3f4f6;color:#6b7280;border-radius:6px;padding:1px 6px;font-size:11px;">{{ roleLabel }}</span>
@@ -4770,7 +4770,42 @@ const _app = createApp({
             "采购费率": "内部采购成本费率（保单上没有此项，需要手动填写）",
             "公司利润": "这份保单为公司带来的利润（保单上没有此项，需要手动填写）",
             "跟单人利润": "跟单人对应的利润分成（保单上没有此项，需要手动填写）",
-            "所属企业": "这条记录归属的企业账号（按上传该保单的微信身份自动关联到对应企业）"
+            "所属企业": "这条记录归属的企业账号（按上传该保单的微信身份自动关联到对应企业）",
+            "交强险保费": "该记录交强险部分对应的保费金额（按车牌合并显示时的分列，来自交强险保单的\"保费\"）",
+            "商业险保费": "该记录商业险部分对应的保费金额（按车牌合并显示时的分列，来自商业险保单的\"保费\"）",
+            "非车险保费": "该记录非车险（驾意险/意外险等）部分对应的保费金额（按车牌合并显示时的分列）",
+            "交强险保单号": "该车辆交强险保单的保单号",
+            "商业险保单号": "该车辆商业险保单的保单号",
+            "非车险保单号": "该车辆非车险（驾意险/意外险等）保单的保单号",
+            "交强比例": "交强险部分的分成/提成比例（保单上没有此项，需要手动填写）",
+            "商业比例": "商业险部分的分成/提成比例（保单上没有此项，需要手动填写）",
+            "驾意比例": "非车险（驾意险等）部分的分成/提成比例（保单上没有此项，需要手动填写）",
+            "商业险佣金率": "商业险部分的业务佣金比例（保单上没有此项，需要手动填写）",
+            "交强险佣金率": "交强险部分的业务佣金比例（保单上没有此项，需要手动填写）",
+            "非车险佣金率": "非车险部分的业务佣金比例（保单上没有此项，需要手动填写）",
+            "商业险佣金": "商业险部分的业务佣金金额（保单上没有此项，需要手动填写）",
+            "交强险佣金": "交强险部分的业务佣金金额（保单上没有此项，需要手动填写）",
+            "非车险佣金": "非车险部分的业务佣金金额（保单上没有此项，需要手动填写）",
+            "商业险采购费率": "商业险部分的内部采购成本费率（保单上没有此项，需要手动填写）",
+            "交强险采购费率": "交强险部分的内部采购成本费率（保单上没有此项，需要手动填写）",
+            "非车险采购费率": "非车险部分的内部采购成本费率（保单上没有此项，需要手动填写）",
+            "商业险公司利润": "商业险部分为公司带来的利润（保单上没有此项，需要手动填写）",
+            "交强险公司利润": "交强险部分为公司带来的利润（保单上没有此项，需要手动填写）",
+            "非车险公司利润": "非车险部分为公司带来的利润（保单上没有此项，需要手动填写）",
+            "商业险跟单人利润": "商业险部分跟单人对应的利润分成（保单上没有此项，需要手动填写）",
+            "交强险跟单人利润": "交强险部分跟单人对应的利润分成（保单上没有此项，需要手动填写）",
+            "非车险跟单人利润": "非车险部分跟单人对应的利润分成（保单上没有此项，需要手动填写）",
+            "结算金额": "这笔业务最终需要结算的金额（保单上没有此项，可按公式自动计算或手动填写）",
+            "个人交强应得": "交强险部分个人应得的分成金额（保单上没有此项，根据比例自动计算或手动填写）",
+            "个人商业应得": "商业险部分个人应得的分成金额（保单上没有此项，根据比例自动计算或手动填写）",
+            "个人驾意应得": "非车险（驾意险等）部分个人应得的分成金额（保单上没有此项，根据比例自动计算或手动填写）",
+            "返佣": "返还给客户或渠道的佣金金额（保单上没有此项，需要手动填写）",
+            "剩余": "结算后尚未支付/剩余未结的金额（保单上没有此项，需要手动填写或系统计算）",
+            "是否已付": "标记这笔应付款项是否已经支付完成（保单上没有此项，需要手动标记）",
+            "手机号码": "客户/投保人的联系手机号（保单上投保人信息处的联系电话，或手动填写）",
+            "介绍人": "介绍这笔业务/客户的人（保单上没有此项，需要手动填写）",
+            "业务员#2": "第二业务员/协办业务员（保单上没有此项，需要手动填写）",
+            "出单渠道#2": "第二出单/销售渠道（保单上没有此项，需要手动填写）"
         });
         // 字段说明悬浮框：teleport到body用fixed定位，脱离表格sticky列/行层叠上下文，
         // 避免像之前纯CSS方案那样被表体的冻结列/操作列盖住(2026-07-14连续两次z-index调整都没能解决)

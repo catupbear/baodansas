@@ -241,6 +241,34 @@ def init_enterprises_table(db):
         conn.close()
 
 
+def init_enterprise_follow_status_column(db):
+    """幂等：给 enterprises 表加 follow_status 列（客户跟进状态，如"正常使用"/"待使用"/"无使用（体量太小）"）"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("ALTER TABLE enterprises ADD COLUMN follow_status VARCHAR(64) DEFAULT '' COMMENT '客户跟进状态'")
+            logger.info("enterprises 表添加列 follow_status 完成")
+        except Exception:
+            pass  # 列已存在，跳过
+    finally:
+        conn.close()
+
+
+def init_enterprise_remark_column(db):
+    """幂等：给 enterprises 表加 remark 列（客户档案备注，销售跟进记录用）"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("ALTER TABLE enterprises ADD COLUMN remark TEXT COMMENT '客户档案备注'")
+            logger.info("enterprises 表添加列 remark 完成")
+        except Exception:
+            pass  # 列已存在，跳过
+    finally:
+        conn.close()
+
+
 def list_enterprises(db, enabled: int = None) -> list:
     """查询企业列表，可按启用状态筛选"""
     conn = db.pool.connection()
@@ -301,7 +329,7 @@ def update_enterprise(db, enterprise_id: int, data: dict):
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        allowed = {"name", "enterprise_no", "contact_person", "contact_phone", "enabled", "merge_by_plate", "renewal_enabled", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at", "referrer_id", "survey_token", "survey_data"}
+        allowed = {"name", "enterprise_no", "contact_person", "contact_phone", "enabled", "merge_by_plate", "renewal_enabled", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at", "referrer_id", "survey_token", "survey_data", "follow_status", "remark"}
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
             return
