@@ -616,19 +616,25 @@ def init_insurance_tables(db):
                 backfill_conn.rollback()
                 logger.exception("反向修正 is_abnormal 失败")
 
-            # 修正已标记正常但 is_abnormal 仍为 1 的历史数据
+            # 修正已标记正常但 is_abnormal 仍为 1 的历史数据（分批避免锁超时）
             try:
-                bc.execute("""
-                    UPDATE insurance_records
-                    SET is_abnormal = 0, hint = ''
-                    WHERE is_abnormal = 1
-                      AND abnormal_override_reason IS NOT NULL
-                      AND abnormal_override_reason != ''
-                """)
-                fixed = bc.rowcount
-                if fixed:
-                    logger.info("修正已标记正常但 is_abnormal=1 的记录 %d 条", fixed)
-                backfill_conn.commit()
+                total_fixed = 0
+                while True:
+                    bc.execute("""
+                        UPDATE insurance_records
+                        SET is_abnormal = 0, hint = ''
+                        WHERE is_abnormal = 1
+                          AND abnormal_override_reason IS NOT NULL
+                          AND abnormal_override_reason != ''
+                        LIMIT 200
+                    """)
+                    affected = bc.rowcount
+                    backfill_conn.commit()
+                    if not affected:
+                        break
+                    total_fixed += affected
+                if total_fixed:
+                    logger.info("修正已标记正常但 is_abnormal=1 的记录 %d 条", total_fixed)
             except Exception:
                 backfill_conn.rollback()
                 logger.exception("修正 abnormal_override 失败")
@@ -664,20 +670,32 @@ def init_insurance_tables(db):
                 backfill_conn.rollback()
                 logger.exception("回填 display_fields 失败")
 
-            # 回填 display_fields 中缺少的车主字段
+            # 回填 display_fields 中缺少的车主字段（分批避免锁超时）
             try:
                 bc.execute("""
-                    UPDATE insurance_records r
+                    SELECT r.id, pf.owner
+                    FROM insurance_records r
                     JOIN insurance_policy_fields pf ON pf.record_id = r.id
-                    SET r.display_fields = JSON_SET(r.display_fields, '$."车主"', pf.owner)
                     WHERE pf.owner IS NOT NULL AND pf.owner != ''
                       AND r.display_fields IS NOT NULL AND r.display_fields != ''
                       AND (JSON_EXTRACT(r.display_fields, '$."车主"') IS NULL
                            OR JSON_EXTRACT(r.display_fields, '$."车主"') = '')
                 """)
-                if bc.rowcount:
-                    logger.info("回填 display_fields 车主字段 %d 条", bc.rowcount)
-                backfill_conn.commit()
+                owner_rows = bc.fetchall()
+                backfilled_owner = 0
+                for i, row in enumerate(owner_rows):
+                    rid = row.get("id") if isinstance(row, dict) else row[0]
+                    owner = row.get("owner") if isinstance(row, dict) else row[1]
+                    bc.execute(
+                        'UPDATE insurance_records SET display_fields = JSON_SET(display_fields, \'$."车主"\', %s) WHERE id = %s',
+                        (owner, rid)
+                    )
+                    backfilled_owner += 1
+                    if backfilled_owner % 200 == 0:
+                        backfill_conn.commit()
+                if backfilled_owner:
+                    backfill_conn.commit()
+                    logger.info("回填 display_fields 车主字段 %d 条", backfilled_owner)
             except Exception:
                 backfill_conn.rollback()
                 logger.exception("回填 display_fields 车主字段失败")
