@@ -17,6 +17,7 @@
       incremental_interval: 600    # 增量发现间隔（秒）
       full_interval: 21600         # 全量刷新间隔（秒）
       list_interval: 86400         # 客户群列表发现间隔（秒），0=关闭
+      list_corp_names: ["午虎科技"]  # 列表发现只跑这些企业（按 name），不配=全部企业
       api_delay: 0.3               # 每次企微 API 调用间隔（秒）
 """
 
@@ -31,7 +32,7 @@ from storage.db import Database
 from storage.group_db import (
     init_group_table, discover_new_rooms, get_groups_to_sync,
     update_group_success, update_group_failure, get_sync_stats,
-    insert_room_ids,
+    insert_room_ids, cleanup_pending_external,
 )
 
 logging.basicConfig(
@@ -285,8 +286,18 @@ def run_sync(db, corps: list, full: bool, api_delay: float):
         lock_conn.close()
 
 
-def run_list_discovery(db, corps: list, api_delay: float):
-    """客户群列表全量发现：各企业拉客户群列表，新 chat_id 插入为 pending（随后由增量解析补详情）"""
+def run_list_discovery(db, corps: list, api_delay: float, allowed_names: list = None):
+    """客户群列表全量发现：各企业拉客户群列表，新 chat_id 插入为 pending（随后由增量解析补详情）。
+    allowed_names 非空时只跑白名单内的企业，并清理此前误插入的其他企业待解析群。"""
+    if allowed_names:
+        allowed = [c for c in corps if c.name in allowed_names]
+        if not allowed:
+            logger.warning("列表发现白名单 %s 未匹配到任何企业，跳过", allowed_names)
+            return
+        deleted = cleanup_pending_external(db, [c.corpid for c in allowed])
+        if deleted:
+            logger.info("已清理白名单外企业的待解析群 %d 个", deleted)
+        corps = allowed
     total_new = 0
     for corp in corps:
         chat_ids = corp.list_customer_groups(api_delay)
@@ -307,17 +318,20 @@ def main():
     incremental_interval = sync_cfg.get("incremental_interval", 600)
     full_interval = sync_cfg.get("full_interval", 6 * 3600)
     list_interval = sync_cfg.get("list_interval", 24 * 3600)  # 0=关闭客户群列表发现
+    # 列表发现企业白名单（按企业 name）：不配置默认只跑「午虎科技」，配 [] 表示全部企业
+    list_corp_names = sync_cfg.get("list_corp_names", ["午虎科技"])
     api_delay = sync_cfg.get("api_delay", 0.3)
 
     db = Database(config["mysql"], main_corpid=config["wecom"]["corpid"])
     init_group_table(db)
     corps = build_corps(config)
-    logger.info("群同步任务启动: 企业 %s | 增量 %ds / 全量 %ds / 列表发现 %ds",
-                [c.name for c in corps], incremental_interval, full_interval, list_interval)
+    logger.info("群同步任务启动: 企业 %s | 增量 %ds / 全量 %ds / 列表发现 %ds (白名单 %s)",
+                [c.name for c in corps], incremental_interval, full_interval,
+                list_interval, list_corp_names or "全部")
 
     # 启动先跑一轮列表发现 + 全量（首次部署时把存量群全部灌入并解析）
     if list_interval:
-        run_list_discovery(db, corps, api_delay)
+        run_list_discovery(db, corps, api_delay, list_corp_names)
     run_sync(db, corps, full=True, api_delay=api_delay)
 
     now = time.time()
@@ -328,7 +342,7 @@ def main():
         time.sleep(30)
         now = time.time()
         if now >= next_list:
-            run_list_discovery(db, corps, api_delay)
+            run_list_discovery(db, corps, api_delay, list_corp_names)
             run_sync(db, corps, full=False, api_delay=api_delay)  # 立即解析新发现的群
             next_list = time.time() + list_interval
             next_incremental = time.time() + incremental_interval

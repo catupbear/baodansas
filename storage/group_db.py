@@ -22,12 +22,28 @@ logger = logging.getLogger(__name__)
 FAIL_BACKOFF_THRESHOLD = 5
 
 
+def _get_table_collation(cursor, table_name: str) -> str:
+    """查当前库中某张表的排序规则，不存在返回空"""
+    cursor.execute(
+        "SELECT TABLE_COLLATION FROM information_schema.TABLES "
+        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s",
+        (table_name,),
+    )
+    row = cursor.fetchone()
+    return (row[0] if row else "") or ""
+
+
 def init_group_table(db):
-    """创建统一群信息表（幂等）"""
+    """创建统一群信息表（幂等）。
+    排序规则与 messages 表对齐（roomid 会与 messages/insurance_records JOIN，
+    不对齐会报 Illegal mix of collations）；已存在的旧表规则不一致时自动转换。
+    """
     conn = db.pool.connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("""
+        collation = _get_table_collation(cursor, "messages") or "utf8mb4_unicode_ci"
+        charset = collation.split("_")[0]
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS wecom_groups (
                 roomid          VARCHAR(128) NOT NULL COMMENT '群ID',
                 corpid          VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '解析成功的企业corpid',
@@ -43,9 +59,18 @@ def init_group_table(db):
                 last_synced_at  DATETIME     NULL COMMENT '最近一次成功同步时间',
                 PRIMARY KEY (roomid),
                 KEY idx_sync (sync_status, last_attempt_at)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='统一群信息表（task_group_sync维护）'
+            ) ENGINE=InnoDB DEFAULT CHARSET={charset} COLLATE={collation}
+              COMMENT='统一群信息表（task_group_sync维护）'
         """)
         conn.commit()
+        # 旧表排序规则不一致时自动转换（表很小，秒级完成）
+        current = _get_table_collation(cursor, "wecom_groups")
+        if current and current != collation:
+            logger.info("wecom_groups 排序规则 %s 与 messages(%s) 不一致，自动转换", current, collation)
+            cursor.execute(
+                f"ALTER TABLE wecom_groups CONVERT TO CHARACTER SET {charset} COLLATE {collation}"
+            )
+            conn.commit()
     finally:
         conn.close()
 
@@ -98,6 +123,32 @@ def insert_room_ids(db, roomids: list, corpid: str = "", group_type: str = "") -
         inserted = cursor.rowcount
         conn.commit()
         return inserted
+    finally:
+        conn.close()
+
+
+def cleanup_pending_external(db, allowed_corpids: list) -> int:
+    """
+    清理不在白名单企业的、由客户群列表发现插入的待解析群
+    （sync_status='pending' 且 group_type='external' 只可能来自列表发现；
+    messages 增量发现插入的群 group_type 为空，不受影响）。
+    返回删除数量。
+    """
+    if not allowed_corpids:
+        return 0
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        ph = ",".join(["%s"] * len(allowed_corpids))
+        cursor.execute(
+            f"DELETE FROM wecom_groups "
+            f"WHERE sync_status = 'pending' AND group_type = 'external' "
+            f"AND corpid NOT IN ({ph})",
+            allowed_corpids,
+        )
+        deleted = cursor.rowcount
+        conn.commit()
+        return deleted
     finally:
         conn.close()
 
