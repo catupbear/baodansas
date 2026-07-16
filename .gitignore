@@ -7,4 +7,5 @@ data/
 .DS_Store
 .idea/
 config.yaml
+venv/
 
