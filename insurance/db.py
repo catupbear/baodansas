@@ -1306,10 +1306,13 @@ def update_records_abnormal_flag(db, record_ids: list, is_abnormal: int) -> None
         conn.close()
 
 
-def find_records_by_plate(db, plate: str, exclude_id: int = None) -> list:
+def find_records_by_plate(db, plate: str, exclude_id: int = None, roomid: str = None) -> list:
     """
     查找同车牌的已完成保单记录，用于跨保单字段互补。
     返回 parsed_fields 非空且 status=done 的记录列表（按时间倒序）。
+
+    roomid: 可选，传入时只匹配同一个群的记录（如群内文本回填场景），
+    避免不同群里凑巧同车牌号的保单互相串数据。
     """
     if not plate:
         return []
@@ -1325,6 +1328,9 @@ def find_records_by_plate(db, plate: str, exclude_id: int = None) -> list:
         if exclude_id:
             sql += " AND id != %s"
             params.append(exclude_id)
+        if roomid:
+            sql += " AND roomid = %s"
+            params.append(roomid)
         sql += " ORDER BY id DESC LIMIT 10"
         cursor.execute(sql, params)
         rows = cursor.fetchall()

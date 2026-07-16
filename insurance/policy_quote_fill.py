@@ -89,13 +89,16 @@ def parse_policy_quote_text(text: str):
     return result
 
 
-def apply_policy_quote(db, text: str):
+def apply_policy_quote(db, text: str, roomid: str = None):
     """
     解析文本并按车牌回填到所有同车牌记录。
     返回 (matched_count, parsed_dict)：
       - 非政策报价文本：(0, None)
       - 是政策报价但无同车牌记录：(0, parsed)
       - 成功：(命中记录数, parsed)
+
+    roomid: 触发这条文本的群，只回填同一个群里的同车牌记录，
+    避免不同群（不同企业）凑巧同车牌号时数据串到别的企业。
     """
     from insurance.db import find_records_by_plate, update_insurance_record
 
@@ -106,7 +109,7 @@ def apply_policy_quote(db, text: str):
     plate = parsed["plate"]
     fill = {k: v for k, v in parsed.items() if k != "plate"}
 
-    records = find_records_by_plate(db, plate)
+    records = find_records_by_plate(db, plate, roomid=roomid)
     if not records:
         logger.info("政策回填：车牌 %s 暂无识别记录，待补 %s", plate, fill)
         return 0, parsed

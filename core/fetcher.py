@@ -415,7 +415,7 @@ class MessageFetcher:
             return
         try:
             from insurance.policy_quote_fill import apply_policy_quote
-            cnt, info = apply_policy_quote(handler.db, text)
+            cnt, info = apply_policy_quote(handler.db, text, roomid=roomid)
             if info:
                 logger.info("政策回填: seq=%d room=%s 命中%d条 %s", seq, roomid, cnt, info)
         except Exception as e:
