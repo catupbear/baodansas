@@ -2687,7 +2687,9 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
     PROVINCE_CHARS = "京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁"
     # 处理跨行车牌：省份简称后换行跟字母数字（如"鄂\nABC123"）
     plate_text = re.sub(rf'([{PROVINCE_CHARS}])\s*\n\s*([A-Z])', r'\1\2', text)
-    plate_text = re.sub(r'([A-Z]-?)\s*\n\s*([A-Z0-9])', r'\1\2', plate_text)
+    # 排除下一行是日期格式(如 2026/08/05、2026-08-05、2026年...)的情况，
+    # 避免误把已完整的车牌(如"粤G9803R")跟下一行日期的开头数字拼在一起(电子标志/交强险标志常见排版)
+    plate_text = re.sub(r'([A-Z]-?)\s*\n\s*(?!\d{4}[-/年])([A-Z0-9])', r'\1\2', plate_text)
     # 中华联合格式："号1牌1号1码" 需要合并
     plate_text_merged = re.sub(r'([\u4e00-\u9fff])1([\u4e00-\u9fff])', r'\1\2',
                                 re.sub(r'([\u4e00-\u9fff])1([\u4e00-\u9fff])', r'\1\2', plate_text))
