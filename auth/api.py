@@ -509,6 +509,8 @@ def api_create_enterprise():
             init_enterprise_default_template(_db, eid)
         except Exception:
             logger.exception("初始化企业默认导出模板失败")
+        if data.get("referrer_id"):
+            update_enterprise(_db, eid, {"referrer_id": data["referrer_id"]})
         # 默认不自动开通套餐：新企业为"未开通"状态，由管理员手动「开通套餐」配置。
         # 仅当显式传入 plan_type 时才开通（兼容将来在创建表单里直接选套餐的场景）。
         if data.get("plan_type"):

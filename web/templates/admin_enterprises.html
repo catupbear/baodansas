@@ -428,6 +428,27 @@
                             <label class="block text-sm text-gray-500 mb-1">联系电话</label>
                             <input v-model="form.contact_phone" type="text" class="form-input" placeholder="请输入联系电话">
                         </div>
+                        <div v-if="!isEdit">
+                            <label class="block text-sm text-gray-500 mb-1">推荐人（输入姓名/手机号搜索）</label>
+                            <input v-model="referrerSearch" @input="searchReferrerUsers" placeholder="输入姓名或手机号..."
+                                   class="form-input" style="margin-bottom:6px;">
+                            <div v-if="referrerUserList.length" style="border:1px solid #e7e0d8;border-radius:8px;max-height:160px;overflow-y:auto;">
+                                <div v-for="u in referrerUserList" :key="u.id"
+                                     @click="selectReferrer(u)"
+                                     :style="{
+                                        padding:'8px 12px', cursor:'pointer', fontSize:'13px', display:'flex',
+                                        justifyContent:'space-between', alignItems:'center',
+                                        background: referrerSelected && referrerSelected.id===u.id ? '#fff7ed' : ''
+                                     }">
+                                    <span>{{ u.name || u.phone }}</span>
+                                    <span style="font-size:11px;color:#9ca3af;">{{ u.phone }}</span>
+                                </div>
+                            </div>
+                            <div v-if="referrerSelected" style="margin-top:6px;padding:7px 10px;background:#fff7ed;border-radius:8px;font-size:13px;color:#92400e;">
+                                已选：{{ referrerSelected.name || referrerSelected.phone }}
+                                <button @click="referrerSelected=null" style="margin-left:8px;color:#9ca3af;background:none;border:none;cursor:pointer;">✕ 清除</button>
+                            </div>
+                        </div>
                     </div>
 
                     <div v-if="formError" class="mt-4 bg-red-50 text-red-600 text-sm rounded-lg px-4 py-2">{{ formError }}</div>
@@ -846,6 +867,9 @@ createApp({
             form.contact_person = '';
             form.contact_phone = '';
             formError.value = '';
+            referrerSearch.value = '';
+            referrerUserList.value = [];
+            referrerSelected.value = null;
             showModal.value = true;
         }
 
@@ -962,6 +986,9 @@ createApp({
                     contact_person: form.contact_person.trim(),
                     contact_phone: form.contact_phone.trim(),
                 };
+                if (!isEdit.value) {
+                    body.referrer_id = referrerSelected.value ? referrerSelected.value.id : null;
+                }
                 const url = isEdit.value ? '/api/auth/enterprises/' + editId.value : '/api/auth/enterprises';
                 const method = isEdit.value ? 'PUT' : 'POST';
                 const resp = await authFetch(url, { method, body: JSON.stringify(body) });
