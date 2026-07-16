@@ -5,6 +5,8 @@
   - 增量发现（默认每 10 分钟）：messages 里新出现的群 → 插入并立即解析
   - 全量刷新（默认每 6 小时）：逐群重新拉取群名/群主/成员数，捕捉群改名
     连续失败 >= 5 次的群退避为每天试 1 次；解析失败不覆盖旧群名
+  - 客户群列表发现（默认每天 1 次）：调客户群列表 API 全量发现新群，
+    还没发过消息的群也能提前入表（配监控群不再需要先发一条消息）
 
 运行方式（与 web 服务完全解耦，互不影响）：
     cd /home/wxbot && nohup python3 task_group_sync.py >> logs/group_sync.log 2>&1 &
@@ -14,6 +16,7 @@
     group_sync:
       incremental_interval: 600    # 增量发现间隔（秒）
       full_interval: 21600         # 全量刷新间隔（秒）
+      list_interval: 86400         # 客户群列表发现间隔（秒），0=关闭
       api_delay: 0.3               # 每次企微 API 调用间隔（秒）
 """
 
@@ -28,6 +31,7 @@ from storage.db import Database
 from storage.group_db import (
     init_group_table, discover_new_rooms, get_groups_to_sync,
     update_group_success, update_group_failure, get_sync_stats,
+    insert_room_ids,
 )
 
 logging.basicConfig(
@@ -150,6 +154,40 @@ class CorpClient:
             logger.warning("[%s] 客户群接口异常 %s: %s", self.name, roomid, e)
         return None
 
+    def list_customer_groups(self, api_delay: float = 0.3) -> list:
+        """
+        客户群列表 API（externalcontact/groupchat/list）翻页拉取本企业全部客户群 chat_id。
+        参考 wuhuApi/task.py 的 get_group_chat_list。
+        需要「客户联系」权限且应用可见范围覆盖群主；未配置 external_secret 时返回空。
+        """
+        token = self.external_token()
+        if not token:
+            return []
+        chat_ids = []
+        cursor = ""
+        url = f"https://qyapi.weixin.qq.com/cgi-bin/externalcontact/groupchat/list?access_token={token}"
+        while True:
+            body = {"status_filter": 0, "limit": 1000}
+            if cursor:
+                body["cursor"] = cursor
+            try:
+                data = self._post(url, body)
+            except Exception as e:
+                logger.warning("[%s] 客户群列表接口异常: %s", self.name, e)
+                break
+            if data.get("errcode") != 0:
+                logger.warning("[%s] 客户群列表接口失败: errcode=%s, errmsg=%s",
+                               self.name, data.get("errcode"), data.get("errmsg"))
+                break
+            chat_ids.extend(
+                g.get("chat_id") for g in data.get("group_chat_list", []) if g.get("chat_id")
+            )
+            cursor = data.get("next_cursor", "")
+            if not cursor:
+                break
+            time.sleep(api_delay)
+        return chat_ids
+
 
 def build_corps(config: dict) -> list:
     """从 config.yaml 组装企业客户端列表（主企业在前）"""
@@ -247,6 +285,20 @@ def run_sync(db, corps: list, full: bool, api_delay: float):
         lock_conn.close()
 
 
+def run_list_discovery(db, corps: list, api_delay: float):
+    """客户群列表全量发现：各企业拉客户群列表，新 chat_id 插入为 pending（随后由增量解析补详情）"""
+    total_new = 0
+    for corp in corps:
+        chat_ids = corp.list_customer_groups(api_delay)
+        if not chat_ids:
+            continue
+        new_cnt = insert_room_ids(db, chat_ids, corpid=corp.corpid, group_type="external")
+        total_new += new_cnt
+        logger.info("[%s] 客户群列表发现: 共 %d 个群, 新增 %d", corp.name, len(chat_ids), new_cnt)
+    if total_new:
+        logger.info("客户群列表发现完成: 新增 %d 个群，转增量解析", total_new)
+
+
 def main():
     with open("config.yaml", "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
@@ -254,24 +306,33 @@ def main():
     sync_cfg = config.get("group_sync", {}) or {}
     incremental_interval = sync_cfg.get("incremental_interval", 600)
     full_interval = sync_cfg.get("full_interval", 6 * 3600)
+    list_interval = sync_cfg.get("list_interval", 24 * 3600)  # 0=关闭客户群列表发现
     api_delay = sync_cfg.get("api_delay", 0.3)
 
     db = Database(config["mysql"], main_corpid=config["wecom"]["corpid"])
     init_group_table(db)
     corps = build_corps(config)
-    logger.info("群同步任务启动: 企业 %s | 增量 %ds / 全量 %ds",
-                [c.name for c in corps], incremental_interval, full_interval)
+    logger.info("群同步任务启动: 企业 %s | 增量 %ds / 全量 %ds / 列表发现 %ds",
+                [c.name for c in corps], incremental_interval, full_interval, list_interval)
 
-    # 启动先跑一轮全量（首次部署时把存量群全部灌入并解析）
+    # 启动先跑一轮列表发现 + 全量（首次部署时把存量群全部灌入并解析）
+    if list_interval:
+        run_list_discovery(db, corps, api_delay)
     run_sync(db, corps, full=True, api_delay=api_delay)
 
     now = time.time()
     next_incremental = now + incremental_interval
     next_full = now + full_interval
+    next_list = now + list_interval if list_interval else float("inf")
     while True:
         time.sleep(30)
         now = time.time()
-        if now >= next_full:
+        if now >= next_list:
+            run_list_discovery(db, corps, api_delay)
+            run_sync(db, corps, full=False, api_delay=api_delay)  # 立即解析新发现的群
+            next_list = time.time() + list_interval
+            next_incremental = time.time() + incremental_interval
+        elif now >= next_full:
             run_sync(db, corps, full=True, api_delay=api_delay)
             next_full = time.time() + full_interval
             next_incremental = time.time() + incremental_interval  # 全量已含增量

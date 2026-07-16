@@ -167,9 +167,18 @@ class ContactsManager:
         return name or user_id
 
     def get_room_name(self, room_id: str) -> str:
-        """获取群名称"""
+        """获取群名称（优先读统一群信息表 wecom_groups，由 task_group_sync 独立任务维护）"""
         if not room_id:
             return ""
+
+        # 统一群信息表优先（群改名后这里是最新值；contacts_cache 是永久缓存不会刷新）
+        try:
+            from storage.group_db import get_group_name_map
+            name = get_group_name_map(self.db, [room_id]).get(room_id, "")
+            if name:
+                return name
+        except Exception:
+            pass
 
         cached = self._get_cache(room_id)
         if cached:
@@ -603,12 +612,15 @@ class ContactsManager:
             """, corpid_params)
             users = [row["sender"] for row in cursor.fetchall()]
 
-            # 查找未缓存的 roomid
+            # 查找未缓存的 roomid（统一群信息表 wecom_groups 已有群名的不再重复解析，
+            # 群名解析主责已移交 task_group_sync 独立任务，这里只兜底它还没覆盖的）
             cursor.execute(f"""
                 SELECT DISTINCT m.roomid
                 FROM messages m
                 LEFT JOIN contacts_cache c ON {join_expr_room} = c.id
-                WHERE m.roomid != '' AND m.roomid IS NOT NULL AND c.id IS NULL
+                LEFT JOIN wecom_groups g ON g.roomid = m.roomid AND g.name != ''
+                WHERE m.roomid != '' AND m.roomid IS NOT NULL
+                  AND c.id IS NULL AND g.roomid IS NULL
                 {corpid_filter}
                 LIMIT 50
             """, corpid_params)
@@ -791,9 +803,18 @@ class ContactsManager:
             else:
                 users[uid] = self.get_name(uid)
 
-        # 群：同上
+        # 群：统一群信息表优先（一次批量查），其次 contacts_cache，最后现场解析
+        group_names = {}
+        if unique_rooms:
+            try:
+                from storage.group_db import get_group_name_map
+                group_names = get_group_name_map(self.db, unique_rooms)
+            except Exception:
+                pass
         for rid in unique_rooms:
-            if rid in cached:
+            if rid in group_names:
+                rooms[rid] = group_names[rid]
+            elif rid in cached:
                 rooms[rid] = cached[rid]
             else:
                 rooms[rid] = self.get_room_name(rid)

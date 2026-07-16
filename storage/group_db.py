@@ -78,6 +78,30 @@ def discover_new_rooms(db) -> int:
         conn.close()
 
 
+def insert_room_ids(db, roomids: list, corpid: str = "", group_type: str = "") -> int:
+    """
+    批量插入群 ID（已存在的忽略），供客户群列表发现使用。
+    新群以 pending 状态入表，由增量解析补齐群名等详情。
+    返回新插入的数量。
+    """
+    ids = [r for r in set(roomids or []) if r]
+    if not ids:
+        return 0
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.executemany(
+            "INSERT IGNORE INTO wecom_groups (roomid, corpid, group_type, sync_status) "
+            "VALUES (%s, %s, %s, 'pending')",
+            [(rid, corpid, group_type) for rid in ids],
+        )
+        inserted = cursor.rowcount
+        conn.commit()
+        return inserted
+    finally:
+        conn.close()
+
+
 def get_groups_to_sync(db, full: bool = False, limit: int = 500) -> list:
     """
     取待同步的群列表。

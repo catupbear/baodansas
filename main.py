@@ -62,6 +62,11 @@ def create_app(config: dict) -> Flask:
     # 初始化数据库（MySQL 连接池，传入主企业 corpid 用于回填历史消息）
     db = Database(config["mysql"], main_corpid=config["wecom"]["corpid"])
 
+    # 初始化统一群信息表（数据由独立进程 task_group_sync.py 维护，web 只读；
+    # 必须在 ContactsManager 之前建表，通讯录解析会 JOIN 该表）
+    from storage.group_db import init_group_table
+    init_group_table(db)
+
     # 初始化通讯录模块（主企业：车物家，不加缓存前缀以兼容历史数据）
     contacts = ContactsManager(
         corpid=config["wecom"]["corpid"],
@@ -127,10 +132,6 @@ def create_app(config: dict) -> Flask:
     # 注册前端 API 蓝图
     init_api(db, contacts=contacts, cos_storage=cos_storage)
     app.register_blueprint(api_bp)
-
-    # 初始化统一群信息表（数据由独立进程 task_group_sync.py 维护，web 只读）
-    from storage.group_db import init_group_table
-    init_group_table(db)
 
     # 初始化保单识别模块
     init_insurance_tables(db)

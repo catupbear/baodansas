@@ -7685,22 +7685,8 @@ const _app = createApp({
                     }
                 } catch (e) {}
 
-                // 对未解析的名称（room_name 等于 roomid 的）批量解析
-                const unresolvedRooms = Object.keys(roomMap).filter(id => roomMap[id] === id);
-                if (unresolvedRooms.length) {
-                    try {
-                        const resolveResp = await authFetch('/api/contacts/resolve', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ user_ids: [], room_ids: unresolvedRooms }),
-                        });
-                        const names = await resolveResp.json();
-                        for (const [id, name] of Object.entries(names.rooms || {})) {
-                            if (name) roomMap[id] = name;
-                        }
-                    } catch (e) {}
-                }
-
+                // 群名已由后端统一群信息表（wecom_groups，task_group_sync 维护）解析，
+                // 前端不再补调 /api/contacts/resolve
                 monitorRooms.value = Object.entries(roomMap).map(([id, name]) => ({ id, name, enterprise_id: roomEntMap[id] })).sort((a, b) => a.name.localeCompare(b.name));
             } catch (e) {
                 console.error('加载筛选列表失败', e);
