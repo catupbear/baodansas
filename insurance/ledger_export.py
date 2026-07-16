@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 _INTERNAL_BASE = "http://127.0.0.1:8090"
 
-_KEYWORD_RE = re.compile(r"发送台账\s*(今日|今天|本周|本月)")
+_KEYWORD_RE = re.compile(r"发送台账\s*(今日|今天|昨日|昨天|本周|本月)")
 # 跨月区间："6月1日到7月10日"（到/至/- 均可，日期间允许空格）
 _CROSS_MONTH_RANGE_RE = re.compile(
     r"发送台账\s*(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日\s*[到至\-~]\s*(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日")
@@ -36,7 +36,7 @@ def match_ledger_trigger(text: str):
     匹配"发送台账XX"命令，命中返回 (label, date_start, date_end)，否则 None。
 
     支持：
-    - 关键词：今日(今天) / 本周 / 本月
+    - 关键词：今日(今天) / 昨日(昨天) / 本周 / 本月
     - 具体日期：6月22日 / 2026年6月22日（单日）
     - 日期区间：6月1日到10日（同月）/ 6月25日到7月5日（跨月）/ 6到10日（当月，无需写月份）
 
@@ -51,9 +51,13 @@ def match_ledger_trigger(text: str):
 
     m = _KEYWORD_RE.search(text)
     if m:
-        period = "今日" if m.group(1) == "今天" else m.group(1)
-        date_start, date_end = _resolve_period_range(period)
-        return period, date_start, date_end
+        kw = m.group(1)
+        if kw == "今天":
+            kw = "今日"
+        elif kw == "昨天":
+            kw = "昨日"
+        date_start, date_end = _resolve_period_range(kw)
+        return kw, date_start, date_end
 
     now = datetime.now()
     cur_year = now.year
@@ -110,7 +114,7 @@ def _fmt(dt):
 
 
 def _resolve_period_range(period: str):
-    """今日/本周/本月 -> (date_start, date_end)，均为 'YYYY-MM-DD HH:MM:SS' 字符串。"""
+    """今日/昨日/本周/本月 -> (date_start, date_end)，均为 'YYYY-MM-DD HH:MM:SS' 字符串。"""
     now = datetime.now()
     today = datetime(now.year, now.month, now.day)
     if period == "本周":
@@ -121,6 +125,9 @@ def _resolve_period_range(period: str):
         next_first = (first.replace(year=first.year + 1, month=1)
                       if first.month == 12 else first.replace(month=first.month + 1))
         start, end = first, next_first
+    elif period == "昨日":
+        yesterday = today - timedelta(days=1)
+        start, end = yesterday, today
     else:  # "今日"
         start, end = today, today + timedelta(days=1)
     return _fmt(start), _fmt(end)
