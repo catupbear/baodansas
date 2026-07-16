@@ -2532,27 +2532,38 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
                 return cursor.fetchone()["cnt"]
 
         done_where = f"({col_prefix}status = 'done' OR {col_prefix}status = 'success')"
-        # 各分项按与列表各 Tab【完全一致】的筛选 + 去重口径独立统计，total = 各分项之和：
-        #  - 成功    = done 且 is_abnormal=0 且 doc_category=保单
-        #  - 需补充  = done 且 is_abnormal=1
-        #  - 非保单  = done 且 doc_category≠保单且≠空
-        #  - 失败    = failed
-        # 这样保证「每个 Tab 数字 = 点进去列表条数」（电子标志等与保单同号时，
-        # 各 Tab 在自己子集内去重，不会被全局去重并入保单而少算），且加总 = 全部。
-        success_cnt = _count(f"{done_where} AND {col_prefix}is_abnormal = 0 AND {col_prefix}doc_category = '保单'")
-        abnormal_cnt = _count(f"{done_where} AND {col_prefix}is_abnormal = 1")
-        nonpolicy_cnt = _count(f"{done_where} AND {col_prefix}doc_category != '保单' AND {col_prefix}doc_category != ''")
-        failed_cnt = _count(f"{col_prefix}status = 'failed'")
+        if dedup:
+            # 去重模式：各分项独立统计（每个 Tab 在自己子集内去重）
+            success_cnt = _count(f"{done_where} AND {col_prefix}is_abnormal = 0 AND {col_prefix}doc_category = '保单'")
+            abnormal_cnt = _count(f"{done_where} AND {col_prefix}is_abnormal = 1")
+            nonpolicy_cnt = _count(f"{done_where} AND {col_prefix}doc_category != '保单' AND {col_prefix}doc_category != ''")
+            failed_cnt = _count(f"{col_prefix}status = 'failed'")
+            total = _count("")
+        else:
+            # 非去重：合并为 1 次条件聚合查询（原先 5 次 COUNT → 1 次）
+            cursor.execute(
+                f"SELECT COUNT(*) as total,"
+                f" SUM(CASE WHEN {done_where} AND {col_prefix}is_abnormal = 0"
+                f"   AND {col_prefix}doc_category = '保单' THEN 1 ELSE 0 END) as success_cnt,"
+                f" SUM(CASE WHEN {done_where} AND {col_prefix}is_abnormal = 1"
+                f"   THEN 1 ELSE 0 END) as abnormal_cnt,"
+                f" SUM(CASE WHEN {done_where} AND {col_prefix}doc_category != '保单'"
+                f"   AND {col_prefix}doc_category != '' THEN 1 ELSE 0 END) as nonpolicy_cnt,"
+                f" SUM(CASE WHEN {col_prefix}status = 'failed'"
+                f"   THEN 1 ELSE 0 END) as failed_cnt"
+                f" FROM {from_sql}{where_sql}",
+                params
+            )
+            row = cursor.fetchone()
+            total = row["total"] or 0
+            success_cnt = int(row["success_cnt"] or 0)
+            abnormal_cnt = int(row["abnormal_cnt"] or 0)
+            nonpolicy_cnt = int(row["nonpolicy_cnt"] or 0)
+            failed_cnt = int(row["failed_cnt"] or 0)
         done_cnt = success_cnt + abnormal_cnt + nonpolicy_cnt
-        # total 改用与列表"全部"Tab【完全一致】的全局去重口径：去重时同一保单号跨分类
-        # （如保单与电子标志同号）全局只算 1 条，与列表条数一致；不再用各分项相加
-        # （各分项相加会把跨分类同号记录在不同分项各算一次，导致统计比列表多算）。
-        total = _count("")
-        pending_cnt = 0       # 已在 where 排除，统计中恒为 0
-        processing_cnt = 0    # 已在 where 排除，统计中恒为 0
         summary = {
             "total": total, "done_cnt": done_cnt, "failed_cnt": failed_cnt,
-            "pending_cnt": pending_cnt, "processing_cnt": processing_cnt,
+            "pending_cnt": 0, "processing_cnt": 0,
             "abnormal_cnt": abnormal_cnt, "nonpolicy_cnt": nonpolicy_cnt,
         }
 
@@ -2570,7 +2581,10 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
         engine_stats = list(cursor.fetchall())
 
         # 按群统计（始终返回，按账号/企业权限过滤）
-        room_where_parts = []
+        room_where_parts = [
+            "deleted_at IS NULL",
+            "status NOT IN ('processing', 'pending', 'duplicate')",
+        ]
         room_params = []
         if filters.get("user_ids") is not None:
             uid_list = filters["user_ids"]
