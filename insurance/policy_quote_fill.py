@@ -73,7 +73,9 @@ def parse_policy_quote_text(text: str):
             result[field] = m.group(1)
 
     # 必须至少有一个政策项，否则视为普通聊天
-    if not any(k in result for k in ("政策商业险", "政策强险", "政策非车险")):
+    # 紫金宝安实际用法里常常只发"车牌+业务员+出单处"、不带商业/交强/驾意数字，
+    # 所以业务员#2/出单处命中也算数，不能只看三个保费数字项
+    if not any(k in result for k in ("政策商业险", "政策强险", "政策非车险", "业务员#2", "出单处")):
         return None
 
     pm2 = _PHONE_RE.search(t)
