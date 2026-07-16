@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>保单识别记录 · 手机版卡片最终方案（分组卡·默认收起）</title>
+<style>
+    /* ========== 全局 ========== */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: #f3f4f6;
+        color: #1f2937;
+        padding: 32px 16px 80px;
+    }
+    .page-wrap { max-width: 1100px; margin: 0 auto; }
+    .page-title { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+    .page-sub { color: #6b7280; font-size: 14px; margin-bottom: 28px; line-height: 1.7; }
+    .page-sub b { color: #ea580c; }
+
+    /* ========== 说明卡片 ========== */
+    .note-card {
+        background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+        padding: 20px 24px; margin-bottom: 28px; font-size: 13.5px; line-height: 1.9; color: #374151;
+    }
+    .note-card h3 { font-size: 15px; margin-bottom: 8px; color: #111827; }
+    .note-card ul { padding-left: 20px; }
+    .note-card li b { color: #ea580c; }
+
+    /* ========== 布局：手机 + 说明 ========== */
+    .demo-area { display: flex; gap: 40px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+    .plan { display: flex; flex-direction: column; align-items: center; }
+    .plan-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .plan-title .rec {
+        background: #ea580c; color: #fff; font-size: 11px; font-weight: 600;
+        padding: 2px 8px; border-radius: 99px; margin-left: 6px; vertical-align: 2px;
+    }
+    .plan-desc { color: #6b7280; font-size: 12.5px; margin-bottom: 16px; max-width: 390px; text-align: center; line-height: 1.7; }
+    .plan-desc b { color: #ea580c; }
+
+    /* ========== 手机外框 ========== */
+    .phone {
+        width: 390px; height: 800px; background: #f6f7f9;
+        border-radius: 40px; border: 10px solid #1f2937;
+        overflow: hidden; position: relative;
+        box-shadow: 0 24px 60px rgba(0,0,0,.18);
+        display: flex; flex-direction: column;
+    }
+    .phone .screen { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+    .phone .screen::-webkit-scrollbar { display: none; }
+
+    /* ========== 手机内通用 ========== */
+    .m-statusbar {
+        height: 34px; display: flex; align-items: center; justify-content: space-between;
+        padding: 0 22px; font-size: 12px; font-weight: 600; color: #111827; background: #fff; flex-shrink: 0;
+    }
+    .m-header {
+        background: #fff; padding: 6px 14px 10px; flex-shrink: 0;
+        border-bottom: 1px solid #f0f1f3;
+        position: sticky; top: 0; z-index: 10;
+    }
+    .m-header-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .m-header-title { font-size: 17px; font-weight: 700; }
+    .m-search {
+        flex: 1; display: flex; align-items: center; gap: 6px;
+        background: #f3f4f6; border-radius: 99px; padding: 7px 12px; color: #9ca3af; font-size: 13px;
+    }
+    .m-filter-btn {
+        width: 34px; height: 34px; border-radius: 10px; background: #fff7ed; border: 1px solid #fed7aa;
+        display: flex; align-items: center; justify-content: center; color: #ea580c; flex-shrink: 0; position: relative;
+    }
+    .m-filter-btn .dot {
+        position: absolute; top: -3px; right: -3px; width: 8px; height: 8px;
+        background: #ef4444; border-radius: 50%; border: 1.5px solid #fff;
+    }
+    /* 状态 Tab（横向滑动） */
+    .m-tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+    .m-tabs::-webkit-scrollbar { display: none; }
+    .m-tab {
+        flex-shrink: 0; padding: 6px 12px; border-radius: 99px; font-size: 13px;
+        color: #6b7280; background: transparent; border: none; cursor: pointer; font-weight: 500;
+    }
+    .m-tab .cnt { font-size: 11px; margin-left: 3px; opacity: .75; }
+    .m-tab.active { background: #ea580c; color: #fff; font-weight: 600; }
+
+    /* 卡片列表区 */
+    .m-list { flex: 1; padding: 10px 10px 90px; display: flex; flex-direction: column; gap: 10px; }
+
+    /* ========== 状态徽标 ========== */
+    .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 2.5px 8px; border-radius: 99px; flex-shrink: 0; }
+    .badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+    .badge-done { background: #dcfce7; color: #16a34a; }
+    .badge-abnormal { background: #fef3c7; color: #b45309; }
+    .badge-failed { background: #fee2e2; color: #dc2626; }
+    .badge-nonpolicy { background: #f3f4f6; color: #6b7280; }
+
+    /* 险种小标签 */
+    .chip { font-size: 10.5px; font-weight: 600; padding: 1.5px 6px; border-radius: 4px; flex-shrink: 0; }
+    .chip-jq { background: #dbeafe; color: #1d4ed8; }
+    .chip-sy { background: #f3e8ff; color: #7c3aed; }
+    .chip-jy { background: #ccfbf1; color: #0d9488; }
+    .chip-doc { background: #dcfce7; color: #15803d; }
+    .chip-doc-mark { background: #fef9c3; color: #a16207; }
+
+    /* 车牌 */
+    .plate { display: inline-block; font-size: 15px; font-weight: 800; letter-spacing: .5px; color: #111827; }
+    .plate.none { color: #9ca3af; font-weight: 600; font-size: 13.5px; }
+
+    /* ========== 卡片 ========== */
+    .card {
+        background: #fff; border-radius: 14px; padding: 12px 14px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.05); border: 1px solid #f0f1f3;
+    }
+    .card .row1 { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; flex-wrap: wrap; }
+    .card .row1 .badge { margin-left: auto; }
+    .hint-bar { font-size: 11px; border-radius: 8px; padding: 5px 10px; margin-bottom: 8px; }
+    .hint-fail { background: #fef2f2; color: #dc2626; }
+    .hint-multi { background: #eff6ff; color: #2563eb; }
+    .hint-ok { background: #f0fdf4; color: #16a34a; }
+
+    /* 收起态：核心摘要（2x2 网格） */
+    .summary {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px;
+        background: #f9fafb; border-radius: 10px; padding: 8px 12px;
+    }
+    .kv { font-size: 12px; display: flex; align-items: baseline; gap: 8px; min-width: 0; padding: 2px 0; }
+    .kv .k { color: #9ca3af; flex-shrink: 0; min-width: 52px; }
+    .kv .v { color: #1f2937; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .kv .v.wrap { white-space: normal; word-break: break-all; line-height: 1.5; }
+    .kv .v.money { color: #ea580c; font-weight: 700; }
+    .kv .v.empty { color: #d1d5db; font-weight: 400; }
+    .kv .v.link { color: #ea580c; }
+    .kv.full { grid-column: 1 / -1; }
+
+    /* 展开区：分组明细（默认隐藏） */
+    .card .detail { display: none; }
+    .card.open .detail { display: block; }
+    .sec-title {
+        font-size: 11px; font-weight: 700; color: #9ca3af; letter-spacing: .5px;
+        display: flex; align-items: center; gap: 6px; margin: 10px 0 4px;
+    }
+    .sec-title::after { content: ''; flex: 1; height: 1px; background: #f0f1f3; }
+    .sec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; }
+
+    /* 展开/收起按钮（整行浅色，好点按） */
+    .toggle-btn {
+        width: 100%; margin-top: 8px; padding: 6px; border: none; cursor: pointer;
+        background: #fafafa; border-radius: 8px; color: #9ca3af; font-size: 11.5px; font-weight: 500;
+        display: flex; align-items: center; justify-content: center; gap: 4px;
+    }
+    .toggle-btn:active { background: #f3f4f6; }
+    .toggle-btn .arr { font-size: 10px; transition: transform .2s; }
+    .card.open .toggle-btn .arr { transform: rotate(180deg); }
+    .toggle-btn .txt-open { display: inline; }
+    .toggle-btn .txt-close { display: none; }
+    .card.open .toggle-btn .txt-open { display: none; }
+    .card.open .toggle-btn .txt-close { display: inline; }
+
+    /* 底部操作 */
+    .card .foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+    .card .foot .meta { font-size: 11px; color: #9ca3af; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .btn-s {
+        border: none; cursor: pointer; border-radius: 8px; font-size: 12px; font-weight: 600;
+        padding: 6px 14px; flex-shrink: 0;
+    }
+    .btn-view { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; }
+    .btn-primary { background: #ea580c; color: #fff; }
+    .btn-mark { background: #fef3c7; color: #92400e; border: 1px solid #fbbf24; }
+    .btn-more {
+        width: 30px; height: 30px; border-radius: 8px; background: #f3f4f6; color: #6b7280;
+        border: none; cursor: pointer; font-size: 16px; font-weight: 700; line-height: 1; flex-shrink: 0;
+    }
+
+    /* ========== 底部悬浮：上传按钮 ========== */
+    .fab {
+        position: absolute; right: 16px; bottom: 24px; z-index: 20;
+        width: 52px; height: 52px; border-radius: 50%; border: none; cursor: pointer;
+        background: linear-gradient(135deg, #f97316, #ea580c); color: #fff;
+        font-size: 24px; font-weight: 400; line-height: 1;
+        box-shadow: 0 6px 16px rgba(234,88,12,.4);
+        display: flex; align-items: center; justify-content: center;
+    }
+
+    /* ========== 更多操作：底部弹出菜单 ========== */
+    .sheet-mask {
+        position: absolute; inset: 0; background: rgba(0,0,0,.35); z-index: 30;
+        opacity: 0; pointer-events: none; transition: opacity .2s;
+    }
+    .sheet-mask.show { opacity: 1; pointer-events: auto; }
+    .sheet {
+        position: absolute; left: 0; right: 0; bottom: 0; z-index: 31;
+        background: #fff; border-radius: 20px 20px 0 0; padding: 8px 16px 24px;
+        transform: translateY(100%); transition: transform .25s ease;
+    }
+    .sheet-mask.show .sheet { transform: translateY(0); }
+    .sheet .bar { width: 36px; height: 4px; background: #e5e7eb; border-radius: 99px; margin: 6px auto 10px; }
+    .sheet .sheet-title { font-size: 13px; color: #9ca3af; text-align: center; margin-bottom: 6px; }
+    .sheet .item {
+        display: flex; align-items: center; gap: 12px; padding: 13px 6px;
+        font-size: 15px; color: #1f2937; border-bottom: 1px solid #f6f7f9; cursor: pointer;
+    }
+    .sheet .item:last-child { border-bottom: none; }
+    .sheet .item .ico { width: 22px; text-align: center; }
+    .sheet .item.danger { color: #dc2626; }
+    .sheet .cancel {
+        margin-top: 8px; width: 100%; padding: 12px; border-radius: 12px; border: none;
+        background: #f3f4f6; color: #374151; font-size: 15px; font-weight: 600; cursor: pointer;
+    }
+</style>
+</head>
+<body>
+<div class="page-wrap">
+    <h1 class="page-title">📱 保单识别记录 · 手机版卡片最终方案</h1>
+    <p class="page-sub">
+        已确定方向：<b>方案 B 分组卡 + 默认收起大部分信息</b>。<br>
+        卡片默认只显示：头部（车牌 + 险种 + 状态）+ 核心摘要（被保人 / 承保公司 / 保费 / 终保日期）+ 操作按钮。<br>
+        点击「<b>展开全部字段</b>」显示按信息类型分组的完整字段（= 桌面列表的原有全部列）。👉 手机框里可以直接点击体验。
+    </p>
+
+    <div class="demo-area">
+        <!-- ================= 最终方案手机演示 ================= -->
+        <div class="plan">
+            <div class="plan-title">最终方案 · 分组卡（默认收起）<span class="rec">待确认</span></div>
+            <div class="plan-desc">默认一屏约 3～4 张卡；第 1 张卡已预先展开，展示完整分组字段的样子。<b>点卡片底部的「展开/收起」条切换</b>，点「⋯」看更多操作菜单。</div>
+            <div class="phone">
+                <div class="screen">
+                    <div class="m-statusbar"><span>9:41</span><span>📶 🔋</span></div>
+                    <div class="m-header">
+                        <div class="m-header-top">
+                            <div class="m-header-title">识别记录</div>
+                            <div class="m-search">🔍 搜索车牌 / 保单号 / 被保险人</div>
+                            <div class="m-filter-btn">⚙<span class="dot"></span></div>
+                        </div>
+                        <div class="m-tabs" id="tabsA">
+                            <button class="m-tab active" data-st="all">全部<span class="cnt">128</span></button>
+                            <button class="m-tab" data-st="done">成功<span class="cnt">109</span></button>
+                            <button class="m-tab" data-st="abnormal">需人工补充<span class="cnt">6</span></button>
+                            <button class="m-tab" data-st="nonpolicy">非保单<span class="cnt">9</span></button>
+                            <button class="m-tab" data-st="failed">失败<span class="cnt">4</span></button>
+                        </div>
+                    </div>
+                    <div class="m-list" id="listA">
+
+                        <!-- ① 成功：预先展开，展示完整分组字段 -->
+                        <div class="card open" data-st="done">
+                            <div class="row1">
+                                <span class="plate">皖A·D88291</span>
+                                <span class="chip chip-sy">商业险</span>
+                                <span class="chip chip-doc">保单</span>
+                                <span class="badge badge-done">成功</span>
+                            </div>
+                            <!-- 收起态摘要 -->
+                            <div class="summary">
+                                <div class="kv"><span class="k">被保人</span><span class="v">张伟</span></div>
+                                <div class="kv"><span class="k">承保公司</span><span class="v">平安财险</span></div>
+                                <div class="kv"><span class="k">保费</span><span class="v money">¥4,280.00</span></div>
+                                <div class="kv"><span class="k">终保日期</span><span class="v">2027-07-14</span></div>
+                            </div>
+                            <!-- 展开态：分组完整字段 -->
+                            <div class="detail">
+                                <div class="sec-title">📄 文件</div>
+                                <div class="sec-grid">
+                                    <div class="kv full"><span class="k">文件名</span><span class="v link wrap">平安商业险保单-皖AD88291.pdf 👁</span></div>
+                                </div>
+                                <div class="sec-title">🏢 保单信息</div>
+                                <div class="sec-grid">
+                                    <div class="kv full"><span class="k">保单号</span><span class="v">10502012345678901234</span></div>
+                                    <div class="kv"><span class="k">保司(地区)</span><span class="v">平安财险-安徽</span></div>
+                                    <div class="kv full"><span class="k">保司全称</span><span class="v wrap">中国平安财产保险股份有限公司安徽分公司</span></div>
+                                    <div class="kv full"><span class="k">保司地址</span><span class="v wrap">合肥市政务区祁门路1799号平安大厦</span></div>
+                                </div>
+                                <div class="sec-title">👤 人员</div>
+                                <div class="sec-grid">
+                                    <div class="kv"><span class="k">投保人</span><span class="v">张伟</span></div>
+                                    <div class="kv"><span class="k">车主</span><span class="v">张伟</span></div>
+                                    <div class="kv"><span class="k">业务员</span><span class="v">王芳</span></div>
+                                    <div class="kv"><span class="k">跟单人</span><span class="v">李助理</span></div>
+                                    <div class="kv full"><span class="k">被保人证件</span><span class="v">340104198802141234</span></div>
+                                    <div class="kv full"><span class="k">投保人证件</span><span class="v">340104198802141234</span></div>
+                                </div>
+                                <div class="sec-title">🚗 车辆</div>
+                                <div class="sec-grid">
+                                    <div class="kv full"><span class="k">车架号</span><span class="v">LSVAU2180N2183456</span></div>
+                                </div>
+                                <div class="sec-title">📅 日期与金额</div>
+                                <div class="sec-grid">
+                                    <div class="kv"><span class="k">签单日期</span><span class="v">2026-07-15</span></div>
+                                    <div class="kv"><span class="k">起保日期</span><span class="v">2026-07-16</span></div>
+                                    <div class="kv"><span class="k">车船税</span><span class="v">¥360.00</span></div>
+                                </div>
+                                <div class="sec-title">📥 来源</div>
+                                <div class="sec-grid">
+                                    <div class="kv"><span class="k">群名</span><span class="v link">午虎科技-车险1群</span></div>
+                                    <div class="kv"><span class="k">发送人</span><span class="v link">刘经理</span></div>
+                                    <div class="kv"><span class="k">创建时间</span><span class="v">07-16 09:32</span></div>
+                                    <div class="kv"><span class="k">识别时间</span><span class="v">07-16 09:33</span></div>
+                                </div>
+                            </div>
+                            <button class="toggle-btn" onclick="toggleCard(this)">
+                                <span class="txt-open">展开全部字段</span><span class="txt-close">收起</span><span class="arr">▼</span>
+                            </button>
+                            <div class="foot">
+                                <div class="meta">07-16 09:32 · 午虎科技-车险1群</div>
+                                <button class="btn-s btn-view">预览</button>
+                                <button class="btn-more" onclick="openSheet()">⋯</button>
+                            </div>
+                        </div>
+
+                        <!-- ② 成功：默认收起 -->
+                        <div class="card" data-st="done">
+                            <div class="row1">
+                                <span class="plate">皖AF2L96</span>
+                                <span class="chip chip-jq">交强险</span>
+                                <span class="chip chip-sy">商业险</span>
+                                <span class="badge badge-done">成功</span>
+                            </div>
+                            <div class="hint-bar hint-multi">📎 同车牌 2 张保单</div>
+                            <div class="summary">
+                                <div class="kv"><span class="k">被保人</span><span class="v">合肥宏远物流有限公司</span></div>
+                                <div class="kv"><span class="k">承保公司</span><span class="v">人保财险</span></div>
+                                <div class="kv"><span class="k">总保费</span><span class="v money">¥6,152.30</span></div>
+                                <div class="kv"><span class="k">终保日期</span><span class="v">2027-06-30</span></div>
+                            </div>
+                            <button class="toggle-btn" onclick="toggleCard(this)">
+                                <span class="txt-open">展开全部字段</span><span class="txt-close">收起</span><span class="arr">▼</span>
+                            </button>
+                            <div class="detail">
+                                <div class="sec-title">📄 文件</div>
+                                <div class="sec-grid">
+                                    <div class="kv full"><span class="k">文件名</span><span class="v link wrap">人保交强+商业-皖AF2L96.pdf 👁</span></div>
+                                </div>
+                                <div class="sec-title">🏢 保单信息</div>
+                                <div class="sec-grid">
+                                    <div class="kv full"><span class="k">保单号</span><span class="v">PDAA2026340100012345 等2张</span></div>
+                                    <div class="kv"><span class="k">保司(地区)</span><span class="v">人保财险-安徽</span></div>
+                                </div>
+                                <div class="sec-title">📥 来源</div>
+                                <div class="sec-grid">
+                                    <div class="kv"><span class="k">群名</span><span class="v link">宏远物流对接群</span></div>
+                                    <div class="kv"><span class="k">发送人</span><span class="v link">周会计</span></div>
+                                    <div class="kv"><span class="k">创建时间</span><span class="v">07-15 16:20</span></div>
+                                </div>
+                            </div>
+                            <div class="foot">
+                                <div class="meta">07-15 16:20 · 宏远物流对接群</div>
+                                <button class="btn-s btn-view">展开 2 条</button>
+                                <button class="btn-more" onclick="openSheet()">⋯</button>
+                            </div>
+                        </div>
+
+                        <!-- ③ 需人工补充：默认收起 -->
+                        <div class="card" data-st="abnormal">
+                            <div class="row1">
+                                <span class="plate none">车牌未识别</span>
+                                <span class="chip chip-jy">驾意险</span>
+                                <span class="badge badge-abnormal">需人工补充</span>
+                            </div>
+                            <div class="hint-bar hint-fail">⚠ 车牌号、保费 未识别，展开后可点击字段补充</div>
+                            <div class="summary">
+                                <div class="kv"><span class="k">被保人</span><span class="v">李娟</span></div>
+                                <div class="kv"><span class="k">承保公司</span><span class="v">太平洋财险</span></div>
+                                <div class="kv"><span class="k">保费</span><span class="v empty">— 待补充</span></div>
+                                <div class="kv"><span class="k">终保日期</span><span class="v">2027-07-15</span></div>
+                            </div>
+                            <button class="toggle-btn" onclick="toggleCard(this)">
+                                <span class="txt-open">展开全部字段</span><span class="txt-close">收起</span><span class="arr">▼</span>
+                            </button>
+                            <div class="detail">
+                                <div class="sec-title">📄 文件</div>
+                                <div class="sec-grid">
+                                    <div class="kv full"><span class="k">文件名</span><span class="v link wrap">太平洋驾意险-李娟.pdf 👁</span></div>
+                                </div>
+                                <div class="sec-title">🏢 保单信息</div>
+                                <div class="sec-grid">
+                                    <div class="kv full"><span class="k">保单号</span><span class="v">ASHX20260701122938</span></div>
+                                    <div class="kv"><span class="k">保司(地区)</span><span class="v">太平洋财险-安徽</span></div>
+                                </div>
+                                <div class="sec-title">👤 人员</div>
+                                <div class="sec-grid">
+                                    <div class="kv"><span class="k">投保人</span><span class="v">李娟</span></div>
+                                    <div class="kv"><span class="k">车主</span><span class="v empty">—</span></div>
+                                    <div class="kv"><span class="k">业务员</span><span class="v empty">—</span></div>
+                                    <div class="kv"><span class="k">跟单人</span><span class="v empty">—</span></div>
+                                    <div class="kv full"><span class="k">被保人证件</span><span class="v">340111199203087766</span></div>
+                                </div>
+                                <div class="sec-title">📅 日期与金额</div>
+                                <div class="sec-grid">
+                                    <div class="kv"><span class="k">签单日期</span><span class="v">2026-07-15</span></div>
+                                    <div class="kv"><span class="k">起保日期</span><span class="v">2026-07-16</span></div>
+                                    <div class="kv"><span class="k">车船税</span><span class="v empty">—</span></div>
+                                </div>
+                                <div class="sec-title">📥 来源</div>
+                                <div class="sec-grid">
+                                    <div class="kv"><span class="k">群名</span><span class="v empty">—（手动上传）</span></div>
+                                    <div class="kv"><span class="k">创建时间</span><span class="v">07-15 14:08</span></div>
+                                </div>
+                            </div>
+                            <div class="foot">
+                                <div class="meta">07-15 14:08 · 手动上传</div>
+                                <button class="btn-s btn-mark">标记正常</button>
+                                <button class="btn-more" onclick="openSheet()">⋯</button>
+                            </div>
+                        </div>
+
+                        <!-- ④ 失败：默认收起 -->
+                        <div class="card" data-st="failed">
+                            <div class="row1">
+                                <span class="plate none">📄 202607车险保单-扫描件.pdf</span>
+                                <span class="badge badge-failed">失败</span>
+                            </div>
+                            <div class="hint-bar hint-fail">✕ 扫描件清晰度不足，OCR 无法解析</div>
+                            <button class="toggle-btn" onclick="toggleCard(this)">
+                                <span class="txt-open">展开全部字段</span><span class="txt-close">收起</span><span class="arr">▼</span>
+                            </button>
+                            <div class="detail">
+                                <div class="sec-title">📥 来源</div>
+                                <div class="sec-grid">
+                                    <div class="kv"><span class="k">群名</span><span class="v link">午虎科技-车险1群</span></div>
+                                    <div class="kv"><span class="k">发送人</span><span class="v link">刘经理</span></div>
+                                    <div class="kv"><span class="k">创建时间</span><span class="v">07-15 11:47</span></div>
+                                    <div class="kv"><span class="k">识别时间</span><span class="v">07-15 11:48</span></div>
+                                </div>
+                            </div>
+                            <div class="foot">
+                                <div class="meta">07-15 11:47 · 午虎科技-车险1群</div>
+                                <button class="btn-s btn-primary">重新识别</button>
+                                <button class="btn-s btn-view">重新上传</button>
+                                <button class="btn-more" onclick="openSheet()">⋯</button>
+                            </div>
+                        </div>
+
+                        <!-- ⑤ 非保单：默认收起 -->
+                        <div class="card" data-st="nonpolicy">
+                            <div class="row1">
+                                <span class="plate none">📄 交强险电子标志.pdf</span>
+                                <span class="chip chip-doc-mark">电子标志</span>
+                                <span class="badge badge-nonpolicy">非保单</span>
+                            </div>
+                            <button class="toggle-btn" onclick="toggleCard(this)">
+                                <span class="txt-open">展开全部字段</span><span class="txt-close">收起</span><span class="arr">▼</span>
+                            </button>
+                            <div class="detail">
+                                <div class="sec-title">📥 来源</div>
+                                <div class="sec-grid">
+                                    <div class="kv"><span class="k">群名</span><span class="v link">宏远物流对接群</span></div>
+                                    <div class="kv"><span class="k">发送人</span><span class="v link">周会计</span></div>
+                                    <div class="kv"><span class="k">创建时间</span><span class="v">07-14 18:03</span></div>
+                                </div>
+                            </div>
+                            <div class="foot">
+                                <div class="meta">07-14 18:03 · 宏远物流对接群</div>
+                                <button class="btn-s btn-view">预览</button>
+                                <button class="btn-more" onclick="openSheet()">⋯</button>
+                            </div>
+                        </div>
+
+                        <!-- ⑥ 已标记正常：默认收起 -->
+                        <div class="card" data-st="abnormal">
+                            <div class="row1">
+                                <span class="plate">皖NB7752</span>
+                                <span class="chip chip-jq">交强险</span>
+                                <span class="badge badge-done">成功</span>
+                            </div>
+                            <div class="hint-bar hint-ok">✓ 已标记正常：摩托车无商业险</div>
+                            <div class="summary">
+                                <div class="kv"><span class="k">被保人</span><span class="v">陈国强</span></div>
+                                <div class="kv"><span class="k">承保公司</span><span class="v">国寿财险</span></div>
+                                <div class="kv"><span class="k">保费</span><span class="v money">¥120.00</span></div>
+                                <div class="kv"><span class="k">终保日期</span><span class="v">2027-07-10</span></div>
+                            </div>
+                            <button class="toggle-btn" onclick="toggleCard(this)">
+                                <span class="txt-open">展开全部字段</span><span class="txt-close">收起</span><span class="arr">▼</span>
+                            </button>
+                            <div class="detail">
+                                <div class="sec-title">📥 来源</div>
+                                <div class="sec-grid">
+                                    <div class="kv"><span class="k">群名</span><span class="v link">午虎科技-车险1群</span></div>
+                                    <div class="kv"><span class="k">创建时间</span><span class="v">07-14 10:15</span></div>
+                                </div>
+                            </div>
+                            <div class="foot">
+                                <div class="meta">07-14 10:15 · 午虎科技-车险1群</div>
+                                <button class="btn-s btn-view">预览</button>
+                                <button class="btn-more" onclick="openSheet()">⋯</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 悬浮上传 -->
+                    <button class="fab" title="手动上传">+</button>
+
+                    <!-- 更多操作底部菜单 -->
+                    <div class="sheet-mask" id="sheetMask" onclick="closeSheet(event)">
+                        <div class="sheet">
+                            <div class="bar"></div>
+                            <div class="sheet-title">皖A·D88291 · 平安财险</div>
+                            <div class="item"><span class="ico">👁</span>预览保单文件</div>
+                            <div class="item"><span class="ico">🔄</span>重新识别</div>
+                            <div class="item"><span class="ico">✏️</span>编辑字段</div>
+                            <div class="item"><span class="ico">📤</span>导出此保单</div>
+                            <div class="item"><span class="ico">⚠️</span>报错反馈</div>
+                            <div class="item danger"><span class="ico">🗑</span>删除记录（仅超管）</div>
+                            <button class="cancel" onclick="closeSheet()">取消</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= 右侧说明 ================= -->
+        <div style="max-width:420px;">
+            <div class="note-card">
+                <h3>🎯 卡片结构（收起 → 展开）</h3>
+                <ul>
+                    <li><b>头部</b>：车牌号（无车牌降级显示被保险人/文件名）+ 险种标签 + 文档类型 + 状态徽标</li>
+                    <li><b>提示条</b>（按需）：多保单合并 / 缺失字段警告 / 已标记正常原因 / 失败原因</li>
+                    <li><b>核心摘要</b>（默认可见）：被保人、承保公司、保费、终保日期（2×2 网格）</li>
+                    <li><b>展开全部字段</b>：按「文件 / 保单信息 / 人员 / 车辆 / 日期金额 / 来源」分组展示桌面列表的全部列；跟随用户「页面列配置」，勾选哪列显示哪个字段，空值显示 —</li>
+                    <li><b>底部</b>：时间·来源（一行）+ 状态差异化主操作 +「⋯」更多菜单</li>
+                </ul>
+            </div>
+            <div class="note-card">
+                <h3>📱 页面级交互</h3>
+                <ul>
+                    <li>顶部搜索 + 筛选抽屉（保司/险种/日期范围，复用桌面高级搜索参数）</li>
+                    <li>状态 Tab 横向滑动：全部 / 成功 / 需人工补充 / 非保单 / 失败</li>
+                    <li>卡片流触底自动加载下一页（替代分页器）</li>
+                    <li>右下角悬浮「+」手动上传保单</li>
+                    <li>长按卡片进入多选模式 → 底部批量操作栏（批量导出 Excel / 批量导出保单 / 批量重新识别）</li>
+                    <li>展开态中点击字段值可编辑（复用现有行内编辑逻辑），日期字段调起日期选择器</li>
+                </ul>
+            </div>
+            <div class="note-card">
+                <h3>🛠 实现方式（确认后执行）</h3>
+                <ul>
+                    <li>在现有 <b>insurance.html</b> 内实现，不新建页面：<code>&lt;768px</code> 媒体查询隐藏表格、显示卡片流，共用同一份 Vue 数据（records、visibleListColumns、recordTabs、筛选条件），<b>无需后端改动</b></li>
+                    <li>展开区字段遍历 visibleListColumns 渲染，按预设「字段→分组」映射归类；未归类的新字段自动落入「其他」分组，避免遗漏</li>
+                    <li>展开状态记录在每条 record 的临时属性（如 _mExpanded），切页/刷新后默认收起</li>
+                    <li>超管专属字段（所属企业、识别方式、置信度、内部备注）按角色渲染在对应分组</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 展开/收起卡片
+    function toggleCard(btn) { btn.closest('.card').classList.toggle('open'); }
+    // 状态Tab切换过滤卡片（演示）
+    document.querySelectorAll('#tabsA .m-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('#tabsA .m-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            const st = tab.dataset.st;
+            document.querySelectorAll('#listA .card').forEach(c => {
+                c.style.display = (st === 'all' || c.dataset.st === st) ? '' : 'none';
+            });
+        });
+    });
+    // 更多操作底部菜单（演示）
+    function openSheet() { document.getElementById('sheetMask').classList.add('show'); }
+    function closeSheet(e) {
+        if (e && e.target !== e.currentTarget) return;
+        document.getElementById('sheetMask').classList.remove('show');
+    }
+</script>
+</body>
+</html>

@@ -385,10 +385,96 @@
     }
     /* 预览弹窗移动端：信息面板改为下方堆叠、顶部按钮可换行 */
     @media (max-width:640px){
-      .preview-actions{ flex-wrap:wrap; justify-content:flex-end; }
+      /* 头部两行布局：第一行文件名（单行省略）+ 标签，第二行操作按钮 */
+      .preview-header{ flex-wrap:wrap; padding:8px 12px !important; row-gap:6px; }
+      .preview-title-wrap{ flex:1 1 100%; min-width:0; flex-wrap:wrap; row-gap:4px; }
+      .preview-title{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .preview-actions{ flex:1 1 100%; flex-wrap:wrap; justify-content:flex-end; row-gap:6px; }
+      .preview-actions .btn{ padding:4px 8px !important; font-size:11px !important; }
       .preview-body{ flex-direction:column; }
       .preview-side{ width:100% !important; min-width:0 !important; max-height:45vh; border-left:none !important; border-top:1px solid #e5e7eb; }
     }
+
+    /* ========== 识别记录：移动端卡片视图（<768px） ==========
+       桌面端保持表格不变；手机端隐藏表格/分页，改为卡片流（分组卡·默认收起）。
+       卡片字段动态跟随 visibleListColumns（每个客户的列配置不同，不写死）。 */
+    .m-record-toolbar { display: none; }
+    .m-record-cards { display: none; }
+    @media (max-width: 767px) {
+        .records-desktop-wrapper { display: none !important; }
+        .records-desktop-pagination { display: none !important; }
+        .record-filter-card { display: none; }
+        .record-filter-card.m-open { display: block; }
+        .m-record-toolbar { display: flex; align-items: center; gap: 8px; }
+        .m-record-cards { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
+        /* 卡片流跟随整页滚动（解除表格卡高度封顶，覆盖 641-767px 区间） */
+        .table-card { max-height: none !important; }
+    }
+    /* 移动端顶部：快捷搜索 + 筛选开关 */
+    .m-search-box { flex: 1; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; border-radius: 99px; padding: 8px 14px; min-width: 0; }
+    .m-search-box svg { width: 15px; height: 15px; color: #9ca3af; flex-shrink: 0; }
+    .m-search-box input { flex: 1; border: none; outline: none; font-size: 14px; background: transparent; min-width: 0; }
+    .m-filter-toggle { flex-shrink: 0; padding: 8px 14px; border-radius: 99px; font-size: 13px; font-weight: 500; background: #fff; border: 1px solid #e5e7eb; color: #6b7280; cursor: pointer; }
+    .m-filter-toggle.active { background: #fff7ed; border-color: #fb923c; color: #ea580c; }
+    /* 卡片 */
+    .mrc-card { background: #fff; border: 1px solid #f0f1f3; border-radius: 14px; padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+    .mrc-head { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+    .mrc-check { width: 16px; height: 16px; flex-shrink: 0; }
+    .mrc-title { font-size: 15px; font-weight: 800; letter-spacing: .5px; color: #111827; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+    .mrc-title.none { color: #6b7280; font-weight: 600; font-size: 13px; }
+    .mrc-badge { margin-left: auto; }
+    .mrc-chip { font-size: 10.5px; font-weight: 600; padding: 1.5px 6px; border-radius: 4px; flex-shrink: 0; }
+    .mrc-chip-jq { background: #dbeafe; color: #1d4ed8; }
+    .mrc-chip-sy { background: #f3e8ff; color: #7c3aed; }
+    .mrc-chip-jy { background: #ccfbf1; color: #0d9488; }
+    .mrc-chip-other { background: #f3f4f6; color: #6b7280; }
+    .mrc-chip-doc { background: #fef9c3; color: #a16207; }
+    .mrc-hint { font-size: 11px; border-radius: 8px; padding: 5px 10px; margin-top: 8px; }
+    .mrc-hint-fail { background: #fef2f2; color: #dc2626; }
+    .mrc-hint-warn { background: #fefce8; color: #a16207; }
+    .mrc-hint-multi { background: #eff6ff; color: #2563eb; }
+    .mrc-hint-ok { background: #f0fdf4; color: #16a34a; }
+    .mrc-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; background: #f9fafb; border-radius: 10px; padding: 8px 12px; margin-top: 8px; }
+    .mrc-kv { font-size: 12px; display: flex; align-items: baseline; gap: 8px; min-width: 0; padding: 2px 0; }
+    .mrc-kv .k { color: #9ca3af; flex-shrink: 0; min-width: 52px; }
+    .mrc-kv .v { color: #1f2937; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .mrc-kv .v.wrap { white-space: normal; word-break: break-all; line-height: 1.5; }
+    .mrc-kv .v.money { color: #ea580c; font-weight: 700; }
+    .mrc-kv .v.empty { color: #d1d5db; font-weight: 400; }
+    .mrc-kv .v.link { color: #ea580c; }
+    .mrc-kv.full { grid-column: 1 / -1; }
+    .mrc-toggle { width: 100%; margin-top: 8px; padding: 6px; border: none; cursor: pointer; background: #fafafa; border-radius: 8px; color: #9ca3af; font-size: 11.5px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .mrc-toggle:active { background: #f3f4f6; }
+    .mrc-sec-title { font-size: 11px; font-weight: 700; color: #9ca3af; letter-spacing: .5px; display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; }
+    .mrc-sec-title::after { content: ''; flex: 1; height: 1px; background: #f0f1f3; }
+    .mrc-sec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; }
+    .mrc-foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+    .mrc-foot .meta { font-size: 11px; color: #9ca3af; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mrc-btn { border: none; cursor: pointer; border-radius: 8px; font-size: 12px; font-weight: 600; padding: 6px 14px; flex-shrink: 0; display: inline-flex; align-items: center; }
+    .mrc-btn-view { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; }
+    .mrc-btn-primary { background: #ea580c; color: #fff; }
+    .mrc-btn-mark { background: #fef3c7; color: #92400e; border: 1px solid #fbbf24; }
+    .mrc-btn-warn { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
+    .mrc-more { width: 30px; height: 30px; border-radius: 8px; background: #f3f4f6; color: #6b7280; border: none; cursor: pointer; font-size: 16px; font-weight: 700; line-height: 1; flex-shrink: 0; }
+    .mrc-children { margin-top: 8px; border-top: 1px dashed #e5e7eb; padding-top: 4px; }
+    .mrc-child { padding: 8px 0; border-bottom: 1px solid #f6f7f9; }
+    .mrc-child:last-child { border-bottom: none; }
+    .mrc-child-info { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #4b5563; flex-wrap: wrap; }
+    .mrc-child-acts { display: flex; gap: 6px; margin-top: 6px; }
+    .mrc-child-acts .mrc-btn { padding: 4px 10px; font-size: 11px; }
+    .mrc-loadmore { text-align: center; padding: 14px 0 4px; font-size: 12px; color: #9ca3af; }
+    .mrc-loadmore .more { color: #ea580c; cursor: pointer; }
+    /* 行内编辑（移动端卡片内） */
+    .mrc-edit-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+    .mrc-edit-row input { flex: 1; min-width: 0; font-size: 12px; border: 1px solid #fdba74; border-radius: 6px; padding: 4px 6px; background: #fff; outline: none; }
+    /* 底部操作菜单 */
+    .mrc-sheet-mask { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 120; display: flex; align-items: flex-end; }
+    .mrc-sheet { width: 100%; background: #fff; border-radius: 20px 20px 0 0; padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); }
+    .mrc-sheet-bar { width: 36px; height: 4px; background: #e5e7eb; border-radius: 99px; margin: 6px auto 10px; }
+    .mrc-sheet-title { font-size: 13px; color: #9ca3af; text-align: center; margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mrc-sheet-item { display: flex; align-items: center; gap: 12px; padding: 13px 6px; font-size: 15px; color: #1f2937; border-bottom: 1px solid #f6f7f9; cursor: pointer; }
+    .mrc-sheet-item.danger { color: #dc2626; }
+    .mrc-sheet-cancel { margin-top: 8px; width: 100%; padding: 12px; border-radius: 12px; border: none; background: #f3f4f6; color: #374151; font-size: 15px; font-weight: 600; cursor: pointer; }
     </style>
 </head>
 <body class="min-h-screen" style="background:#faf5f0;">
@@ -1798,8 +1884,22 @@
             <span class="text-xs text-orange-600 cursor-pointer ml-1"
                   @click="filterByCompany(recordCompanyFilter)">✕ 清除</span>
         </div>
-        <!-- 筛选栏 -->
-        <div class="card p-4">
+        <!-- 移动端：快捷搜索（车牌）+ 筛选开关（<768px 显示） -->
+        <div class="m-record-toolbar">
+            <div class="m-search-box">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                <input v-model="recordFilter.search_plate_no" type="search" placeholder="搜索车牌号"
+                       @input="debounceLoadRecords()">
+            </div>
+            <button class="m-filter-toggle" :class="{ active: mobileFilterOpen }"
+                    @click="mobileFilterOpen = !mobileFilterOpen">
+                筛选 {{ mobileFilterOpen ? '▲' : '▼' }}
+            </button>
+        </div>
+        <!-- 筛选栏（移动端默认收起，点「筛选」展开） -->
+        <div class="card p-4 record-filter-card" :class="{ 'm-open': mobileFilterOpen }">
             <div class="flex flex-wrap items-center gap-3">
                 <!-- 来源下拉框 -->
                 <div class="flex items-center gap-1.5">
@@ -2138,7 +2238,8 @@
                 </svg>
                 暂无识别记录
             </div>
-            <div v-else class="table-scroll-wrapper" style="flex:1;min-height:0;max-height:none;">
+            <template v-else>
+            <div class="table-scroll-wrapper records-desktop-wrapper" style="flex:1;min-height:0;max-height:none;">
                 <table class="records-table text-left">
                     <thead>
                         <tr>
@@ -2419,8 +2520,139 @@
                 </table>
             </div>
 
-            <!-- 分页器（固定在底部） -->
-            <div v-if="recordPagination.total > 0" class="px-4 py-3 border-t flex items-center justify-between"
+            <!-- 移动端卡片流（<768px 显示，与桌面表格共用同一份数据与列配置） -->
+            <div class="m-record-cards">
+                <div v-for="record in filteredRecords" :key="'m' + record.id" class="mrc-card">
+                    <!-- 头部：勾选 + 标题（车牌，降级被保人/文件名）+ 险种 + 文档类型 + 状态 -->
+                    <div class="mrc-head">
+                        <input v-if="isSuperAdmin || currentUser.role === 'enterprise'" type="checkbox"
+                               :value="record.id" v-model="selectedRecordIds" class="mrc-check">
+                        <span class="mrc-title" :class="{ none: !mHasPlate(record) }">{{ mCardTitle(record) }}</span>
+                        <span v-if="mField(record, '险种')" class="mrc-chip" :class="mPolicyChipClass(record)">{{ mField(record, '险种') }}</span>
+                        <span v-if="record.doc_category && record.doc_category !== '保单'" class="mrc-chip mrc-chip-doc">{{ record.doc_category }}</span>
+                        <span class="badge text-xs mrc-badge"
+                              :class="record.status === 'done' ? 'badge-success'
+                                    : record.status === 'failed' ? 'badge-danger'
+                                    : record.status === 'processing' ? 'badge-warning'
+                                    : 'badge-gray'">
+                            {{ record.is_abnormal && !record.abnormal_override_reason && record.status === 'done' ? '需人工补充' : statusLabel(record.status) }}
+                        </span>
+                    </div>
+                    <!-- 提示条 -->
+                    <div v-if="record._merged" class="mrc-hint mrc-hint-multi">📎 同车牌 {{ record._children ? record._children.length : 0 }} 张保单</div>
+                    <div v-if="record.policy_count > 1" class="mrc-hint mrc-hint-multi">多保单 {{ record.policy_index }}/{{ record.policy_count }}<template v-if="record.page_range">（第{{ record.page_range }}页）</template></div>
+                    <div v-if="getFailHint(record)" class="mrc-hint mrc-hint-fail">{{ getFailHint(record) }}</div>
+                    <div v-if="record.hint" class="mrc-hint mrc-hint-warn">{{ record.hint }}</div>
+                    <div v-if="record.abnormal_override_reason" class="mrc-hint mrc-hint-ok">✓ 已标记正常：{{ record.abnormal_override_reason }}</div>
+                    <!-- 核心摘要（跟随列配置自动挑选，默认可见） -->
+                    <div v-if="mSummaryCols.length" class="mrc-summary">
+                        <div v-for="col in mSummaryCols" :key="'ms' + col.key" class="mrc-kv">
+                            <span class="k">{{ col.display_name }}</span>
+                            <span v-if="listEditing.recordId === record.id && listEditing.col === col.key" class="mrc-edit-row" style="flex:1;">
+                                <input v-model="listEditing.value" v-auto-picker="isDateField(col.key)"
+                                       :type="isDateField(col.key) ? 'date' : 'text'"
+                                       @keyup.enter="saveListEdit(record)" @keyup.escape="cancelListEdit()">
+                                <button class="mrc-btn mrc-btn-primary" style="padding:4px 8px;font-size:11px;" :disabled="listEditing.saving" @click="saveListEdit(record)">{{ listEditing.saving ? '..' : '✓' }}</button>
+                                <button class="mrc-btn" style="padding:4px 8px;font-size:11px;background:#fff;border:1px solid #d1d5db;color:#6b7280;" @click="cancelListEdit()">✕</button>
+                            </span>
+                            <span v-else class="v" :class="mValClass(record, col)" @click="mFieldClick(record, col)">
+                                {{ mFieldDisplay(record, col) }}
+                            </span>
+                        </div>
+                    </div>
+                    <!-- 展开/收起全部字段 -->
+                    <button v-if="mDetailGroups.length || isSuperAdmin" class="mrc-toggle" @click="record._mExpanded = !record._mExpanded">
+                        {{ record._mExpanded ? '收起' : '展开全部字段' }}
+                        <span style="font-size:10px;">{{ record._mExpanded ? '▲' : '▼' }}</span>
+                    </button>
+                    <!-- 展开区：按信息类型分组的完整字段（跟随列配置，未归类字段落入「其他」） -->
+                    <div v-if="record._mExpanded">
+                        <template v-for="group in mDetailGroups" :key="'mg' + group.title">
+                            <div class="mrc-sec-title">{{ group.title }}</div>
+                            <div class="mrc-sec-grid">
+                                <div v-for="col in group.cols" :key="'md' + col.key" class="mrc-kv" :class="{ full: mIsLong(col.key) }">
+                                    <span class="k">{{ col.display_name }}</span>
+                                    <span v-if="listEditing.recordId === record.id && listEditing.col === col.key" class="mrc-edit-row" style="flex:1;">
+                                        <input v-model="listEditing.value" v-auto-picker="isDateField(col.key)"
+                                               :type="isDateField(col.key) ? 'date' : 'text'"
+                                               @keyup.enter="saveListEdit(record)" @keyup.escape="cancelListEdit()">
+                                        <button class="mrc-btn mrc-btn-primary" style="padding:4px 8px;font-size:11px;" :disabled="listEditing.saving" @click="saveListEdit(record)">{{ listEditing.saving ? '..' : '✓' }}</button>
+                                        <button class="mrc-btn" style="padding:4px 8px;font-size:11px;background:#fff;border:1px solid #d1d5db;color:#6b7280;" @click="cancelListEdit()">✕</button>
+                                    </span>
+                                    <template v-else>
+                                        <span class="v" :class="mValClass(record, col)" @click="mFieldClick(record, col)">
+                                            {{ mFieldDisplay(record, col) }}
+                                        </span>
+                                        <button v-if="remarkSelector.enabled && col.key === remarkSelector.config.target_key"
+                                                @click.stop="openRemarkSelector(record)"
+                                                class="mrc-btn" style="padding:2px 8px;font-size:10px;background:#fff7ed;border:1px solid #fdba74;color:#c2410c;">选择</button>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                        <!-- 管理信息（仅超管） -->
+                        <template v-if="isSuperAdmin">
+                            <div class="mrc-sec-title">🔧 管理</div>
+                            <div class="mrc-sec-grid">
+                                <div class="mrc-kv"><span class="k">所属企业</span><span class="v" :class="{ empty: !record.enterprise_name }">{{ record.enterprise_name || '—' }}</span></div>
+                                <div class="mrc-kv"><span class="k">识别方式</span><span class="v" :class="{ empty: !record.ocr_engine }">{{ record.ocr_engine === 'baidu' ? '百度OCR' : record.ocr_engine === 'volc' ? '火山引擎' : record.ocr_engine === 'pdfplumber+ocr' ? 'PDF+OCR' : record.ocr_engine ? 'PDF提取' : '—' }}</span></div>
+                                <div class="mrc-kv"><span class="k">置信度</span><span class="v" :class="{ empty: !record.confidence }">{{ record.confidence ? (record.confidence * 100).toFixed(0) + '%' : '—' }}</span></div>
+                                <div class="mrc-kv full"><span class="k">内部备注</span>
+                                    <span class="v" style="color:#1d4ed8;" @click="openInternalNotes(record)">
+                                        {{ (record.internal_note && record.internal_note.latest) || '备注/日志' }}{{ (record.internal_note && record.internal_note.count) ? ' (' + record.internal_note.count + ')' : '' }}
+                                    </span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    <!-- 合并明细：同车牌的原始记录（可单条预览/重新识别/报错） -->
+                    <div v-if="record._merged && record._expanded" class="mrc-children">
+                        <div v-for="child in record._children" :key="'mc' + child.id" class="mrc-child">
+                            <div class="mrc-child-info">
+                                <span class="mrc-chip mrc-chip-jq">{{ (child.display_fields || {})['险种'] || '险种?' }}</span>
+                                <span>保单号 {{ (child.display_fields || {})['保单号'] || '—' }}</span>
+                                <span>保费 {{ (child.display_fields || {})['保费'] || '—' }}</span>
+                            </div>
+                            <div class="mrc-child-acts">
+                                <button v-if="child.cos_url" class="mrc-btn mrc-btn-view" @click="previewRecord(child)">预览</button>
+                                <button class="mrc-btn mrc-btn-primary" :disabled="child._reocring" @click="reocrRecord(child)">{{ child._reocring ? '识别中..' : '重新识别' }}</button>
+                                <button class="mrc-btn mrc-btn-warn" @click="openErrorReport(child)">报错</button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 底部：时间来源 + 状态差异化主操作 + 更多 -->
+                    <div class="mrc-foot">
+                        <div class="meta">{{ mField(record, '创建时间') || formatTime(record.created_at) }}<template v-if="record.room_name"> · {{ record.room_name }}</template></div>
+                        <template v-if="record._merged">
+                            <button class="mrc-btn mrc-btn-view" @click="record._expanded = !record._expanded">
+                                {{ record._expanded ? '收起' : '展开' }} {{ record._children ? record._children.length : 0 }} 条
+                            </button>
+                        </template>
+                        <template v-else>
+                            <button v-if="record.is_abnormal && !record.abnormal_override_reason" class="mrc-btn mrc-btn-mark" @click="openMarkNormal(record)">标记正常</button>
+                            <button v-else-if="record.status === 'failed' && record.cos_url" class="mrc-btn mrc-btn-primary" :disabled="record._reocring" @click="reocrRecord(record)">{{ record._reocring ? '识别中...' : '重新识别' }}</button>
+                            <button v-else-if="record.cos_url" class="mrc-btn mrc-btn-view" @click="previewRecord(record)">预览</button>
+                            <label v-if="record.status === 'failed' && !record.cos_url" class="mrc-btn mrc-btn-primary" style="cursor:pointer;">
+                                {{ record._reuploading ? '上传中...' : '重新上传' }}
+                                <input type="file" accept=".pdf" style="display:none;" @change="reuploadRecord(record, $event)" :disabled="record._reuploading">
+                            </label>
+                            <button class="mrc-more" @click="openMSheet(record)">⋯</button>
+                        </template>
+                    </div>
+                </div>
+                <!-- 触底自动加载 / 手动加载更多 -->
+                <div v-if="!pageMergeByPlate" class="mrc-loadmore">
+                    <span v-if="mLoadingMore">加载中...</span>
+                    <span v-else-if="recordPagination.page < recordPagination.totalPages" class="more" @click="mLoadMore()">
+                        加载更多（{{ records.length }}/{{ recordPagination.total }}）
+                    </span>
+                    <span v-else>已加载全部 {{ recordPagination.total }} 条</span>
+                </div>
+            </div>
+            </template>
+
+            <!-- 分页器（固定在底部，移动端隐藏） -->
+            <div v-if="recordPagination.total > 0" class="px-4 py-3 border-t flex items-center justify-between records-desktop-pagination"
                  style="flex-shrink:0;background:#fff;">
                 <span class="text-xs text-gray-400">
                     共 {{ recordPagination.total }} 条，第 {{ recordPagination.page }} / {{ recordPagination.totalPages }} 页
@@ -2443,6 +2675,29 @@
                 </div>
             </div>
         </div>
+
+        <!-- 移动端「更多操作」底部弹出菜单 -->
+        <transition name="fade">
+            <div v-if="mSheetRecord" class="mrc-sheet-mask" @click.self="closeMSheet()">
+                <div class="mrc-sheet">
+                    <div class="mrc-sheet-bar"></div>
+                    <div class="mrc-sheet-title">
+                        {{ mCardTitle(mSheetRecord) }}<template v-if="mField(mSheetRecord, '承保公司')"> · {{ mField(mSheetRecord, '承保公司') }}</template>
+                    </div>
+                    <div v-if="mSheetRecord.cos_url" class="mrc-sheet-item" @click="previewRecord(mSheetRecord); closeMSheet()">👁 预览保单文件</div>
+                    <div v-if="mSheetRecord.status === 'done' || mSheetRecord.status === 'success' || mSheetRecord.status === 'failed'"
+                         class="mrc-sheet-item" @click="reocrRecord(mSheetRecord); closeMSheet()">🔄 重新识别</div>
+                    <div v-if="mSheetRecord.is_abnormal && !mSheetRecord.abnormal_override_reason"
+                         class="mrc-sheet-item" @click="openMarkNormal(mSheetRecord); closeMSheet()">✅ 标记正常</div>
+                    <div v-if="mSheetRecord.abnormal_override_reason"
+                         class="mrc-sheet-item" @click="undoMarkNormal(mSheetRecord); closeMSheet()">↩️ 撤销标记正常</div>
+                    <div class="mrc-sheet-item" @click="openErrorReport(mSheetRecord); closeMSheet()">⚠️ 报错反馈</div>
+                    <div v-if="isSuperAdmin" class="mrc-sheet-item" @click="openInternalNotes(mSheetRecord); closeMSheet()">📝 内部备注/日志</div>
+                    <div v-if="isSuperAdmin" class="mrc-sheet-item danger" @click="openDeleteRecord(mSheetRecord); closeMSheet()">🗑 删除记录</div>
+                    <button class="mrc-sheet-cancel" @click="closeMSheet()">取消</button>
+                </div>
+            </div>
+        </transition>
     </main>
 
     <!-- 联系人编辑弹窗 -->
@@ -3368,13 +3623,13 @@
         <div v-if="previewVisible" class="fixed inset-0 z-50 modal-mask flex items-center justify-center"
              @click.self="previewVisible = false">
             <div class="bg-white flex flex-col" style="height: 100vh; width: 100vw;" @click="siblingDropdownOpen = false">
-                <div class="flex items-center justify-between px-5 py-3 border-b flex-shrink-0" style="background:#fafbfc;">
-                    <div class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="flex items-center justify-between px-5 py-3 border-b flex-shrink-0 preview-header" style="background:#fafbfc;">
+                    <div class="flex items-center gap-2 preview-title-wrap">
+                        <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                         </svg>
-                        <h3 class="text-sm font-semibold text-gray-700">{{ previewFileName }}</h3>
+                        <h3 class="text-sm font-semibold text-gray-700 preview-title">{{ previewFileName }}</h3>
                         <span v-if="previewAutoRecord && previewAutoRecord.policy_count > 1"
                               class="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-medium">
                             多保单 {{ previewAutoRecord.policy_index }}/{{ previewAutoRecord.policy_count }}
@@ -7751,7 +8006,7 @@ const _app = createApp({
             loadRecords();
         }
 
-        async function loadRecords(resetPage = true, silent = false) {
+        async function loadRecords(resetPage = true, silent = false, append = false) {
             if (resetPage) recordPagination.page = 1;
             if (!silent) isLoadingRecords.value = true;
             try {
@@ -7810,12 +8065,14 @@ const _app = createApp({
                 const json = await resp.json();
                 // API 返回 {"code":0, "data": {"records":[], "total":N}}
                 const data = json.data || json;
-                records.value = (data.records || data.items || []).map(r => ({
+                const _newRecords = (data.records || data.items || []).map(r => ({
                     ...r,
                     _retrying: false,
                     _syncing: false,
                     _reocring: false,
                 }));
+                // append=true：移动端触底加载，把下一页追加到已有列表；否则整页替换
+                records.value = append ? records.value.concat(_newRecords) : _newRecords;
                 if (data.column_config && data.column_config.columns) {
                     listColumnConfig.value = data.column_config.columns;
                 }
@@ -8670,7 +8927,118 @@ const _app = createApp({
         // 设置已迁移到独立的 /monitor-config 页面
 
         // ========== 初始化 ==========
+        // ==================== 识别记录：移动端卡片视图（<768px） ====================
+        // 卡片字段完全跟随 visibleListColumns（每个客户的「页面列配置」不同，不写死字段）
+        const mobileFilterOpen = ref(false);        // 移动端筛选卡展开状态
+        const mSheetRecord = ref(null);             // 「更多操作」底部菜单当前记录
+        const mLoadingMore = ref(false);            // 触底加载中
+
+        // 头部已展示的字段（卡片正文不再重复）
+        const M_HEADER_KEYS = ['车牌', '险种', '状态', '文档类型'];
+        // 摘要区优先展示的核心字段（存在于客户列配置中才显示）
+        const M_SUMMARY_PREF = ['被保人', '承保公司', '保费', '终保日期'];
+        // 长文本字段：展开区独占整行
+        const M_LONG_KEYS = ['文件名', '保单号', '被保险人身份证号码', '投保人身份证号码', '车架号', '保司公司名称', '保司地址', '群名'];
+        // 金额字段：橙色加粗
+        const M_MONEY_KEYS = ['保费', '车船税', '不含税保费', '增值税额'];
+        // 字段 → 分组映射（展开区按信息类型分组；未归类字段自动落入「其他」，新增列不会丢）
+        const M_FIELD_GROUPS = [
+            { title: '📄 文件', keys: ['文件名'] },
+            { title: '🏢 保单信息', keys: ['承保公司', '保单号', '保司公司名称', '保司地址', '保司（带地区）'] },
+            { title: '👤 人员', keys: ['投保人', '被保人', '车主', '业务员', '跟单人', '被保险人身份证号码', '投保人身份证号码', '司机乘客'] },
+            { title: '🚗 车辆', keys: ['车架号', '厂牌型号', '发动机号', '车辆性质', '使用性质', '机动车种类', '核定载质量', '初次登记日期'] },
+            { title: '📅 日期与金额', keys: ['签单日期', '起保日期', '终保日期', '保费', '车船税', '交强到期时间', '收费确认时间', '不含税保费', '增值税额'] },
+            { title: '📥 来源', keys: ['群名', '发送人', '创建时间', '识别时间'] },
+        ];
+
+        function mField(record, key) { return (record.display_fields || {})[key] || ''; }
+        function mHasPlate(record) { return !!mField(record, '车牌'); }
+        // 卡片主标题：车牌 → 被保人 → 文件名 逐级降级
+        function mCardTitle(record) {
+            return mField(record, '车牌') || mField(record, '被保人') || record.filename || '—';
+        }
+        function mPolicyChipClass(record) {
+            const v = mField(record, '险种');
+            if (v.includes('交强')) return 'mrc-chip-jq';
+            if (v.includes('商业')) return 'mrc-chip-sy';
+            if (v.includes('驾意')) return 'mrc-chip-jy';
+            return 'mrc-chip-other';
+        }
+        function mIsLong(key) { return M_LONG_KEYS.includes(key); }
+        // 摘要字段：优先取核心字段，不足 4 个时按列配置顺序补齐（跳过长文本字段）
+        const mSummaryCols = computed(() => {
+            const cols = visibleListColumns.value.filter(c => !M_HEADER_KEYS.includes(c.key));
+            const picked = M_SUMMARY_PREF.map(k => cols.find(c => c.key === k)).filter(Boolean);
+            for (const c of cols) {
+                if (picked.length >= 4) break;
+                if (picked.includes(c) || M_LONG_KEYS.includes(c.key)) continue;
+                picked.push(c);
+            }
+            return picked;
+        });
+        // 展开区分组：可见列（排除头部/摘要已展示的）按分组归类，未归类的落入「其他」
+        const mDetailGroups = computed(() => {
+            const summaryKeys = mSummaryCols.value.map(c => c.key);
+            const rest = visibleListColumns.value.filter(c => !M_HEADER_KEYS.includes(c.key) && !summaryKeys.includes(c.key));
+            const groups = [];
+            for (const g of M_FIELD_GROUPS) {
+                const cols = rest.filter(c => g.keys.includes(c.key));
+                if (cols.length) groups.push({ title: g.title, cols });
+            }
+            const groupedKeys = new Set(M_FIELD_GROUPS.flatMap(g => g.keys));
+            const others = rest.filter(c => !groupedKeys.has(c.key));
+            if (others.length) groups.push({ title: '📋 其他', cols: others });
+            return groups;
+        });
+        // 字段显示值（特殊字段走记录属性，其余取 display_fields）
+        function mFieldDisplay(record, col) {
+            const key = col.key;
+            if (key === '文件名') return record.filename || '—';
+            if (key === '群名') return record.room_name || record.roomid || '—';
+            if (key === '发送人') return record.sender_name || record.sender || '—';
+            return mField(record, key) || '—';
+        }
+        function mValClass(record, col) {
+            const v = mFieldDisplay(record, col);
+            return {
+                empty: v === '—',
+                money: M_MONEY_KEYS.includes(col.key),
+                link: (col.key === '文件名' && !!record.cos_url) || col.key === '群名' || col.key === '发送人',
+                wrap: mIsLong(col.key),
+            };
+        }
+        // 字段点击：文件名→预览；群名/发送人→编辑联系人；其余→行内编辑（复用桌面逻辑）
+        function mFieldClick(record, col) {
+            const key = col.key;
+            if (key === '文件名') { if (record.cos_url) previewRecord(record); return; }
+            if (key === '群名') { if (record.roomid) openContactEdit(record.roomid, record.room_name, 'room'); return; }
+            if (key === '发送人') { if (record.sender) openContactEdit(record.sender, record.sender_name, 'user'); return; }
+            if (record._merged) return;  // 合并伪记录不可编辑
+            startListEdit(record, key);
+        }
+        function openMSheet(record) { mSheetRecord.value = record; }
+        function closeMSheet() { mSheetRecord.value = null; }
+        // 触底加载下一页（追加模式；按车牌合并视图下不启用）
+        async function mLoadMore() {
+            if (mLoadingMore.value || isLoadingRecords.value || pageMergeByPlate.value) return;
+            if (recordPagination.page >= recordPagination.totalPages) return;
+            mLoadingMore.value = true;
+            recordPagination.page += 1;
+            try {
+                await loadRecords(false, true, true);
+            } finally {
+                mLoadingMore.value = false;
+            }
+        }
+        function mOnScroll() {
+            if (window.innerWidth >= 768 || pageTab.value !== 'records') return;
+            if (window.innerHeight + window.scrollY < document.body.scrollHeight - 300) return;
+            mLoadMore();
+        }
+
         onMounted(async () => {
+            // 移动端卡片流：滚动触底自动加载下一页
+            window.addEventListener('scroll', mOnScroll, { passive: true });
             // 先获取用户信息（isSuperAdmin 等 computed 依赖此）
             try {
                 const meResp = await authFetch('/api/auth/me');
@@ -8710,6 +9078,8 @@ const _app = createApp({
                 if (isLoadingRecords.value || pageMergeByPlate.value) return;
                 if (previewVisible.value || recordDetailVisible.value || mappingModalVisible.value
                         || contactEditVisible.value || pricingVisible.value || profileVisible.value) return;
+                // 移动端卡片流已触底加载多页时跳过（静默刷新只请求当前页，会把追加的数据刷掉）
+                if (window.innerWidth < 768 && recordPagination.page > 1) return;
                 loadRecords(false, true);
             }, 30000);
         });
@@ -8810,6 +9180,11 @@ const _app = createApp({
             // 通知面板
             // 移动端菜单
             mobileMenuOpen,
+            // 识别记录移动端卡片视图
+            mobileFilterOpen, mSheetRecord, mLoadingMore,
+            mField, mHasPlate, mCardTitle, mPolicyChipClass, mIsLong,
+            mSummaryCols, mDetailGroups, mFieldDisplay, mValClass, mFieldClick,
+            openMSheet, closeMSheet, mLoadMore,
             // 购买套餐弹窗
             pricingVisible, billingType, showPricingQr, pricingData,
             // 设置已迁移到 /monitor-config 页面
