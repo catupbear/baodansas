@@ -508,11 +508,12 @@ class MessageFetcher:
             from insurance.ledger_export import export_ledger_via_binding
             from insurance.flowbot_notify import send_flowbot_group_message
 
+            label, date_start, date_end = period
             excel_bytes, filename, count = export_ledger_via_binding(
-                handler.db, config_user_id, config_enterprise_id, period)
+                handler.db, config_user_id, config_enterprise_id, label, date_start, date_end)
 
             if not excel_bytes:
-                send_flowbot_group_message(room_name, sender_name, f"【保单台账】{period}暂无保单数据", robot_id)
+                send_flowbot_group_message(room_name, sender_name, f"【保单台账】{label}暂无保单数据", robot_id)
                 return
 
             if not handler.cos_storage:
