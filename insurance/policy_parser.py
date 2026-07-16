@@ -235,6 +235,8 @@ def _is_valid_person(val: str) -> bool:
         r'|本人|雇佣|义务|权利'
         # 法律/条款常见虚词（易从条款正文中误提取）
         r'|鉴于|甲方|乙方|丙方|若干|总则|细则|附则|前述|兹有|特此'
+        # "协商确定"等占位/待定用语（如"本合同保险期间以保险人和投保人协商确定"被误当人名）
+        r'|协商确定|另行约定|双方约定|待定|不详'
         # 社交媒体/营销标签（如保单PDF中的微信公众号标签"众诚官微"）
         r'|官微|官网',
         val
@@ -2939,8 +2941,22 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
     ]:
         m = re.search(p, text)
         if m:
-            fields["发动机号"] = m.group(1)
-            break
+            _val = m.group(1)
+            # "发动机号码[：:\s]*(\S+)" 太宽松：版式是"值在标签上一行、标签在下一行"时（紫金/PICC
+            # 交强险常见），标签后紧跟的其实是"识别代码（车架号）"这行本身，不能当值收下
+            if not re.search(r'识别代码|车架号', _val):
+                fields["发动机号"] = _val
+                break
+
+    # 紫金/PICC等竖排错位：发动机号+车架号的值整段落在"发动机号码 识别代码（车架号）"标签的
+    # 上一行，中间用空格分隔（如"274822E LGBH92E00MY754688\n发动机号码 识别代码（车架号）"）
+    if "发动机号" not in fields or "车架号VIN" not in fields:
+        m = re.search(r"([A-Za-z0-9]{5,20})\s+([A-HJ-NPR-Z][A-Z0-9]{16})\s*\n\s*发动机号码\s*识别代码", text)
+        if m:
+            if "发动机号" not in fields:
+                fields["发动机号"] = m.group(1)
+            if "车架号VIN" not in fields:
+                fields["车架号VIN"] = m.group(2)
 
     # 厂牌型号
     for p in [
