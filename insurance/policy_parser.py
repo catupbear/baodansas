@@ -1101,6 +1101,10 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
         if m:
             val = m.group(1).strip()
             if val and len(val) >= 4 and re.search(r'[市区县].{2,}[街路号大厦广场楼栋座]|大道', val):
+                # 该模板地址尾部常跟着一段小写字母(+数字)的内部代理人代码水印（如"一楼
+                # feichexianzyz1"），紧跟在地址正常结尾（楼/号/室等）后面、与真实门牌单元号
+                # （通常大写字母，如"3栋A座1701-BCDEF"）明显不同，予以剥离
+                val = re.sub(r'(?<=[楼号室座栋幢层])\s+[a-z]{3,}\d*$', '', val)
                 fields["保司地址"] = val
 
     # 紫金等格式：公司名称跨行，标签在中间
