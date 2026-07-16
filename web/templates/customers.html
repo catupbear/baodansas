@@ -212,6 +212,8 @@
                                 <td>
                                     <button class="op-btn orange" @click="gotoManage(c)">客户系统配置</button>
                                     <button class="op-btn" @click="openProfile(c)">客户档案</button>
+                                    <button class="op-btn" @click="openEditModal(c)">编辑</button>
+                                    <button class="op-btn" style="background:#fef2f2;color:#dc2626;" @click="confirmDelete(c)">删除</button>
                                 </td>
                             </tr>
                         </tbody>
@@ -241,6 +243,8 @@
                         <div class="cc-ops">
                             <button class="op-btn orange" @click="gotoManage(c)">客户系统配置</button>
                             <button class="op-btn" @click="openProfile(c)">客户档案</button>
+                            <button class="op-btn" @click="openEditModal(c)">编辑</button>
+                            <button class="op-btn" style="background:#fef2f2;color:#dc2626;" @click="confirmDelete(c)">删除</button>
                         </div>
                     </div>
                 </div>
@@ -291,6 +295,65 @@
                 <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
                     <button class="btn btn-outline" @click="closeProfile">取消</button>
                     <button class="btn btn-primary" :disabled="profileSaving" @click="saveProfile">{{ profileSaving ? '保存中…' : '保存' }}</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 删除确认弹窗 -->
+        <div v-if="deleteTarget" class="modal-mask" @click.self="deleteTarget=null" style="position:fixed;inset:0;background:rgba(15,23,42,0.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:60;">
+            <div style="background:#fff;border-radius:12px;padding:24px;width:min(360px, calc(100vw - 32px));">
+                <h3 style="font-size:16px;font-weight:700;color:#1c1410;margin-bottom:12px;">确认删除</h3>
+                <p style="font-size:14px;color:#555;margin-bottom:6px;">确定删除企业 <strong>{{ deleteTarget.name }}</strong> 吗？</p>
+                <p style="font-size:12px;color:#dc2626;">此操作不可恢复，该企业下的账号将失去归属。</p>
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+                    <button class="btn btn-outline" @click="deleteTarget=null">取消</button>
+                    <button class="btn btn-sm" :disabled="deleting" style="background:#dc2626;color:#fff;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;" @click="doDelete">
+                        {{ deleting ? '删除中…' : '确认删除' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 编辑企业弹窗 -->
+        <div v-if="editTarget" class="modal-mask" @click.self="closeEditModal" style="position:fixed;inset:0;background:rgba(15,23,42,0.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:60;">
+            <div style="background:#fff;border-radius:12px;padding:24px;width:min(420px, calc(100vw - 32px));">
+                <h3 style="font-size:16px;font-weight:700;color:#1c1410;margin-bottom:16px;">编辑企业</h3>
+                <div v-if="editFormError" style="background:#fef2f2;color:#dc2626;font-size:12px;padding:8px 12px;border-radius:8px;margin-bottom:12px;">{{ editFormError }}</div>
+                <div style="margin-bottom:12px;">
+                    <label style="display:block;font-size:12px;color:#6b7280;margin-bottom:5px;">企业名称 <span style="color:#dc2626;">*</span></label>
+                    <input v-model="editForm.name" type="text" style="width:100%;height:38px;border:1px solid #e7e0d8;border-radius:8px;padding:0 12px;font-size:14px;outline:none;">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="display:block;font-size:12px;color:#6b7280;margin-bottom:5px;">企业编号 <span style="color:#dc2626;">*</span></label>
+                    <input v-model="editForm.enterprise_no" type="text" style="width:100%;height:38px;border:1px solid #e7e0d8;border-radius:8px;padding:0 12px;font-size:14px;outline:none;">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="display:block;font-size:12px;color:#6b7280;margin-bottom:5px;">联系人</label>
+                    <input v-model="editForm.contact_person" type="text" style="width:100%;height:38px;border:1px solid #e7e0d8;border-radius:8px;padding:0 12px;font-size:14px;outline:none;">
+                </div>
+                <div style="margin-bottom:16px;">
+                    <label style="display:block;font-size:12px;color:#6b7280;margin-bottom:5px;">联系电话</label>
+                    <input v-model="editForm.contact_phone" type="text" style="width:100%;height:38px;border:1px solid #e7e0d8;border-radius:8px;padding:0 12px;font-size:14px;outline:none;">
+                </div>
+                <div style="margin-bottom:16px;">
+                    <label style="display:block;font-size:12px;color:#6b7280;margin-bottom:5px;">推荐人（输入姓名/手机号搜索）</label>
+                    <input v-model="editReferrerSearch" @input="searchEditReferrer" placeholder="输入姓名或手机号…"
+                           style="width:100%;height:38px;border:1px solid #e7e0d8;border-radius:8px;padding:0 12px;font-size:14px;outline:none;margin-bottom:6px;">
+                    <div v-if="editReferrerList.length" style="border:1px solid #e7e0d8;border-radius:8px;max-height:160px;overflow-y:auto;">
+                        <div v-for="u in editReferrerList" :key="u.id" @click="selectEditReferrer(u)"
+                             :style="{padding:'8px 12px',cursor:'pointer',fontSize:'13px',display:'flex',justifyContent:'space-between',alignItems:'center',background: editReferrerSelected && editReferrerSelected.id===u.id ? '#fff7ed' : ''}">
+                            <span>{{ u.name || u.phone }}</span>
+                            <span style="font-size:11px;color:#9ca3af;">{{ u.phone }}</span>
+                        </div>
+                    </div>
+                    <div v-if="editReferrerSelected" style="margin-top:6px;padding:7px 10px;background:#fff7ed;border-radius:8px;font-size:13px;color:#92400e;">
+                        已选：{{ editReferrerSelected.name || editReferrerSelected.phone }}
+                        <button @click="editReferrerSelected=null" style="margin-left:8px;color:#9ca3af;background:none;border:none;cursor:pointer;">✕ 清除</button>
+                    </div>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                    <button class="btn btn-outline" @click="closeEditModal">取消</button>
+                    <button class="btn btn-primary" :disabled="editSubmitting" @click="submitEditModal">{{ editSubmitting ? '保存中…' : '确定' }}</button>
                 </div>
             </div>
         </div>
@@ -411,6 +474,110 @@ createApp({
         function gotoManage(c) {
             window.location.href = `/admin/enterprises?search=${encodeURIComponent(c.name || '')}`;
         }
+        const editTarget = ref(null);
+        const editForm = ref({ name: '', enterprise_no: '', contact_person: '', contact_phone: '' });
+        const editFormError = ref('');
+        const editSubmitting = ref(false);
+        const editReferrerSearch = ref('');
+        const editReferrerList = ref([]);
+        const editReferrerSelected = ref(null);
+        let editReferrerTimer = null;
+        function openEditModal(c) {
+            editTarget.value = c;
+            editForm.value = {
+                name: c.name || '',
+                enterprise_no: c.enterprise_no || '',
+                contact_person: c.contact_person || '',
+                contact_phone: c.contact_phone || '',
+            };
+            editFormError.value = '';
+            editReferrerSearch.value = '';
+            editReferrerList.value = [];
+            editReferrerSelected.value = c.referrer_id ? { id: c.referrer_id, name: c.referrer_name, phone: '' } : null;
+        }
+        function searchEditReferrer() {
+            clearTimeout(editReferrerTimer);
+            const q = editReferrerSearch.value.trim();
+            if (!q) { editReferrerList.value = []; return; }
+            editReferrerTimer = setTimeout(async () => {
+                try {
+                    const resp = await authFetch(`/api/auth/users?q=${encodeURIComponent(q)}&limit=10`);
+                    const j = await resp.json();
+                    if (j.code === 0) editReferrerList.value = j.data || [];
+                } catch (e) {}
+            }, 300);
+        }
+        function selectEditReferrer(u) { editReferrerSelected.value = u; }
+        function closeEditModal() {
+            editTarget.value = null;
+        }
+        async function submitEditModal() {
+            if (!editTarget.value) return;
+            if (!editForm.value.name.trim()) { editFormError.value = '请输入企业名称'; return; }
+            if (!editForm.value.enterprise_no.trim()) { editFormError.value = '请输入企业编号'; return; }
+            editSubmitting.value = true;
+            try {
+                const body = {
+                    name: editForm.value.name.trim(),
+                    enterprise_no: editForm.value.enterprise_no.trim(),
+                    contact_person: editForm.value.contact_person.trim(),
+                    contact_phone: editForm.value.contact_phone.trim(),
+                };
+                const resp = await authFetch(`/api/auth/enterprises/${editTarget.value.id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (data.code !== 0) {
+                    editFormError.value = data.msg || '保存失败';
+                    editSubmitting.value = false;
+                    return;
+                }
+                const refResp = await authFetch(`/api/auth/enterprises/${editTarget.value.id}/referrer`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ referrer_id: editReferrerSelected.value ? editReferrerSelected.value.id : null }),
+                });
+                const refData = await refResp.json();
+                if (refData.code !== 0) {
+                    editFormError.value = refData.msg || '推荐人保存失败';
+                    editSubmitting.value = false;
+                    return;
+                }
+                Object.assign(editTarget.value, body, {
+                    referrer_id: editReferrerSelected.value ? editReferrerSelected.value.id : null,
+                    referrer_name: editReferrerSelected.value ? (editReferrerSelected.value.name || editReferrerSelected.value.phone) : '',
+                });
+                closeEditModal();
+            } catch (e) {
+                editFormError.value = '网络错误';
+            } finally {
+                editSubmitting.value = false;
+            }
+        }
+
+        const deleteTarget = ref(null);
+        const deleting = ref(false);
+        function confirmDelete(c) {
+            deleteTarget.value = c;
+        }
+        async function doDelete() {
+            if (!deleteTarget.value) return;
+            deleting.value = true;
+            try {
+                const resp = await authFetch('/api/auth/enterprises/' + deleteTarget.value.id, { method: 'DELETE' });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    customers.value = customers.value.filter(c => c.id !== deleteTarget.value.id);
+                    deleteTarget.value = null;
+                } else {
+                    alert(data.msg || '删除失败');
+                }
+            } catch (e) {
+                alert('网络错误');
+            } finally {
+                deleting.value = false;
+            }
+        }
 
         const profileTarget = ref(null);
         const profileFollowups = ref([]);
@@ -475,6 +642,9 @@ createApp({
             formatTime, updateStatus, startEdit, cancelEdit, saveEdit, gotoManage, logout,
             profileTarget, profileFollowups, newFollowupDate, newFollowupContent, profileSaving,
             openProfile, closeProfile, saveProfile, addFollowup,
+            deleteTarget, deleting, confirmDelete, doDelete,
+            editTarget, editForm, editFormError, editSubmitting, openEditModal, closeEditModal, submitEditModal,
+            editReferrerSearch, editReferrerList, editReferrerSelected, searchEditReferrer, selectEditReferrer,
         };
     }
 }).mount('#app');

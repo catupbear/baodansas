@@ -336,14 +336,11 @@
                                 <!-- 操作 -->
                                 <td>
                                     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;row-gap:6px;max-width:210px;">
-                                        <button @click="openEditModal(ent)" class="op-btn gray">编辑</button>
                                         <button @click="openReportModal(ent)" class="op-btn blue">导出报告</button>
                                         <button @click="openPlanModal(ent)" class="op-btn orange">开通</button>
                                         <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled ? 'amber' : 'green']">{{ ent.enabled ? '禁用' : '启用' }}</button>
                                         <button @click="toggleMerge(ent)" :class="['op-btn', ent.merge_by_plate ? 'orange on' : 'gray']" title="开启后该企业识别记录默认按车牌合并显示">车牌合并{{ ent.merge_by_plate ? '✓' : '' }}</button>
-                                        
-                                        <button @click="confirmDelete(ent)" class="op-btn red">删除</button>
-                                    </div>
+                                                                            </div>
                                 </td>
                             </tr>
                         </tbody>
@@ -370,16 +367,13 @@
                                 <div class="ec-item"><div class="k">人员 / 群</div><div class="vv">{{ ent.member_count||0 }} 人 · {{ ent.monitor_count||0 }} 群</div></div>
                             </div>
                             <div class="ec-ops">
-                                <button @click="openEditModal(ent)" class="op-btn gray">编辑</button>
                                 <button @click="gotoMembers(ent)" class="op-btn orange">人员管理</button>
                                 <button @click="gotoMonitor(ent)" class="op-btn orange">监控设置</button>
                                 <button @click="openReportModal(ent)" class="op-btn blue">导出报告</button>
                                 <button @click="openPlanModal(ent)" class="op-btn orange">开通</button>
                                 <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled?'amber':'green']">{{ ent.enabled?'禁用':'启用' }}</button>
                                 <button @click="toggleMerge(ent)" :class="['op-btn', ent.merge_by_plate?'orange on':'gray']">车牌合并{{ ent.merge_by_plate?'✓':'' }}</button>
-                                
-                                <button @click="confirmDelete(ent)" class="op-btn red">删除</button>
-                            </div>
+                                                            </div>
                         </div>
                     </div>
                 </div>
@@ -525,23 +519,6 @@
                         <button @click="closePlanModal" class="btn btn-outline">取消</button>
                         <button @click="submitPlanForm" :disabled="planSubmitting" class="btn btn-primary">
                             {{ planSubmitting ? '提交中...' : '确定开通' }}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </transition>
-
-        <!-- 删除确认弹窗 -->
-        <transition name="fade">
-            <div v-if="deleteTarget" class="modal-mask" @click.self="deleteTarget=null">
-                <div class="modal-content" style="width:min(360px, calc(100vw - 32px));">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-3">确认删除</h3>
-                    <p style="font-size:14px;color:#555;margin-bottom:6px;">确定删除企业 <strong>{{ deleteTarget.name }}</strong> 吗？</p>
-                    <p style="font-size:12px;color:#dc2626;">此操作不可恢复，该企业下的账号将失去归属。</p>
-                    <div class="flex justify-end gap-3 mt-6">
-                        <button @click="deleteTarget=null" class="btn btn-outline">取消</button>
-                        <button @click="doDelete" :disabled="deleting" class="btn btn-sm" style="background:#dc2626;color:#fff;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;">
-                            {{ deleting ? '删除中...' : '确认删除' }}
                         </button>
                     </div>
                 </div>
@@ -711,8 +688,6 @@ createApp({
             return String(ent.next_plan_start_at).slice(0, 10);
         }
 
-        const deleteTarget = ref(null);
-        const deleting = ref(false);
 
         // 导出企业报告
         const showReportModal = ref(false);
@@ -975,30 +950,6 @@ createApp({
             else ok();
         }
 
-        function confirmDelete(ent) {
-            deleteTarget.value = ent;
-        }
-
-        async function doDelete() {
-            if (!deleteTarget.value) return;
-            deleting.value = true;
-            try {
-                const resp = await authFetch('/api/auth/enterprises/' + deleteTarget.value.id, { method: 'DELETE' });
-                const data = await resp.json();
-                if (data.code === 0) {
-                    showToast('企业已删除');
-                    deleteTarget.value = null;
-                    fetchEnterprises();
-                } else {
-                    showToast(data.msg || '删除失败', 'error');
-                }
-            } catch {
-                showToast('网络错误', 'error');
-            } finally {
-                deleting.value = false;
-            }
-        }
-
         async function submitForm() {
             formError.value = '';
             if (!form.name.trim()) { formError.value = '请输入企业名称'; return; }
@@ -1103,7 +1054,6 @@ createApp({
             showPlanModal, planEditEnt, planForm, planFormError, planSubmitting, planCurrentExpiry,
             openPlanModal, closePlanModal, submitPlanForm,
             toggleEnabled, toggleMerge, logout, toast, formatTime, gotoMembers, gotoMonitor,
-            deleteTarget, deleting, confirmDelete, doDelete,
             showReportModal, reportTarget, reportRange, reportStart, reportEnd, reportSubmitting,
             reportLink, reportCopied, copyReportLink,
             openReportModal, doExportReport,
