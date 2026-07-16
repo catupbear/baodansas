@@ -1165,9 +1165,16 @@ def update_record_fields(record_id):
             except (TypeError, json.JSONDecodeError):
                 df = {}
         # 只更新本次修改的字段到 display_fields，保留其他已有的补充字段
+        # 注意：field_name 可能是 OCR 原始字段名（如"车牌号"），列表/详情实际渲染读取的
+        # 是映射后的展示列名（如"车牌"）——必须经 get_mapping_for_company 转换，否则会
+        # 写出一个没人读取的影子字段，展示列上的旧值永远不刷新（表现为列表和详情不一致）
+        from insurance.field_mapping import get_mapping_for_company
+        company_short = pf.get("保险公司简称", "")
+        field_mapping_table = get_mapping_for_company(company_short)
         display_fields = dict(df)
         for field_name, new_value in updated_fields.items():
-            display_fields[field_name] = new_value
+            display_key = field_mapping_table.get(field_name) or field_name
+            display_fields[display_key] = new_value
 
         # 更新数据库（同步更新 display_fields）
         logger.info("[DEBUG-保存] record_id=%s, 更新字段=%s, manual_fields=%s", record_id, updated_fields, mf)

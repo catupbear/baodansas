@@ -24,14 +24,13 @@ from insurance.db import (
     get_insurance_record,
     save_insurance_record,
     set_insurance_config,
-    soft_delete_record,
     update_insurance_record,
 )
 from insurance.monitor_config_db import get_enabled_monitor_configs
 from insurance.field_mapping import apply_mapping
 from insurance.ocr_service import extract_text_from_pdf_bytes
 from insurance.policy_parser import parse_policy_text, parse_policy_text_multi, _find_policy_boundaries
-from core.notify import notify_error, notify_new_company, notify_duplicate_policy
+from core.notify import notify_error, notify_new_company
 
 logger = logging.getLogger(__name__)
 
@@ -561,8 +560,6 @@ class InsuranceHandler:
                         record_id, seq, sender, _same_enterprise,
                     )
                     self._copy_recognition_result(record_id, existing_full, file_md5, config_user_id, config_enterprise_id)
-                    if _same_enterprise:
-                        self._replace_duplicate_within_enterprise(existing_full, file_md5, record_id, sender_name, room_name)
                     return
                 # 同一条消息重复处理，标记为 duplicate
                 logger.info(
@@ -1195,7 +1192,10 @@ class InsuranceHandler:
                     logger.warning("%s反向互补失败: record_id=%s, %s", match_desc, rec["id"], e)
 
     # 无车牌时按人名互补的字段
-    PERSON_FILL_FIELDS = ["车牌号", "投保人", "被保险人", "车主", "车架号VIN", "被保险人身份证号码", "投保人身份证号码"]
+    # 注意：车架号VIN 不能放进来——它是"一车一码"，同一投保人/企业名下可能有多台不同的车，
+    # 按人名匹配互补车架号会张冠李戴（如同一物流公司多台货车互相顶替车架号），
+    # 车架号只应按车牌(_cross_fill_by_plate)或车架号本身(_cross_fill_by_vin)匹配互补。
+    PERSON_FILL_FIELDS = ["车牌号", "投保人", "被保险人", "车主", "被保险人身份证号码", "投保人身份证号码"]
 
     def _cross_fill_by_person(self, parsed_fields: dict, record_id: int = None):
         """
@@ -1321,62 +1321,6 @@ class InsuranceHandler:
             logger.info("反向互补后重新同步钉钉: record_id=%d", record_id)
         except Exception as e:
             logger.warning("反向互补后重新同步钉钉失败: record_id=%d, %s", record_id, e)
-
-    # ------------------------------------------------------------------ #
-    # 重复 PDF 不同发送人：复制识别结果
-    # ------------------------------------------------------------------ #
-
-    def _replace_duplicate_within_enterprise(self, existing_full: dict, file_md5: str,
-                                              new_record_id: int, new_sender_name: str, new_room_name: str):
-        """
-        同企业内不同员工(或同员工)重复发送同一份保单：只保留最后发送的这一条。
-        软删除旧记录(含同一份PDF的所有兄弟保单记录)，并发钉钉群通知。
-        """
-        try:
-            old_msg_seq = existing_full.get("msg_seq")
-            old_ids = [existing_full["id"]]
-            if file_md5 and old_msg_seq:
-                conn = self.db.pool.connection()
-                try:
-                    cursor = conn.cursor(pymysql.cursors.DictCursor)
-                    cursor.execute(
-                        "SELECT id FROM insurance_records WHERE file_md5 = %s AND msg_seq = %s AND deleted_at IS NULL",
-                        (file_md5, old_msg_seq),
-                    )
-                    old_ids = [r["id"] for r in cursor.fetchall()] or old_ids
-                finally:
-                    conn.close()
-
-            for oid in old_ids:
-                soft_delete_record(self.db, oid)
-            logger.info(
-                "[REPLACE] 同企业重复保单，已软删除旧记录 %s，保留最新记录 record_id=%d",
-                old_ids, new_record_id,
-            )
-
-            enterprise_name = ""
-            eid = existing_full.get("enterprise_id")
-            if eid:
-                try:
-                    from auth.db import get_enterprise_by_id
-                    ent = get_enterprise_by_id(self.db, eid)
-                    enterprise_name = (ent or {}).get("name", "")
-                except Exception:
-                    pass
-
-            notify_duplicate_policy(
-                enterprise_name,
-                existing_full.get("filename", ""),
-                existing_full.get("sender_name") or existing_full.get("sender", ""),
-                existing_full.get("room_name", ""),
-                new_sender_name or "",
-                new_room_name or "",
-                old_ids,
-                new_record_id,
-            )
-        except Exception:
-            logger.exception("同企业重复保单替换处理失败, existing_id=%s, new_record_id=%d",
-                              existing_full.get("id"), new_record_id)
 
     # ------------------------------------------------------------------ #
     # 重复 PDF 不同发送人：复制识别结果

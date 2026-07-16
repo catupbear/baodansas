@@ -2957,6 +2957,27 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
                         fields["厂牌型号"] = _prev + _next
                         break
 
+    # 富德等交强险竖排错位：厂牌型号完整值整段落在标签下一行，但行首带竖排水印单字
+    #（如"动 五菱LZW6442JY多用途乘用车"，"动"是左侧"被保险机动车"竖排水印串入的字）。
+    # 与上面"泰康"错位不同：这里标签上一行只是无关水印单字（如"险"），不能参与拼接，
+    # 下一行去掉水印单字后已是完整厂牌型号，不需要跟上一行拼接。
+    if "厂牌型号" not in fields:
+        _pl2b = text.split('\n')
+        for _i in range(1, len(_pl2b) - 1):
+            if re.search(r'厂\s*牌\s*型\s*号', _pl2b[_i]):
+                _after2b = re.sub(r'.*厂\s*牌\s*型\s*号[：:\s]*', '', _pl2b[_i]).strip()
+                if re.match(r'(初?次?登\s*记\s*日\s*期|核\s*定|发\s*动\s*机|排\s*量|(?:使用|营业|营运)性质|机动车种类)', _after2b):
+                    _next_seg2b = _pl2b[_i + 1].strip()
+                    _m2b = re.match(r'^[一-鿿]\s+(.{4,30})$', _next_seg2b)
+                    if _m2b:
+                        _val2b = _m2b.group(1).replace(' ', '')
+                        # 真实厂牌型号一定以品牌名（中文/字母）开头，不会是孤立数字（严重错位文档里
+                        # 常见"1 车厢可卸式垃圾车 11555"这种噪声行，首字符是数字即判为非法值丢弃）
+                        if (re.search(r'[A-Za-z0-9]', _val2b) and len(_val2b) >= 4
+                                and not _val2b[0].isdigit()):
+                            fields["厂牌型号"] = _val2b
+                            break
+
     # 华泰驾乘险表格版式错位：品牌型号值被拆成两段，中间夹"品牌型号"标签、座位数、"核定座位数(座)"标签
     # "车辆信息\n宝马BMW6462ES(BMWX1)多\n品牌型号\n5\n核定座位数(座)\n用途乘用车\n车架号(VIN)"
     if "厂牌型号" not in fields:
@@ -2988,6 +3009,31 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
                         and not re.match(r'(车牌|号牌|发动机|车架|被保险|地址|核定|投保|保险|机动车|车主|公司)', _pv)):
                     fields["厂牌型号"] = _pv + _cp2
                 break
+
+    # 华安"车辆清单"表格错位（货运险等）：表头 序号/车牌号/车辆类型/车架号/厂牌型号/发动机号/...
+    # 后接三行——品牌前缀单独一行、空格分隔的数据行(车架号 车牌号 车辆类型 发动机号 ...)、
+    # 车辆类型后缀单独一行；厂牌型号被切成"品牌"+"类型后缀"两截，中间夹着数据行。
+    # 例："五十铃\nLWLGWFSU4ML01 粤GR7580 牵引车 QL4250W2NCZ ...\n半挂牵引车"
+    if "厂牌型号" not in fields:
+        _m_vlist = re.search(
+            r'车辆清单\s*\n序号\s*车牌号\s*车辆类型\s*车架号\s*厂牌型号\s*发动机号[^\n]*\n'
+            r'([^\n]{1,15})\n'
+            # 组内分隔只认空格/制表符（不认换行），避免某字段贪婪吃穿行尾把下一行(如"四、保障方案")
+            # 错当成本行内容，继而把"车辆类型后缀"错取成再下一行的章节标题
+            r'([A-Z0-9]{5,20})[ \t]+(\S+)[ \t]+(\S{2,8})[ \t]+([A-Za-z0-9\-]+)[^\n]*\n'
+            r'([^\n]{1,15})',
+            text
+        )
+        # 后缀必须像"车辆类型"（以"车"结尾），且不能是误吃到的章节标题/条款文字
+        if _m_vlist and _m_vlist.group(6).endswith('车') and '、' not in _m_vlist.group(6):
+            _brand, _vin, _plate, _vtype, _engine, _suffix = _m_vlist.groups()
+            fields["厂牌型号"] = _brand + _suffix
+            if "车架号VIN" not in fields:
+                fields["车架号VIN"] = _vin
+            if "车牌号" not in fields:
+                fields["车牌号"] = _plate
+            if "发动机号" not in fields:
+                fields["发动机号"] = _engine
 
     # 核定载客：兼容多种写法——
     #   通用"核定载客 5 人"；阳光/申能"核定载客数(人)：5人"；安诚/永诚"核定载客/载质量：23人/9500千克"。

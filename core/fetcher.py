@@ -428,7 +428,7 @@ class MessageFetcher:
         仅对监控群生效；发送人需能解析出所属账号——优先用其个人绑定
         （user_sender_binding），否则退回监控配置/该企业自己的 enterprise 账号
         （企业管理员一般不建个人绑定，这层兜底让企业管理员本人也能直接触发）。
-        两者都解析不出时静默忽略（不回复任何内容，避免群内被无关消息刷屏）。
+        两者都解析不出时回复"您当前账号无权限，请联系客服开通"。
         任何环节异常都只记日志，绝不影响消息处理主流程。
         """
         handler = getattr(self, "insurance_handler", None)
@@ -454,6 +454,25 @@ class MessageFetcher:
 
         sender = parsed.get("from", "")
         try:
+            sender_name = ""
+            room_name = ""
+            if handler.contacts:
+                try:
+                    sender_name = handler.contacts.get_name(sender) or ""
+                except Exception:
+                    pass
+                try:
+                    room_name = handler.contacts.get_room_name(roomid) or ""
+                except Exception:
+                    pass
+
+            from insurance.db import get_insurance_config
+            cfg = get_insurance_config(handler.db, "flowbot_fail_notify", {}) or {}
+            robot_id = cfg.get("robot_id")
+            if not robot_id or not room_name:
+                logger.info("台账导出命令：缺少 robot_id 或群名，跳过 seq=%d room=%s", seq, roomid)
+                return
+
             # 解析绑定账号：与保单识别共用的"监控配置 + sender 绑定"解析链路
             matched_monitors = handler._get_matched_monitors(roomid, sender)
             config_user_id = None
@@ -481,26 +500,9 @@ class MessageFetcher:
                 if ent_users:
                     config_user_id = ent_users[0]["id"]
             if not config_user_id:
-                logger.info("台账导出命令：sender=%s 未绑定账号且找不到所属企业账号，忽略 seq=%d", sender, seq)
-                return
-
-            sender_name = ""
-            room_name = ""
-            if handler.contacts:
-                try:
-                    sender_name = handler.contacts.get_name(sender) or ""
-                except Exception:
-                    pass
-                try:
-                    room_name = handler.contacts.get_room_name(roomid) or ""
-                except Exception:
-                    pass
-
-            from insurance.db import get_insurance_config
-            cfg = get_insurance_config(handler.db, "flowbot_fail_notify", {}) or {}
-            robot_id = cfg.get("robot_id")
-            if not robot_id or not room_name:
-                logger.info("台账导出命令：缺少 robot_id 或群名，跳过 seq=%d room=%s", seq, roomid)
+                logger.info("台账导出命令：sender=%s 未绑定账号且找不到所属企业账号，提示无权限 seq=%d", sender, seq)
+                from insurance.flowbot_notify import send_flowbot_group_message
+                send_flowbot_group_message(room_name, sender_name, "您当前账号无权限，请联系客服开通", robot_id)
                 return
 
             from insurance.ledger_export import export_ledger_via_binding
