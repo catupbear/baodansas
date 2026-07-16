@@ -418,6 +418,10 @@ def init_insurance_tables(db):
             # 复合索引：加速按企业/用户权限过滤 + 时间排序的常见查询
             "CREATE INDEX idx_insurance_eid_del_created ON insurance_records(enterprise_id, deleted_at, created_at)",
             "CREATE INDEX idx_insurance_uid_del_created ON insurance_records(user_id, deleted_at, created_at)",
+            # 覆盖索引：列表统计（Tab计数/engine_stats/room_stats/COUNT）全部走纯索引扫描，
+            # 避免回表扫 1GB 大行数据（行含大JSON字段），统计耗时 1.25s → 0.14s
+            "CREATE INDEX idx_stats_covering ON insurance_records"
+            "(deleted_at, status, doc_category, is_abnormal, ocr_engine, enterprise_id, user_id, roomid, room_name)",
         ]:
             try:
                 cursor.execute(idx_sql)
@@ -1463,8 +1467,10 @@ def find_insurer_info_by_plates(db, plates: list) -> dict:
 
 def find_sign_info_by_plates(db, plates: list) -> dict:
     """
-    批量查询车牌对应的签单日期和业务员（从 display_fields）。
+    批量查询车牌对应的签单日期和业务员。
     返回 {车牌: {"sign_date": ..., "salesperson": ...}}，取最新有值记录。
+    走 insurance_policy_fields 关联表（plate_no 有索引），
+    替代原先对 insurance_records.display_fields 的 JSON_EXTRACT 全表扫描（单次近 1 秒）。
     """
     if not plates:
         return {}
@@ -1473,30 +1479,24 @@ def find_sign_info_by_plates(db, plates: list) -> dict:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         placeholders = ",".join(["%s"] * len(plates))
         cursor.execute(
-            f"SELECT id, display_fields FROM insurance_records "
-            f"WHERE status = 'done' AND display_fields IS NOT NULL "
-            f"AND JSON_UNQUOTE(JSON_EXTRACT(display_fields, '$.车牌')) IN ({placeholders}) "
-            f"ORDER BY id DESC LIMIT %s",
-            plates + [len(plates) * 20],
+            f"SELECT pf.plate_no, pf.sign_date, pf.salesperson "
+            f"FROM insurance_policy_fields pf "
+            f"JOIN insurance_records r ON r.id = pf.record_id "
+            f"WHERE pf.plate_no IN ({placeholders}) "
+            f"AND r.status = 'done' "
+            f"ORDER BY r.id DESC",
+            plates,
         )
         result = {}
         for row in cursor.fetchall():
-            try:
-                df = json.loads(row["display_fields"]) if isinstance(row["display_fields"], str) else (row["display_fields"] or {})
-            except Exception:
-                continue
-            plate = df.get("车牌") or df.get("车牌号") or ""
-            if not plate or plate not in plates:
-                continue
+            plate = row["plate_no"]
             if plate not in result:
                 result[plate] = {"sign_date": "", "salesperson": ""}
             p = result[plate]
-            if not p["sign_date"] and df.get("签单日期"):
-                p["sign_date"] = df["签单日期"]
-            if not p["salesperson"] and df.get("业务员"):
-                p["salesperson"] = df["业务员"]
-            if p["sign_date"] and p["salesperson"]:
-                pass  # 继续遍历其余车牌记录
+            if not p["sign_date"] and row["sign_date"]:
+                p["sign_date"] = row["sign_date"]
+            if not p["salesperson"] and row["salesperson"]:
+                p["salesperson"] = row["salesperson"]
         return result
     except Exception:
         return {}
