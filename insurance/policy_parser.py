@@ -1700,6 +1700,13 @@ def _extract_policy_no(text: str, fields: dict, company_short: str, policy_type:
                 fields["保单号"] = stripped
                 break
 
+    # 阳光农业等：保单号中间有一处OCR多余空格（如"44075100B EAQ2026100161"被上面的
+    # 通用规则截成"44075100B"），紧跟的空格后若还是字母数字续段，判定是同一个号被截断，拼回
+    if fields.get("保单号"):
+        _pm2 = re.search(re.escape(fields["保单号"]) + r"\s+([A-Za-z0-9]{6,})", text)
+        if _pm2 and len(fields["保单号"]) <= 12:
+            fields["保单号"] = fields["保单号"] + _pm2.group(1)
+
     # 统一清理：保单号只保留字母、数字、横线，截断中文/标点及之后的内容
     if "保单号" in fields:
         val = fields["保单号"]
