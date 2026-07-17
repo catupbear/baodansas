@@ -755,11 +755,14 @@ def get_effective_config(db, user_id: int, role: str, parent_id=None) -> dict:
 # 列配置读写（list_columns / export_columns）
 # ------------------------------------------------------------------ #
 
-def _fix_missing_defaults(db, config_type, columns, scope, scope_id):
+def _fix_missing_defaults(db, config_type, columns, scope, scope_id, template_name=None):
     """
     自动补充 DEFAULT_COLUMNS 中有但用户配置里不存在的字段到末尾。
     例如新增了「车主」「文件名」等字段后，已保存的配置自动补上。
     同时迁移已废弃的列名（如「时间」→「创建时间」）。
+    template_name 为 None 时按 save_column_config 默认写回"默认模板"——调用方读的是哪个
+    命名模板就必须把该模板名传进来，否则修正结果会错误地写进默认模板、污染其数据
+    （历史bug：曾导致切到"标准版"却看到"完整版"/"默认模板"的列数据）。
     """
     changed = False
     # 迁移旧列名：「时间」→「创建时间」
@@ -797,7 +800,7 @@ def _fix_missing_defaults(db, config_type, columns, scope, scope_id):
             added += 1
 
     if added or changed:
-        save_column_config(db, config_type, scope, scope_id, columns)
+        save_column_config(db, config_type, scope, scope_id, columns, template_name=template_name)
         if added:
             logger.debug("自动补充 %s 默认字段 %d 个", config_type, added)
         if changed:
@@ -805,12 +808,13 @@ def _fix_missing_defaults(db, config_type, columns, scope, scope_id):
     return columns
 
 
-def _fix_merge_columns(db, columns, scope, scope_id, user_id, role, parent_id):
+def _fix_merge_columns(db, columns, scope, scope_id, user_id, role, parent_id, template_name=None):
     """
     自动修正 export_columns 中的合并字段：
     - 合并开启时：清理不在 MERGE_EXTRA_COLUMNS 中的旧 merge 字段，补充缺失的
     - 合并关闭时：不处理
-    修正后自动回写数据库。
+    修正后自动回写数据库。template_name 含义同 _fix_missing_defaults，必须传实际读到的
+    模板名，否则回写会落进"默认模板"而不是当前正在看的命名模板。
     """
     merge_enabled = get_merge_by_plate(db, user_id, role, parent_id)
     if not merge_enabled:
@@ -841,7 +845,7 @@ def _fix_merge_columns(db, columns, scope, scope_id, user_id, role, parent_id):
     # 有变更则回写数据库
     new_json = json.dumps(columns, ensure_ascii=False)
     if new_json != original_json:
-        save_column_config(db, "export_columns", scope, scope_id, columns)
+        save_column_config(db, "export_columns", scope, scope_id, columns, template_name=template_name)
         logger.debug("自动修正 export_columns 合并字段")
 
     return columns
@@ -904,11 +908,15 @@ def get_column_config(db, config_type: str, user_id: int, role: str, parent_id=N
             if row:
                 try:
                     columns = json.loads(row["config_value"])
-                    # 自动补充 DEFAULT_COLUMNS 中新增的字段
-                    columns = _fix_missing_defaults(db, config_type, columns, scope, scope_id)
+                    # 自动补充 DEFAULT_COLUMNS 中新增的字段（回写必须落回刚匹配到的 tpl，
+                    # 不能省略——否则会把"标准版"/"完整版"等命名模板的修正结果错误写进默认模板）。
+                    # tpl 是默认模板时按原逻辑传 None（save_column_config 靠 template_name 是否
+                    # 为空判断 visible_to_employees 默认值，传"默认模板"字面量会改变这个行为）。
+                    _fix_tpl = tpl if tpl != DEFAULT_TEMPLATE_NAME else None
+                    columns = _fix_missing_defaults(db, config_type, columns, scope, scope_id, template_name=_fix_tpl)
                     # export_columns 自动修正合并字段（清理旧版 + 补充缺失）
                     if config_type == "export_columns":
-                        columns = _fix_merge_columns(db, columns, scope, scope_id, user_id, role, parent_id)
+                        columns = _fix_merge_columns(db, columns, scope, scope_id, user_id, role, parent_id, template_name=_fix_tpl)
                     return {"source": source_label, "columns": columns}
                 except (TypeError, json.JSONDecodeError):
                     pass
