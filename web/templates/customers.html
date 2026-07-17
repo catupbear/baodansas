@@ -540,7 +540,12 @@ createApp({
                     body: JSON.stringify({ follow_status: value }),
                 });
                 const data = await resp.json();
-                if (data.code !== 0) { c.follow_status = old; alert(data.msg || '保存失败'); }
+                if (data.code !== 0) {
+                    c.follow_status = old;
+                    alert(data.msg || '保存失败');
+                } else if (data.data && data.data.onboarded_at) {
+                    c.onboarded_at = data.data.onboarded_at;
+                }
             } catch (e) {
                 c.follow_status = old;
                 alert('网络错误');

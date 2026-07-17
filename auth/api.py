@@ -639,10 +639,13 @@ def api_update_enterprise(eid):
             commission_type = new_type
             commission_months = new_months
 
-        update_enterprise(_db, eid, data)
+        updated_fields = update_enterprise(_db, eid, data)
         if commission_triggered:
             _try_pay_commission(eid, commission_type, commission_months, add_wallet_commission, get_enterprise_by_id, get_user_by_id)
-        return jsonify({"code": 0})
+        resp_data = {}
+        if updated_fields and "onboarded_at" in updated_fields:
+            resp_data["onboarded_at"] = updated_fields["onboarded_at"]
+        return jsonify({"code": 0, "data": resp_data})
     except Exception as e:
         logger.exception("更新企业 %d 失败", eid)
         return jsonify({"code": 500, "msg": str(e)}), 500

@@ -368,17 +368,21 @@ def update_enterprise(db, enterprise_id: int, data: dict):
         allowed = {"name", "enterprise_no", "contact_person", "contact_phone", "enabled", "merge_by_plate", "renewal_enabled", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at", "referrer_id", "survey_token", "survey_data", "follow_status", "remark", "onboarded_at"}
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
-            return
+            return None
         # "预备群"占位企业改名为正式客户名称时，首次记录正式接入时间(onboarded_at)
         if "name" in fields and not fields["name"].startswith("预备群"):
             cursor.execute("SELECT name, onboarded_at FROM enterprises WHERE id = %s", (enterprise_id,))
             row = cursor.fetchone()
             if row and (row.get("name") or "").startswith("预备群") and not row.get("onboarded_at"):
                 fields["onboarded_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # 跟进状态改为"正常使用"时，接入时间实时刷新为当前时间
+        if fields.get("follow_status") == "正常使用":
+            fields["onboarded_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         set_clause = ", ".join(f"{k} = %s" for k in fields)
         values = list(fields.values()) + [enterprise_id]
         cursor.execute(f"UPDATE enterprises SET {set_clause} WHERE id = %s", values)
         conn.commit()
+        return fields
     finally:
         conn.close()
 
