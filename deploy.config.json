@@ -1,0 +1,7 @@
+{
+  "type": "backend",
+  "remote_dir": "/home/wxbot",
+  "local_dir": ".",
+  "backup": false,
+  "exclude": ["*.log", "data/", "config.yaml", "venv/", "docs/"]
+}
