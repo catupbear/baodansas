@@ -251,8 +251,12 @@ def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False)
             return
 
         logger.info("%s开始: 本轮待同步 %d 个群", label, len(groups))
-        ok = failed = changed = 0
+        ok = failed = changed = done = 0
         for g in groups:
+            done += 1
+            if done % 50 == 0:
+                logger.info("%s进度: %d/%d (成功 %d, 失败 %d)",
+                            label, done, len(groups), ok, failed)
             corp, detail = resolve_group(corps, g["roomid"], g.get("corpid", ""), api_delay)
             if corp and detail:
                 name_changed = update_group_success(
