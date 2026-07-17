@@ -3738,7 +3738,9 @@
                             </svg>
                             <span class="text-sm text-gray-400">保单加载中...</span>
                         </div>
-                        <iframe v-if="previewIsImage === false" :src="previewSrc" class="w-full h-full border-0" @load="previewLoading = false"></iframe>
+                        <!-- 微信/移动端浏览器不支持 iframe 内嵌 PDF，改用 pdf.js 渲染成 canvas -->
+                        <div v-if="previewUseCanvas && previewIsImage === false" id="pdfCanvasContainer" class="w-full py-2"></div>
+                        <iframe v-else-if="previewIsImage === false" :src="previewSrc" class="w-full h-full border-0" @load="previewLoading = false"></iframe>
                         <img v-else :src="previewSrc" class="max-w-full max-h-full mx-auto p-4" style="object-fit: contain;" @load="previewLoading = false">
                     </div>
                     <!-- 右侧：列表信息 -->
@@ -5779,6 +5781,13 @@ const _app = createApp({
             loadPreviewRawText(file.name);
             previewShowRaw.value = false; previewShowFields.value = false; previewShowRules.value = false;
             previewType.value = file.type;
+            if (file.type === 'pdf' && PDF_CANVAS_MODE) {
+                // 微信/移动端：pdf.js 渲染 canvas
+                previewSrc.value = '';
+                previewVisible.value = true;
+                renderPdfCanvas({ data: base64ToBytes(file.base64) }, 0);
+                return;
+            }
             if (file.type === 'pdf') {
                 const blob = await fetch(`data:application/pdf;base64,${file.base64}`).then(r => r.blob());
                 previewSrc.value = URL.createObjectURL(blob);
@@ -5799,12 +5808,124 @@ const _app = createApp({
                     previewFileName.value = r.file_name;
                     loadPreviewRawText(r.file_name);
                     previewShowRaw.value = false; previewShowFields.value = false; previewShowRules.value = false;
+                    if (PDF_CANVAS_MODE) {
+                        previewSrc.value = '';
+                        previewVisible.value = true;
+                        renderPdfCanvas({ data: base64ToBytes(stored.data) }, 0);
+                        return;
+                    }
                     const blob = await fetch(`data:application/pdf;base64,${stored.data}`).then(r => r.blob());
                     previewSrc.value = URL.createObjectURL(blob);
                     previewVisible.value = true;
                 }
             }
         }
+
+        // ========== 微信/移动端 PDF 预览（pdf.js 渲染 canvas） ==========
+        // 微信内置浏览器（X5内核）及大部分移动端浏览器不支持 iframe 内嵌 PDF（会强制下载），
+        // 这些环境下改用 pdf.js 把 PDF 渲染成 canvas 显示
+        const PDF_CANVAS_MODE = /MicroMessenger|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const previewUseCanvas = ref(false);
+        let previewPdfDoc = null;
+
+        function base64ToBytes(b64) {
+            const binary = atob(b64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            return bytes;
+        }
+
+        // 懒加载 pdf.js（优先本地 /static 自托管，失败降级 CDN）
+        // 注意：库只存私有变量 pdfJsLib，不暴露到 window.pdfjsLib——
+        // window.pdfjsLib = null 是有意禁用客户端识别提取（见 6d0faf5），这里仅用于预览渲染
+        let pdfJsLib = null;
+        let pdfJsLoading = null;
+        function ensurePdfJs() {
+            if (pdfJsLib) return Promise.resolve(pdfJsLib);
+            if (pdfJsLoading) return pdfJsLoading;
+            const loadScript = (src) => new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('load fail: ' + src));
+                document.head.appendChild(s);
+            });
+            const CDN_BASE = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+            pdfJsLoading = loadScript('/static/pdf.min.js')
+                .then(() => '/static/')
+                .catch(() => loadScript(CDN_BASE + 'pdf.min.js').then(() => CDN_BASE))
+                .then((base) => {
+                    pdfJsLib = window.pdfjsLib || window['pdfjs-dist/build/pdf'];
+                    window.pdfjsLib = null;  // 保持客户端识别提取处于禁用状态
+                    pdfJsLib.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.min.js';
+                    return pdfJsLib;
+                })
+                .catch(e => { pdfJsLoading = null; throw e; });
+            return pdfJsLoading;
+        }
+
+        // 把 PDF 渲染到 #pdfCanvasContainer；source 为 {url} 或 {data: Uint8Array}
+        async function renderPdfCanvas(source, startPage) {
+            previewUseCanvas.value = true;
+            previewLoading.value = true;
+            try {
+                const lib = await ensurePdfJs();
+                let data = source.data;
+                if (!data) {
+                    const resp = await fetch(source.url);
+                    if (!resp.ok) throw new Error('文件下载失败: ' + resp.status);
+                    data = await resp.arrayBuffer();
+                }
+                if (previewPdfDoc) { try { previewPdfDoc.destroy(); } catch (e) {} previewPdfDoc = null; }
+                const pdf = await lib.getDocument({
+                    data,
+                    cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+                    cMapPacked: true,
+                }).promise;
+                previewPdfDoc = pdf;
+                await nextTick();
+                const container = document.getElementById('pdfCanvasContainer');
+                if (!container) return;
+                container.innerHTML = '';
+                const width = container.clientWidth || document.documentElement.clientWidth || 360;
+                const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    // 用户中途关闭预览或切换文件时停止渲染
+                    if (previewPdfDoc !== pdf) return;
+                    const page = await pdf.getPage(i);
+                    const vp1 = page.getViewport({ scale: 1 });
+                    const scale = (width - 16) / vp1.width;
+                    const vp = page.getViewport({ scale: scale * dpr });
+                    const canvas = document.createElement('canvas');
+                    canvas.width = vp.width; canvas.height = vp.height;
+                    canvas.style.width = (vp.width / dpr) + 'px';
+                    canvas.style.height = (vp.height / dpr) + 'px';
+                    canvas.style.cssText += 'display:block;margin:8px auto;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15);';
+                    canvas.dataset.page = i;
+                    container.appendChild(canvas);
+                    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+                    page.cleanup();
+                    if (i === 1) previewLoading.value = false;  // 首页渲染完成即可查看
+                }
+                if (startPage > 1) {
+                    const target = container.querySelector(`canvas[data-page="${startPage}"]`);
+                    if (target) target.scrollIntoView();
+                }
+            } catch (e) {
+                console.error('pdf.js 渲染失败，回退 iframe 预览', e);
+                previewUseCanvas.value = false;  // 回退到 iframe（至少桌面端可用）
+            } finally {
+                previewLoading.value = false;
+            }
+        }
+
+        // 关闭预览时释放 pdf.js 资源
+        Vue.watch(previewVisible, (v) => {
+            if (!v) {
+                if (previewPdfDoc) { try { previewPdfDoc.destroy(); } catch (e) {} previewPdfDoc = null; }
+                const c = document.getElementById('pdfCanvasContainer');
+                if (c) c.innerHTML = '';
+                previewUseCanvas.value = false;
+            }
+        });
 
         // 识别记录文件预览（通过代理接口避免 COS 下载）
         // 从 page_range（如 "8-16"、"3"、"1,3,5"）提取起始页码
@@ -5827,7 +5948,15 @@ const _app = createApp({
             previewType.value = ext || 'pdf';
             const pageHash = getStartPage(record.page_range) > 1 ? `#page=${getStartPage(record.page_range)}` : '';
             previewLoading.value = true;
-            previewSrc.value = `/api/insurance/records/${record.id}/preview?token=${getToken()}${pageHash}`;
+            const previewUrl = `/api/insurance/records/${record.id}/preview?token=${getToken()}`;
+            if ((ext || 'pdf') === 'pdf' && PDF_CANVAS_MODE) {
+                // 微信/移动端：pdf.js 渲染 canvas（iframe 会被强制下载）
+                previewSrc.value = '';
+                renderPdfCanvas({ url: previewUrl }, getStartPage(record.page_range));
+            } else {
+                previewUseCanvas.value = false;
+                previewSrc.value = previewUrl + pageHash;
+            }
             // PDF 文件支持查看原文（懒加载）
             previewHasRawText.value = (ext === 'pdf');
             previewRawText.value = '';
@@ -5875,9 +6004,14 @@ const _app = createApp({
                     previewRawText.value = '';
                     previewOcrRawText.value = '';
                     previewRawTextTab.value = 'pdf';
-                    // 跳转到对应起始页（同一 PDF，通过 iframe contentWindow 跳页）
+                    // 跳转到对应起始页（同一 PDF，iframe 通过 hash 跳页，canvas 模式滚动到对应页）
                     const startPage = getStartPage(detail.page_range);
                     Vue.nextTick(() => {
+                        if (previewUseCanvas.value) {
+                            const target = document.querySelector(`#pdfCanvasContainer canvas[data-page="${startPage}"]`);
+                            if (target) target.scrollIntoView();
+                            return;
+                        }
                         const iframe = document.querySelector('.flex-1.overflow-auto iframe');
                         if (iframe && startPage > 0) {
                             const base = iframe.src.split('#')[0];
@@ -9145,7 +9279,7 @@ const _app = createApp({
             newAliasFrom, newAliasTo, toggleCompanyConfig, addAlias, saveCompanyConfig,
             companyStats, filterByCompany, goCompanyRecords, companyPct,
             syncMessage, syncSuccess,
-            previewVisible, previewSrc, previewLoading, previewIsImage, previewOcrEngine,
+            previewVisible, previewSrc, previewLoading, previewIsImage, previewOcrEngine, previewUseCanvas,
             previewType, previewFileName, previewHasRawText, previewShowRaw, previewShowFields, previewShowRules,
             previewRawText, previewOcrRawText, previewRawTextTab, activeRawText, formattedRawText, previewFieldsList, rawTextCopied, copyRawText,
             extractionRules, loadExtractionRules,
