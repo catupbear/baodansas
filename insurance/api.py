@@ -916,9 +916,12 @@ def list_records():
                 start_date = df.get("起保日期", "")
                 if not (plate and start_date and re.search(r"\d{4}", str(start_date))):
                     continue
-                is_compulsory = "交强" in policy_type or "交通事故责任强制" in policy_type
+                # 跟合并导出一致的险种分类，驾意险/非车险(如交通出行意外险)不能被当成商业险
+                _type_code, _ = get_policy_type_code(policy_type)
+                if _type_code not in ("compulsory", "commercial"):
+                    continue
                 bucket = _plate_start_dates.setdefault(_norm_plate(plate), {})
-                bucket.setdefault("compulsory" if is_compulsory else "commercial", start_date)
+                bucket.setdefault(_type_code, start_date)
 
         # 交强与交商终保时间：同上，用原始终保日期按车牌分险种收集
         _need_end_combo = "交强与交商终保时间" in list_visible_keys
@@ -931,9 +934,11 @@ def list_records():
                 end_date = df.get("终保日期", "")
                 if not (plate and end_date and re.search(r"\d{4}", str(end_date))):
                     continue
-                is_compulsory = "交强" in policy_type or "交通事故责任强制" in policy_type
+                _type_code, _ = get_policy_type_code(policy_type)
+                if _type_code not in ("compulsory", "commercial"):
+                    continue
                 bucket = _plate_end_dates.setdefault(_norm_plate(plate), {})
-                bucket.setdefault("compulsory" if is_compulsory else "commercial", end_date)
+                bucket.setdefault(_type_code, end_date)
 
         # 互补后：计算"保司（带地区）" + 应用用户配置
         for record in result.get("records", []):

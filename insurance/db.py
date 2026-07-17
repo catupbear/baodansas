@@ -1443,15 +1443,20 @@ def find_commercial_compulsory_start_dates(db, plates: list) -> dict:
             f"ORDER BY r.id DESC",
             plates,
         )
+        from insurance.policy_parser import get_policy_type_code
         result = {}
         for row in cursor.fetchall():
             plate = row["plate_no"]
             policy_type = row["policy_type"] or ""
-            is_compulsory = "交强" in policy_type or "交通事故责任强制" in policy_type
-            key = "compulsory" if is_compulsory else "commercial"
+            # 用跟合并导出一致的险种分类（商业险/交强险/驾意险/非车险），不能简单地拿
+            # "不是交强险就当商业险"——驾意险/非车险(如交通出行意外险)会被错误当成商业险，
+            # 导致"交强与交商起保时间"里商业险的那个日期其实是不相关险种的日期
+            type_code, _ = get_policy_type_code(policy_type)
+            if type_code not in ("compulsory", "commercial"):
+                continue
             bucket = result.setdefault(plate, {})
-            if key not in bucket:
-                bucket[key] = row["start_date"]
+            if type_code not in bucket:
+                bucket[type_code] = row["start_date"]
         return result
     except Exception:
         return {}
@@ -1480,15 +1485,17 @@ def find_commercial_compulsory_end_dates(db, plates: list) -> dict:
             f"ORDER BY r.id DESC",
             plates,
         )
+        from insurance.policy_parser import get_policy_type_code
         result = {}
         for row in cursor.fetchall():
             plate = row["plate_no"]
             policy_type = row["policy_type"] or ""
-            is_compulsory = "交强" in policy_type or "交通事故责任强制" in policy_type
-            key = "compulsory" if is_compulsory else "commercial"
+            type_code, _ = get_policy_type_code(policy_type)
+            if type_code not in ("compulsory", "commercial"):
+                continue
             bucket = result.setdefault(plate, {})
-            if key not in bucket:
-                bucket[key] = row["end_date"]
+            if type_code not in bucket:
+                bucket[type_code] = row["end_date"]
         return result
     except Exception:
         return {}
