@@ -101,7 +101,7 @@ class CorpClient:
         返回:
           dict {"name","owner","member_count","group_type"}  成功
           {"permanent": True}                                群不存在/已解散
-          None                                               本企业解析不到（可换企业再试）
+          {"error": "失败原因"}                               本企业解析不到（可换企业再试）
         """
         # 1. 会话存档接口（内部群）
         token = self.access_token()
@@ -120,17 +120,16 @@ class CorpClient:
                             "member_count": len(members), "group_type": "internal"}
                 if data.get("errcode") != 301059:
                     # 301059=非内部群（继续走外部群接口）；其他错误码本企业放弃
-                    logger.debug("[%s] 内部群接口失败 %s: errcode=%s",
-                                 self.name, roomid, data.get("errcode"))
-                    return None
+                    return {"error": f"内部群接口errcode={data.get('errcode')}({data.get('errmsg', '')})"}
             except Exception as e:
-                logger.warning("[%s] 内部群接口异常 %s: %s", self.name, roomid, e)
-                return None
+                return {"error": f"内部群接口异常: {e}"}
+        else:
+            return {"error": "获取access_token失败"}
 
         # 2. 客户群接口（外部群）
         ext_token = self.external_token()
         if not ext_token:
-            return None
+            return {"error": "非内部群且external_secret未配置或token获取失败"}
         try:
             data = self._post(
                 f"https://qyapi.weixin.qq.com/cgi-bin/externalcontact/groupchat/get?access_token={ext_token}",
@@ -150,10 +149,9 @@ class CorpClient:
                 # 40050 = chat_id 无效（群已解散/不存在）
                 return {"permanent": True}
             # 90501=不是外部群 / 92002=跨企业 等：本企业解析不到，换下一个企业
-            logger.debug("[%s] 客户群接口失败 %s: errcode=%s", self.name, roomid, errcode)
+            return {"error": f"客户群接口errcode={errcode}({data.get('errmsg', '')})"}
         except Exception as e:
-            logger.warning("[%s] 客户群接口异常 %s: %s", self.name, roomid, e)
-        return None
+            return {"error": f"客户群接口异常: {e}"}
 
     def list_customer_groups(self, api_delay: float = 0.3) -> list:
         """
@@ -213,10 +211,11 @@ def build_corps(config: dict) -> list:
 def resolve_group(corps: list, roomid: str, corpid_hint: str, api_delay: float):
     """
     逐企业解析群详情。已知所属企业的优先试（省 API 调用）。
-    返回 (corp, detail) / (None, {"permanent":True}) / (None, None)
+    返回 (corp, detail) / (None, {"permanent":True}) / (None, {"errors": [各企业失败原因]})
     """
     ordered = sorted(corps, key=lambda c: 0 if c.corpid == corpid_hint else 1) \
         if corpid_hint else corps
+    errors = []
     for corp in ordered:
         detail = corp.fetch_group(roomid)
         time.sleep(api_delay)
@@ -224,7 +223,11 @@ def resolve_group(corps: list, roomid: str, corpid_hint: str, api_delay: float):
             return None, detail
         if detail and detail.get("name"):
             return corp, detail
-    return None, None
+        if detail and detail.get("error"):
+            errors.append(f"{corp.name}: {detail['error']}")
+        else:
+            errors.append(f"{corp.name}: 接口返回群名为空")
+    return None, {"errors": errors}
 
 
 def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False):
@@ -280,8 +283,9 @@ def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False)
             else:
                 update_group_failure(db, g["roomid"])
                 failed += 1
-                logger.info("[%d/%d] 同步失败: %s 「%s」(两个企业均解析不到)",
-                            done, total, g["roomid"], g.get("name") or "(空)")
+                reasons = "; ".join((detail or {}).get("errors") or ["未知原因"])
+                logger.info("[%d/%d] 同步失败: %s 「%s」| %s",
+                            done, total, g["roomid"], g.get("name") or "(空)", reasons)
 
         logger.info("%s完成: 共 %d 个群, 成功 %d, 失败 %d, 群名变化 %d | 总体状态: %s",
                     label, len(groups), ok, failed, changed, get_sync_stats(db))
