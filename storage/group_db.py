@@ -153,24 +153,33 @@ def cleanup_pending_external(db, allowed_corpids: list) -> int:
         conn.close()
 
 
-def get_groups_to_sync(db, full: bool = False, limit: int = 500, force: bool = False) -> list:
+def get_groups_to_sync(db, full: bool = False, limit: int = 500, force: bool = False,
+                       corpids: list = None) -> list:
     """
     取待同步的群列表。
     full=False（增量）：只取 pending 状态的新群。
-    full=True（全量刷新）：取所有群，但排除
+    full=True（全量刷新）：取待同步的群，排除
       - unresolvable（已确认解散/不存在，每天试 1 次）
       - 连续失败 >= 阈值 且 24 小时内已尝试过的（退避）
-    force=True（强制全量，启动时用）：忽略退避，所有群都取出来重新同步。
+    force=True（强制全量，启动时用）：忽略退避。
+    corpids 非空时（全量）：只取「这些企业名下的群（corpid 匹配）或 pending 新群」，
+      不再扫全表——其他企业的历史失败群不参与同步。
     """
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        corp_filter, params = "", []
+        if corpids:
+            ph = ",".join(["%s"] * len(corpids))
+            corp_filter = f"AND (corpid IN ({ph}) OR sync_status = 'pending')"
+            params = list(corpids)
         if full and force:
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT roomid, corpid, name FROM wecom_groups
+                WHERE 1=1 {corp_filter}
                 ORDER BY last_attempt_at IS NULL DESC, last_attempt_at ASC
                 LIMIT %s
-            """, (limit,))
+            """, params + [limit])
         elif full:
             cursor.execute(f"""
                 SELECT roomid, corpid, name FROM wecom_groups
@@ -178,10 +187,10 @@ def get_groups_to_sync(db, full: bool = False, limit: int = 500, force: bool = F
                     (sync_status = 'unresolvable' OR fail_count >= {FAIL_BACKOFF_THRESHOLD})
                     AND last_attempt_at IS NOT NULL
                     AND last_attempt_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
-                )
+                ) {corp_filter}
                 ORDER BY last_attempt_at IS NULL DESC, last_attempt_at ASC
                 LIMIT %s
-            """, (limit,))
+            """, params + [limit])
         else:
             cursor.execute(
                 "SELECT roomid, corpid, name FROM wecom_groups "
