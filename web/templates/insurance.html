@@ -1920,9 +1920,17 @@
                             class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 cursor-pointer"
                             @change="loadRecords()">
                         <option value="">全部群</option>
-                        <option v-for="room in filteredMonitorRooms" :key="room.id" :value="room.id">
-                            {{ room.name }}
-                        </option>
+                        <template v-if="isSuperAdmin">
+                            <template v-for="g in groupedMonitorRoomOptions" :key="g.entName">
+                                <option disabled style="font-weight:700;color:#111;">── {{ g.entName }} ──</option>
+                                <option v-for="room in g.rooms" :key="room.id" :value="room.id">　{{ room.name }}</option>
+                            </template>
+                        </template>
+                        <template v-else>
+                            <option v-for="room in filteredMonitorRooms" :key="room.id" :value="room.id">
+                                {{ room.name }}
+                            </option>
+                        </template>
                     </select>
                 </div>
                 <div v-if="recordFilter.source_type === 'user'" class="flex items-center gap-1.5">
@@ -7745,6 +7753,22 @@ const _app = createApp({
             if (!ef) return monitorRooms.value;
             return monitorRooms.value.filter(r => String(r.enterprise_id) === String(ef));
         });
+        // 群下拉按企业分组展示：先按企业名称分组，组内群按名称排序；没有匹配到企业的群归到"未分组"
+        const groupedMonitorRoomOptions = computed(() => {
+            const nameMap = {};
+            recordEnterpriseList.value.forEach(e => { nameMap[String(e.id)] = e.name; });
+            const groups = {};
+            filteredMonitorRooms.value.forEach(r => {
+                const entName = nameMap[String(r.enterprise_id)] || '未分组';
+                if (!groups[entName]) groups[entName] = [];
+                groups[entName].push(r);
+            });
+            return Object.keys(groups).sort((a, b) => a === '未分组' ? 1 : b === '未分组' ? -1 : a.localeCompare(b))
+                .map(entName => ({
+                    entName,
+                    rooms: groups[entName].slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')),
+                }));
+        });
         // 切换企业时：若当前选中的群不属于该企业则清空群筛选，再加载
         function onEnterpriseChange() {
             const ef = recordEnterpriseFilter.value;
@@ -9134,7 +9158,7 @@ const _app = createApp({
             // 识别记录
             records, filteredRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
             isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask, collapseDownloadTask, expandDownloadTask, retryDownloadTask, batchFailModal, batchFailRetry, batchFailUpload,
-            roomList, monitorRooms, filteredMonitorRooms, onEnterpriseChange, monitorUsers,
+            roomList, monitorRooms, filteredMonitorRooms, groupedMonitorRoomOptions, onEnterpriseChange, monitorUsers,
             recordFilter, dateTypeSupportsTime, openNativePicker, statusLabel, onSourceTypeChange, clearAllFilters, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
             recordEnterpriseFilter, recordEnterpriseList,
             recordPagination, visiblePages, recordStats,
