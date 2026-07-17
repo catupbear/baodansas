@@ -7640,9 +7640,15 @@ const _app = createApp({
             const allCols = [...recordExtraColumns, ...dynamicCols].filter(c => { if (seen.has(c)) return false; seen.add(c); return true; });
             exportAvailableFields.value = allCols;
             exportSelectedFields.value = [...allCols];
-            // 加载合并默认值（按设置来）
+            // 加载合并默认值（按设置来）：超管选了企业筛选时，必须按该企业自己的开关取值，
+            // 不能默认查超管自己账号的设置——否则企业开了"按车牌合并"，超管导出时这个开关
+            // 却是关的，列模板里配的交强险保费/商业险保费等合并专属列就会全部导出成空白。
             try {
-                const mergeResp = await authFetch('/api/insurance/merge-config');
+                let mergeUrl = '/api/insurance/merge-config';
+                if (isSuperAdmin.value && recordEnterpriseFilter.value) {
+                    mergeUrl += `?target_scope=enterprise&target_scope_id=${recordEnterpriseFilter.value}`;
+                }
+                const mergeResp = await authFetch(mergeUrl);
                 const mergeData = await mergeResp.json();
                 if (mergeData.code === 0) exportMergeByPlate.value = mergeData.data.enabled;
             } catch (e) { /* ignore */ }

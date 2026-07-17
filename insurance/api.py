@@ -5631,14 +5631,17 @@ def get_merge_config_api():
         # 超管代管模式
         target_scope = request.args.get("target_scope")
         target_scope_id = request.args.get("target_scope_id")
+        ent_id_for_merge = None  # 用于跟企业自己的"按车牌合并"列表开关对齐
         if user["role"] == ROLE_SUPER_ADMIN and target_scope:
             sid = int(target_scope_id) if target_scope_id else None
             if target_scope == "enterprise":
                 enabled = get_merge_by_plate(_db, sid, "enterprise", sid)
+                ent_id_for_merge = sid
             elif target_scope == "user":
                 from auth.db import get_user_by_id
                 target_user = get_user_by_id(_db, sid)
-                enabled = get_merge_by_plate(_db, sid, "employee", target_user.get("parent_id") if target_user else None)
+                ent_id_for_merge = target_user.get("parent_id") if target_user else None
+                enabled = get_merge_by_plate(_db, sid, "employee", ent_id_for_merge)
             else:
                 enabled = get_merge_by_plate(_db, 0, "super_admin", None)
         else:
@@ -5647,8 +5650,22 @@ def get_merge_config_api():
                 enabled = get_merge_by_plate(_db, 0, "super_admin", None)
             elif source == "enterprise" and user.get("parent_id"):
                 enabled = get_merge_by_plate(_db, user["parent_id"], "enterprise", user["parent_id"])
+                ent_id_for_merge = user["parent_id"]
             else:
                 enabled = get_merge_by_plate(_db, user["user_id"], user["role"], user.get("parent_id"))
+                ent_id_for_merge = user.get("parent_id") or (user["user_id"] if user["role"] == ROLE_ENTERPRISE else None)
+        # 企业在"服务企业管理"里开的"按车牌合并"（驱动列表默认合并显示）跟这里的导出专属
+        # 开关是两套独立配置，容易不同步——企业开了列表合并，导出却还是关的，列模板里配的
+        # 交强险保费/商业险保费等合并专属列就会导出成空白。让企业自己开了列表合并时，
+        # 导出默认也跟着合并，两者保持一致。
+        if not enabled and ent_id_for_merge:
+            try:
+                from auth.db import get_enterprise_by_id
+                ent = get_enterprise_by_id(_db, ent_id_for_merge)
+                if ent and ent.get("merge_by_plate"):
+                    enabled = True
+            except Exception:
+                pass
         return jsonify({"code": 0, "data": {"enabled": enabled}})
     except Exception as e:
         logger.exception("获取合并配置失败")
