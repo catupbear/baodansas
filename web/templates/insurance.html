@@ -8017,6 +8017,9 @@ const _app = createApp({
                     display_fields: row,
                     _merged: true, _plate: p, _children: children, _expanded: false,
                     filename: children.length + ' 条', status: 'done', doc_category: '保单',
+                    // 合并行是前端拼出来的"伪记录"，原始字段(所属企业等)不会自动带过来，
+                    // 要显式从子记录里取——不然超管列表页合并显示时"所属企业"列永远是空的
+                    enterprise_name: (children[0] && children[0].enterprise_name) || '',
                 };
             });
             recordPagination.total = records.value.length;
