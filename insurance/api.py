@@ -111,9 +111,9 @@ def _date_only_key(raw) -> str:
     return s if _DATE_ONLY_RE.match(s) else str(raw).strip()
 
 
-def _combine_start_dates(commercial_raw, compulsory_raw, fmt, no_pad) -> str:
-    """"交强与交商起保时间"：商业险/交强险起保日期同一天只显示商业险那个；
-    不同则显示"商业险起保日期交交强险起保月/日"（月/日不补零，如 交7/16）。"""
+def _combine_dual_dates(commercial_raw, compulsory_raw, fmt, no_pad) -> str:
+    """"交强与交商起保/终保时间"共用：商业险/交强险的同一类日期(起保或终保)同一天只
+    显示商业险那个；不同则显示"商业险日期交交强险日期的月/日"（月/日不补零，如 交7/16）。"""
     if not commercial_raw and not compulsory_raw:
         return ""
     if not compulsory_raw:
@@ -920,6 +920,21 @@ def list_records():
                 bucket = _plate_start_dates.setdefault(_norm_plate(plate), {})
                 bucket.setdefault("compulsory" if is_compulsory else "commercial", start_date)
 
+        # 交强与交商终保时间：同上，用原始终保日期按车牌分险种收集
+        _need_end_combo = "交强与交商终保时间" in list_visible_keys
+        _plate_end_dates = {}  # {车牌: {"commercial": 终保日期, "compulsory": 终保日期}}
+        if _need_end_combo:
+            for record in result.get("records", []):
+                df = record.get("display_fields", {})
+                plate = df.get("车牌", "") or df.get("车牌号", "")
+                policy_type = df.get("险种", "") or df.get("险种类型", "")
+                end_date = df.get("终保日期", "")
+                if not (plate and end_date and re.search(r"\d{4}", str(end_date))):
+                    continue
+                is_compulsory = "交强" in policy_type or "交通事故责任强制" in policy_type
+                bucket = _plate_end_dates.setdefault(_norm_plate(plate), {})
+                bucket.setdefault("compulsory" if is_compulsory else "commercial", end_date)
+
         # 互补后：计算"保司（带地区）" + 应用用户配置
         for record in result.get("records", []):
             df = record.get("display_fields", {})
@@ -1049,9 +1064,55 @@ def list_records():
                 if not plate:
                     continue
                 _bucket = _plate_start_dates.get(_norm_plate(plate), {})
-                df["交强与交商起保时间"] = _combine_start_dates(
+                df["交强与交商起保时间"] = _combine_dual_dates(
                     _bucket.get("commercial"), _bucket.get("compulsory"),
                     _start_combo_fmt, _start_combo_no_pad)
+
+        # 注入交强与交商终保时间（同交强与交商起保时间）
+        if _need_end_combo:
+            _plates_need_lookup3 = set()
+            for record in result.get("records", []):
+                df = record.get("display_fields", {})
+                np = _norm_plate(df.get("车牌", "") or df.get("车牌号", ""))
+                if not np:
+                    continue
+                _bucket = _plate_end_dates.get(np, {})
+                if "commercial" not in _bucket or "compulsory" not in _bucket:
+                    _plates_need_lookup3.add(np)
+            if _plates_need_lookup3:
+                try:
+                    from insurance.db import find_commercial_compulsory_end_dates
+                    _db_end_dates2 = find_commercial_compulsory_end_dates(_db, list(_plates_need_lookup3))
+                    for _p, _v in _db_end_dates2.items():
+                        _bucket = _plate_end_dates.setdefault(_norm_plate(_p), {})
+                        for _k, _dv in _v.items():
+                            _bucket.setdefault(_k, _dv)
+                except Exception:
+                    logger.debug("查询交强与交商终保时间失败")
+            _end_combo_fmt = ""
+            _end_combo_no_pad = False
+            for _item in (user_config or {}).get("date_format", []):
+                if _item.get("key") == "交强与交商终保时间":
+                    _end_combo_fmt = _item.get("value", "")
+                elif _item.get("key") == "__no_pad__" and _item.get("value"):
+                    _end_combo_no_pad = True
+            for record in result.get("records", []):
+                df = record.get("display_fields", {})
+                _mf_raw3 = record.get("manual_fields")
+                if isinstance(_mf_raw3, str):
+                    try:
+                        _mf_raw3 = json.loads(_mf_raw3)
+                    except (TypeError, json.JSONDecodeError):
+                        _mf_raw3 = []
+                if isinstance(_mf_raw3, list) and "交强与交商终保时间" in _mf_raw3:
+                    continue
+                plate = df.get("车牌", "") or df.get("车牌号", "")
+                if not plate:
+                    continue
+                _bucket = _plate_end_dates.get(_norm_plate(plate), {})
+                df["交强与交商终保时间"] = _combine_dual_dates(
+                    _bucket.get("commercial"), _bucket.get("compulsory"),
+                    _end_combo_fmt, _end_combo_no_pad)
 
         # 注：is_abnormal（需人工补充）统一由 _compute_abnormal 在入库/字段更新/启动回填
         # 时按固定 10 列口径计算并写库。此处不再做"浏览时惰性重判+写库"，避免浏览行为
@@ -4522,11 +4583,52 @@ def export_excel():
                 if not plate:
                     return
                 _bucket = plate_start_dates.get(_norm_plate(plate), {})
-                _cv = _combine_start_dates(
+                _cv = _combine_dual_dates(
                     _bucket.get("commercial"), _bucket.get("compulsory"),
                     export_start_combo_fmt, export_start_combo_no_pad)
                 if _cv:
                     row_fields["交强与交商起保时间"] = _cv
+
+            need_end_combo = "交强与交商终保时间" in field_names
+            plate_end_dates = {}
+            export_end_combo_fmt = ""
+            export_end_combo_no_pad = False
+            if need_end_combo:
+                all_plates3 = set()
+                for inv in invoices:
+                    f = inv.get("fields", {}) if isinstance(inv, dict) else {}
+                    np = _norm_plate(f.get("车牌", "") or f.get("车牌号", ""))
+                    if np:
+                        all_plates3.add(np)
+                if all_plates3 and _db:
+                    try:
+                        from insurance.db import find_commercial_compulsory_end_dates
+                        db_end_dates3 = find_commercial_compulsory_end_dates(_db, list(all_plates3))
+                        for _p, _v in db_end_dates3.items():
+                            plate_end_dates[_norm_plate(_p)] = _v
+                    except Exception:
+                        logger.debug("导出时查询交强与交商终保时间失败")
+                for _item in (user_config or {}).get("date_format", []):
+                    if _item.get("key") == "交强与交商终保时间":
+                        export_end_combo_fmt = _item.get("value", "")
+                    elif _item.get("key") == "__no_pad__" and _item.get("value"):
+                        export_end_combo_no_pad = True
+
+            def _inject_end_combo(row_fields):
+                """向一行数据注入并格式化交强与交商终保时间（手动填写过的不覆盖）。"""
+                if not need_end_combo:
+                    return
+                if row_fields.get("交强与交商终保时间"):
+                    return
+                plate = row_fields.get("车牌", "") or row_fields.get("车牌号", "") or ""
+                if not plate:
+                    return
+                _bucket = plate_end_dates.get(_norm_plate(plate), {})
+                _cv = _combine_dual_dates(
+                    _bucket.get("commercial"), _bucket.get("compulsory"),
+                    export_end_combo_fmt, export_end_combo_no_pad)
+                if _cv:
+                    row_fields["交强与交商终保时间"] = _cv
 
             if merge_enabled:
                 # ---- 按车牌合并导出 ----
@@ -4632,10 +4734,11 @@ def export_excel():
                     merged_rows.append(row)
 
                 # 注入交强到期时间（同车牌交强险终保日期，按配置格式格式化）
-                # 注入交强与交商起保时间（同车牌商业险/交强险起保日期，一致显示一个/不同组合显示）
+                # 注入交强与交商起保/终保时间（同车牌商业险/交强险起保/终保日期，一致显示一个/不同组合显示）
                 for row in merged_rows:
                     _inject_compulsory_end(row)
                     _inject_start_combo(row)
+                    _inject_end_combo(row)
 
                 # 3. 排序（按车牌；新车无牌按车架号兜底排序）
                 merged_rows.sort(key=lambda r: r.get("车牌", "") or r.get("车架号", ""))
@@ -4687,6 +4790,7 @@ def export_excel():
                     # 注入交强到期时间（原始终保日期，按配置格式格式化；手动填写过的不覆盖）
                     _inject_compulsory_end(fields)
                     _inject_start_combo(fields)
+                    _inject_end_combo(fields)
                     row = []
                     for col in field_names:
                         if col == "文件名":
