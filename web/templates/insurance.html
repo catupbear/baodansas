@@ -6621,7 +6621,7 @@ const _app = createApp({
             return fallback;
         }
 
-        async function doExportExcel(type, selectedCols, mergeByPlate = false) {
+        async function doExportExcel(type, selectedCols, mergeByPlate = false, tplSuffix = '') {
             let data, fileName;
             if (type === 'success') {
                 data = enrichUploadData(buildMappedInvoices(), successResults.value);
@@ -6648,6 +6648,7 @@ const _app = createApp({
                 }));
                 fileName = '识别失败清单.xlsx';
             }
+            if (tplSuffix) fileName = fileName.replace(/\.xlsx$/, `${tplSuffix}.xlsx`);
             try {
                 const resp = await authFetch('/api/insurance/export/excel', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -6743,6 +6744,7 @@ const _app = createApp({
         const batchExportAllData = ref(null);    // 暂存全量数据供分批切片
         const batchExportCols = ref(null);       // 暂存导出列
         const batchExportMerge = ref(false);     // 暂存合并开关
+        const batchExportTplSuffix = ref('');    // 暂存模板名后缀（用于文件名）
 
         const isAllExportFieldsSelected = computed(() =>
             exportAvailableFields.value.length > 0 && exportSelectedFields.value.length === exportAvailableFields.value.length
@@ -6832,6 +6834,8 @@ const _app = createApp({
             const type = exportPendingType.value;
             const selectedCols = (exportCustomMode.value || exportSelectedTemplateName.value) ? exportSelectedFields.value : null;
             const merge = exportMergeByPlate.value;
+            // 用了命名模板（非自定义勾选）时，文件名带上模板名，方便区分标准版/完整版等导出的文件
+            const tplSuffix = (!exportCustomMode.value && exportSelectedTemplateName.value) ? `_${exportSelectedTemplateName.value}` : '';
 
             if (type === 'records') {
                 // 识别记录：先收集全部数据，检查条数
@@ -6843,10 +6847,11 @@ const _app = createApp({
                     batchExportAllData.value = allData;
                     batchExportCols.value = selectedCols;
                     batchExportMerge.value = merge;
+                    batchExportTplSuffix.value = tplSuffix;
                     batchExportVisible.value = true;
                     return;
                 }
-                await sendExportRequest(allData, selectedCols, merge, '保单识别记录');
+                await sendExportRequest(allData, selectedCols, merge, `保单识别记录${tplSuffix}`);
             } else {
                 // 手动上传结果导出
                 const count = getManualExportCount(type);
@@ -6857,10 +6862,11 @@ const _app = createApp({
                     batchExportAllData.value = allData;
                     batchExportCols.value = selectedCols || exportSelectedFields.value;
                     batchExportMerge.value = merge;
+                    batchExportTplSuffix.value = tplSuffix;
                     batchExportVisible.value = true;
                     return;
                 }
-                await doExportExcel(type, selectedCols || exportSelectedFields.value, merge);
+                await doExportExcel(type, selectedCols || exportSelectedFields.value, merge, tplSuffix);
             }
         }
 
@@ -6869,7 +6875,7 @@ const _app = createApp({
             const range = batchExportRanges.value[batchIdx];
             const sliced = batchExportAllData.value.slice(range.start - 1, range.end);
             batchExportVisible.value = false;
-            const batchLabel = `第${batchIdx + 1}批`;
+            const batchLabel = `第${batchIdx + 1}批${batchExportTplSuffix.value}`;
             await sendExportRequest(sliced, batchExportCols.value, batchExportMerge.value, batchLabel);
         }
 
@@ -7294,6 +7300,7 @@ const _app = createApp({
                     if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
                     if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
                     if (recordPolicyTypeFilter.value) params.set('policy_type', recordPolicyTypeFilter.value);
+                    if (recordEnterpriseFilter.value) params.set('enterprise_id', recordEnterpriseFilter.value);
                     _appendDateParams(params);
                     _appendAdvancedParams(params);
 
@@ -7481,6 +7488,7 @@ const _app = createApp({
                 if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
                 if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
                 if (recordPolicyTypeFilter.value) params.set('policy_type', recordPolicyTypeFilter.value);
+                if (recordEnterpriseFilter.value) params.set('enterprise_id', recordEnterpriseFilter.value);
                 _appendDateParams(params);
                 _appendAdvancedParams(params);
 
@@ -7685,6 +7693,7 @@ const _app = createApp({
                     if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
                     if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
                     if (recordPolicyTypeFilter.value) params.set('policy_type', recordPolicyTypeFilter.value);
+                    if (recordEnterpriseFilter.value) params.set('enterprise_id', recordEnterpriseFilter.value);
                     _appendDateParams(params);
                     if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');
                     _appendAdvancedParams(params);
