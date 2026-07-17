@@ -2545,8 +2545,10 @@
                             {{ record.is_abnormal && !record.abnormal_override_reason && record.status === 'done' ? '需人工补充' : statusLabel(record.status) }}
                         </span>
                     </div>
-                    <!-- 提示条 -->
-                    <div v-if="record._merged" class="mrc-hint mrc-hint-multi">📎 同车牌 {{ record._children ? record._children.length : 0 }} 张保单</div>
+                    <!-- 提示条：车牌/车架号都缺失时按id/保单号兜底分组，不是真按车牌合并，
+                         不能显示"同车牌"误导用户 -->
+                    <div v-if="record._merged && record._plate && !record._plate.startsWith('__')" class="mrc-hint mrc-hint-multi">📎 同车牌 {{ record._children ? record._children.length : 0 }} 张保单</div>
+                    <div v-else-if="record._merged" class="mrc-hint mrc-hint-warn">暂无车牌</div>
                     <div v-if="record.policy_count > 1" class="mrc-hint mrc-hint-multi">多保单 {{ record.policy_index }}/{{ record.policy_count }}<template v-if="record.page_range">（第{{ record.page_range }}页）</template></div>
                     <div v-if="getFailHint(record)" class="mrc-hint mrc-hint-fail">{{ getFailHint(record) }}</div>
                     <div v-if="record.hint" class="mrc-hint mrc-hint-warn">{{ record.hint }}</div>
