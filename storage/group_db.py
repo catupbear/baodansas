@@ -153,18 +153,25 @@ def cleanup_pending_external(db, allowed_corpids: list) -> int:
         conn.close()
 
 
-def get_groups_to_sync(db, full: bool = False, limit: int = 500) -> list:
+def get_groups_to_sync(db, full: bool = False, limit: int = 500, force: bool = False) -> list:
     """
     取待同步的群列表。
     full=False（增量）：只取 pending 状态的新群。
     full=True（全量刷新）：取所有群，但排除
       - unresolvable（已确认解散/不存在，每天试 1 次）
       - 连续失败 >= 阈值 且 24 小时内已尝试过的（退避）
+    force=True（强制全量，启动时用）：忽略退避，所有群都取出来重新同步。
     """
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        if full:
+        if full and force:
+            cursor.execute("""
+                SELECT roomid, corpid, name FROM wecom_groups
+                ORDER BY last_attempt_at IS NULL DESC, last_attempt_at ASC
+                LIMIT %s
+            """, (limit,))
+        elif full:
             cursor.execute(f"""
                 SELECT roomid, corpid, name FROM wecom_groups
                 WHERE NOT (

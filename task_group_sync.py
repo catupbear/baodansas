@@ -227,9 +227,9 @@ def resolve_group(corps: list, roomid: str, corpid_hint: str, api_delay: float):
     return None, None
 
 
-def run_sync(db, corps: list, full: bool, api_delay: float):
-    """执行一轮同步（增量 full=False / 全量 full=True）"""
-    label = "全量刷新" if full else "增量发现"
+def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False):
+    """执行一轮同步（增量 full=False / 全量 full=True / force=True 忽略失败退避强制全量）"""
+    label = "强制全量刷新" if (full and force) else ("全量刷新" if full else "增量发现")
     lock_conn = db.pool.connection()
     got_lock = False
     try:
@@ -244,7 +244,7 @@ def run_sync(db, corps: list, full: bool, api_delay: float):
         if new_cnt:
             logger.info("发现 %d 个新群", new_cnt)
 
-        groups = get_groups_to_sync(db, full=full)
+        groups = get_groups_to_sync(db, full=full, force=force)
         if not groups:
             if full:
                 logger.info("%s：无待同步的群", label)
@@ -329,10 +329,10 @@ def main():
                 [c.name for c in corps], incremental_interval, full_interval,
                 list_interval, list_corp_names or "全部")
 
-    # 启动先跑一轮列表发现 + 全量（首次部署时把存量群全部灌入并解析）
+    # 启动先跑一轮列表发现 + 强制全量（每次启动都把所有群重新同步一遍群名，忽略失败退避）
     if list_interval:
         run_list_discovery(db, corps, api_delay, list_corp_names)
-    run_sync(db, corps, full=True, api_delay=api_delay)
+    run_sync(db, corps, full=True, api_delay=api_delay, force=True)
 
     now = time.time()
     next_incremental = now + incremental_interval
