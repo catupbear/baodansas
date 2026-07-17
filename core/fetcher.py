@@ -377,6 +377,12 @@ class MessageFetcher:
             # 检查是否需要触发保单识别
             self._check_insurance_trigger(msg_seq, msg_data, parsed)
 
+            # "群公告"文本（机器人自己发的入群欢迎语/系统公告）只正常存档，
+            # 不识别、不触发任何关键词类功能（保险报价/回填/台账导出等），避免误命中
+            _notice_text = (parsed.get("content") or {}).get("text") or "" if parsed.get("msgtype") == "text" else ""
+            if "群公告" in _notice_text:
+                return
+
             # 检查是否需要触发保险报价
             self._check_quote_trigger(msg_seq, msg_data, parsed)
 
