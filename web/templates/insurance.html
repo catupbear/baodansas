@@ -326,8 +326,9 @@
             /* 状态Tab行在移动端换行 */
             .record-tab-row { flex-wrap: wrap !important; gap: 0 !important; }
             .record-tab-row .record-actions { width: 100%; border-top: 1px solid #f3f4f6; padding: 8px 12px; justify-content: flex-end; }
-            /* 操作按钮文字隐藏，只留图标 */
-            .record-actions .btn-label { display: none; }
+            /* 操作按钮文字缩小显示，纯图标不知道点了是做什么 */
+            .record-actions .btn-label { display: inline; font-size: 10px; }
+            .record-actions .btn { padding: 5px 8px !important; gap: 3px !important; }
             /* 表格卡不撑宽页面 */
             .table-card { overflow-x: hidden !important; }
             .table-scroll-wrapper { overflow-x: auto !important; }
@@ -4137,14 +4138,6 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
             </svg>
             <span style="font-size:10px;font-weight:500;">首页</span>
-        </button>
-        <button v-if="!notActivated" @click="pageTab='upload'"
-                style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;"
-                :style="pageTab==='upload'?'color:#ea580c;':'color:#9ca3af;'">
-            <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-            </svg>
-            <span style="font-size:10px;font-weight:500;">手动上传</span>
         </button>
         <button v-if="isSuperAdmin && !notActivated" @click="pageTab='dashboard';loadDashboard()"
                 style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;"
