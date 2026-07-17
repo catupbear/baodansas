@@ -1148,7 +1148,7 @@ createApp({
             try {
                 let url = `/api/insurance/merge-config?source=${activeSource.value}`;
                 if (adminTarget.value) {
-                    url += `?target_scope=${adminTarget.value.scope}`;
+                    url += `&target_scope=${adminTarget.value.scope}`;
                     if (adminTarget.value.scope_id != null) url += `&target_scope_id=${adminTarget.value.scope_id}`;
                 }
                 const resp = await authFetch(url);
