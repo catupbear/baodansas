@@ -162,8 +162,9 @@ def get_groups_to_sync(db, full: bool = False, limit: int = 500, force: bool = F
       - unresolvable（已确认解散/不存在，每天试 1 次）
       - 连续失败 >= 阈值 且 24 小时内已尝试过的（退避）
     force=True（强制全量，启动时用）：忽略退避。
-    corpids 非空时（全量）：只取「这些企业名下的群（corpid 匹配）或 pending 新群」，
-      不再扫全表——其他企业的历史失败群不参与同步。
+    corpids 非空时（全量）：严格只取这些企业名下的群（corpid 匹配，
+      客户群列表发现插入的群带 corpid，会被包含）。messages 增量发现的
+      corpid 为空的 pending 群由增量轮解析，解析成功后 corpid 补上才进全量。
     """
     conn = db.pool.connection()
     try:
@@ -171,7 +172,7 @@ def get_groups_to_sync(db, full: bool = False, limit: int = 500, force: bool = F
         corp_filter, params = "", []
         if corpids:
             ph = ",".join(["%s"] * len(corpids))
-            corp_filter = f"AND (corpid IN ({ph}) OR sync_status = 'pending')"
+            corp_filter = f"AND corpid IN ({ph})"
             params = list(corpids)
         if full and force:
             cursor.execute(f"""
