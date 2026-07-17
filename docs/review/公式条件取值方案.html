@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>方案评审：比例规则 · 按条件取值（公式不变）</title>
+<style>
+  :root{
+    --ink:#1a2333; --sub:#5b6a82; --line:#e4e9f2; --bg:#f6f8fb;
+    --blue:#2563eb; --blue-bg:#eff4ff; --green:#059669; --green-bg:#ecfdf5;
+    --amber:#b45309; --amber-bg:#fffbeb; --red:#dc2626; --red-bg:#fef2f2;
+    --code-bg:#0f172a; --code-ink:#e2e8f0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"PingFang SC","Microsoft YaHei",-apple-system,sans-serif;color:var(--ink);background:var(--bg);line-height:1.75;font-size:15px}
+  .wrap{max-width:1080px;margin:0 auto;padding:48px 32px 96px}
+  header{margin-bottom:40px;padding-bottom:24px;border-bottom:2px solid var(--ink)}
+  header .tag{display:inline-block;background:var(--amber-bg);color:var(--amber);border:1px solid #fcd34d;border-radius:4px;padding:2px 10px;font-size:13px;font-weight:600;margin-bottom:12px}
+  h1{font-size:28px;letter-spacing:.5px}
+  header p{color:var(--sub);margin-top:8px;font-size:14px}
+  h2{font-size:20px;margin:48px 0 16px;padding-left:12px;border-left:4px solid var(--blue)}
+  h3{font-size:16px;margin:28px 0 10px;color:var(--ink)}
+  p{margin:8px 0}
+  section p, section li{color:#2c3a52}
+  ul,ol{padding-left:24px;margin:8px 0}
+  li{margin:4px 0}
+  .card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px 24px;margin:16px 0}
+  .callout{border-radius:8px;padding:14px 18px;margin:14px 0;font-size:14px}
+  .callout.blue{background:var(--blue-bg);border:1px solid #bfdbfe}
+  .callout.green{background:var(--green-bg);border:1px solid #a7f3d0}
+  .callout.amber{background:var(--amber-bg);border:1px solid #fde68a}
+  .callout.red{background:var(--red-bg);border:1px solid #fecaca}
+  .callout b{display:block;margin-bottom:4px}
+  table{width:100%;border-collapse:collapse;margin:14px 0;background:#fff;font-size:14px}
+  th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}
+  th{background:#f1f5fb;font-weight:600;white-space:nowrap}
+  code{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:13px;background:#eef2f8;border-radius:4px;padding:1px 6px;color:#0f3fa8}
+  pre{background:var(--code-bg);color:var(--code-ink);border-radius:10px;padding:18px 20px;overflow-x:auto;margin:14px 0;font-size:13px;line-height:1.7}
+  pre code{background:none;color:inherit;padding:0}
+  .cm{color:#7dd3fc}.str{color:#86efac}.num{color:#fca5a5}.key{color:#fcd34d}
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0}
+  .flow .node{background:#fff;border:1.5px solid var(--blue);color:var(--blue);border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600}
+  .flow .node.gray{border-color:#94a3b8;color:#475569}
+  .flow .node.green{border-color:var(--green);color:var(--green)}
+  .flow .node.purple{border-color:#a21caf;color:#a21caf}
+  .flow .arrow{color:#94a3b8;font-size:16px}
+  .badge{display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:600;margin-right:6px}
+  .badge.p1{background:var(--green-bg);color:var(--green)}
+  .badge.p2{background:var(--blue-bg);color:var(--blue)}
+  .badge.p3{background:#f1f5f9;color:#64748b}
+  .kv{color:var(--sub);font-size:13px}
+  .toc{background:#fff;border:1px solid var(--line);border-radius:10px;padding:16px 24px;font-size:14px}
+  .toc a{color:var(--blue);text-decoration:none}
+  .toc li{margin:2px 0}
+  .path{font-size:13px;color:var(--sub);word-break:break-all}
+
+  /* ===== 交互原型样式 ===== */
+  .demo-banner{background:linear-gradient(90deg,#2563eb,#7c3aed);color:#fff;border-radius:10px;padding:12px 20px;font-size:14px;margin:14px 0;font-weight:600}
+  .demo{background:#fff;border:2px solid var(--blue);border-radius:12px;overflow:hidden;margin:16px 0}
+  .demo-head{background:var(--blue-bg);border-bottom:1px solid #bfdbfe;padding:12px 20px;font-weight:700;font-size:15px;display:flex;align-items:center;gap:10px}
+  .demo-head .dot{width:10px;height:10px;border-radius:50%;background:var(--blue);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .demo select,.demo input[type=text],.demo input[type=number]{
+    font:inherit;font-size:13px;border:1px solid #cbd5e1;border-radius:6px;padding:5px 8px;background:#fff;color:var(--ink);outline:none}
+  .demo select:focus,.demo input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(37,99,235,.15)}
+  .demo input.pct{width:80px;font-family:"SF Mono",Menlo,monospace;text-align:right;font-weight:700}
+  .demo .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+  .demo .lbl{color:var(--sub);font-size:13px;white-space:nowrap}
+  .seg{display:inline-flex;border:1px solid #cbd5e1;border-radius:8px;overflow:hidden}
+  .seg button{font:inherit;font-size:13px;padding:6px 16px;border:none;background:#f8fafc;color:#475569;cursor:pointer;font-weight:600}
+  .seg button.on{background:var(--blue);color:#fff}
+  .branch-card{border:1.5px dashed #94a3b8;border-radius:10px;padding:12px 16px;margin:12px 0;background:#fafcff;position:relative}
+  .branch-card .bh{font-weight:700;color:var(--blue);font-size:13px;display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .branch-card.def{border-style:solid;border-color:#cbd5e1;background:#f8fafc}
+  .branch-card.def .bh{color:#64748b}
+  .cond-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0;padding:6px 10px;background:#fff;border:1px solid var(--line);border-radius:8px}
+  .icon-btn{border:none;background:none;cursor:pointer;font-size:14px;color:#94a3b8;padding:2px 6px;border-radius:4px;line-height:1}
+  .icon-btn:hover{background:#fee2e2;color:var(--red)}
+  .icon-btn.mv:hover{background:var(--blue-bg);color:var(--blue)}
+  .demo .btn{font:inherit;font-size:13px;border-radius:6px;padding:5px 14px;font-weight:600;border:1px solid var(--blue);color:var(--blue);background:#fff;cursor:pointer}
+  .demo .btn:hover{background:var(--blue-bg)}
+  .demo .btn.primary{background:var(--blue);color:#fff}
+  .demo .btn.primary:hover{background:#1d4ed8}
+  .demo .btn.ghost{border-color:#cbd5e1;color:#64748b}
+  .demo .btn.sm{padding:2px 10px;font-size:12px}
+  .and-tag{background:#e0e7ff;color:#4338ca;border-radius:4px;padding:0 8px;font-size:11px;font-weight:700}
+  .demo-grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
+  .demo-grid > div{padding:20px}
+  .demo-grid > div:first-child{border-right:1px solid var(--line)}
+  @media(max-width:900px){.demo-grid{grid-template-columns:1fr}.demo-grid>div:first-child{border-right:none;border-bottom:1px solid var(--line)}}
+  .panel-title{font-weight:700;font-size:14px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .panel-title .n{background:var(--blue);color:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;flex:none}
+  .sim-table{font-size:13px;margin:8px 0}
+  .sim-table th{font-size:12px;padding:6px 8px}
+  .sim-table td{padding:5px 8px}
+  .sim-table input{width:100%;border:1px solid transparent;background:transparent;font:inherit;font-size:13px;border-radius:4px;padding:2px 4px}
+  .sim-table input:hover{border-color:#cbd5e1;background:#fff}
+  .sim-table input:focus{border-color:var(--blue);background:#fff;outline:none}
+  .res-pill{display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:700;white-space:nowrap}
+  .res-pill.b0{background:var(--green-bg);color:var(--green)}
+  .res-pill.b1{background:var(--blue-bg);color:var(--blue)}
+  .res-pill.b2{background:#fdf4ff;color:#a21caf}
+  .res-pill.def{background:#f1f5f9;color:#64748b}
+  .res-pill.miss{background:var(--red-bg);color:var(--red)}
+  .res-val{font-family:"SF Mono",Menlo,monospace;font-weight:700;color:var(--ink)}
+  .rate-big{font-family:"SF Mono",Menlo,monospace;font-weight:800;color:var(--blue)}
+  .json-box{background:var(--code-bg);color:var(--code-ink);border-radius:10px;padding:14px 16px;font-family:"SF Mono",Menlo,monospace;font-size:12px;line-height:1.6;max-height:340px;overflow:auto;white-space:pre;margin-top:8px}
+  details.jsonwrap{margin-top:14px}
+  details.jsonwrap summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--blue)}
+  .hint{font-size:12px;color:var(--sub);margin-top:4px}
+  .toast{position:fixed;left:50%;bottom:40px;transform:translateX(-50%) translateY(20px);background:#111827;color:#fff;border-radius:8px;padding:10px 22px;font-size:14px;opacity:0;pointer-events:none;transition:all .25s;z-index:99}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  /* 批量导入面板 */
+  .imp-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:900px){.imp-grid{grid-template-columns:1fr}}
+  .demo textarea{width:100%;font-family:"SF Mono",Menlo,monospace;font-size:12.5px;line-height:1.7;border:1px solid #cbd5e1;border-radius:8px;padding:10px 12px;background:#fff;color:var(--ink);resize:vertical;outline:none}
+  .demo textarea:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(37,99,235,.15)}
+  .imp-rule{border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:8px 0;background:#fff;font-size:13px}
+  .imp-rule .rk{font-weight:700;color:var(--ink)}
+  .imp-rule .rk .badge{margin-left:6px}
+  .imp-rule ul{list-style:none;padding-left:6px;margin:6px 0 0}
+  .imp-rule li{margin:3px 0;color:#334155}
+  .imp-rule li .cnd{background:var(--blue-bg);color:var(--blue);border-radius:4px;padding:0 8px;font-size:12px;font-weight:600;margin-right:6px}
+  .imp-rule li .cnd.def{background:#f1f5f9;color:#64748b}
+  .imp-err{background:var(--red-bg);border:1px solid #fecaca;border-radius:8px;padding:8px 14px;margin:8px 0;font-size:13px;color:var(--red)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="tag">方案评审 · 未确认</div>
+  <h1>比例规则 · 按条件取值方案（计算公式不变）</h1>
+  <p>台账系统 · 模板配置增强 &nbsp;|&nbsp; 2026-07-17 &nbsp;|&nbsp; docs/review/公式条件取值方案.html</p>
+</header>
+
+<div class="toc">
+  <b>目录</b>
+  <ol>
+    <li><a href="#s1">需求背景与设计定位</a></li>
+    <li><a href="#s2">现状分析</a></li>
+    <li><a href="#s3">方案设计：比例规则层（公式引擎零改动）</a></li>
+    <li><a href="#s4">条件类型详解（含跨保单条件）</a></li>
+    <li><a href="#s5">🖱️ 交互原型（可操作演示：编辑 / 批量导入 / 规则总览）</a></li>
+    <li><a href="#s6">代码改动清单</a></li>
+    <li><a href="#s7">兼容性与风险</a></li>
+    <li><a href="#s8">分期实施计划</a></li>
+    <li><a href="#s9">前海案例的最终配置效果</a></li>
+  </ol>
+</div>
+
+<!-- ============ 1 ============ -->
+<h2 id="s1">一、需求背景与设计定位</h2>
+<div class="card">
+  <p>客户（文十七科技-TZ014 群）提出：<b>前海保司的交强险费用比例，取决于是否带驾乘险出单</b>：</p>
+  <ul>
+    <li>带驾乘险出单：交强险比例 <b>22%</b>，驾乘险比例 <b>30%</b></li>
+    <li>不带驾乘险出单：交强险比例 <b>20%</b></li>
+  </ul>
+  <p>类似需求未来会不断出现（不同保司、不同条件、不同比例），需要做成<b>前端随时可配置、可调整、可批量导入、可总览</b>的通用能力。</p>
+</div>
+<div class="callout blue">
+  <b>设计定位（已确认的方向）</b>
+  这里<b>只设置比例</b>，不碰计算公式：新增一层「比例规则」，按条件算出一个<b>比例字段</b>的值（如「应付费率」= 0.22 或 0.20）；计算仍走现有<b>普通公式</b>（如 <code>应付费用 = 保费 × 应付费率</code>），公式只需配一次、永远不用改。运营日常只维护比例数字，不接触公式。
+</div>
+
+<!-- ============ 2 ============ -->
+<h2 id="s2">二、现状分析</h2>
+
+<h3>2.1 现有公式系统的结构</h3>
+<p>公式存储在 <code>user_field_config</code> 表（<span class="path">/Users/take/Downloads/yun/web/wxbot/insurance/db.py:260</span>），<code>config_type='fee_formula'</code>，跟随模板（template_name）与作用域（global / enterprise / user）三级继承，前端在「模板配置 → 自动计算公式」中编辑。</p>
+<pre><code><span class="cm">// 现有一条公式规则的结构</span>
+{
+  <span class="key">"key"</span>: <span class="str">"结算金额:平安:交强险"</span>,          <span class="cm">// 目标字段 : 保司 : 险种（三段匹配条件）</span>
+  <span class="key">"value"</span>: {
+    <span class="key">"display"</span>: <span class="str">"保费 × 0.95"</span>,             <span class="cm">// 公式表达式（按字段名引用）</span>
+    <span class="key">"tokens"</span>: [<span class="str">"保费"</span>, <span class="str">"×"</span>, <span class="str">"0.95"</span>]
+  }
+}</code></pre>
+
+<h3>2.2 计算链路（三处入口共用一套引擎）</h3>
+<div class="flow">
+  <div class="node gray">列表 / 详情 / 导出</div><span class="arrow">→</span>
+  <div class="node">apply_user_config_to_fields()</div><span class="arrow">→</span>
+  <div class="node">match_fee_formulas()<br><span class="kv">按 保司+险种 筛选公式</span></div><span class="arrow">→</span>
+  <div class="node">evaluate_formula()<br><span class="kv">字段替换 + 安全 eval</span></div><span class="arrow">→</span>
+  <div class="node green">写入目标字段</div>
+</div>
+<table>
+  <tr><th>入口</th><th>位置</th></tr>
+  <tr><td>记录列表 / 详情展示</td><td class="path">insurance/api.py:973、1259（GET /api/insurance/records）</td></tr>
+  <tr><td>Excel / CSV 导出</td><td class="path">insurance/api.py:4464-4493（_postprocess_row，可编辑导出转 Excel 活公式）</td></tr>
+  <tr><td>公式匹配 + 求值引擎</td><td class="path">insurance/field_config_db.py:1382-1496（evaluate_formula / match_fee_formulas）</td></tr>
+</table>
+
+<h3>2.3 缺口</h3>
+<div class="callout red">
+  <b>现有系统无法表达本需求，卡在两点：</b>
+  ① 比例目前要么写死在公式里（<code>保费 × 0.95</code>），要么按「保司+险种」拆多条公式，无法按「是否带驾乘险」「保费金额区间」等条件取不同比例；<br>
+  ② 「是否带驾乘险」是<b>跨保单条件</b>（交强险保单 PDF 里没有驾乘险信息，驾乘险是同车的另一张保单），需要查关联记录才能判断。
+</div>
+
+<!-- ============ 3 ============ -->
+<h2 id="s3">三、方案设计：比例规则层（公式引擎零改动）</h2>
+
+<div class="callout blue">
+  <b>核心思路</b>
+  在公式计算<b>之前</b>插入一层「比例规则」：按「保司 + 险种」命中规则后，顺序检查条件分支，<b>第一个满足条件的分支比例生效</b>（都不满足走默认比例），把结果作为一个<b>比例字段</b>（如「应付费率」）注入记录；现有 <code>evaluate_formula()</code> 本来就是按字段名替换数值，普通公式 <code>保费 × 应付费率</code> 照常求值——<b>公式引擎一行不改</b>。
+</div>
+
+<div class="flow">
+  <div class="node gray">一条保单记录</div><span class="arrow">→</span>
+  <div class="node purple">比例规则（新增）<br><span class="kv">保司+险种命中 → 条件分支取比例</span></div><span class="arrow">→</span>
+  <div class="node purple">注入比例字段<br><span class="kv">应付费率 = 0.22</span></div><span class="arrow">→</span>
+  <div class="node">普通公式（现状不变）<br><span class="kv">应付费用 = 保费 × 应付费率</span></div><span class="arrow">→</span>
+  <div class="node green">结果</div>
+</div>
+
+<h3>3.1 数据结构（新增 config_type='ratio_rule'，存现有表）</h3>
+<pre><code><span class="cm">// 一条比例规则（前海交强险案例）——存 user_field_config，config_type='ratio_rule'</span>
+{
+  <span class="key">"key"</span>: <span class="str">"应付费率:前海:交强险"</span>,               <span class="cm">// 比例字段 : 保司 : 险种（沿用现有三段 key 与匹配逻辑）</span>
+  <span class="key">"value"</span>: {
+    <span class="key">"branches"</span>: [                              <span class="cm">// 条件分支，自上而下首个命中生效</span>
+      {
+        <span class="key">"conditions"</span>: [                          <span class="cm">// 条件组，多条之间为 AND</span>
+          { <span class="key">"type"</span>: <span class="str">"related"</span>,                   <span class="cm">// 跨保单条件</span>
+            <span class="key">"match_by"</span>: <span class="str">"车牌号"</span>,
+            <span class="key">"policy_type"</span>: <span class="str">"驾乘险"</span>,
+            <span class="key">"op"</span>: <span class="str">"exists"</span>,
+            <span class="key">"days"</span>: <span class="num">7</span> }
+        ],
+        <span class="key">"value"</span>: <span class="num">0.22</span>,                          <span class="cm">// 命中时的比例</span>
+        <span class="key">"note"</span>: <span class="str">"带驾乘险出单"</span>
+      }
+    ],
+    <span class="key">"default"</span>: <span class="num">0.20</span>                            <span class="cm">// 默认比例（else）</span>
+  }
+}
+
+<span class="cm">// 普通公式保持现状，只需配一条（甚至可配"全部:全部"通用）：</span>
+{ <span class="key">"key"</span>: <span class="str">"应付费用:全部:全部"</span>, <span class="key">"value"</span>: { <span class="key">"display"</span>: <span class="str">"保费 × 应付费率"</span> } }</code></pre>
+
+<h3>3.2 计算时序</h3>
+<p>在 <code>apply_user_config_to_fields()</code>（<span class="path">insurance/field_config_db.py:1499</span>）内，套用公式<b>之前</b>先执行 <code>apply_ratio_rules()</code>：命中的比例写入 <code>fields["应付费率"]</code>。比例字段同时可作为导出列显示（运营能直接看到每单用的比例，便于核对）。没有命中任何比例规则的记录，比例字段为空，公式行为与现在缺字段时一致（按 0 处理）。</p>
+
+<h3>3.3 批量导入比例</h3>
+<p>客户往往一次给出<b>整张费率表</b>（几十个保司 × 险种 × 条件的比例）。在「比例规则」页签提供<b>「批量导入」</b>：直接粘贴 Excel 区域（Tab 分隔）或上传 CSV，一次生成全部规则。</p>
+<table>
+  <tr><th style="width:120px">表格列（5 列）</th><th>说明与写法</th></tr>
+  <tr><td>① 比例字段</td><td>比例写入哪个字段，如 <code>应付费率</code>、<code>结算费率</code>（公式里引用的名字）</td></tr>
+  <tr><td>② 保司</td><td>保司简称，<code>全部</code> 表示不限</td></tr>
+  <tr><td>③ 险种</td><td>险种简称，<code>全部</code> 表示不限</td></tr>
+  <tr><td>④ 条件</td><td>留空或「默认」= 默认比例；<code>带驾乘险</code> / <code>不带商业险</code> = 关联单条件（同车牌 7 天内存在/不存在）；<code>保费&gt;5000</code>、<code>使用性质=营运</code>、<code>承保险种包含摩托</code> = 字段条件</td></tr>
+  <tr><td>⑤ 比例</td><td><code>22%</code> 或 <code>0.22</code> 均可，自动归一化为小数 0.22</td></tr>
+</table>
+<ul>
+  <li><b>自动合并分支</b>：同一（比例字段, 保司, 险种）的多行自动合并为一条规则——带条件的行按顺序成为分支，「默认/空条件」行成为默认比例；只有一行且无条件的即固定比例。</li>
+  <li><b>导入预览</b>：解析后先预览生成的规则与分支结构（错误行标红），确认后才写入；与已有规则 key 重复时可选「覆盖 / 跳过」。</li>
+  <li><b>实现位置</b>：纯前端解析（field_config.html 批量导入弹窗），生成规则 JSON 后走现有 <code>buildConfig()</code> / 保存接口，<b>后端零改动</b>。</li>
+</ul>
+
+<h3>3.4 规则总览</h3>
+<p>「比例规则」页签默认即<b>总览视图</b>：按当前模板列出所有规则，一行行展示「比例字段 / 保司 / 险种 / 条件 → 比例」，支持搜索与按保司筛选，点击行内「编辑」进入该规则的分支编辑。运营随时能一眼看清<b>目前每个保司在什么条件下用什么比例</b>。</p>
+
+<!-- ============ 4 ============ -->
+<h2 id="s4">四、条件类型详解</h2>
+
+<table>
+  <tr><th style="width:110px">条件类型</th><th style="width:70px">分期</th><th>说明</th><th>示例</th></tr>
+  <tr>
+    <td><b>字段条件</b><br><code>type=field</code></td>
+    <td><span class="badge p1">P1</span></td>
+    <td>对<b>本条记录</b>的任意字段做比较。操作符：等于 / 不等于 / 包含 / 不包含 / 大于 / 大于等于 / 小于 / 小于等于 / 为空 / 不为空。数值比较自动提取数字（复用 evaluate_formula 的清洗逻辑）。</td>
+    <td>「承保险种 包含 驾乘」<br>「保费 &gt; 5000」<br>「使用性质 等于 营运」</td>
+  </tr>
+  <tr>
+    <td><b>关联单条件</b><br><code>type=related</code></td>
+    <td><span class="badge p2">P2</span></td>
+    <td>查<b>同企业下的其他保单记录</b>是否存在：按「车牌号 / 车架号 / 投保人」关联，限定险种（可选保司），出单时间前后 N 天内（默认 7 天）。操作符：存在 / 不存在。这是「带驾乘险出单」的关键能力。</td>
+    <td>「同车牌 7 天内 存在 驾乘险」<br>「同车架号 存在 商业险」</td>
+  </tr>
+</table>
+
+<h3>4.1 关联单条件的实现要点（P2）</h3>
+<div class="card">
+  <ul>
+    <li><b>已有先例可复用</b>：<code>insurance/db.py:1425-1496</code> 的 <code>find_commercial_compulsory_start_dates / end_dates</code> 已实现「按车牌跨记录查另一险种」的同款查询（用于"交强与交商起保/终保时间"计算字段），SQL 模式直接照搬。</li>
+    <li><b>批量预取防 N+1</b>：列表/导出是批量渲染，逐条查库会拖垮性能。做法：应用比例规则前先扫一遍本批记录，收集所有分支需要的（关联键, 险种）组合，<b>一次 SQL IN 查询</b>预取成 set，逐条判断时纯内存命中。</li>
+    <li><b>时序问题</b>：交强险先入库、驾乘险后入库时，交强险那条的比例会在驾乘险入库后的<b>下一次查询/导出时自动更新</b>——比例与公式都是展示/导出时实时计算的，不落库，天然解决时序问题。</li>
+  </ul>
+</div>
+
+<!-- ============ 5 交互原型 ============ -->
+<h2 id="s5">五、交互原型（可操作演示）</h2>
+<div class="demo-banner">🖱️ 下面是可以真实操作的原型：① 编辑比例规则（只填比例，不碰公式）② 样例保单实时演算 ③ 批量导入比例 ④ 规则总览。默认已预置前海案例。</div>
+
+<div class="demo">
+  <div class="demo-head"><span class="dot"></span>模板配置 → 比例规则（原型）</div>
+
+  <div class="demo-body" style="border-bottom:1px solid var(--line)">
+    <div class="row">
+      <span class="lbl">比例字段</span>
+      <select id="rTarget"><option>应付费率</option><option>结算费率</option><option>佣金率</option></select>
+      <span class="lbl">适用保司</span>
+      <select id="rCompany"><option>前海</option><option>平安</option><option>人保</option><option>太平洋</option><option>全部</option></select>
+      <span class="lbl">适用险种</span>
+      <select id="rPolicyType"><option>交强险</option><option>商业险</option><option>驾乘险</option><option>全部</option></select>
+      <span class="lbl" style="margin-left:12px">取值方式</span>
+      <span class="seg">
+        <button id="modeNormal" onclick="setMode('normal')">固定比例</button>
+        <button id="modeBranch" class="on" onclick="setMode('branch')">条件分支</button>
+      </span>
+    </div>
+    <div class="row" style="background:var(--green-bg);border:1px solid #a7f3d0;border-radius:8px;padding:8px 12px">
+      <span class="lbl" style="color:var(--green);font-weight:700">关联普通公式（现有能力，保持不变）</span>
+      <span>应付费用 =</span>
+      <input type="text" id="linkedFormula" value="保费 × 应付费率" style="font-family:Menlo,monospace;width:200px" oninput="recalc()">
+      <span class="hint">公式只配一次，比例怎么变都不用改公式</span>
+    </div>
+  </div>
+
+  <div class="demo-grid">
+    <!-- 左：比例规则编辑器 -->
+    <div>
+      <div class="panel-title"><span class="n">1</span>比例规则编辑器</div>
+      <div id="normalBox" style="display:none">
+        <div class="row"><span class="lbl">比例 =</span><input type="number" class="pct" id="normalPct" value="30" step="0.5" oninput="recalc()"><span>%</span></div>
+        <div class="hint">固定比例：命中「保司+险种」即用此比例（如前海驾乘险固定 30%）。</div>
+      </div>
+      <div id="branchBox">
+        <div id="branchList"></div>
+        <div class="branch-card def">
+          <div class="bh">默认（以上条件都不满足时）</div>
+          <div class="row">
+            <span class="lbl">比例 =</span><input type="number" class="pct" id="defPct" value="20" step="0.5" oninput="recalc()"><span>%</span>
+            <span class="lbl">备注</span><input type="text" id="defNote" value="不带驾乘险" style="width:110px" oninput="recalc()">
+          </div>
+        </div>
+        <div class="row">
+          <button class="btn" onclick="addBranch()">＋ 添加分支</button>
+          <span class="hint">分支自上而下匹配，首个命中者生效（if / else if / else）</span>
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn ghost" onclick="resetDemo()">↺ 重置为前海案例</button>
+        <span style="flex:1"></span>
+        <button class="btn primary" onclick="saveRule()">保存规则</button>
+      </div>
+      <details class="jsonwrap">
+        <summary>查看生成的配置 JSON（即存入 user_field_config.config_value 的内容）</summary>
+        <div class="json-box" id="jsonBox"></div>
+      </details>
+    </div>
+
+    <!-- 右：实时演算 -->
+    <div>
+      <div class="panel-title"><span class="n">2</span>样例保单 · 实时演算 <span class="hint" style="font-weight:400">（保司/险种/车牌/保费都可以改，改完立即重算）</span></div>
+      <table class="sim-table" id="simTable">
+        <thead><tr><th>#</th><th>保司</th><th>险种</th><th>车牌号</th><th>保费</th><th>出单日期</th><th></th></tr></thead>
+        <tbody id="simBody"></tbody>
+      </table>
+      <div class="row"><button class="btn sm" onclick="addRecord()">＋ 加一条样例保单</button></div>
+
+      <div class="panel-title" style="margin-top:16px"><span class="n">3</span>计算结果（比例字段：<span id="resTargetName">应付费率</span>）</div>
+      <table class="sim-table">
+        <thead><tr><th>#</th><th>记录</th><th>命中</th><th>比例</th><th>应付费用</th></tr></thead>
+        <tbody id="resBody"></tbody>
+      </table>
+      <div class="hint">💡 试一试：把 2 号驾乘险的车牌改掉（或删掉这条），1 号交强险的比例会立刻从 22% 变回 20%。</div>
+    </div>
+  </div>
+
+  <!-- 批量导入面板 -->
+  <div style="border-top:1px solid var(--line);padding:20px">
+    <div class="panel-title"><span class="n">4</span>批量导入比例
+      <span class="hint" style="font-weight:400">粘贴 Excel/CSV 表格（Tab / 逗号分隔均可），一次生成多条规则。列：比例字段, 保司, 险种, 条件, 比例</span>
+    </div>
+    <div class="imp-grid">
+      <div>
+        <textarea id="impText" rows="9" spellcheck="false">应付费率	前海	交强险	带驾乘险	22%
+应付费率	前海	交强险	默认	20%
+应付费率	前海	驾乘险		30%
+应付费率	平安	交强险	保费>5000	4%
+应付费率	平安	交强险	默认	5%
+应付费率	人保	商业险		15%</textarea>
+        <div class="row" style="margin-top:8px">
+          <button class="btn" onclick="parseImport()">解析预览</button>
+          <button class="btn primary" style="padding:5px 28px" onclick="applyImport()">导入</button>
+          <span class="hint">导入后写入下方规则总览，重复的规则自动覆盖</span>
+        </div>
+        <div class="hint">条件写法：留空/「默认」= 默认比例；「带驾乘险」「不带商业险」= 关联单条件（同车牌 7 天内存在/不存在）；「保费&gt;5000」「使用性质=营运」「承保险种包含摩托」= 字段条件。比例支持 <b>22%</b> 或 <b>0.22</b> 两种写法。</div>
+      </div>
+      <div>
+        <div class="hint" style="margin-bottom:6px">解析结果预览（同一「比例字段+保司+险种」的多行自动合并为一条分支规则）：</div>
+        <div id="impPreview"><div class="hint">点击「解析预览」查看生成的规则</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 规则总览面板 -->
+  <div style="border-top:1px solid var(--line);padding:20px">
+    <div class="panel-title"><span class="n">5</span>规则总览
+      <span class="hint" style="font-weight:400">一眼看清目前有哪些规则、各自对应的比例；编辑器保存、批量导入的规则都汇总在这里</span>
+    </div>
+    <div class="row">
+      <input type="text" id="ovSearch" placeholder="搜索：字段 / 保司 / 险种 / 条件 / 比例" style="width:300px" oninput="renderOverview()">
+      <select id="ovCompany" onchange="renderOverview()"><option value="">全部保司</option></select>
+      <span class="hint" id="ovCount"></span>
+      <span style="flex:1"></span>
+      <button class="btn" onclick="document.getElementById('impText').scrollIntoView({behavior:'smooth',block:'center'});document.getElementById('impText').focus()">📥 批量导入</button>
+      <button class="btn" onclick="resetDemo();document.getElementById('rTarget').scrollIntoView({behavior:'smooth',block:'center'})">＋ 新增规则</button>
+    </div>
+    <table class="sim-table">
+      <thead><tr><th>比例字段</th><th>保司</th><th>险种</th><th>条件</th><th>比例</th><th style="width:120px">操作</th></tr></thead>
+      <tbody id="ovBody"></tbody>
+    </table>
+    <div class="hint">💡 点「编辑」可把该规则调进上方编辑器修改，改完「保存规则」后总览同步更新。真实系统中此总览按当前模板展示，支持导出核对。</div>
+  </div>
+</div>
+
+<div class="callout blue">
+  <b>与真实前端的对应关系</b>
+  上面原型即 <span class="path">web/templates/field_config.html</span> 新增「比例规则」页签的目标形态：总览表（面板 5）为主视图，行内编辑打开规则编辑器（面板 1），工具栏提供批量导入（面板 4）；<code>buildConfig()</code>（2111 行）按上面 JSON 结构上传，走现有模板保存接口。「自动计算公式」页签维持现状（普通公式），只需引用比例字段。右侧"实时演算"对应真实系统中列表页/导出的实时计算效果。
+</div>
+
+<!-- ============ 6 ============ -->
+<h2 id="s6">六、代码改动清单</h2>
+<table>
+  <tr><th>文件</th><th>改动</th><th>分期</th></tr>
+  <tr>
+    <td class="path">insurance/field_config_db.py</td>
+    <td>① 新增 <code>apply_ratio_rules(config, fields, related_ctx)</code>：匹配比例规则（复用现有保司/险种 key 匹配逻辑）、条件分支判断、把命中比例写入比例字段；② 新增 <code>check_condition()</code>：字段条件比较器（10 种操作符）；③ 在 <code>apply_user_config_to_fields()</code>（1499 行）套用公式前调用。<b>evaluate_formula / match_fee_formulas 不改。</b></td>
+    <td><span class="badge p1">P1</span></td>
+  </tr>
+  <tr>
+    <td class="path">insurance/db.py</td>
+    <td>新增 <code>find_related_policies_batch(keys, policy_type, days)</code>：按车牌/车架号/投保人批量预取关联记录（参考 1425-1496 行现有同款查询）。</td>
+    <td><span class="badge p2">P2</span></td>
+  </tr>
+  <tr>
+    <td class="path">insurance/api.py</td>
+    <td>列表（973）、详情（1259）、导出（4464）三处入口：应用配置前预扫本批记录构建 related_ctx（关联单预取上下文）并传入。P1 阶段不含关联条件时无需改动此处。</td>
+    <td><span class="badge p2">P2</span></td>
+  </tr>
+  <tr>
+    <td class="path">web/templates/field_config.html</td>
+    <td>新增「比例规则」页签：规则总览表（搜索/按保司筛选/行内编辑/删除）、规则编辑器（固定比例 / 条件分支、条件行编辑、默认比例）、批量导入弹窗（表格解析、条件 DSL、预览、覆盖/跳过）；<code>buildConfig()</code>（2111）与保存逻辑支持 <code>ratio_rule</code> 类型。「自动计算公式」页签不动。</td>
+    <td><span class="badge p1">P1</span></td>
+  </tr>
+  <tr>
+    <td class="path">insurance/field_config_db.py（列配置）</td>
+    <td>比例字段自动纳入公式可引用字段与导出列可选字段（沿用自定义字段机制，<code>get_available_ocr_fields()</code> 路径），运营可把「应付费率」勾选为显示列核对每单比例。</td>
+    <td><span class="badge p1">P1</span></td>
+  </tr>
+  <tr>
+    <td class="path">数据库</td>
+    <td><b>无表结构变更</b>。比例规则存现有 <code>user_field_config</code>（<code>config_type='ratio_rule'</code>），跟随模板与三级作用域，无迁移。</td>
+    <td>—</td>
+  </tr>
+</table>
+
+<!-- ============ 7 ============ -->
+<h2 id="s7">七、兼容性与风险</h2>
+<table>
+  <tr><th style="width:200px">项</th><th>说明</th></tr>
+  <tr><td>现有公式 / 模板</td><td>公式引擎与现有 fee_formula 完全不动；未配置比例规则的企业行为零变化。比例规则是纯增量配置类型。</td></tr>
+  <tr><td>Excel「活公式」导出</td><td>比例字段作为<b>静态数值列</b>写入导出表；普通公式仍照现状转 Excel 活公式（如 <code>=IFERROR(保费列*费率列,0)</code>），引用比例列即可——<b>活公式能力不受影响，且比例在表里可见、可手改重算</b>，比之前"分支公式降级为静态值"的方案更好。</td></tr>
+  <tr><td>比例字段命名</td><td>保存时校验：比例字段名不得与系统既有字段（保费、车船税等）重名，避免注入时覆盖真实数据。</td></tr>
+  <tr><td>关联条件性能</td><td>批量预取（一次 IN 查询）替代逐条查库；insurance_records 已有索引，必要时对车牌字段加索引。</td></tr>
+  <tr><td>关联误匹配</td><td>同车牌历史续保可能误命中 → 「前后 N 天」时间窗限制（默认 7 天，可配）；车牌为空的记录关联条件直接判否。</td></tr>
+  <tr><td>配置错误兜底</td><td>前端保存时强制要求默认比例；万一规则未命中，比例字段留空，公式按缺字段 0 处理，与现有行为一致。</td></tr>
+  <tr><td>历史 API 兼容</td><td>API 请求/响应结构不变（比例只是多一个普通字段值）；仅模板配置的保存/读取多识别一种 config_type，老版本前端忽略该类型不受影响。</td></tr>
+</table>
+
+<!-- ============ 8 ============ -->
+<h2 id="s8">八、分期实施计划</h2>
+<table>
+  <tr><th style="width:90px">阶段</th><th>内容</th><th style="width:110px">工作量预估</th></tr>
+  <tr>
+    <td><span class="badge p1">P1</span></td>
+    <td><b>比例规则框架</b>：ratio_rule 存储与应用（固定比例 + 字段条件分支）、「比例规则」页签（总览 / 编辑器 / 批量导入）、比例字段接入公式引用与导出列。上线即可支持「按本单字段取不同比例」与整表导入。</td>
+    <td>1.5 ~ 2 天</td>
+  </tr>
+  <tr>
+    <td><span class="badge p2">P2</span></td>
+    <td><b>关联单条件</b>：跨保单存在性判断（同车牌/车架号/投保人 × 险种 × 时间窗）、批量预取、三处入口接线。上线后前海案例完整落地。</td>
+    <td>1 ~ 1.5 天</td>
+  </tr>
+  <tr>
+    <td><span class="badge p3">P3</span></td>
+    <td><b>体验增强（可选）</b>：记录详情显示比例命中详情（命中哪条规则哪个分支，便于对账排查）；总览导出为 Excel 费率表。</td>
+    <td>按需</td>
+  </tr>
+</table>
+
+<!-- ============ 9 ============ -->
+<h2 id="s9">九、前海案例的最终配置效果</h2>
+<div class="card">
+  <p>P2 上线后，运营配置如下（公式一条 + 比例规则两条，或直接批量导入三行表格），全程无需开发介入：</p>
+  <table>
+    <tr><th>配置</th><th>内容</th></tr>
+    <tr><td>普通公式（一次性）</td><td><code>应付费用 = 保费 × 应付费率</code>（全部保司 : 全部险种，配一次不再改）</td></tr>
+    <tr><td>比例规则 ①</td><td>应付费率 : 前海 : 交强险 —— 条件分支：同车牌 7 天内<b>存在</b>驾乘险 → <b>22%</b>；默认 → <b>20%</b></td></tr>
+    <tr><td>比例规则 ②</td><td>应付费率 : 前海 : 驾乘险 —— 固定比例 <b>30%</b></td></tr>
+  </table>
+  <p class="kv">后续任何保司的费率调整：在规则总览里搜到对应行改个数字，或整表批量导入覆盖，保存即生效。</p>
+</div>
+
+<div class="callout green">
+  <b>方案小结</b>
+  只加一层「比例规则」：按条件（本单字段 / 是否带某险种）取出比例数字注入比例字段，计算仍走现有普通公式，公式引擎与现有配置零改动、零迁移；配套批量导入（整表费率一键导入）与规则总览（随时查看每个保司在什么条件下用什么比例），全部前端可配、保存即生效。
+</div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= 交互原型逻辑 ================= */
+const FIELD_OPS = ["等于","不等于","包含","不包含","大于","大于等于","小于","小于等于","为空","不为空"];
+const FIELD_NAMES = ["承保险种","使用性质","保费","车牌号","投保人","车辆种类"];
+const POLICY_TYPES = ["驾乘险","商业险","交强险","非车险"];
+const MATCH_BYS = ["车牌号","车架号","投保人"];
+
+let mode = "branch";
+let branches = [];      // {conditions:[...], pct(百分数), note}
+let records = [];
+let recSeq = 0;
+
+function defaultBranches(){
+  return [{
+    conditions:[{type:"related", match_by:"车牌号", op:"exists", policy_type:"驾乘险", days:7}],
+    pct:22, note:"带驾乘险出单"
+  }];
+}
+function defaultRecords(){
+  recSeq = 0;
+  return [
+    mkRec("前海","交强险","粤G89Y69","950","2026-07-10"),
+    mkRec("前海","驾乘险","粤G89Y69","300","2026-07-11"),
+    mkRec("前海","交强险","粤B12345","980","2026-07-12"),
+    mkRec("平安","交强险","粤C88888","1100","2026-07-12"),
+  ];
+}
+function mkRec(c,t,plate,fee,date){ return {id:++recSeq, company:c, ptype:t, plate:plate, fee:fee, date:date}; }
+
+/* —— 模式切换 —— */
+function setMode(m){
+  mode = m;
+  document.getElementById("modeNormal").classList.toggle("on", m==="normal");
+  document.getElementById("modeBranch").classList.toggle("on", m==="branch");
+  document.getElementById("normalBox").style.display = m==="normal" ? "" : "none";
+  document.getElementById("branchBox").style.display = m==="branch" ? "" : "none";
+  recalc();
+}
+
+/* —— 分支编辑 —— */
+function addBranch(){
+  branches.push({conditions:[{type:"field", field:"保费", op:"大于", value:"5000"}], pct:25, note:""});
+  renderBranches(); recalc();
+}
+function delBranch(i){ branches.splice(i,1); renderBranches(); recalc(); }
+function moveBranch(i,d){
+  const j=i+d; if(j<0||j>=branches.length) return;
+  [branches[i],branches[j]]=[branches[j],branches[i]];
+  renderBranches(); recalc();
+}
+function addCond(bi,type){
+  branches[bi].conditions.push(type==="related"
+    ? {type:"related", match_by:"车牌号", op:"exists", policy_type:"驾乘险", days:7}
+    : {type:"field", field:"保费", op:"大于", value:""});
+  renderBranches(); recalc();
+}
+function delCond(bi,ci){ branches[bi].conditions.splice(ci,1); renderBranches(); recalc(); }
+function updCond(bi,ci,key,val){ branches[bi].conditions[ci][key] = key==="days" ? (parseInt(val)||7) : val; recalc(); }
+function updBranch(bi,key,val){ branches[bi][key] = key==="pct" ? (parseFloat(val)||0) : val; recalc(); }
+
+function sel(opts, cur, onchange){
+  return `<select onchange="${onchange}">` +
+    opts.map(o=>`<option ${o===cur?"selected":""}>${o}</option>`).join("") + `</select>`;
+}
+function renderBranches(){
+  const box = document.getElementById("branchList");
+  box.innerHTML = branches.map((b,bi)=>{
+    const conds = b.conditions.map((c,ci)=>{
+      const del = `<button class="icon-btn" title="删除条件" onclick="delCond(${bi},${ci})">✕</button>`;
+      const and = ci>0 ? `<span class="and-tag">且</span>` : `<span class="and-tag" style="visibility:hidden">且</span>`;
+      if(c.type==="related"){
+        return `<div class="cond-row">${and}
+          ${sel(["关联单条件","字段条件"],"关联单条件",`updCondType(${bi},${ci},this.value)`)}
+          <span class="lbl">按</span>${sel(MATCH_BYS,c.match_by,`updCond(${bi},${ci},'match_by',this.value)`)}
+          ${sel(["存在","不存在"], c.op==="exists"?"存在":"不存在", `updCond(${bi},${ci},'op',this.value==='存在'?'exists':'not_exists')`)}
+          <span class="lbl">险种</span>${sel(POLICY_TYPES,c.policy_type,`updCond(${bi},${ci},'policy_type',this.value)`)}
+          <span class="lbl">前后</span><input type="number" value="${c.days}" min="1" style="width:56px" oninput="updCond(${bi},${ci},'days',this.value)"><span class="lbl">天</span>
+          ${del}</div>`;
+      }
+      const needVal = !["为空","不为空"].includes(c.op);
+      return `<div class="cond-row">${and}
+        ${sel(["字段条件","关联单条件"],"字段条件",`updCondType(${bi},${ci},this.value)`)}
+        ${sel(FIELD_NAMES,c.field,`updCond(${bi},${ci},'field',this.value)`)}
+        ${sel(FIELD_OPS,c.op,`updCond(${bi},${ci},'op',this.value); renderBranches(); recalc()`)}
+        ${needVal?`<input type="text" value="${c.value||""}" placeholder="比较值" style="width:100px" oninput="updCond(${bi},${ci},'value',this.value)">`:""}
+        ${del}</div>`;
+    }).join("");
+    return `<div class="branch-card">
+      <div class="bh">分支 ${bi+1} · 如果满足以下全部条件
+        <span style="flex:1"></span>
+        <button class="icon-btn mv" title="上移" onclick="moveBranch(${bi},-1)">↑</button>
+        <button class="icon-btn mv" title="下移" onclick="moveBranch(${bi},1)">↓</button>
+        <button class="icon-btn" title="删除分支" onclick="delBranch(${bi})">✕ 删除分支</button>
+      </div>
+      ${conds}
+      <div class="row">
+        <button class="btn sm ghost" onclick="addCond(${bi},'field')">＋字段条件</button>
+        <button class="btn sm ghost" onclick="addCond(${bi},'related')">＋关联单条件</button>
+      </div>
+      <div class="row">
+        <span class="lbl">则比例 =</span><input type="number" class="pct" value="${b.pct}" step="0.5" oninput="updBranch(${bi},'pct',this.value)"><span>%</span>
+        <span class="lbl">备注</span><input type="text" value="${b.note||""}" style="width:120px" placeholder="如：带驾乘险出单" oninput="updBranch(${bi},'note',this.value)">
+      </div>
+    </div>`;
+  }).join("");
+}
+function updCondType(bi,ci,label){
+  branches[bi].conditions[ci] = label==="关联单条件"
+    ? {type:"related", match_by:"车牌号", op:"exists", policy_type:"驾乘险", days:7}
+    : {type:"field", field:"保费", op:"大于", value:""};
+  renderBranches(); recalc();
+}
+
+/* —— 样例保单编辑 —— */
+function renderRecords(){
+  document.getElementById("simBody").innerHTML = records.map((r,i)=>`<tr>
+    <td>${r.id}</td>
+    <td><input value="${r.company}" oninput="updRec(${i},'company',this.value)"></td>
+    <td><input value="${r.ptype}" oninput="updRec(${i},'ptype',this.value)"></td>
+    <td><input value="${r.plate}" oninput="updRec(${i},'plate',this.value)"></td>
+    <td><input value="${r.fee}" oninput="updRec(${i},'fee',this.value)" style="width:64px"></td>
+    <td><input value="${r.date}" oninput="updRec(${i},'date',this.value)" style="width:92px"></td>
+    <td><button class="icon-btn" title="删除" onclick="delRec(${i})">✕</button></td>
+  </tr>`).join("");
+}
+function updRec(i,k,v){ records[i][k]=v; recalc(); }
+function delRec(i){ records.splice(i,1); renderRecords(); recalc(); }
+function addRecord(){ records.push(mkRec("前海","交强险","","","2026-07-15")); renderRecords(); recalc(); }
+
+/* —— 计算引擎（镜像后端逻辑）—— */
+function numOf(v){ const m=String(v??"").replace(/[^\d.]/g,""); return m?parseFloat(m):0; }
+function fuzzyMatch(rule, val){ // 保司/险种：全部 or 双向包含
+  if(!rule || rule==="全部") return true;
+  if(!val) return false;
+  return val.includes(rule) || rule.includes(val);
+}
+function checkFieldCond(c, rec){
+  const map = {承保险种:rec.ptype, 使用性质:"", 保费:rec.fee, 车牌号:rec.plate, 投保人:"", 车辆种类:""};
+  const raw = map[c.field] ?? "";
+  const v = String(raw), t = String(c.value??"");
+  switch(c.op){
+    case "等于": return v===t;
+    case "不等于": return v!==t;
+    case "包含": return t!=="" && v.includes(t);
+    case "不包含": return !(t!=="" && v.includes(t));
+    case "大于": return numOf(v)>numOf(t);
+    case "大于等于": return numOf(v)>=numOf(t);
+    case "小于": return numOf(v)<numOf(t);
+    case "小于等于": return numOf(v)<=numOf(t);
+    case "为空": return v.trim()==="";
+    case "不为空": return v.trim()!=="";
+  }
+  return false;
+}
+function checkRelatedCond(c, rec){
+  const key = c.match_by==="车牌号" ? rec.plate : ""; // 原型样例只有车牌
+  if(!key || !String(key).trim()) return c.op==="not_exists";
+  const d0 = Date.parse(rec.date)||0;
+  const found = records.some(o=> o!==rec
+    && String(o.plate).trim()===String(key).trim()
+    && fuzzyMatch(c.policy_type, o.ptype)
+    && Math.abs((Date.parse(o.date)||0)-d0) <= (c.days||7)*86400000);
+  return c.op==="exists" ? found : !found;
+}
+function evalFormula(formula, fields){
+  if(!formula) return "";
+  let expr = formula.replace(/×/g,"*").replace(/÷/g,"/");
+  Object.keys(fields).sort((a,b)=>b.length-a.length).forEach(k=>{
+    expr = expr.split(k).join(String(fields[k]));
+  });
+  expr = expr.replace(/[一-鿿][一-鿿\w#]*/g,"0");
+  if(!/^[\d\s+\-*/.()]+$/.test(expr)) return null;
+  try{
+    let r = Function('"use strict";return('+expr+')')();
+    if(typeof r!=="number"||!isFinite(r)) return "";
+    r = Math.floor(r*100)/100;
+    return r===Math.trunc(r) ? String(Math.trunc(r)) : r.toFixed(2);
+  }catch(e){ return null; }
+}
+function condText(c){
+  if(c.type==="related") return `同${c.match_by}${c.days}天内${c.op==="exists"?"存在":"不存在"}${c.policy_type}`;
+  return `${c.field}${c.op}${["为空","不为空"].includes(c.op)?"":c.value}`;
+}
+function pctPill(p, cls){ return `<span class="res-pill ${cls||"b1"}">${Math.round(p*100)/100}%</span>`; }
+
+/* —— 编辑器当前规则 → 对一条记录求比例 —— */
+function resolveRateFromEditor(rec){
+  // 返回 {pill, rate}；rate 为小数（0.22），null 表示未命中规则
+  const rc = document.getElementById("rCompany").value;
+  const rt = document.getElementById("rPolicyType").value;
+  if(!(fuzzyMatch(rc,rec.company) && fuzzyMatch(rt,rec.ptype))) return {pill:'<span class="res-pill miss">未命中规则</span>', rate:null};
+  if(mode==="normal"){
+    const p = parseFloat(document.getElementById("normalPct").value)||0;
+    return {pill:'<span class="res-pill b1">固定比例</span>', rate:p/100, pct:p};
+  }
+  for(let i=0;i<branches.length;i++){
+    const b=branches[i];
+    const ok = b.conditions.length>0 && b.conditions.every(c=> c.type==="related"?checkRelatedCond(c,rec):checkFieldCond(c,rec));
+    if(ok) return {pill:`<span class="res-pill b${i%3}">分支${i+1}${b.note?"·"+b.note:""}</span>`, rate:b.pct/100, pct:b.pct};
+  }
+  const dp = parseFloat(document.getElementById("defPct").value)||0;
+  const dn = document.getElementById("defNote").value;
+  return {pill:`<span class="res-pill def">默认${dn?"·"+dn:""}</span>`, rate:dp/100, pct:dp};
+}
+
+/* —— 重算 & 渲染结果 —— */
+function recalc(){
+  const target = document.getElementById("rTarget").value;
+  document.getElementById("resTargetName").textContent = target;
+  const formula = document.getElementById("linkedFormula").value;
+
+  document.getElementById("resBody").innerHTML = records.map(rec=>{
+    const label = `${rec.company}·${rec.ptype}·${rec.plate||"无牌"}`;
+    const {pill, rate, pct} = resolveRateFromEditor(rec);
+    let rateCell, valCell;
+    if(rate===null){ rateCell='<span class="kv">—</span>'; valCell='<span class="kv">不计算</span>'; }
+    else{
+      rateCell = `<span class="rate-big">${Math.round(pct*100)/100}%</span>`;
+      const fields = {保费:numOf(rec.fee), 车船税:0}; fields[target]=rate;
+      const v = evalFormula(formula, fields);
+      valCell = v===null ? '<span class="res-pill miss">公式语法错误</span>' : `<span class="res-val">${v}</span>`;
+    }
+    return `<tr><td>${rec.id}</td><td>${label}</td><td>${pill}</td><td>${rateCell}</td><td>${valCell}</td></tr>`;
+  }).join("");
+  renderJSON(target);
+}
+
+function renderJSON(target){
+  const rc = document.getElementById("rCompany").value;
+  const rt = document.getElementById("rPolicyType").value;
+  let value;
+  if(mode==="normal"){
+    value = {value:(parseFloat(document.getElementById("normalPct").value)||0)/100};
+  }else{
+    value = {branches: branches.map(b=>({
+        conditions:b.conditions.map(c=> c.type==="related"
+          ? {type:"related", match_by:c.match_by, policy_type:c.policy_type, op:c.op, days:c.days}
+          : {type:"field", field:c.field, op:c.op, ...(["为空","不为空"].includes(c.op)?{}:{value:c.value})}),
+        value:(b.pct||0)/100, ...(b.note?{note:b.note}:{})
+      })),
+      "default": (parseFloat(document.getElementById("defPct").value)||0)/100
+    };
+    const dn=document.getElementById("defNote").value;
+    if(dn) value.default_note=dn;
+  }
+  document.getElementById("jsonBox").textContent =
+    JSON.stringify({config_type:"ratio_rule", key:`${target}:${rc}:${rt}`, value}, null, 2);
+}
+
+/* ===== 规则总览（规则库） ===== */
+let ruleStore = [];
+function ruleKey(r){ return `${r.target}:${r.company}:${r.ptype}`; }
+function upsertRule(r){
+  const i = ruleStore.findIndex(x=>ruleKey(x)===ruleKey(r));
+  if(i>=0) ruleStore[i]=r; else ruleStore.push(r);
+}
+function initStore(){
+  ruleStore = [
+    {target:"应付费率",company:"前海",ptype:"交强险",mode:"branch",
+     branches:[{conditions:[{type:"related",match_by:"车牌号",op:"exists",policy_type:"驾乘险",days:7}],pct:22,note:"带驾乘险出单"}],
+     defPct:20, defNote:"不带驾乘险"},
+    {target:"应付费率",company:"前海",ptype:"驾乘险",mode:"normal",normalPct:30},
+  ];
+  renderOverview();
+}
+function getEditorRule(){
+  return {
+    target:document.getElementById("rTarget").value,
+    company:document.getElementById("rCompany").value,
+    ptype:document.getElementById("rPolicyType").value,
+    mode,
+    branches: JSON.parse(JSON.stringify(branches)),
+    defPct: parseFloat(document.getElementById("defPct").value)||0,
+    defNote: document.getElementById("defNote").value,
+    normalPct: parseFloat(document.getElementById("normalPct").value)||0,
+  };
+}
+function ensureOption(selId,val){
+  const s=document.getElementById(selId);
+  if(![...s.options].some(o=>o.value===val)){ const o=document.createElement("option"); o.textContent=val; s.appendChild(o); }
+  s.value=val;
+}
+function loadRule(i){
+  const r=ruleStore[i]; if(!r) return;
+  ensureOption("rTarget",r.target); ensureOption("rCompany",r.company); ensureOption("rPolicyType",r.ptype);
+  branches = JSON.parse(JSON.stringify(r.branches||[]));
+  document.getElementById("defPct").value = r.defPct ?? 20;
+  document.getElementById("defNote").value = r.defNote ?? "";
+  document.getElementById("normalPct").value = r.normalPct ?? 30;
+  setMode(r.mode||"normal");
+  renderBranches(); recalc();
+  toast(`正在编辑规则「${ruleKey(r)}」`);
+  document.getElementById("rTarget").scrollIntoView({behavior:"smooth",block:"center"});
+}
+function delRule(i){ ruleStore.splice(i,1); renderOverview(); }
+function renderOverview(){
+  const q=(document.getElementById("ovSearch").value||"").trim();
+  const sel=document.getElementById("ovCompany");
+  const cur=sel.value;
+  const cs=[...new Set(ruleStore.map(r=>r.company))];
+  sel.innerHTML='<option value="">全部保司</option>'+cs.map(c=>`<option ${c===cur?"selected":""}>${c}</option>`).join("");
+  const fc=sel.value;
+  let html="", shown=0;
+  ruleStore.forEach((r,i)=>{
+    const lines=[];
+    if(r.mode==="branch"){
+      (r.branches||[]).forEach((b,bi)=>lines.push({cond:(b.conditions||[]).map(condText).join(" 且 ")||"（无条件）",pct:b.pct,cls:`b${bi%3}`,note:b.note}));
+      lines.push({cond:"默认"+(r.defNote?"（"+r.defNote+"）":""),pct:r.defPct,cls:"def"});
+    }else{
+      lines.push({cond:"—（固定比例）",pct:r.normalPct,cls:"def"});
+    }
+    const text=`${r.target} ${r.company} ${r.ptype} `+lines.map(l=>`${l.cond} ${l.note||""} ${l.pct}%`).join(" ");
+    if(fc && r.company!==fc) return;
+    if(q && !text.toLowerCase().includes(q.toLowerCase())) return;
+    shown++;
+    lines.forEach((l,li)=>{
+      html+=`<tr>${li===0?`<td rowspan="${lines.length}"><b>${r.target}</b></td><td rowspan="${lines.length}">${r.company}</td><td rowspan="${lines.length}">${r.ptype}</td>`:""}
+        <td><span class="res-pill ${l.cls}">${l.note||l.cond}</span>${l.note?` <span class="kv">${l.cond}</span>`:""}</td>
+        <td><span class="rate-big">${Math.round((l.pct||0)*100)/100}%</span></td>
+        ${li===0?`<td rowspan="${lines.length}"><button class="btn sm" onclick="loadRule(${i})">编辑</button> <button class="icon-btn" title="删除规则" onclick="delRule(${i})">✕</button></td>`:""}</tr>`;
+    });
+  });
+  document.getElementById("ovBody").innerHTML = html || `<tr><td colspan="6" class="kv" style="text-align:center">暂无规则（可在上方编辑器保存，或批量导入）</td></tr>`;
+  document.getElementById("ovCount").textContent = `共 ${ruleStore.length} 条规则，显示 ${shown} 条`;
+}
+
+/* ===== 批量导入 ===== */
+let impGroups = null;
+function parseCondCell(s){
+  s=(s||"").trim();
+  if(!s||s==="默认"||s==="其他"||s==="以上都不满足") return {kind:"default"};
+  let m=s.match(/^(不带|带|含|不含)(.+?)(出单)?$/);
+  if(m){
+    const neg = m[1]==="不带"||m[1]==="不含";
+    return {kind:"cond",cond:{type:"related",match_by:"车牌号",op:neg?"not_exists":"exists",policy_type:m[2].trim(),days:7}};
+  }
+  m=s.match(/^(.+?)(不包含|包含|>=|＞=|<=|＜=|>|＞|<|＜|=|＝)(.+)$/);
+  if(m){
+    const opMap={">":"大于","＞":"大于",">=":"大于等于","＞=":"大于等于","<":"小于","＜":"小于","<=":"小于等于","＜=":"小于等于","=":"等于","＝":"等于","包含":"包含","不包含":"不包含"};
+    return {kind:"cond",cond:{type:"field",field:m[1].trim(),op:opMap[m[2]],value:m[3].trim()}};
+  }
+  return {kind:"error"};
+}
+function normPct(s){
+  // 返回百分数（22 表示 22%）；null = 无法解析
+  s=(s||"").trim();
+  let m=s.match(/^([\d.]+)\s*[%％]$/);
+  if(m) return parseFloat(m[1]);
+  if(/^[\d.]+$/.test(s)){
+    const n=parseFloat(s);
+    return n<=1 ? Math.round(n*10000)/100 : n;  // 0.22 → 22；22 → 22
+  }
+  return null;
+}
+function parseImport(){
+  const raw=document.getElementById("impText").value;
+  const lines=raw.split(/\n/).map(l=>l.trim()).filter(Boolean);
+  const groups={}, errors=[];
+  lines.forEach((line,ln)=>{
+    const cells=line.split(/\t|,|，/).map(c=>c.trim());
+    if(cells.length<4){ errors.push(`第 ${ln+1} 行：列数不足（需 5 列：比例字段,保司,险种,条件,比例）`); return; }
+    const [target,company,ptype]=cells;
+    const cond=cells.length>=5?cells[3]:"";
+    const pRaw=cells.length>=5?cells[4]:cells[3];
+    if(!target||!company||!ptype||!pRaw){ errors.push(`第 ${ln+1} 行：字段/保司/险种/比例不能为空`); return; }
+    const pct=normPct(pRaw);
+    if(pct===null){ errors.push(`第 ${ln+1} 行：比例「${pRaw}」无法识别（支持 22% 或 0.22）`); return; }
+    const pc=parseCondCell(cond);
+    if(pc.kind==="error"){ errors.push(`第 ${ln+1} 行：条件「${cond}」无法识别`); return; }
+    const key=`${target}:${company}:${ptype}`;
+    groups[key]=groups[key]||{target,company,ptype,rows:[]};
+    groups[key].rows.push({pc,pct,condText:cond});
+  });
+  impGroups = Object.values(groups).map(g=>{
+    const r={target:g.target,company:g.company,ptype:g.ptype};
+    const condRows=g.rows.filter(x=>x.pc.kind==="cond");
+    const defRow=g.rows.find(x=>x.pc.kind==="default");
+    if(condRows.length===0){
+      r.mode="normal"; r.normalPct=(defRow||g.rows[0]).pct;
+    }else{
+      r.mode="branch";
+      r.branches=condRows.map(x=>({conditions:[x.pc.cond],pct:x.pct,note:x.condText}));
+      r.defPct=defRow?defRow.pct:condRows[condRows.length-1].pct;
+      r.defNote=defRow?"":"未提供默认行，暂沿用末分支比例";
+      if(!defRow) errors.push(`规则「${g.target}:${g.company}:${g.ptype}」缺少默认行，导入时将要求补充`);
+    }
+    return r;
+  });
+  let html = impGroups.map(r=>{
+    const lines = r.mode==="normal"
+      ? [`<li><span class="cnd def">固定比例</span><span class="rate-big">${r.normalPct}%</span></li>`]
+      : [...r.branches.map(b=>`<li><span class="cnd">${b.note||condText(b.conditions[0])}</span><span class="rate-big">${b.pct}%</span></li>`),
+         `<li><span class="cnd def">默认</span><span class="rate-big">${r.defPct}%</span></li>`];
+    return `<div class="imp-rule"><div class="rk">${r.target} : ${r.company} : ${r.ptype}<span class="badge ${r.mode==="branch"?"p2":"p3"}">${r.mode==="branch"?"条件分支（"+(r.branches.length+1)+" 档）":"固定比例"}</span></div><ul>${lines.join("")}</ul></div>`;
+  }).join("");
+  if(errors.length) html = `<div class="imp-err">⚠️ ${errors.join("<br>⚠️ ")}</div>`+html;
+  document.getElementById("impPreview").innerHTML = html || '<div class="hint">没有可解析的内容</div>';
+  return impGroups;
+}
+function applyImport(){
+  if(!impGroups) parseImport();
+  if(!impGroups||!impGroups.length){ toast("没有可导入的规则"); return; }
+  impGroups.forEach(upsertRule);
+  renderOverview();
+  toast(`✅ 已导入 ${impGroups.length} 条规则（重复 key 已覆盖），见下方规则总览`);
+}
+
+function saveRule(){
+  upsertRule(getEditorRule());
+  renderOverview();
+  toast("✅ 已保存并更新规则总览 —— 真实系统中保存后，列表/导出下次刷新即按新比例计算");
+}
+function resetDemo(){
+  branches = defaultBranches();
+  records = defaultRecords();
+  document.getElementById("defPct").value = 20;
+  document.getElementById("defNote").value = "不带驾乘险";
+  document.getElementById("normalPct").value = 30;
+  document.getElementById("linkedFormula").value = "保费 × 应付费率";
+  document.getElementById("rTarget").value="应付费率";
+  document.getElementById("rCompany").value="前海";
+  document.getElementById("rPolicyType").value="交强险";
+  setMode("branch");
+  renderBranches(); renderRecords(); recalc();
+}
+let toastTimer;
+function toast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg; t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove("show"),2600);
+}
+["rTarget","rCompany","rPolicyType"].forEach(id=>document.getElementById(id).addEventListener("change",recalc));
+resetDemo();
+initStore();
+</script>
+</body>
+</html>
