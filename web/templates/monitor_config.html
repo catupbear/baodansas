@@ -181,7 +181,7 @@
     <header class="nav-header shadow-lg">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
             <div class="flex items-center gap-4">
-                <a :href="urlEnterpriseId ? '/admin/enterprises' : '/insurance'" style="color:#fff;opacity:0.85;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.85'">
+                <a :href="urlEnterpriseId ? ('/admin/enterprises?search=' + encodeURIComponent(urlEnterpriseName || '')) : '/insurance'" style="color:#fff;opacity:0.85;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.85'">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
                     </svg>
