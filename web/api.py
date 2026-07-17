@@ -483,6 +483,11 @@ def update_contact():
                             "UPDATE insurance_records SET room_name = %s WHERE roomid = %s",
                             (name, contact_id)
                         )
+                        # 同步更新统一群信息表(wecom_groups)，保持群名一致
+                        cursor.execute(
+                            "UPDATE wecom_groups SET name = %s, name_updated_at = NOW() WHERE roomid = %s",
+                            (name, contact_id)
+                        )
                     else:
                         cursor.execute(
                             "UPDATE insurance_records SET sender_name = %s WHERE sender = %s",
