@@ -234,8 +234,10 @@ def resolve_group(corps: list, roomid: str, corpid_hint: str, api_delay: float):
     return None, {"errors": errors}
 
 
-def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False):
-    """执行一轮同步（增量 full=False / 全量 full=True / force=True 忽略失败退避强制全量）"""
+def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False,
+             corpids: list = None):
+    """执行一轮同步（增量 full=False / 全量 full=True / force=True 忽略失败退避强制全量）
+    corpids 非空时全量只同步这些企业名下的群 + pending 新群，不扫全表"""
     label = "强制全量刷新" if (full and force) else ("全量刷新" if full else "增量发现")
     lock_conn = db.pool.connection()
     got_lock = False
@@ -251,7 +253,7 @@ def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False)
         if new_cnt:
             logger.info("发现 %d 个新群", new_cnt)
 
-        groups = get_groups_to_sync(db, full=full, force=force)
+        groups = get_groups_to_sync(db, full=full, force=force, corpids=corpids)
         if not groups:
             if full:
                 logger.info("%s：无待同步的群", label)
@@ -354,10 +356,13 @@ def main():
                 incremental_interval, full_interval,
                 list_interval, list_corp_names or "全部")
 
-    # 启动先跑一轮列表发现 + 强制全量（每次启动都把所有群重新同步一遍群名，忽略失败退避）
+    # 全量只同步白名单企业名下的群 + pending 新群，不扫全表（其他企业的历史失败群不参与）
+    sync_corpids = [c.corpid for c in sync_corps]
+
+    # 启动流程：先调客户群列表 API 发现/登记群 → 再对白名单企业名下的群逐个强制刷新群名
     if list_interval:
         run_list_discovery(db, corps, api_delay, list_corp_names)
-    run_sync(db, sync_corps, full=True, api_delay=api_delay, force=True)
+    run_sync(db, sync_corps, full=True, api_delay=api_delay, force=True, corpids=sync_corpids)
 
     now = time.time()
     next_incremental = now + incremental_interval
@@ -372,7 +377,10 @@ def main():
             next_list = time.time() + list_interval
             next_incremental = time.time() + incremental_interval
         elif now >= next_full:
-            run_sync(db, sync_corps, full=True, api_delay=api_delay)
+            # 全量前先跑一轮列表发现，保证新建的客户群先入表再统一刷新
+            if list_interval:
+                run_list_discovery(db, corps, api_delay, list_corp_names)
+            run_sync(db, sync_corps, full=True, api_delay=api_delay, corpids=sync_corpids)
             next_full = time.time() + full_interval
             next_incremental = time.time() + incremental_interval  # 全量已含增量
         elif now >= next_incremental:
