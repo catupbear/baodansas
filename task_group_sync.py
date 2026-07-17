@@ -104,6 +104,8 @@ class CorpClient:
           {"error": "失败原因"}                               本企业解析不到（可换企业再试）
         """
         # 1. 会话存档接口（内部群）
+        # 无论内部群接口因何失败（301059非内部群/301052存档到期等），都继续降级试客户群接口
+        internal_err = ""
         token = self.access_token()
         if token:
             try:
@@ -118,18 +120,18 @@ class CorpClient:
                         name = "、".join(m.get("memberid", "") for m in members[:3]) + "..."
                     return {"name": name, "owner": "",
                             "member_count": len(members), "group_type": "internal"}
-                if data.get("errcode") != 301059:
-                    # 301059=非内部群（继续走外部群接口）；其他错误码本企业放弃
-                    return {"error": f"内部群接口errcode={data.get('errcode')}({data.get('errmsg', '')})"}
+                if data.get("errcode") != 301059:  # 301059=非内部群，属正常降级不算错误
+                    internal_err = f"内部群接口errcode={data.get('errcode')}({data.get('errmsg', '')})"
             except Exception as e:
-                return {"error": f"内部群接口异常: {e}"}
+                internal_err = f"内部群接口异常: {e}"
         else:
-            return {"error": "获取access_token失败"}
+            internal_err = "获取access_token失败"
 
         # 2. 客户群接口（外部群）
         ext_token = self.external_token()
         if not ext_token:
-            return {"error": "非内部群且external_secret未配置或token获取失败"}
+            return {"error": ((internal_err + "; ") if internal_err else "")
+                    + "客户群接口: external_secret未配置或token获取失败"}
         try:
             data = self._post(
                 f"https://qyapi.weixin.qq.com/cgi-bin/externalcontact/groupchat/get?access_token={ext_token}",
@@ -149,9 +151,11 @@ class CorpClient:
                 # 40050 = chat_id 无效（群已解散/不存在）
                 return {"permanent": True}
             # 90501=不是外部群 / 92002=跨企业 等：本企业解析不到，换下一个企业
-            return {"error": f"客户群接口errcode={errcode}({data.get('errmsg', '')})"}
+            return {"error": ((internal_err + "; ") if internal_err else "")
+                    + f"客户群接口errcode={errcode}({data.get('errmsg', '')})"}
         except Exception as e:
-            return {"error": f"客户群接口异常: {e}"}
+            return {"error": ((internal_err + "; ") if internal_err else "")
+                    + f"客户群接口异常: {e}"}
 
     def list_customer_groups(self, api_delay: float = 0.3) -> list:
         """
@@ -334,19 +338,26 @@ def main():
     list_interval = sync_cfg.get("list_interval", 24 * 3600)  # 0=关闭客户群列表发现
     # 列表发现企业白名单（按企业 name）：不配置默认只跑「午虎科技」，配 [] 表示全部企业
     list_corp_names = sync_cfg.get("list_corp_names", ["午虎科技"])
+    # 群详情解析企业白名单：只用这些企业的接口查群名（车物家会话存档已到期，查了也是浪费）
+    sync_corp_names = sync_cfg.get("sync_corp_names", ["午虎科技"])
     api_delay = sync_cfg.get("api_delay", 0.3)
 
     db = Database(config["mysql"], main_corpid=config["wecom"]["corpid"])
     init_group_table(db)
     corps = build_corps(config)
-    logger.info("群同步任务启动: 企业 %s | 增量 %ds / 全量 %ds / 列表发现 %ds (白名单 %s)",
-                [c.name for c in corps], incremental_interval, full_interval,
+    if sync_corp_names:
+        sync_corps = [c for c in corps if c.name in sync_corp_names] or corps
+    else:
+        sync_corps = corps
+    logger.info("群同步任务启动: 发现企业 %s / 解析企业 %s | 增量 %ds / 全量 %ds / 列表发现 %ds (白名单 %s)",
+                [c.name for c in corps], [c.name for c in sync_corps],
+                incremental_interval, full_interval,
                 list_interval, list_corp_names or "全部")
 
     # 启动先跑一轮列表发现 + 强制全量（每次启动都把所有群重新同步一遍群名，忽略失败退避）
     if list_interval:
         run_list_discovery(db, corps, api_delay, list_corp_names)
-    run_sync(db, corps, full=True, api_delay=api_delay, force=True)
+    run_sync(db, sync_corps, full=True, api_delay=api_delay, force=True)
 
     now = time.time()
     next_incremental = now + incremental_interval
@@ -357,15 +368,15 @@ def main():
         now = time.time()
         if now >= next_list:
             run_list_discovery(db, corps, api_delay, list_corp_names)
-            run_sync(db, corps, full=False, api_delay=api_delay)  # 立即解析新发现的群
+            run_sync(db, sync_corps, full=False, api_delay=api_delay)  # 立即解析新发现的群
             next_list = time.time() + list_interval
             next_incremental = time.time() + incremental_interval
         elif now >= next_full:
-            run_sync(db, corps, full=True, api_delay=api_delay)
+            run_sync(db, sync_corps, full=True, api_delay=api_delay)
             next_full = time.time() + full_interval
             next_incremental = time.time() + incremental_interval  # 全量已含增量
         elif now >= next_incremental:
-            run_sync(db, corps, full=False, api_delay=api_delay)
+            run_sync(db, sync_corps, full=False, api_delay=api_delay)
             next_incremental = time.time() + incremental_interval
 
 
