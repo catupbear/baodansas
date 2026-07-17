@@ -3056,10 +3056,23 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
                     # 续行行首常带竖排水印（如"保险 电动轿车"），有空格时取最后一段去掉水印前缀
                     _next_seg = _pl[_i + 1].strip()
                     _next = (_next_seg.split()[-1] if re.search(r'\s', _next_seg) else _next_seg).replace(' ', '')
-                    # 上一行须含字母数字型号代码（区分泰康/人民财产的完整前半 vs 平安那种纯中文残段）
-                    if (re.search(r'[A-Za-z0-9]{4,}', _prev) and len(_prev) >= 6 and len(_next) <= 6
+                    # 上一行须含字母数字型号代码（区分泰康/人民财产的完整前半 vs 平安那种纯中文残段）。
+                    # 续行长度上限放宽到16——"插电式增程混合动力多用途乘用车"这类新能源车型描述
+                    # 能长达15个字，比"半挂牵引车"等常见车辆类型后缀长得多，原6字上限会把这类合法
+                    # 续行整段漏掉、或从中间截断（如截成"...增程混合动力多"）
+                    if (re.search(r'[A-Za-z0-9]{4,}', _prev) and len(_prev) >= 6 and len(_next) <= 16
                             and not re.match(r'(车牌|号牌|发动机|车架|被保险|地址|核定|投保|保险|机动车)', _prev)):
-                        fields["厂牌型号"] = _prev + _next
+                        _combined = _prev + _next
+                        # 三段式续行（新能源车型描述常见）：拼完还是不以常见车辆类型收尾词结尾，
+                        # 说明续行本身也被切断了，隔着1行竖排水印（如"保险/车辆/情况"这类单独成行
+                        # 的1~2字水印）再找下一行，是真正的第三段
+                        if not re.search(r'(车|艇|船|挂车|运输车)$', _combined) and _i + 3 < len(_pl):
+                            _wm_line = _pl[_i + 2].strip()
+                            _tail_seg = _pl[_i + 3].strip()
+                            _tail = (_tail_seg.split()[-1] if re.search(r'\s', _tail_seg) else _tail_seg).replace(' ', '')
+                            if len(_wm_line) <= 3 and 2 <= len(_tail) <= 10 and re.match(r'^[一-鿿]+$', _tail):
+                                _combined += _tail
+                        fields["厂牌型号"] = _combined
                         break
 
     # 富德等交强险竖排错位：厂牌型号完整值整段落在标签下一行，但行首带竖排水印单字
