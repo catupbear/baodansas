@@ -146,7 +146,7 @@
         }
         .nav-inner { display:flex; align-items:center; }
         .nav-right-btns { display:flex; align-items:center; gap:8px; margin-left:auto; flex-shrink:0; }
-        .nav-hamburger { display:none; align-items:center; justify-content:center; flex-shrink:0; }
+        .nav-hamburger { display:none; align-items:center; justify-content:center; flex-shrink:0; margin-left:auto; }
         @media (max-width:639px) {
             .nav-right-btns { display:none; }
             .nav-hamburger { display:inline-flex; }
@@ -8981,7 +8981,7 @@ const _app = createApp({
         // 摘要区优先展示的核心字段（存在于客户列配置中才显示）
         const M_SUMMARY_PREF = ['被保人', '承保公司', '保费', '终保日期'];
         // 长文本字段：展开区独占整行
-        const M_LONG_KEYS = ['文件名', '保单号', '被保险人身份证号码', '投保人身份证号码', '车架号', '保司公司名称', '保司地址', '群名'];
+        const M_LONG_KEYS = ['文件名', '保单号', '被保险人身份证号码', '投保人身份证号码', '车架号', '保司公司名称', '保司地址', '群名', '承保公司', '厂牌型号'];
         // 金额字段：橙色加粗
         const M_MONEY_KEYS = ['保费', '车船税', '不含税保费', '增值税额'];
         // 字段 → 分组映射（展开区按信息类型分组；未归类字段自动落入「其他」，新增列不会丢）
