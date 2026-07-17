@@ -90,6 +90,20 @@
             .cust-table-wrap { display: none; }
             .cust-cards { display: flex; flex-direction: column; gap: 12px; padding: 14px; }
         }
+        .onboard-layout { display: flex; gap: 16px; align-items: flex-start; }
+        .onboard-sidebar { width: 168px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; }
+        .onboard-sidebar-item {
+            padding: 9px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;
+            display: flex; justify-content: space-between; align-items: center; color: #57534e;
+        }
+        .onboard-sidebar-item:hover { background: #faf7f4; }
+        .onboard-sidebar-item.active { background: #fff7ed; color: #c2410c; font-weight: 600; }
+        .onboard-content { flex: 1; min-width: 0; }
+        @media (max-width: 820px) {
+            .onboard-layout { flex-direction: column; }
+            .onboard-sidebar { width: 100%; flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+            .onboard-sidebar-item { flex-shrink: 0; white-space: nowrap; }
+        }
         .cust-card { border: 1px solid #f0ece8; border-radius: 14px; padding: 16px; background: #fff; }
         .cc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
         .cc-name { font-size: 16px; font-weight: 700; color: #1c1410; line-height: 1.3; }
@@ -161,17 +175,27 @@
                     <span class="text-sm text-gray-400" style="margin-right:4px;">共 {{ filteredCustomers.length }} 个客户</span>
                     <a href="/admin/users?role=super_admin" class="btn btn-outline" style="font-size:13px;color:#7c3aed;border-color:#c4b5fd;text-decoration:none;">内部账号</a>
                     <a href="/admin/users?enterprise_id=__none__" class="btn btn-outline" style="font-size:13px;color:#374151;border-color:#e7e0d8;text-decoration:none;">未分组账号</a>
-                    <a href="/admin/enterprises?create=1" class="btn btn-primary" style="text-decoration:none;">
+                    <button @click="openCreateModal" class="btn btn-primary">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                         </svg>
                         添加企业
-                    </a>
+                    </button>
                 </div>
             </div>
 
             <div v-if="loading" class="text-center py-16 text-gray-400">加载中…</div>
             <template v-else>
+            <div class="onboard-layout">
+                <!-- 左侧接入时间分组导航 -->
+                <div class="onboard-sidebar">
+                    <div v-for="g in sidebarGroups" :key="g.key" class="onboard-sidebar-item" :class="{active: activeGroup === g.key}" @click="activeGroup = g.key">
+                        <span>{{ g.label }}</span>
+                        <span>{{ g.count }}</span>
+                    </div>
+                </div>
+
+                <div class="onboard-content">
                 <!-- 桌面表格 -->
                 <div class="cust-table-wrap bg-white rounded-2xl border border-gray-100 overflow-x-auto">
                     <table class="data-table">
@@ -179,26 +203,15 @@
                             <tr>
                                 <th>企业ID</th>
                                 <th>企业名称</th>
-                                <th>企业联系人</th>
-                                <th>负责人联系电话</th>
                                 <th>跟进状态</th>
-                                <th>推荐人</th>
-                                <th>更新时间</th>
+                                <th>接入时间</th>
                                 <th>操作</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="c in filteredCustomers" :key="c.id">
+                            <tr v-for="c in displayedCustomers" :key="c.id">
                                 <td class="text-gray-400">{{ c.enterprise_no || '-' }}</td>
                                 <td class="font-medium text-gray-800">{{ c.name }}</td>
-                                <td>
-                                    <span v-if="editingField !== c.id + ':contact_person'" class="editable-cell" @click="startEdit(c, 'contact_person')">{{ c.contact_person || '未填' }}</span>
-                                    <input v-else class="edit-input" v-model="editValue" @blur="saveEdit(c, 'contact_person')" @keyup.enter="saveEdit(c, 'contact_person')" @keyup.esc="cancelEdit" autofocus>
-                                </td>
-                                <td>
-                                    <span v-if="editingField !== c.id + ':contact_phone'" class="editable-cell" @click="startEdit(c, 'contact_phone')">{{ c.contact_phone || '未填' }}</span>
-                                    <input v-else class="edit-input" v-model="editValue" @blur="saveEdit(c, 'contact_phone')" @keyup.enter="saveEdit(c, 'contact_phone')" @keyup.esc="cancelEdit" autofocus>
-                                </td>
                                 <td>
                                     <select class="status-select" :value="c.follow_status || ''" @change="updateStatus(c, $event.target.value)">
                                         <option value="">未标记</option>
@@ -207,8 +220,7 @@
                                         <option value="无使用（体量太小）">无使用（体量太小）</option>
                                     </select>
                                 </td>
-                                <td class="text-gray-500">{{ c.referrer_name || '无' }}</td>
-                                <td class="text-gray-400">{{ formatTime(c.updated_at) }}</td>
+                                <td class="text-gray-400">{{ c.onboarded_at ? formatTime(c.onboarded_at) : '未接入' }}</td>
                                 <td>
                                     <button class="op-btn orange" @click="gotoManage(c)">客户系统配置</button>
                                     <button class="op-btn" @click="openProfile(c)">客户档案</button>
@@ -222,14 +234,12 @@
 
                 <!-- 移动端卡片 -->
                 <div class="cust-cards">
-                    <div class="cust-card" v-for="c in filteredCustomers" :key="'m'+c.id">
+                    <div class="cust-card" v-for="c in displayedCustomers" :key="'m'+c.id">
                         <div class="cc-head">
                             <div class="cc-name">{{ c.name }}</div>
                             <div class="cc-no">{{ c.enterprise_no || '-' }}</div>
                         </div>
                         <div class="cc-grid">
-                            <div class="cc-item"><div class="k">企业联系人</div><div class="vv">{{ c.contact_person || '未填' }}</div></div>
-                            <div class="cc-item"><div class="k">联系电话</div><div class="vv">{{ c.contact_phone || '未填' }}</div></div>
                             <div class="cc-item"><div class="k">跟进状态</div><div class="vv">
                                 <select class="status-select" :value="c.follow_status || ''" @change="updateStatus(c, $event.target.value)">
                                     <option value="">未标记</option>
@@ -238,7 +248,6 @@
                                     <option value="无使用（体量太小）">无使用（体量太小）</option>
                                 </select>
                             </div></div>
-                            <div class="cc-item"><div class="k">推荐人</div><div class="vv">{{ c.referrer_name || '无' }}</div></div>
                         </div>
                         <div class="cc-ops">
                             <button class="op-btn orange" @click="gotoManage(c)">客户系统配置</button>
@@ -248,6 +257,8 @@
                         </div>
                     </div>
                 </div>
+                </div>
+            </div>
             </template>
         </div>
 
@@ -261,7 +272,7 @@
                     <div><div style="color:#9ca3af;font-size:11px;margin-bottom:3px;">企业联系人</div><div>{{ profileTarget.contact_person || '未填' }}</div></div>
                     <div><div style="color:#9ca3af;font-size:11px;margin-bottom:3px;">负责人联系电话</div><div>{{ profileTarget.contact_phone || '未填' }}</div></div>
                     <div><div style="color:#9ca3af;font-size:11px;margin-bottom:3px;">推荐人</div><div>{{ profileTarget.referrer_name || '无' }}</div></div>
-                    <div><div style="color:#9ca3af;font-size:11px;margin-bottom:3px;">更新时间</div><div>{{ formatTime(profileTarget.updated_at) }}</div></div>
+                    <div><div style="color:#9ca3af;font-size:11px;margin-bottom:3px;">接入时间</div><div>{{ profileTarget.onboarded_at ? formatTime(profileTarget.onboarded_at) : '未接入' }}</div></div>
                 </div>
                 <div style="font-size:12px;color:#6b7280;margin-bottom:6px;">跟进记录</div>
                 <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px;">
@@ -336,6 +347,10 @@
                     <input v-model="editForm.contact_phone" type="text" style="width:100%;height:38px;border:1px solid #e7e0d8;border-radius:8px;padding:0 12px;font-size:14px;outline:none;">
                 </div>
                 <div style="margin-bottom:16px;">
+                    <label style="display:block;font-size:12px;color:#6b7280;margin-bottom:5px;">接入时间（预备群改名后自动记录，也可手动修正）</label>
+                    <input v-model="editForm.onboarded_at" type="date" style="width:100%;height:38px;border:1px solid #e7e0d8;border-radius:8px;padding:0 12px;font-size:14px;outline:none;">
+                </div>
+                <div style="margin-bottom:16px;">
                     <label style="display:block;font-size:12px;color:#6b7280;margin-bottom:5px;">推荐人（输入姓名/手机号搜索）</label>
                     <input v-model="editReferrerSearch" @input="searchEditReferrer" placeholder="输入姓名或手机号…"
                            style="width:100%;height:38px;border:1px solid #e7e0d8;border-radius:8px;padding:0 12px;font-size:14px;outline:none;margin-bottom:6px;">
@@ -357,6 +372,51 @@
                 </div>
             </div>
         </div>
+
+        <!-- 添加企业弹窗 -->
+        <div v-if="createVisible" class="modal-mask" @click.self="closeCreateModal" style="position:fixed;inset:0;background:rgba(15,23,42,0.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:60;">
+            <div style="background:#fff;border-radius:12px;padding:24px;width:min(420px, calc(100vw - 32px));">
+                <h3 style="font-size:16px;font-weight:700;color:#1c1410;margin-bottom:16px;">添加企业</h3>
+                <div v-if="createFormError" style="background:#fef2f2;color:#dc2626;font-size:12px;padding:8px 12px;border-radius:8px;margin-bottom:12px;">{{ createFormError }}</div>
+                <div style="margin-bottom:12px;">
+                    <label style="display:block;font-size:12px;color:#6b7280;margin-bottom:5px;">企业名称 <span style="color:#dc2626;">*</span></label>
+                    <input v-model="createForm.name" type="text" style="width:100%;height:38px;border:1px solid #e7e0d8;border-radius:8px;padding:0 12px;font-size:14px;outline:none;">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="display:block;font-size:12px;color:#6b7280;margin-bottom:5px;">企业编号 <span style="color:#dc2626;">*</span></label>
+                    <input v-model="createForm.enterprise_no" type="text" style="width:100%;height:38px;border:1px solid #e7e0d8;border-radius:8px;padding:0 12px;font-size:14px;outline:none;">
+                    <p style="font-size:12px;color:#9ca3af;margin-top:4px;line-height:1.5;">添加后将自动创建该企业管理员账号：<br>账号为企业编号（小写、去掉横线），初始密码 <span style="color:#ea580c;font-weight:600;">wuhu2025</span></p>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="display:block;font-size:12px;color:#6b7280;margin-bottom:5px;">联系人</label>
+                    <input v-model="createForm.contact_person" type="text" style="width:100%;height:38px;border:1px solid #e7e0d8;border-radius:8px;padding:0 12px;font-size:14px;outline:none;">
+                </div>
+                <div style="margin-bottom:16px;">
+                    <label style="display:block;font-size:12px;color:#6b7280;margin-bottom:5px;">联系电话</label>
+                    <input v-model="createForm.contact_phone" type="text" style="width:100%;height:38px;border:1px solid #e7e0d8;border-radius:8px;padding:0 12px;font-size:14px;outline:none;">
+                </div>
+                <div style="margin-bottom:16px;">
+                    <label style="display:block;font-size:12px;color:#6b7280;margin-bottom:5px;">推荐人（输入姓名/手机号搜索）</label>
+                    <input v-model="createReferrerSearch" @input="searchCreateReferrer" placeholder="输入姓名或手机号…"
+                           style="width:100%;height:38px;border:1px solid #e7e0d8;border-radius:8px;padding:0 12px;font-size:14px;outline:none;margin-bottom:6px;">
+                    <div v-if="createReferrerList.length" style="border:1px solid #e7e0d8;border-radius:8px;max-height:160px;overflow-y:auto;">
+                        <div v-for="u in createReferrerList" :key="u.id" @click="selectCreateReferrer(u)"
+                             :style="{padding:'8px 12px',cursor:'pointer',fontSize:'13px',display:'flex',justifyContent:'space-between',alignItems:'center',background: createReferrerSelected && createReferrerSelected.id===u.id ? '#fff7ed' : ''}">
+                            <span>{{ u.name || u.phone }}</span>
+                            <span style="font-size:11px;color:#9ca3af;">{{ u.phone }}</span>
+                        </div>
+                    </div>
+                    <div v-if="createReferrerSelected" style="margin-top:6px;padding:7px 10px;background:#fff7ed;border-radius:8px;font-size:13px;color:#92400e;">
+                        已选：{{ createReferrerSelected.name || createReferrerSelected.phone }}
+                        <button @click="createReferrerSelected=null" style="margin-left:8px;color:#9ca3af;background:none;border:none;cursor:pointer;">✕ 清除</button>
+                    </div>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                    <button class="btn btn-outline" @click="closeCreateModal">取消</button>
+                    <button class="btn btn-primary" :disabled="createSubmitting" @click="submitCreateModal">{{ createSubmitting ? '提交中…' : '确定' }}</button>
+                </div>
+            </div>
+        </div>
     </template>
 </div>
 
@@ -366,6 +426,21 @@ const { createApp, ref, onMounted } = Vue;
 function getToken() { return localStorage.getItem('token'); }
 function getUser() { try { return JSON.parse(localStorage.getItem('user')); } catch { return null; } }
 function doLogout() { localStorage.removeItem('token'); localStorage.removeItem('user'); window.location.href = '/login'; }
+
+// 按正式接入时间(onboarded_at)分组：第一周/第二周/3-6周/试用结束(超过6周)
+// "预备群"占位企业没有 onboarded_at(改名成正式客户名称后才会有)，不计入任何分组，只在"全部"里能看到
+const ONBOARD_GROUPS = [
+    { key: 'week1', label: '接入第一周', test: d => d >= 0 && d < 7 },
+    { key: 'week2', label: '接入第二周', test: d => d >= 7 && d < 14 },
+    { key: 'week3to6', label: '接入3-6周', test: d => d >= 14 && d < 42 },
+    { key: 'trialEnded', label: '试用结束', test: d => d >= 42 },
+];
+function daysSinceOnboard(onboardedAt) {
+    if (!onboardedAt) return null;
+    const d = new Date(onboardedAt.replace(' ', 'T'));
+    if (isNaN(d.getTime())) return null;
+    return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
 async function authFetch(url, options = {}) {
     const headers = { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json', ...(options.headers || {}) };
     const resp = await fetch(url, { ...options, headers });
@@ -382,8 +457,6 @@ createApp({
         const customers = ref([]);
         const custSearch = ref('');
         const mobileMenuOpen = ref(false);
-        const editingField = ref('');
-        const editValue = ref('');
 
         const filteredCustomers = Vue.computed(() => {
             const q = custSearch.value.trim().toLowerCase();
@@ -392,6 +465,34 @@ createApp({
                 (c.name || '').toLowerCase().includes(q) ||
                 (c.contact_person || '').toLowerCase().includes(q)
             );
+        });
+
+        const activeGroup = ref('all');
+
+        const groupedCustomers = Vue.computed(() => {
+            const groups = ONBOARD_GROUPS.map(g => ({ ...g, items: [] }));
+            const prepGroup = { key: 'prep', label: '预备群', items: [] };
+            filteredCustomers.value.forEach(c => {
+                if ((c.name || '').startsWith('预备群')) { prepGroup.items.push(c); return; }
+                const d = daysSinceOnboard(c.onboarded_at);
+                if (d === null) return;
+                const g = groups.find(g => g.test(d));
+                if (g) g.items.push(c);
+            });
+            groups.push(prepGroup);
+            return groups;
+        });
+
+        const sidebarGroups = Vue.computed(() => {
+            const list = [{ key: 'all', label: '全部', count: filteredCustomers.value.length }];
+            groupedCustomers.value.forEach(g => list.push({ key: g.key, label: g.label, count: g.items.length }));
+            return list;
+        });
+
+        const displayedCustomers = Vue.computed(() => {
+            if (activeGroup.value === 'all') return filteredCustomers.value;
+            const g = groupedCustomers.value.find(g => g.key === activeGroup.value);
+            return g ? g.items : [];
         });
 
         function checkAuth() {
@@ -446,36 +547,11 @@ createApp({
             }
         }
 
-        function startEdit(c, field) {
-            editingField.value = c.id + ':' + field;
-            editValue.value = c[field] || '';
-        }
-        function cancelEdit() { editingField.value = ''; }
-        async function saveEdit(c, field) {
-            if (editingField.value !== c.id + ':' + field) return;
-            editingField.value = '';
-            const old = c[field];
-            const val = editValue.value.trim();
-            if (val === (old || '')) return;
-            c[field] = val;
-            try {
-                const resp = await authFetch(`/api/auth/enterprises/${c.id}`, {
-                    method: 'PUT',
-                    body: JSON.stringify({ [field]: val }),
-                });
-                const data = await resp.json();
-                if (data.code !== 0) { c[field] = old; alert(data.msg || '保存失败'); }
-            } catch (e) {
-                c[field] = old;
-                alert('网络错误');
-            }
-        }
-
         function gotoManage(c) {
             window.location.href = `/admin/enterprises?search=${encodeURIComponent(c.name || '')}`;
         }
         const editTarget = ref(null);
-        const editForm = ref({ name: '', enterprise_no: '', contact_person: '', contact_phone: '' });
+        const editForm = ref({ name: '', enterprise_no: '', contact_person: '', contact_phone: '', onboarded_at: '' });
         const editFormError = ref('');
         const editSubmitting = ref(false);
         const editReferrerSearch = ref('');
@@ -489,6 +565,7 @@ createApp({
                 enterprise_no: c.enterprise_no || '',
                 contact_person: c.contact_person || '',
                 contact_phone: c.contact_phone || '',
+                onboarded_at: c.onboarded_at ? c.onboarded_at.slice(0, 10) : '',
             };
             editFormError.value = '';
             editReferrerSearch.value = '';
@@ -523,6 +600,9 @@ createApp({
                     contact_person: editForm.value.contact_person.trim(),
                     contact_phone: editForm.value.contact_phone.trim(),
                 };
+                if (editForm.value.onboarded_at) {
+                    body.onboarded_at = editForm.value.onboarded_at + ' 00:00:00';
+                }
                 const resp = await authFetch(`/api/auth/enterprises/${editTarget.value.id}`, {
                     method: 'PUT',
                     body: JSON.stringify(body),
@@ -552,6 +632,69 @@ createApp({
                 editFormError.value = '网络错误';
             } finally {
                 editSubmitting.value = false;
+            }
+        }
+
+        const createVisible = ref(false);
+        const createForm = ref({ name: '', enterprise_no: '', contact_person: '', contact_phone: '' });
+        const createFormError = ref('');
+        const createSubmitting = ref(false);
+        const createReferrerSearch = ref('');
+        const createReferrerList = ref([]);
+        const createReferrerSelected = ref(null);
+        let createReferrerTimer = null;
+        function openCreateModal() {
+            createForm.value = { name: '', enterprise_no: '', contact_person: '', contact_phone: '' };
+            createFormError.value = '';
+            createReferrerSearch.value = '';
+            createReferrerList.value = [];
+            createReferrerSelected.value = null;
+            createVisible.value = true;
+        }
+        function closeCreateModal() {
+            createVisible.value = false;
+        }
+        function searchCreateReferrer() {
+            clearTimeout(createReferrerTimer);
+            const q = createReferrerSearch.value.trim();
+            if (!q) { createReferrerList.value = []; return; }
+            createReferrerTimer = setTimeout(async () => {
+                try {
+                    const resp = await authFetch(`/api/auth/users?q=${encodeURIComponent(q)}&limit=10`);
+                    const j = await resp.json();
+                    if (j.code === 0) createReferrerList.value = j.data || [];
+                } catch (e) {}
+            }, 300);
+        }
+        function selectCreateReferrer(u) { createReferrerSelected.value = u; }
+        async function submitCreateModal() {
+            if (!createForm.value.name.trim()) { createFormError.value = '请输入企业名称'; return; }
+            if (!createForm.value.enterprise_no.trim()) { createFormError.value = '请输入企业编号'; return; }
+            createSubmitting.value = true;
+            try {
+                const body = {
+                    name: createForm.value.name.trim(),
+                    enterprise_no: createForm.value.enterprise_no.trim(),
+                    contact_person: createForm.value.contact_person.trim(),
+                    contact_phone: createForm.value.contact_phone.trim(),
+                    referrer_id: createReferrerSelected.value ? createReferrerSelected.value.id : null,
+                };
+                const resp = await authFetch('/api/auth/enterprises', {
+                    method: 'POST',
+                    body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (data.code !== 0) {
+                    createFormError.value = data.msg || '添加失败';
+                    createSubmitting.value = false;
+                    return;
+                }
+                closeCreateModal();
+                fetchCustomers();
+            } catch (e) {
+                createFormError.value = '网络错误';
+            } finally {
+                createSubmitting.value = false;
             }
         }
 
@@ -638,13 +781,16 @@ createApp({
 
         return {
             ready, noPermission, currentUser, loading, customers, custSearch, filteredCustomers,
-            mobileMenuOpen, editingField, editValue,
-            formatTime, updateStatus, startEdit, cancelEdit, saveEdit, gotoManage, logout,
+            activeGroup, groupedCustomers, sidebarGroups, displayedCustomers,
+            mobileMenuOpen,
+            formatTime, updateStatus, gotoManage, logout,
             profileTarget, profileFollowups, newFollowupDate, newFollowupContent, profileSaving,
             openProfile, closeProfile, saveProfile, addFollowup,
             deleteTarget, deleting, confirmDelete, doDelete,
             editTarget, editForm, editFormError, editSubmitting, openEditModal, closeEditModal, submitEditModal,
             editReferrerSearch, editReferrerList, editReferrerSelected, searchEditReferrer, selectEditReferrer,
+            createVisible, createForm, createFormError, createSubmitting, openCreateModal, closeCreateModal, submitCreateModal,
+            createReferrerSearch, createReferrerList, createReferrerSelected, searchCreateReferrer, selectCreateReferrer,
         };
     }
 }).mount('#app');

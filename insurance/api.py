@@ -212,6 +212,77 @@ def _try_sdk_download(record: dict) -> bytes:
     return b""
 
 
+def recover_stuck_processing_records(timeout_minutes=10):
+    """
+    自愈：扫描长时间卡在 status='processing' 的记录（多因 gunicorn 重启时后台队列消费线程
+    被杀死、内存中的任务丢失导致），通过内部环回调用 /api/insurance/reocr 自动重新识别恢复。
+    以超管账号身份签发内部调用凭证，与记录归属的 user_id 无关（reocr 接口本身不做归属校验）。
+    """
+    import requests
+
+    from auth.jwt_utils import generate_token
+
+    if not _db:
+        return
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT id FROM insurance_records "
+            "WHERE status = 'processing' AND deleted_at IS NULL "
+            "AND created_at < DATE_SUB(NOW(), INTERVAL %s MINUTE)",
+            (timeout_minutes,)
+        )
+        stuck_ids = [row["id"] for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+    if not stuck_ids:
+        return
+
+    logger.warning("自愈扫描：发现 %d 条卡在 processing 状态超过 %d 分钟的记录: %s",
+                    len(stuck_ids), timeout_minutes, stuck_ids)
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT id, phone, role FROM users WHERE role = %s AND enabled = 1 LIMIT 1",
+            (ROLE_SUPER_ADMIN,)
+        )
+        admin = cursor.fetchone()
+    finally:
+        conn.close()
+
+    if not admin:
+        logger.error("自愈扫描：未找到可用超管账号，无法生成内部调用凭证，跳过本次恢复")
+        return
+
+    token = generate_token(admin["id"], admin["phone"], admin["role"])
+    headers = {"Authorization": f"Bearer {token}"}
+
+    recovered, failed = 0, 0
+    for rid in stuck_ids:
+        try:
+            resp = requests.post(
+                f"http://127.0.0.1:8090/api/insurance/reocr/{rid}",
+                headers=headers, timeout=90,
+            )
+            if resp.ok and resp.json().get("code") == 0:
+                recovered += 1
+                logger.info("自愈扫描：记录 %d 恢复成功", rid)
+            else:
+                failed += 1
+                logger.warning("自愈扫描：记录 %d 恢复失败 status=%s body=%s",
+                                rid, resp.status_code, resp.text[:300])
+        except Exception as e:
+            failed += 1
+            logger.warning("自愈扫描：记录 %d 恢复异常: %s", rid, e)
+
+    logger.warning("自愈扫描完成：成功恢复 %d 条，失败 %d 条", recovered, failed)
+
+
 # ============================================================
 # 全局鉴权：所有保单识别 API 均需登录
 # ============================================================
@@ -1165,9 +1236,16 @@ def update_record_fields(record_id):
             except (TypeError, json.JSONDecodeError):
                 df = {}
         # 只更新本次修改的字段到 display_fields，保留其他已有的补充字段
+        # 注意：field_name 可能是 OCR 原始字段名（如"车牌号"），列表/详情实际渲染读取的
+        # 是映射后的展示列名（如"车牌"）——必须经 get_mapping_for_company 转换，否则会
+        # 写出一个没人读取的影子字段，展示列上的旧值永远不刷新（表现为列表和详情不一致）
+        from insurance.field_mapping import get_mapping_for_company
+        company_short = pf.get("保险公司简称", "")
+        field_mapping_table = get_mapping_for_company(company_short)
         display_fields = dict(df)
         for field_name, new_value in updated_fields.items():
-            display_fields[field_name] = new_value
+            display_key = field_mapping_table.get(field_name) or field_name
+            display_fields[display_key] = new_value
 
         # 更新数据库（同步更新 display_fields）
         logger.info("[DEBUG-保存] record_id=%s, 更新字段=%s, manual_fields=%s", record_id, updated_fields, mf)

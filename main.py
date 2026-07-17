@@ -26,7 +26,7 @@ from insurance.api import insurance_bp, init_insurance_api
 from insurance.renewal_db import init_renewal_tables
 from insurance.renewal_api import renewal_bp, init_renewal_api
 from quote.handler import QuoteHandler
-from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table, init_sms_verification_table, init_referral_columns, init_is_sales_column, init_enterprise_plan_column, init_wallet_tables, init_activated_column, init_users_renewal_column, init_enterprise_follow_status_column, init_enterprise_remark_column
+from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table, init_sms_verification_table, init_referral_columns, init_is_sales_column, init_enterprise_plan_column, init_wallet_tables, init_activated_column, init_users_renewal_column, init_enterprise_follow_status_column, init_enterprise_remark_column, init_enterprise_onboarded_column, backfill_enterprise_onboarded_at
 from auth.jwt_utils import init_jwt
 from auth.decorators import init_auth_decorators
 from auth.api import auth_bp, init_auth_api
@@ -78,7 +78,13 @@ def create_app(config: dict) -> Flask:
     logger.info("[车物家] 通讯录模块初始化完成")
 
     # 启动通讯录自动解析（每5分钟检查一次未解析的联系人/群名）
-    contacts.start_auto_resolve(interval=300)
+    # 本机开发环境IP未加入企业微信白名单，解析必然失败且会把"不可解析"误写回共享库，
+    # 干扰服务器（有白名单权限）后续的正常解析；config.yaml 里配置 dev.disable_contacts_autoresolve
+    # 即可在本机关掉这个线程，服务器 config.yaml 没有这个配置项，行为不受影响。
+    if not config.get("dev", {}).get("disable_contacts_autoresolve"):
+        contacts.start_auto_resolve(interval=300)
+    else:
+        logger.warning("本机开发环境：已跳过通讯录自动解析线程（避免误写共享库的不可解析缓存）")
 
     # 初始化COS存储（可选）
     cos_storage = None
@@ -109,6 +115,8 @@ def create_app(config: dict) -> Flask:
     init_users_renewal_column(db)
     init_enterprise_follow_status_column(db)
     init_enterprise_remark_column(db)
+    init_enterprise_onboarded_column(db)
+    backfill_enterprise_onboarded_at(db)
     init_wallet_tables(db)
 
     # 初始化短信模块
@@ -342,7 +350,8 @@ def create_app(config: dict) -> Flask:
                 )
                 extra_contacts.set_cache_prefix(cb_corpid)
                 extra_contacts.set_fallback_contacts(contacts)  # 跨企业群回退到主企业查询
-                extra_contacts.start_auto_resolve(interval=300)
+                if not config.get("dev", {}).get("disable_contacts_autoresolve"):
+                    extra_contacts.start_auto_resolve(interval=300)
                 # 绑定本企业专属通讯录到 fetcher（群消息触发的功能，如台账导出，
                 # 需要按消息实际所属企业解析群名，不能只用主企业 contacts）
                 extra_fetcher.contacts = extra_contacts
@@ -470,6 +479,13 @@ def create_app(config: dict) -> Flask:
                         logger.info("报价模块就绪：绑定列表 %d 条", len(bindings))
                     except Exception as e:
                         logger.warning("报价绑定列表预热失败: %s", e)
+
+                    # 自愈：恢复上次进程被杀死（如 gunicorn 重启）时卡在 processing 状态的记录
+                    try:
+                        from insurance.api import recover_stuck_processing_records
+                        recover_stuck_processing_records(timeout_minutes=10)
+                    except Exception as e:
+                        logger.warning("启动自愈扫描失败: %s", e)
                 except Exception as e:
                     logger.error("启动补拉/补扫失败: %s", e)
             finally:
@@ -481,6 +497,36 @@ def create_app(config: dict) -> Flask:
                 lock_conn.close()
 
         threading.Thread(target=_startup_catch_up, daemon=True).start()
+
+        # 定时兜底扫描：每 30 分钟检查一次卡在 processing 状态的记录并自动恢复，
+        # 覆盖不重启进程、单纯因网络抖动/SDK超时导致卡住的场景。与启动自愈用同一套恢复逻辑，
+        # 命名锁与 wxbot_startup_catchup 分开，避免和启动补拉互相阻塞。
+        def _stuck_processing_watchdog():
+            import time
+            while True:
+                time.sleep(1800)
+                lock_conn = db.pool.connection()
+                got_lock = False
+                try:
+                    lock_cursor = lock_conn.cursor()
+                    lock_cursor.execute("SELECT GET_LOCK('wxbot_stuck_processing_watchdog', 0)")
+                    got_lock = lock_cursor.fetchone()[0] == 1
+                    if not got_lock:
+                        continue
+                    try:
+                        from insurance.api import recover_stuck_processing_records
+                        recover_stuck_processing_records(timeout_minutes=10)
+                    except Exception as e:
+                        logger.warning("定时自愈扫描失败: %s", e)
+                finally:
+                    try:
+                        if got_lock:
+                            lock_cursor.execute("SELECT RELEASE_LOCK('wxbot_stuck_processing_watchdog')")
+                    except Exception:
+                        pass
+                    lock_conn.close()
+
+        threading.Thread(target=_stuck_processing_watchdog, daemon=True).start()
 
         logger.info("应用初始化完成，回调地址: /callback，前端地址: /")
 

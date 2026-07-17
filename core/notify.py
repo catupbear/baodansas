@@ -206,34 +206,3 @@ def notify_feedback(description: str, detail: str = "", webhook: str = "", secre
     content = "\n".join(lines)
     notifier = DingTalkNotifier(webhook, secret)
     threading.Thread(target=notifier.send, args=(title, content), daemon=True).start()
-
-
-def notify_duplicate_policy(enterprise_name: str, filename: str, old_sender: str, old_room: str,
-                             new_sender: str, new_room: str, old_record_ids: list, new_record_id: int):
-    """
-    同企业不同员工(或同员工重发)发送同一份保单(文件MD5相同)时通知：
-    系统只保留最后发送的这条记录，之前的记录已被软删除替换。
-    复用系统错误告警的钉钉机器人(_notifier)，未配置则不发送。
-    """
-    if not _notifier:
-        return
-
-    title = f"重复保单提醒: {enterprise_name or '未知企业'}"
-    ts = time.strftime("%Y-%m-%d %H:%M:%S")
-    old_ids_str = "、".join(str(i) for i in old_record_ids) if old_record_ids else "无"
-    lines = [
-        "### 重复保单提醒：已保留最新一条记录",
-        f"- **时间**: {ts}",
-        f"- **企业**: {enterprise_name or '（未知）'}",
-        f"- **文件**: {filename}",
-        f"- **原记录**: 发送人 {old_sender or '未知'} / 群 {old_room or '未知'} / 记录ID {old_ids_str}（已软删除）",
-        f"- **保留记录**: 发送人 {new_sender or '未知'} / 群 {new_room or '未知'} / 记录ID {new_record_id}",
-        "",
-        "> 检测到同一企业内重复发送了同一份保单文件，为避免台账重复计入，"
-        "系统已自动软删除较早的记录，仅保留最新这一条。",
-    ]
-    content = "\n".join(lines)
-
-    threading.Thread(
-        target=_notifier.send, args=(title, content), daemon=True
-    ).start()

@@ -235,6 +235,8 @@ def _is_valid_person(val: str) -> bool:
         r'|本人|雇佣|义务|权利'
         # 法律/条款常见虚词（易从条款正文中误提取）
         r'|鉴于|甲方|乙方|丙方|若干|总则|细则|附则|前述|兹有|特此'
+        # "协商确定"等占位/待定用语（如"本合同保险期间以保险人和投保人协商确定"被误当人名）
+        r'|协商确定|另行约定|双方约定|待定|不详'
         # 社交媒体/营销标签（如保单PDF中的微信公众号标签"众诚官微"）
         r'|官微|官网',
         val
@@ -388,6 +390,15 @@ def _identify_company(text: str) -> Dict[str, str]:
 
 def _identify_policy_type(text: str) -> Optional[str]:
     """识别险种类型"""
+    # 太平特种车商业险：严重竖排错位文档里，竖排水印单字会插进"特种车"和"商业保险"中间
+    # （如"特种车 制 商业保险保险单"）。必须在下面主循环之前判断——这类商业险条款正文里
+    # 大量引用"机动车交通事故责任强制保险"字样（免责条款、赔款计算公式等），
+    # 会被主循环靠前的交强险关键词抢先命中，把商业险误判成交强险。
+    # 必须紧跟"保险单"（说明是文档标题），而不是"条款"（说明只是条款清单里列出的一个
+    # 备用条款名，如"...特种车商业保险条款（2020版）"，那种情况不代表这份文档本身是特种车保单）
+    if re.search(r"特种车.{0,3}商业保险\s*保?\s*险?\s*单(?!号)", text):
+        return "特种车商业保险"
+
     for p in [
         # 具体产品名称优先匹配（避免被条款中出现的通用险种名称抢先命中）
         r"((?:守护)?出行无忧[\d.]*(?:[（(]\S+?[)）])?)",  # 太平出行无忧4.0（通用）/ 守护出行无忧3.0
@@ -433,6 +444,12 @@ def _identify_policy_type(text: str) -> Optional[str]:
         m = re.search(p, text)
         if m:
             return m.group(1)
+
+    # 显式"险种名称："标签（如平安出行不便险等非标准车险附加产品，标题
+    # 是"XX险(地区/年份)"这类不含"保险单"关键词的格式，靠标签直接取值最可靠）
+    m = re.search(r"险种名称[：:]\s*([^\n]{2,30}?)\s*(?:\n|购买份数|方案保费|$)", text)
+    if m:
+        return m.group(1).strip()
 
     # 太平洋"神行车保"系列：标题不含标准险种关键词，需从标题推断
     # "神行车保机动车保险单" / "神行车保新能源汽车保险单" / "神行车保系列产品批单"
@@ -542,9 +559,10 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
     _extract_policy_no(text, fields, company_short, policy_type)
 
     # ===== 投保确认码 =====
-    m = re.search(r"(?:投保)?确认码[：:\s]*(\S+)", text)
+    # OCR 偶尔在确认码中间插入一个空格（如"V 0201HNIC..."），容忍一处空格后拼回
+    m = re.search(r"(?:投保)?确认码[：:\s]*([A-Za-z0-9]+(?:[^\S\n][A-Za-z0-9]{2,})?)", text)
     if m:
-        fields["投保确认码"] = m.group(1)
+        fields["投保确认码"] = re.sub(r'\s+', '', m.group(1))
 
     # ===== 人员信息（投保人先于被保险人，因为部分被保人逻辑依赖投保人） =====
     _extract_proposer(text, text_merged, fields, company_short)
@@ -622,7 +640,14 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
     # ===== 其他 =====
     m = re.search(r"争议解决方式[：:\s]*(\S+)", text)
     if m:
-        fields["争议解决方式"] = m.group(1)
+        _val = m.group(1)
+        # 仅当结果被截成孤零零1个汉字时（如"诉 讼"被截成"诉"），才尝试往后拼一个字补全——
+        # 有些保司这里写的是"依法向人民法院起诉"这类完整长句，不能动，只处理这一种截断模式
+        if len(_val) == 1 and re.match(r'[一-鿿]', _val):
+            _m2 = re.search(re.escape(_val) + r"[^\S\n]([一-鿿])(?:\s|$)", text)
+            if _m2:
+                _val = _val + _m2.group(1)
+        fields["争议解决方式"] = _val
 
     # 匹配"制单："或"制单人："，排除"制单时间"
     # 制单人：按行匹配，排除"监制"等干扰
@@ -630,6 +655,12 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
         m = re.search(r"制单(?:人)?(?!时间)[：:][^\S\n]*(\S+?)(?:\s|$)", _line)
         if m:
             _val = m.group(1).lstrip("：:")
+            # 姓名被OCR拆成"姓 名"两段时（如"钟 雅婷"）拼回——仅当结果孤零零1个汉字才处理，
+            # 平安等保司这里填的是"HPIPW-00925"这类系统单据编号，不是姓名，不能被这条误伤
+            if _val and len(_val) == 1 and re.match(r'[一-鿿]', _val):
+                _m2 = re.search(re.escape(_val) + r"[^\S\n]([一-鿿]+)", _line)
+                if _m2:
+                    _val = _val + _m2.group(1)
             if _val and _val not in ("：", ":") and "监制" not in _val:
                 fields["制单人"] = _val
                 break
@@ -1066,17 +1097,40 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
     # OCR 可能将"保险人"区域的"公司名称"拆行，用 text_merged 兜底
     if "保司公司名称" not in fields:
         for src in [text, text_merged]:
-            m = re.search(r'公司名称[：: 　\t]+(.+?)(?:\s*(?:报案|服务电话|电话|传真|网址|投诉)|\s+公司(?:网址|地址)|公司网址|\s{2,}|\n|$)', src)
+            # 华安"七、承保公司\n名称：...\n地址：..."模板：text_merged 把"承保公司"和
+            # "名称："中间的换行吃掉后连成"...公司名称："被本规则命中；原地址标签是裸
+            # "地址："（不带"公司"前缀），原终止词只认"公司地址/公司网址"截不住，加上裸
+            # "地址"作为终止词，避免把地址整段吞进公司名称里
+            m = re.search(r'公司名称[：: 　\t]+(.+?)(?:\s*(?:报案|服务电话|电话|传真|网址|投诉|地址|邮政编码)|\s+公司(?:网址|地址)|公司网址|\s{2,}|\n|$)', src)
             if m:
                 val = m.group(1).strip()
-                # 必须像公司名（含"公司/分公司"），且不能是地址（含"市+路/街"等）
+                # 必须像公司名（含"公司/分公司"），且不能是地址（含"市+路/街/号"、或混入"地址"字样），
+                # 也不能带"公公司"这种重复字——这是 text_merged 把标签间的空格/换行整段吃掉后
+                # 常见的合并伪影（如"...有限公 公司地址："被吃成"...有限公公司地址："），
+                # 真实公司名不会出现这种重复
                 if (val and len(val) >= 4
                         and re.search(r'公司|分公司', val)
+                        and '地址' not in val
+                        and '公公司' not in val
                         and not re.search(r'[市区].*[街路号]', val)):
                     # 去掉"（保险人签章）"等签章后缀
                     val = re.sub(r'\s*[（(][^（(）)]*(?:签章|盖章|印章)[^（(）)]*[）)].*', '', val).strip()
                     fields["保司公司名称"] = val
                     break
+
+    # 华安"七、承保公司\n名称：...\n地址：..."模板：地址标签是裸"地址："（不带"公司"前缀），
+    # 其余"公司地址"系列规则都认不出这个裸标签。限定"名称："前必须紧邻"承保公司"这个小标题，
+    # 避免误命中投保人/被保险人等其他"姓名/名称：...地址：..."区块（不同人的地址不能张冠李戴）
+    if "保司公司名称" in fields and "保司地址" not in fields:
+        m = re.search(r'承保公司\s*\n\s*名称[：:]\s*[^\n]+\n\s*地址[：:]\s*(.+?)(?:\s*联系电话|\s*签单日期|\s{2,}|\n|$)', text)
+        if m:
+            val = m.group(1).strip()
+            if val and len(val) >= 4 and re.search(r'[市区县].{2,}[街路号大厦广场楼栋座]|大道', val):
+                # 该模板地址尾部常跟着一段小写字母(+数字)的内部代理人代码水印（如"一楼
+                # feichexianzyz1"），紧跟在地址正常结尾（楼/号/室等）后面、与真实门牌单元号
+                # （通常大写字母，如"3栋A座1701-BCDEF"）明显不同，予以剥离
+                val = re.sub(r'(?<=[楼号室座栋幢层])\s+[a-z]{3,}\d*$', '', val)
+                fields["保司地址"] = val
 
     # 紫金等格式：公司名称跨行，标签在中间
     # "紫金财产保险股份有限公司深圳分公司龙岗支\n公司名称：\n公司"
@@ -1329,6 +1383,36 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
                         and not re.search(r'[路街号]|大厦|大楼|广场|栋|楼', val)):
                     fields["保司公司名称"] = val if base in val else base + val
                     break
+
+    # 补充模式E3：中国人寿等格式，"公司名称：xxx 公司地址：yyy"同行相邻，分公司名被
+    # "公司地址"标签从中间截断（如"...有限公 公司地址：..."丢了"司"字），完整的分支名残余
+    # 落在地址那行的下一行行首（如"\n司中山市小榄支公司"）
+    if not fields.get("保司公司名称") or not re.search(r'(公司|中心|营业部|服务部)$', fields.get("保司公司名称", "")):
+        _m_cn3 = re.search(
+            r'([一-鿿]{4,25}?)\s*公司地址[：:]\s*[^\n]*\n\s*([一-鿿]{2,15}(?:支公司|分公司|营业部|服务部|中心))',
+            text
+        )
+        if _m_cn3:
+            # group(2) 是地址下一整行原样内容，本身就带着补全前缀所需的字（如"司中山市小榄支公司"
+            # 开头的"司"正好补上前缀"...有限公"缺的那个字），直接拼接，不用再手动补字
+            fields["保司公司名称"] = _m_cn3.group(1) + _m_cn3.group(2)
+
+    # 补充模式E4：同类版式的另一种错位，"公司名称：""公司地址："两个标签紧挨着都没有取到值
+    # （名称在标签所在行的上一行整行，地址下一行是名称残余），如：
+    # "中国人寿财产保险股份有限公司中\n公司名称： 公司地址： xxx\n山市小榄支公司"
+    if not fields.get("保司公司名称") or not re.search(r'(公司|中心|营业部|服务部)$', fields.get("保司公司名称", "")):
+        _m_cn4 = re.search(
+            r'([一-鿿]{4,25})\n公司名称[：:]\s*公司地址[：:]\s*[^\n]*\n\s*([一-鿿]{2,15}(?:支公司|分公司|营业部|服务部|中心))',
+            text
+        )
+        if _m_cn4:
+            fields["保司公司名称"] = _m_cn4.group(1) + _m_cn4.group(2)
+
+    # 邮政编码空值污染：安盛天平等格式"公司名称：XXX东莞分公司 邮政编码：（无值）"，"邮政编码"
+    # 不在原终止词表里，被当成名称的一部分吞了进去
+    _cn5 = fields.get("保司公司名称", "")
+    if _cn5:
+        fields["保司公司名称"] = re.sub(r'\s*邮政编码[：:]?\s*$', '', _cn5)
 
     # 补充模式F：签单机构
     # 现代财产承运人险："签单机构：现代财产保险(中国) 有限公司广东分公司"（公司名后换行）
@@ -1615,6 +1699,13 @@ def _extract_policy_no(text: str, fields: dict, company_short: str, policy_type:
             if re.match(r'^[A-Z0-9]{15,30}$', stripped):
                 fields["保单号"] = stripped
                 break
+
+    # 阳光农业等：保单号中间有一处OCR多余空格（如"44075100B EAQ2026100161"被上面的
+    # 通用规则截成"44075100B"），紧跟的空格后若还是字母数字续段，判定是同一个号被截断，拼回
+    if fields.get("保单号"):
+        _pm2 = re.search(re.escape(fields["保单号"]) + r"\s+([A-Za-z0-9]{6,})", text)
+        if _pm2 and len(fields["保单号"]) <= 12:
+            fields["保单号"] = fields["保单号"] + _pm2.group(1)
 
     # 统一清理：保单号只保留字母、数字、横线，截断中文/标点及之后的内容
     if "保单号" in fields:
@@ -2300,7 +2391,7 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
 
     # 安盛天平格式："姓名：何洪坤；身份证号"
     # 排除"联系人姓名"等非被保险人标签
-    m = re.search(r"(?<!联系人)(?<!联系)(?<!经办人)姓名[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:[；;]|身份证|\s)", text)
+    m = re.search(r"(?<!联系人)(?<!联系)(?<!经办人)(?<!代理人)姓名[：:]\s*([\u4e00-\u9fff][\u4e00-\u9fff\w]+?)(?:[；;]|身份证|\s)", text)
     if m:
         val = _clean_person_name(m.group(1))
         if _is_valid_person(val):
@@ -2896,8 +2987,22 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
     ]:
         m = re.search(p, text)
         if m:
-            fields["发动机号"] = m.group(1)
-            break
+            _val = m.group(1)
+            # "发动机号码[：:\s]*(\S+)" 太宽松：版式是"值在标签上一行、标签在下一行"时（紫金/PICC
+            # 交强险常见），标签后紧跟的其实是"识别代码（车架号）"这行本身，不能当值收下
+            if not re.search(r'识别代码|车架号', _val):
+                fields["发动机号"] = _val
+                break
+
+    # 紫金/PICC等竖排错位：发动机号+车架号的值整段落在"发动机号码 识别代码（车架号）"标签的
+    # 上一行，中间用空格分隔（如"274822E LGBH92E00MY754688\n发动机号码 识别代码（车架号）"）
+    if "发动机号" not in fields or "车架号VIN" not in fields:
+        m = re.search(r"([A-Za-z0-9]{5,20})\s+([A-HJ-NPR-Z][A-Z0-9]{16})\s*\n\s*发动机号码\s*识别代码", text)
+        if m:
+            if "发动机号" not in fields:
+                fields["发动机号"] = m.group(1)
+            if "车架号VIN" not in fields:
+                fields["车架号VIN"] = m.group(2)
 
     # 厂牌型号
     for p in [
@@ -2951,11 +3056,45 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
                     # 续行行首常带竖排水印（如"保险 电动轿车"），有空格时取最后一段去掉水印前缀
                     _next_seg = _pl[_i + 1].strip()
                     _next = (_next_seg.split()[-1] if re.search(r'\s', _next_seg) else _next_seg).replace(' ', '')
-                    # 上一行须含字母数字型号代码（区分泰康/人民财产的完整前半 vs 平安那种纯中文残段）
-                    if (re.search(r'[A-Za-z0-9]{4,}', _prev) and len(_prev) >= 6 and len(_next) <= 6
+                    # 上一行须含字母数字型号代码（区分泰康/人民财产的完整前半 vs 平安那种纯中文残段）。
+                    # 续行长度上限放宽到16——"插电式增程混合动力多用途乘用车"这类新能源车型描述
+                    # 能长达15个字，比"半挂牵引车"等常见车辆类型后缀长得多，原6字上限会把这类合法
+                    # 续行整段漏掉、或从中间截断（如截成"...增程混合动力多"）
+                    if (re.search(r'[A-Za-z0-9]{4,}', _prev) and len(_prev) >= 6 and len(_next) <= 16
                             and not re.match(r'(车牌|号牌|发动机|车架|被保险|地址|核定|投保|保险|机动车)', _prev)):
-                        fields["厂牌型号"] = _prev + _next
+                        _combined = _prev + _next
+                        # 三段式续行（新能源车型描述常见）：拼完还是不以常见车辆类型收尾词结尾，
+                        # 说明续行本身也被切断了，隔着1行竖排水印（如"保险/车辆/情况"这类单独成行
+                        # 的1~2字水印）再找下一行，是真正的第三段
+                        if not re.search(r'(车|艇|船|挂车|运输车)$', _combined) and _i + 3 < len(_pl):
+                            _wm_line = _pl[_i + 2].strip()
+                            _tail_seg = _pl[_i + 3].strip()
+                            _tail = (_tail_seg.split()[-1] if re.search(r'\s', _tail_seg) else _tail_seg).replace(' ', '')
+                            if len(_wm_line) <= 3 and 2 <= len(_tail) <= 10 and re.match(r'^[一-鿿]+$', _tail):
+                                _combined += _tail
+                        fields["厂牌型号"] = _combined
                         break
+
+    # 富德等交强险竖排错位：厂牌型号完整值整段落在标签下一行，但行首带竖排水印单字
+    #（如"动 五菱LZW6442JY多用途乘用车"，"动"是左侧"被保险机动车"竖排水印串入的字）。
+    # 与上面"泰康"错位不同：这里标签上一行只是无关水印单字（如"险"），不能参与拼接，
+    # 下一行去掉水印单字后已是完整厂牌型号，不需要跟上一行拼接。
+    if "厂牌型号" not in fields:
+        _pl2b = text.split('\n')
+        for _i in range(1, len(_pl2b) - 1):
+            if re.search(r'厂\s*牌\s*型\s*号', _pl2b[_i]):
+                _after2b = re.sub(r'.*厂\s*牌\s*型\s*号[：:\s]*', '', _pl2b[_i]).strip()
+                if re.match(r'(初?次?登\s*记\s*日\s*期|核\s*定|发\s*动\s*机|排\s*量|(?:使用|营业|营运)性质|机动车种类)', _after2b):
+                    _next_seg2b = _pl2b[_i + 1].strip()
+                    _m2b = re.match(r'^[一-鿿]\s+(.{4,30})$', _next_seg2b)
+                    if _m2b:
+                        _val2b = _m2b.group(1).replace(' ', '')
+                        # 真实厂牌型号一定以品牌名（中文/字母）开头，不会是孤立数字（严重错位文档里
+                        # 常见"1 车厢可卸式垃圾车 11555"这种噪声行，首字符是数字即判为非法值丢弃）
+                        if (re.search(r'[A-Za-z0-9]', _val2b) and len(_val2b) >= 4
+                                and not _val2b[0].isdigit()):
+                            fields["厂牌型号"] = _val2b
+                            break
 
     # 华泰驾乘险表格版式错位：品牌型号值被拆成两段，中间夹"品牌型号"标签、座位数、"核定座位数(座)"标签
     # "车辆信息\n宝马BMW6462ES(BMWX1)多\n品牌型号\n5\n核定座位数(座)\n用途乘用车\n车架号(VIN)"
@@ -2988,6 +3127,79 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
                         and not re.match(r'(车牌|号牌|发动机|车架|被保险|地址|核定|投保|保险|机动车|车主|公司)', _pv)):
                     fields["厂牌型号"] = _pv + _cp2
                 break
+
+    # 紫金/PICC竖排错位：厂牌型号取到的值以"型号代码+单字车厢类型"结尾（如"...AV5-01厢"），
+    # 真正的车厢类型描述被水印"机/动"字打断、独立成行落在了"核定载质量...千克"这行下面
+    # （如"...AV5-01厢 核定载客 5人 核定载质量 1245千克 千克\n式运输车\n动\n"），把这行拼回去
+    _cp2b = fields.get("厂牌型号", "")
+    if _cp2b and re.search(r'[厢翼柜篷罐槽仓斗]$', _cp2b):
+        _m2b = re.search(re.escape(_cp2b) + r'[^\n]*核定载质量[^\n]*\n\s*([一-鿿]{2,8})\n', text)
+        if _m2b:
+            fields["厂牌型号"] = _cp2b + _m2b.group(1)
+
+    # 华安"车辆清单"表格错位（货运险等）：表头 序号/车牌号/车辆类型/车架号/厂牌型号/发动机号/...
+    # 后接三行——品牌前缀单独一行、空格分隔的数据行(车架号 车牌号 车辆类型 发动机号 ...)、
+    # 车辆类型后缀单独一行；厂牌型号被切成"品牌"+"类型后缀"两截，中间夹着数据行。
+    # 例："五十铃\nLWLGWFSU4ML01 粤GR7580 牵引车 QL4250W2NCZ ...\n半挂牵引车"
+    if "厂牌型号" not in fields:
+        _m_vlist = re.search(
+            r'车辆清单\s*\n序号\s*车牌号\s*车辆类型\s*车架号\s*厂牌型号\s*发动机号[^\n]*\n'
+            r'([^\n]{1,15})\n'
+            # 组内分隔只认空格/制表符（不认换行），避免某字段贪婪吃穿行尾把下一行(如"四、保障方案")
+            # 错当成本行内容，继而把"车辆类型后缀"错取成再下一行的章节标题
+            r'([A-Z0-9]{5,20})[ \t]+(\S+)[ \t]+(\S{2,8})[ \t]+([A-Za-z0-9\-]+)[^\n]*\n'
+            r'([^\n]{1,15})',
+            text
+        )
+        # 后缀必须像"车辆类型"（以"车"结尾），且不能是误吃到的章节标题/条款文字
+        if _m_vlist and _m_vlist.group(6).endswith('车') and '、' not in _m_vlist.group(6):
+            _brand, _vin, _plate, _vtype, _engine, _suffix = _m_vlist.groups()
+            fields["厂牌型号"] = _brand + _suffix
+            if "车架号VIN" not in fields:
+                fields["车架号VIN"] = _vin
+            if "车牌号" not in fields:
+                fields["车牌号"] = _plate
+            if "发动机号" not in fields:
+                fields["发动机号"] = _engine
+
+    # 同一模板的更破损变体：数据行没有独立的"车辆类型后缀"行，厂牌型号/发动机号/核定载重/
+    # 注册日期全部无分隔粘连成一长串（如"HBCEJDA43SC01 粤G36927 牵引车 BJ4250D6CP-0778829664
+    # 00002025-06-09054872半挂牵引车"），厂牌型号/发动机号从这堆粘连文本里已经分不清边界，
+    # 干脆不猜；但行首的车架号和车牌号仍以空格清晰分隔，可靠提取——车牌号即便前面已经被某个更
+    # 宽松的通用规则误抓成别的车/别的字段拼出来的假值（如把品牌"北京"的"京"和车架号片段拼成
+    # "京HBCEJDA"），这里表格里的车牌号可信度更高，直接覆盖
+    _m_glued = re.search(
+        r'车辆清单\s*\n序号\s*车牌号\s*车辆类型\s*车架号\s*厂牌型号\s*发动机号[^\n]*\n'
+        r'[^\n]{1,15}\n'
+        r'([A-Z0-9]{5,20})[ \t]+([京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁][A-Z][A-Z0-9]{4,6})[ \t]+\S{2,8}[ \t]',
+        text
+    )
+    if _m_glued:
+        fields["车牌号"] = _m_glued.group(2)
+        if "车架号VIN" not in fields:
+            fields["车架号VIN"] = _m_glued.group(1)
+
+    # 同批次另一种错位：车架号单独跟品牌"五十铃牌"另起一行，序号残字"1"落到了下一行行首，
+    # 后面才是车牌（如"LWLGWFSU8ML0 五十铃牌\n1 粤GM7901 牵引车 ..."）
+    if "车架号VIN" not in fields:
+        _m_v2 = re.search(
+            r'车辆清单\s*\n序号\s*车牌号\s*车辆类型\s*车架号\s*厂牌型号\s*发动机号[^\n]*\n'
+            r'([A-Z0-9]{5,20})[ \t]+五十铃牌\s*\n'
+            r'\d+[ \t]+[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁][A-Z][A-Z0-9]{4,6}[ \t]',
+            text
+        )
+        if _m_v2:
+            fields["车架号VIN"] = _m_v2.group(1)
+
+    # 同批次第三种错位：品牌行整个丢失，表头后直接就是数据行（车架号 车牌号 车辆类型 ...）
+    if "车架号VIN" not in fields:
+        _m_v3 = re.search(
+            r'车辆清单\s*\n序号\s*车牌号\s*车辆类型\s*车架号\s*厂牌型号\s*发动机号[^\n]*\n'
+            r'([A-Z0-9]{5,20})[ \t]+[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁][A-Z][A-Z0-9]{4,6}[ \t]+\S{2,8}[ \t]',
+            text
+        )
+        if _m_v3:
+            fields["车架号VIN"] = _m_v3.group(1)
 
     # 核定载客：兼容多种写法——
     #   通用"核定载客 5 人"；阳光/申能"核定载客数(人)：5人"；安诚/永诚"核定载客/载质量：23人/9500千克"。
@@ -3117,6 +3329,14 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
                         fields["车主"] = m.group(1)
                         break
                 break
+    if "车主" not in fields:
+        # 国任等提示语句格式："本保单项下投保人为【何卫】，行驶证车主为【广东捷利信设备维修
+        # 有限公司】"，用全角方括号包裹值，不是常见的"标签：值"结构
+        m = re.search(r"行驶证车主为[【\[]([^】\]]{2,30})[】\]]", text)
+        if m:
+            val = _clean_person_name(m.group(1))
+            if _is_valid_person(val):
+                fields["车主"] = val
     if "车主" not in fields:
         for p in [
             r"(?:行驶证)?车主(?:\s*名称)?[：:\s]+(\S+?)(?:\s|$|投保人)",
@@ -3535,9 +3755,11 @@ def _extract_tax(text: str, fields: dict):
     # 处理OCR将"车船税"拆到多行的情况（如"车\n船 合计...元）\n税"）
     # 提取"车"开头到"税"结束的区域，合并为单行后追加到 tax_text 供正则匹配
     # [￥¥Y] 兼容OCR将¥识别为Y的情况
-    m_tax_block = re.search(r"车\n.*?船\s*合计.*?[（(]\s*[￥¥Y][：:\s]*([\d,.]+)\s*(?:元)?[)）].*?\n\s*税", tax_text, re.DOTALL)
+    # OCR 偶尔在金额小数点前后插入一个空格（如"300. 00"或"0 .00"），数字模式两侧都容忍
+    _NUM = r"[\d,]+\s*\.\s*\d+|[\d,]+"
+    m_tax_block = re.search(r"车\n.*?船\s*合计.*?[（(]\s*[￥¥Y][：:\s]*(" + _NUM + r")\s*(?:元)?[)）].*?\n\s*税", tax_text, re.DOTALL)
     if m_tax_block:
-        val = m_tax_block.group(1).strip().replace(",", "")
+        val = re.sub(r'\s+', '', m_tax_block.group(1)).replace(",", "")
         try:
             amt = float(val)
             if amt >= 0:
@@ -3549,18 +3771,18 @@ def _extract_tax(text: str, fields: dict):
     tax_text_clean = re.sub(r'保险费[+＋及]车船税合计.*', '', tax_text)
     for p in [
         # 车船税...合计...（￥/Y：XXX 元）— Y兼容OCR将¥识别为Y
-        r"车\s*船\s*税[\s\S]*?合计.*?[（(]\s*[￥¥Y][：:\s]*([\d,.]+)\s*(?:元)?[)）]",
-        r"车\s*船\s*税[\s\S]*?合计.*?([\d,.]+)\s*元",
+        r"车\s*船\s*税[\s\S]*?合计.*?[（(]\s*[￥¥Y][：:\s]*(" + _NUM + r")\s*(?:元)?[)）]",
+        r"车\s*船\s*税[\s\S]*?合计.*?(" + _NUM + r")\s*元",
         # 平安格式：合计(人民币大写)：...( ￥ XXX 元)（排除"保险费合计"）
-        r"(?<!保险费)合计\s*[（(]人民币大写[)）][：:\s]*.*?[（(\s]+[￥¥Y][：:\s]*([\d,.]+)\s*元",
+        r"(?<!保险费)合计\s*[（(]人民币大写[)）][：:\s]*.*?[（(\s]+[￥¥Y][：:\s]*(" + _NUM + r")\s*元",
         # 车船税...合计...￥/Y（可能跨行）：金额
-        r"车\s*船\s*税[\s\S]*?合计[^￥¥Y]*?[￥¥Y]\s*[：:\s]*\n?\s*([\d,.]+)",
+        r"车\s*船\s*税[\s\S]*?合计[^￥¥Y]*?[￥¥Y]\s*[：:\s]*\n?\s*(" + _NUM + r")",
         # 兜底：当年应缴
-        r"当年应缴\s*[（(\s]*[￥¥Y]?[：:\s]*([\d,.]+)\s*(?:元)?",
+        r"当年应缴\s*[（(\s]*[￥¥Y]?[：:\s]*(" + _NUM + r")\s*(?:元)?",
     ]:
         m = re.search(p, tax_text_clean)
         if m:
-            val = m.group(1).strip().replace(",", "")
+            val = re.sub(r'\s+', '', m.group(1)).replace(",", "")
             try:
                 amt = float(val)
                 if amt >= 0:

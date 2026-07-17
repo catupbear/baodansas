@@ -269,6 +269,38 @@ def init_enterprise_remark_column(db):
         conn.close()
 
 
+def init_enterprise_onboarded_column(db):
+    """幂等：给 enterprises 表加 onboarded_at 列（正式接入时间）。
+    "预备群X"占位企业创建时不记录，等改名为正式客户名称后才首次写入(见 update_enterprise)。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("ALTER TABLE enterprises ADD COLUMN onboarded_at DATETIME DEFAULT NULL COMMENT '正式接入时间(预备群改名后才记录)'")
+            logger.info("enterprises 表添加列 onboarded_at 完成")
+        except Exception:
+            pass  # 列已存在，跳过
+    finally:
+        conn.close()
+
+
+def backfill_enterprise_onboarded_at(db):
+    """一次性回填：本来就不是"预备群"占位的老企业，用创建时间兜底接入时间"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE enterprises SET onboarded_at = created_at "
+            "WHERE onboarded_at IS NULL AND name NOT LIKE '预备群%'"
+        )
+        conn.commit()
+    except Exception:
+        logger.exception("回填 enterprises.onboarded_at 失败")
+    finally:
+        conn.close()
+
+
 def list_enterprises(db, enabled: int = None) -> list:
     """查询企业列表，可按启用状态筛选"""
     conn = db.pool.connection()
@@ -283,7 +315,7 @@ def list_enterprises(db, enabled: int = None) -> list:
         cursor.execute(sql, params)
         rows = cursor.fetchall()
         for row in rows:
-            for f in ("created_at", "updated_at", "plan_start_at", "next_plan_start_at"):
+            for f in ("created_at", "updated_at", "plan_start_at", "next_plan_start_at", "onboarded_at"):
                 if row.get(f) and not isinstance(row[f], str):
                     row[f] = str(row[f])
         return rows
@@ -299,7 +331,7 @@ def get_enterprise_by_id(db, enterprise_id: int) -> dict | None:
         cursor.execute("SELECT * FROM enterprises WHERE id = %s", (enterprise_id,))
         row = cursor.fetchone()
         if row:
-            for f in ("created_at", "updated_at", "plan_start_at", "next_plan_start_at"):
+            for f in ("created_at", "updated_at", "plan_start_at", "next_plan_start_at", "onboarded_at"):
                 if row.get(f) and not isinstance(row[f], str):
                     row[f] = str(row[f])
         return row
@@ -308,15 +340,19 @@ def get_enterprise_by_id(db, enterprise_id: int) -> dict | None:
 
 
 def create_enterprise(db, name: str, contact_person: str = "", contact_phone: str = "") -> int:
-    """创建企业，返回新企业 ID"""
+    """创建企业，返回新企业 ID。
+    "预备群"开头的占位企业不记录接入时间(onboarded_at 留空)，等改名为正式客户名称后才首次写入；
+    非"预备群"开头则视为直接正式接入，创建时立即记录。
+    """
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        onboarded_at = None if name.startswith("预备群") else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         # plan_type 显式置空串表示"未开通"：列为 NOT NULL DEFAULT 'standard'，
         # 若不写该列，数据库会默认成 standard，导致新企业被自动开通。开通由管理员后续操作。
         cursor.execute(
-            "INSERT INTO enterprises (name, contact_person, contact_phone, plan_type) VALUES (%s, %s, %s, '')",
-            (name, contact_person, contact_phone),
+            "INSERT INTO enterprises (name, contact_person, contact_phone, plan_type, onboarded_at) VALUES (%s, %s, %s, '', %s)",
+            (name, contact_person, contact_phone, onboarded_at),
         )
         conn.commit()
         return cursor.lastrowid
@@ -329,10 +365,16 @@ def update_enterprise(db, enterprise_id: int, data: dict):
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        allowed = {"name", "enterprise_no", "contact_person", "contact_phone", "enabled", "merge_by_plate", "renewal_enabled", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at", "referrer_id", "survey_token", "survey_data", "follow_status", "remark"}
+        allowed = {"name", "enterprise_no", "contact_person", "contact_phone", "enabled", "merge_by_plate", "renewal_enabled", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at", "referrer_id", "survey_token", "survey_data", "follow_status", "remark", "onboarded_at"}
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
             return
+        # "预备群"占位企业改名为正式客户名称时，首次记录正式接入时间(onboarded_at)
+        if "name" in fields and not fields["name"].startswith("预备群"):
+            cursor.execute("SELECT name, onboarded_at FROM enterprises WHERE id = %s", (enterprise_id,))
+            row = cursor.fetchone()
+            if row and (row.get("name") or "").startswith("预备群") and not row.get("onboarded_at"):
+                fields["onboarded_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         set_clause = ", ".join(f"{k} = %s" for k in fields)
         values = list(fields.values()) + [enterprise_id]
         cursor.execute(f"UPDATE enterprises SET {set_clause} WHERE id = %s", values)
