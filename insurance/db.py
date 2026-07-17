@@ -1422,6 +1422,43 @@ def find_compulsory_end_dates(db, plates: list) -> dict:
         conn.close()
 
 
+def find_commercial_compulsory_start_dates(db, plates: list) -> dict:
+    """
+    批量查询车牌对应的商业险/交强险起保日期，供"交强与交商起保时间"字段使用。
+    返回 {车牌: {"commercial": 商业险起保日期, "compulsory": 交强险起保日期}}，
+    同一车牌每类险种只取最新一条(r.id DESC 先到先得)的 start_date。
+    """
+    if not plates:
+        return {}
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        placeholders = ",".join(["%s"] * len(plates))
+        cursor.execute(
+            f"SELECT pf.plate_no, pf.start_date, pf.policy_type "
+            f"FROM insurance_policy_fields pf "
+            f"JOIN insurance_records r ON r.id = pf.record_id "
+            f"WHERE pf.plate_no IN ({placeholders}) "
+            f"AND r.status = 'done' AND pf.start_date != '' "
+            f"ORDER BY r.id DESC",
+            plates,
+        )
+        result = {}
+        for row in cursor.fetchall():
+            plate = row["plate_no"]
+            policy_type = row["policy_type"] or ""
+            is_compulsory = "交强" in policy_type or "交通事故责任强制" in policy_type
+            key = "compulsory" if is_compulsory else "commercial"
+            bucket = result.setdefault(plate, {})
+            if key not in bucket:
+                bucket[key] = row["start_date"]
+        return result
+    except Exception:
+        return {}
+    finally:
+        conn.close()
+
+
 def find_insurer_info_by_plates(db, plates: list) -> dict:
     """
     批量查询车牌对应的保司信息和人员信息。

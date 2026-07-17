@@ -69,6 +69,7 @@ DEFAULT_COLUMNS = [
     {"key": "初次登记日期", "visible": False, "order": 36, "display_name": "初次登记日期"},
     {"key": "不含税保费", "visible": False, "order": 37, "display_name": "不含税保费"},
     {"key": "增值税额", "visible": False, "order": 38, "display_name": "增值税额"},
+    {"key": "交强与交商起保时间", "visible": False, "order": 39, "display_name": "交强与交商起保时间"},
 ]
 
 # 记录级字段的 key 集合（用于前端区分渲染方式）
