@@ -250,6 +250,7 @@ def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False)
                 logger.info("%s：无待同步的群", label)
             return
 
+        logger.info("%s开始: 本轮待同步 %d 个群", label, len(groups))
         ok = failed = changed = 0
         for g in groups:
             corp, detail = resolve_group(corps, g["roomid"], g.get("corpid", ""), api_delay)
