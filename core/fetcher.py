@@ -431,11 +431,12 @@ class MessageFetcher:
         """群内"发送台账+今日/本周/本月"文本 -> 生成保单台账Excel，
         上传COS后经FlowBot发到该群并@发送人。
 
-        仅对监控群生效；发送人需能解析出所属账号——优先用其个人绑定
-        （user_sender_binding），否则退回监控配置/该企业自己的 enterprise 账号
-        （企业管理员一般不建个人绑定，这层兜底让企业管理员本人也能直接触发）。
-        两者都解析不出时回复"您当前账号无权限，请联系客服开通"。
-        任何环节异常都只记日志，绝不影响消息处理主流程。
+        仅对监控群生效；发送人必须能通过其微信ID在系统里查到明确绑定的账号
+        （user_sender_binding）才允许触发——不再有"监控配置/企业管理员"兜底
+        身份，避免群里任何未绑定的人（包括机器人自己被存档SDK回收的消息）都能
+        冒充该企业身份导出台账数据（2026-07-17 曾因此误发生产企业真实保单数据
+        到群里，问题发现后收紧为此逻辑）。查不到绑定时回复"您当前账号无权限，
+        请联系客服开通"。任何环节异常都只记日志，绝不影响消息处理主流程。
         """
         handler = getattr(self, "insurance_handler", None)
         if not handler:
@@ -479,34 +480,23 @@ class MessageFetcher:
                 logger.info("台账导出命令：缺少 robot_id 或群名，跳过 seq=%d room=%s", seq, roomid)
                 return
 
-            # 解析绑定账号：与保单识别共用的"监控配置 + sender 绑定"解析链路
+            # 只用 roomid 匹配的监控配置取 enterprise_id 作为绑定查找的范围提示
+            # （不据此直接授权——授权只认发送人自己的 user_sender_binding）
             matched_monitors = handler._get_matched_monitors(roomid, sender)
-            config_user_id = None
             config_enterprise_id = None
             for m in matched_monitors:
-                if m.get("user_id"):
-                    config_user_id = m["user_id"]
                 if m.get("enterprise_id"):
                     config_enterprise_id = m["enterprise_id"]
-                if config_user_id:
                     break
+
             from auth.db import get_binding_by_sender
             bound = get_binding_by_sender(handler.db, sender, config_enterprise_id)
-            if bound:
-                config_user_id = bound["user_id"]
-                if not config_enterprise_id and bound.get("enterprise_id"):
-                    config_enterprise_id = bound["enterprise_id"]
-            # 兜底：企业管理员一般不建 sender 绑定（绑定主要给员工用），
-            # 监控配置也常只挂了 enterprise_id、没挂具体 user_id。
-            # 此时只要能确定是哪家企业的群，就用该企业自己的 enterprise 账号身份导出。
-            if not config_user_id and config_enterprise_id:
-                from auth.db import list_users
-                ent_users = [u for u in list_users(handler.db, role="enterprise", parent_id=config_enterprise_id)
-                             if u.get("enabled")]
-                if ent_users:
-                    config_user_id = ent_users[0]["id"]
+            config_user_id = bound["user_id"] if bound else None
+            if bound and not config_enterprise_id and bound.get("enterprise_id"):
+                config_enterprise_id = bound["enterprise_id"]
+
             if not config_user_id:
-                logger.info("台账导出命令：sender=%s 未绑定账号且找不到所属企业账号，提示无权限 seq=%d", sender, seq)
+                logger.info("台账导出命令：sender=%s 未绑定账号，提示无权限 seq=%d", sender, seq)
                 from insurance.flowbot_notify import send_flowbot_group_message
                 send_flowbot_group_message(room_name, sender_name, "您当前账号无权限，请联系客服开通", robot_id)
                 return
