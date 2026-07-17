@@ -8997,9 +8997,10 @@ const _app = createApp({
 
         function mField(record, key) { return (record.display_fields || {})[key] || ''; }
         function mHasPlate(record) { return !!mField(record, '车牌'); }
-        // 卡片主标题：车牌 → 被保人 → 文件名 逐级降级
+        // 卡片主标题：车牌优先；没有车牌（非车险等）不显示被保人/公司名，直接降级到文件名，
+        // 避免看着像"这份保单的车牌是XX公司"
         function mCardTitle(record) {
-            return mField(record, '车牌') || mField(record, '被保人') || record.filename || '—';
+            return mField(record, '车牌') || record.filename || '—';
         }
         function mPolicyChipClass(record) {
             const v = mField(record, '险种');
