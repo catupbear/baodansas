@@ -250,13 +250,11 @@ def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False)
                 logger.info("%s：无待同步的群", label)
             return
 
-        logger.info("%s开始: 本轮待同步 %d 个群", label, len(groups))
+        total = len(groups)
+        logger.info("%s开始: 本轮待同步 %d 个群", label, total)
         ok = failed = changed = done = 0
         for g in groups:
             done += 1
-            if done % 50 == 0:
-                logger.info("%s进度: %d/%d (成功 %d, 失败 %d)",
-                            label, done, len(groups), ok, failed)
             corp, detail = resolve_group(corps, g["roomid"], g.get("corpid", ""), api_delay)
             if corp and detail:
                 name_changed = update_group_success(
@@ -268,15 +266,22 @@ def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False)
                 ok += 1
                 if name_changed:
                     changed += 1
-                    logger.info("群名更新: %s 「%s」->「%s」(%s)",
-                                g["roomid"], g.get("name") or "(空)", detail["name"], corp.name)
+                    logger.info("[%d/%d] 群名更新: %s 「%s」->「%s」(%s)",
+                                done, total, g["roomid"],
+                                g.get("name") or "(空)", detail["name"], corp.name)
+                else:
+                    logger.info("[%d/%d] 同步成功: %s 「%s」(%s)",
+                                done, total, g["roomid"], detail["name"], corp.name)
             elif detail and detail.get("permanent"):
                 update_group_failure(db, g["roomid"], permanent=True)
                 failed += 1
-                logger.info("群已解散/不存在: %s（保留最后群名「%s」）", g["roomid"], g.get("name") or "")
+                logger.info("[%d/%d] 群已解散/不存在: %s（保留最后群名「%s」）",
+                            done, total, g["roomid"], g.get("name") or "")
             else:
                 update_group_failure(db, g["roomid"])
                 failed += 1
+                logger.info("[%d/%d] 同步失败: %s 「%s」(两个企业均解析不到)",
+                            done, total, g["roomid"], g.get("name") or "(空)")
 
         logger.info("%s完成: 共 %d 个群, 成功 %d, 失败 %d, 群名变化 %d | 总体状态: %s",
                     label, len(groups), ok, failed, changed, get_sync_stats(db))
