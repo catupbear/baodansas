@@ -7294,6 +7294,7 @@ const _app = createApp({
                     if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
                     if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
                     if (recordPolicyTypeFilter.value) params.set('policy_type', recordPolicyTypeFilter.value);
+                    if (recordEnterpriseFilter.value) params.set('enterprise_id', recordEnterpriseFilter.value);
                     _appendDateParams(params);
                     _appendAdvancedParams(params);
 
@@ -7481,6 +7482,7 @@ const _app = createApp({
                 if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
                 if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
                 if (recordPolicyTypeFilter.value) params.set('policy_type', recordPolicyTypeFilter.value);
+                if (recordEnterpriseFilter.value) params.set('enterprise_id', recordEnterpriseFilter.value);
                 _appendDateParams(params);
                 _appendAdvancedParams(params);
 
@@ -7685,6 +7687,7 @@ const _app = createApp({
                     if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
                     if (recordCompanyFilter.value) params.set('company_short', recordCompanyFilter.value);
                     if (recordPolicyTypeFilter.value) params.set('policy_type', recordPolicyTypeFilter.value);
+                    if (recordEnterpriseFilter.value) params.set('enterprise_id', recordEnterpriseFilter.value);
                     _appendDateParams(params);
                     if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');
                     _appendAdvancedParams(params);
