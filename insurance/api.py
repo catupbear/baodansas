@@ -212,6 +212,77 @@ def _try_sdk_download(record: dict) -> bytes:
     return b""
 
 
+def recover_stuck_processing_records(timeout_minutes=10):
+    """
+    自愈：扫描长时间卡在 status='processing' 的记录（多因 gunicorn 重启时后台队列消费线程
+    被杀死、内存中的任务丢失导致），通过内部环回调用 /api/insurance/reocr 自动重新识别恢复。
+    以超管账号身份签发内部调用凭证，与记录归属的 user_id 无关（reocr 接口本身不做归属校验）。
+    """
+    import requests
+
+    from auth.jwt_utils import generate_token
+
+    if not _db:
+        return
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT id FROM insurance_records "
+            "WHERE status = 'processing' AND deleted_at IS NULL "
+            "AND created_at < DATE_SUB(NOW(), INTERVAL %s MINUTE)",
+            (timeout_minutes,)
+        )
+        stuck_ids = [row["id"] for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+    if not stuck_ids:
+        return
+
+    logger.warning("自愈扫描：发现 %d 条卡在 processing 状态超过 %d 分钟的记录: %s",
+                    len(stuck_ids), timeout_minutes, stuck_ids)
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT id, phone, role FROM users WHERE role = %s AND enabled = 1 LIMIT 1",
+            (ROLE_SUPER_ADMIN,)
+        )
+        admin = cursor.fetchone()
+    finally:
+        conn.close()
+
+    if not admin:
+        logger.error("自愈扫描：未找到可用超管账号，无法生成内部调用凭证，跳过本次恢复")
+        return
+
+    token = generate_token(admin["id"], admin["phone"], admin["role"])
+    headers = {"Authorization": f"Bearer {token}"}
+
+    recovered, failed = 0, 0
+    for rid in stuck_ids:
+        try:
+            resp = requests.post(
+                f"http://127.0.0.1:8090/api/insurance/reocr/{rid}",
+                headers=headers, timeout=90,
+            )
+            if resp.ok and resp.json().get("code") == 0:
+                recovered += 1
+                logger.info("自愈扫描：记录 %d 恢复成功", rid)
+            else:
+                failed += 1
+                logger.warning("自愈扫描：记录 %d 恢复失败 status=%s body=%s",
+                                rid, resp.status_code, resp.text[:300])
+        except Exception as e:
+            failed += 1
+            logger.warning("自愈扫描：记录 %d 恢复异常: %s", rid, e)
+
+    logger.warning("自愈扫描完成：成功恢复 %d 条，失败 %d 条", recovered, failed)
+
+
 # ============================================================
 # 全局鉴权：所有保单识别 API 均需登录
 # ============================================================

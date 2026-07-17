@@ -479,6 +479,13 @@ def create_app(config: dict) -> Flask:
                         logger.info("报价模块就绪：绑定列表 %d 条", len(bindings))
                     except Exception as e:
                         logger.warning("报价绑定列表预热失败: %s", e)
+
+                    # 自愈：恢复上次进程被杀死（如 gunicorn 重启）时卡在 processing 状态的记录
+                    try:
+                        from insurance.api import recover_stuck_processing_records
+                        recover_stuck_processing_records(timeout_minutes=10)
+                    except Exception as e:
+                        logger.warning("启动自愈扫描失败: %s", e)
                 except Exception as e:
                     logger.error("启动补拉/补扫失败: %s", e)
             finally:
@@ -490,6 +497,36 @@ def create_app(config: dict) -> Flask:
                 lock_conn.close()
 
         threading.Thread(target=_startup_catch_up, daemon=True).start()
+
+        # 定时兜底扫描：每 30 分钟检查一次卡在 processing 状态的记录并自动恢复，
+        # 覆盖不重启进程、单纯因网络抖动/SDK超时导致卡住的场景。与启动自愈用同一套恢复逻辑，
+        # 命名锁与 wxbot_startup_catchup 分开，避免和启动补拉互相阻塞。
+        def _stuck_processing_watchdog():
+            import time
+            while True:
+                time.sleep(1800)
+                lock_conn = db.pool.connection()
+                got_lock = False
+                try:
+                    lock_cursor = lock_conn.cursor()
+                    lock_cursor.execute("SELECT GET_LOCK('wxbot_stuck_processing_watchdog', 0)")
+                    got_lock = lock_cursor.fetchone()[0] == 1
+                    if not got_lock:
+                        continue
+                    try:
+                        from insurance.api import recover_stuck_processing_records
+                        recover_stuck_processing_records(timeout_minutes=10)
+                    except Exception as e:
+                        logger.warning("定时自愈扫描失败: %s", e)
+                finally:
+                    try:
+                        if got_lock:
+                            lock_cursor.execute("SELECT RELEASE_LOCK('wxbot_stuck_processing_watchdog')")
+                    except Exception:
+                        pass
+                    lock_conn.close()
+
+        threading.Thread(target=_stuck_processing_watchdog, daemon=True).start()
 
         logger.info("应用初始化完成，回调地址: /callback，前端地址: /")
 
