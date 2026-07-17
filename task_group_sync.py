@@ -235,9 +235,10 @@ def resolve_group(corps: list, roomid: str, corpid_hint: str, api_delay: float):
 
 
 def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False,
-             corpids: list = None):
+             corpids: list = None, discover_from_messages: bool = False):
     """执行一轮同步（增量 full=False / 全量 full=True / force=True 忽略失败退避强制全量）
-    corpids 非空时全量只同步这些企业名下的群 + pending 新群，不扫全表"""
+    corpids 非空时只同步这些企业名下的群（客户群列表 API 发现的），不扫全表；
+    discover_from_messages=True 时才从 messages 历史消息发现新群（默认关闭）"""
     label = "强制全量刷新" if (full and force) else ("全量刷新" if full else "增量发现")
     lock_conn = db.pool.connection()
     got_lock = False
@@ -249,9 +250,10 @@ def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False,
             logger.info("%s：另一个同步进程正在执行，本轮跳过", label)
             return
 
-        new_cnt = discover_new_rooms(db)
-        if new_cnt:
-            logger.info("发现 %d 个新群", new_cnt)
+        if discover_from_messages:
+            new_cnt = discover_new_rooms(db)
+            if new_cnt:
+                logger.info("发现 %d 个新群", new_cnt)
 
         groups = get_groups_to_sync(db, full=full, force=force, corpids=corpids)
         if not groups:
@@ -342,6 +344,8 @@ def main():
     list_corp_names = sync_cfg.get("list_corp_names", ["午虎科技"])
     # 群详情解析企业白名单：只用这些企业的接口查群名（车物家会话存档已到期，查了也是浪费）
     sync_corp_names = sync_cfg.get("sync_corp_names", ["午虎科技"])
+    # 是否从 messages 历史消息发现新群（默认关闭：只处理客户群列表 API 返回的群）
+    discover_from_messages = sync_cfg.get("discover_from_messages", False)
     api_delay = sync_cfg.get("api_delay", 0.3)
 
     db = Database(config["mysql"], main_corpid=config["wecom"]["corpid"])
@@ -356,13 +360,17 @@ def main():
                 incremental_interval, full_interval,
                 list_interval, list_corp_names or "全部")
 
-    # 全量只同步白名单企业名下的群 + pending 新群，不扫全表（其他企业的历史失败群不参与）
+    # 只同步白名单企业名下的群（客户群列表 API 发现的），不扫全表
     sync_corpids = [c.corpid for c in sync_corps]
+
+    def sync(full, force=False):
+        run_sync(db, sync_corps, full=full, api_delay=api_delay, force=force,
+                 corpids=sync_corpids, discover_from_messages=discover_from_messages)
 
     # 启动流程：先调客户群列表 API 发现/登记群 → 再对白名单企业名下的群逐个强制刷新群名
     if list_interval:
         run_list_discovery(db, corps, api_delay, list_corp_names)
-    run_sync(db, sync_corps, full=True, api_delay=api_delay, force=True, corpids=sync_corpids)
+    sync(full=True, force=True)
 
     now = time.time()
     next_incremental = now + incremental_interval
@@ -373,18 +381,18 @@ def main():
         now = time.time()
         if now >= next_list:
             run_list_discovery(db, corps, api_delay, list_corp_names)
-            run_sync(db, sync_corps, full=False, api_delay=api_delay)  # 立即解析新发现的群
+            sync(full=False)  # 立即解析新发现的群
             next_list = time.time() + list_interval
             next_incremental = time.time() + incremental_interval
         elif now >= next_full:
             # 全量前先跑一轮列表发现，保证新建的客户群先入表再统一刷新
             if list_interval:
                 run_list_discovery(db, corps, api_delay, list_corp_names)
-            run_sync(db, sync_corps, full=True, api_delay=api_delay, corpids=sync_corpids)
+            sync(full=True)
             next_full = time.time() + full_interval
             next_incremental = time.time() + incremental_interval  # 全量已含增量
         elif now >= next_incremental:
-            run_sync(db, sync_corps, full=False, api_delay=api_delay)
+            sync(full=False)
             next_incremental = time.time() + incremental_interval
 
 

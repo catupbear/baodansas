@@ -194,9 +194,10 @@ def get_groups_to_sync(db, full: bool = False, limit: int = 500, force: bool = F
             """, params + [limit])
         else:
             cursor.execute(
-                "SELECT roomid, corpid, name FROM wecom_groups "
-                "WHERE sync_status = 'pending' ORDER BY first_seen_at ASC LIMIT %s",
-                (limit,),
+                f"SELECT roomid, corpid, name FROM wecom_groups "
+                f"WHERE sync_status = 'pending' {corp_filter} "
+                f"ORDER BY first_seen_at ASC LIMIT %s",
+                params + [limit],
             )
         return list(cursor.fetchall())
     finally:
