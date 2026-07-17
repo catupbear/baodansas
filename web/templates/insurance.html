@@ -8004,6 +8004,9 @@ const _app = createApp({
             // 绝不能再退回用车牌原始值(如"新车")当键——那样会把互不相关的一大堆车全部错误合并
             // 成一组（曾经出现过"新车+空车架号"的记录被合并成大几十条一组的bug）。改用保单号兜底，
             // 保单号也没有的话，各自独立展示（宁可拆开也不能错误合并）。
+            // 注：mergeKey 现在只用来生成展示用的 _plate 分组标签；子记录匹配改用后端返回的
+            // _src_ids（原始记录id列表）精确对应，不再靠字段值反推——车牌/车架号/保单号都缺失
+            // 时（典型的"需人工补充"记录）反推的 key 对不上会导致"展开0条"却仍显示字段值的bug。
             const mergeKey = df => {
                 const raw = ((df['车牌号'] || df['车牌'] || '') + '').trim();
                 if (raw && raw !== '新车' && raw !== '*-*' && raw !== '*—*') return norm(raw);
@@ -8012,6 +8015,9 @@ const _app = createApp({
                 const policyNo = ((df['保单号'] || '') + '').trim();
                 return policyNo ? '__POLICY__' + policyNo : null;
             };
+            const byId = {};
+            raw.forEach(r => { byId[r.id] = r; });
+            // 兼容旧后端(未返回_src_ids时)的兜底匹配
             const byPlate = {};
             raw.forEach(r => {
                 const df = r.display_fields || {};
@@ -8020,7 +8026,8 @@ const _app = createApp({
             });
             records.value = mrows.map((row, i) => {
                 const p = mergeKey(row) || ('__ROW__' + i);
-                const children = byPlate[p] || [];
+                const srcIds = Array.isArray(row._src_ids) ? row._src_ids : null;
+                const children = srcIds ? srcIds.map(id => byId[id]).filter(Boolean) : (byPlate[p] || []);
                 return {
                     id: '__merge_' + (p || i),
                     display_fields: row,

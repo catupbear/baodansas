@@ -4404,6 +4404,9 @@ def export_excel():
                     fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
                     if has_config and not skip_config:
                         fields = apply_user_config_to_fields(user_config, fields)
+                    # 记录来源 id，供 return_json 场景下前端精确匹配合并行对应的原始记录
+                    # （车牌/车架号/保单号都缺失时前端无法靠字段值再算出同一个分组键）
+                    fields["_src_id"] = inv.get("id") if isinstance(inv, dict) else None
                     plate = fields.get("车牌", "") or fields.get("车牌号", "") or ""
                     if _plate_mergeable(plate):
                         group_key = plate.strip()
@@ -4446,11 +4449,13 @@ def export_excel():
                             break
 
                     # 保留其他自定义字段（非共享非差异的字段互相补充）
-                    all_known = set(MERGE_SHARED_FIELDS) | set(MERGE_SPLIT_FIELDS) | {"车船税", "险种", "险种类型"}
+                    all_known = set(MERGE_SHARED_FIELDS) | set(MERGE_SPLIT_FIELDS) | {"车船税", "险种", "险种类型", "_src_id"}
                     for record in group:
                         for k, v in record.items():
                             if k not in all_known and k not in merged and v:
                                 merged[k] = v
+                    # 该合并行汇总了哪些原始记录（前端按此精确匹配，不再靠字段值反推分组键）
+                    merged["_src_ids"] = [r.get("_src_id") for r in group if r.get("_src_id") is not None]
 
                     merged_rows.append(merged)
 
@@ -4472,10 +4477,12 @@ def export_excel():
                     val = fields.get("车船税", "")
                     if val:
                         row["车船税"] = val
-                    all_known = set(MERGE_SHARED_FIELDS) | set(MERGE_SPLIT_FIELDS) | {"车船税", "险种", "险种类型"}
+                    all_known = set(MERGE_SHARED_FIELDS) | set(MERGE_SPLIT_FIELDS) | {"车船税", "险种", "险种类型", "_src_id"}
                     for k, v in fields.items():
                         if k not in all_known and k not in row and v:
                             row[k] = v
+                    _sid = fields.get("_src_id")
+                    row["_src_ids"] = [_sid] if _sid is not None else []
                     merged_rows.append(row)
 
                 # 注入交强到期时间（同车牌交强险终保日期，按配置格式格式化）
