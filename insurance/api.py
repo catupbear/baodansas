@@ -897,8 +897,11 @@ def list_records():
             for record in result.get("records", []):
                 df = record.get("display_fields", {})
                 plate = df.get("车牌", "") or df.get("车牌号", "")
-                policy_type = df.get("险种", "") or df.get("险种类型", "")
-                if plate and ("交强" in policy_type or "交通事故责任强制" in policy_type):
+                # 注意：变量名不能叫 policy_type——会覆盖本函数顶部同名的查询筛选参数，
+                # 导致这个 for 循环跑完后，后面用 policy_type 构建统计筛选条件时值被污染成
+                # 循环最后一条记录的险种，统计接口莫名其妙按险种过滤，数量对不上（真实故障）
+                _row_policy_type = df.get("险种", "") or df.get("险种类型", "")
+                if plate and ("交强" in _row_policy_type or "交通事故责任强制" in _row_policy_type):
                     end_date = df.get("终保日期", "")
                     # 仅采用「含 4 位年份」的终保日期；无年份的（已被格式化为 MM月DD日 等）
                     # 留给数据库兜底查询，避免格式化时丢失年份导致格式不统一
@@ -912,12 +915,12 @@ def list_records():
             for record in result.get("records", []):
                 df = record.get("display_fields", {})
                 plate = df.get("车牌", "") or df.get("车牌号", "")
-                policy_type = df.get("险种", "") or df.get("险种类型", "")
+                _row_policy_type = df.get("险种", "") or df.get("险种类型", "")
                 start_date = df.get("起保日期", "")
                 if not (plate and start_date and re.search(r"\d{4}", str(start_date))):
                     continue
                 # 跟合并导出一致的险种分类，驾意险/非车险(如交通出行意外险)不能被当成商业险
-                _type_code, _ = get_policy_type_code(policy_type)
+                _type_code, _ = get_policy_type_code(_row_policy_type)
                 if _type_code not in ("compulsory", "commercial"):
                     continue
                 bucket = _plate_start_dates.setdefault(_norm_plate(plate), {})
@@ -930,11 +933,11 @@ def list_records():
             for record in result.get("records", []):
                 df = record.get("display_fields", {})
                 plate = df.get("车牌", "") or df.get("车牌号", "")
-                policy_type = df.get("险种", "") or df.get("险种类型", "")
+                _row_policy_type = df.get("险种", "") or df.get("险种类型", "")
                 end_date = df.get("终保日期", "")
                 if not (plate and end_date and re.search(r"\d{4}", str(end_date))):
                     continue
-                _type_code, _ = get_policy_type_code(policy_type)
+                _type_code, _ = get_policy_type_code(_row_policy_type)
                 if _type_code not in ("compulsory", "commercial"):
                     continue
                 bucket = _plate_end_dates.setdefault(_norm_plate(plate), {})
