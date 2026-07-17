@@ -4249,9 +4249,23 @@ def export_excel():
             # 成功类型：完全按用户勾选的列导出
             # 获取用户字段配置，导出时应用简称/日期格式/公式
             user = g.current_user
-            user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
-            # 注入用户个人的自定义字段固定值（独立于模板）
-            export_fixed_vals = get_user_fixed_values(_db, user["user_id"])
+            config_user_id, config_role, config_parent_id = user["user_id"], user["role"], user.get("parent_id")
+            # 超管代企业导出（选了企业筛选）时，公式/固定值配置必须按数据实际归属的企业解析，
+            # 不能用超管自己账号的配置——否则费率公式/固定值全是超管本人的，跟导出的这家企业的
+            # 真实数据对不上（"数据对不上"问题的根因）。
+            if user["role"] == ROLE_SUPER_ADMIN and body.get("enterprise_id"):
+                try:
+                    _eid = int(body["enterprise_id"])
+                except (TypeError, ValueError):
+                    _eid = None
+                if _eid:
+                    from auth.db import get_enterprise_admin_user
+                    ent_admin = get_enterprise_admin_user(_db, _eid)
+                    if ent_admin:
+                        config_user_id, config_role, config_parent_id = ent_admin["id"], ent_admin["role"], ent_admin["parent_id"]
+            user_config = get_effective_config(_db, config_user_id, config_role, config_parent_id)
+            # 注入该企业（而非超管本人）的自定义字段固定值（独立于模板）
+            export_fixed_vals = get_user_fixed_values(_db, config_user_id)
             if export_fixed_vals:
                 if user_config is None:
                     user_config = {}

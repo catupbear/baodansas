@@ -339,6 +339,23 @@ def get_enterprise_by_id(db, enterprise_id: int) -> dict | None:
         conn.close()
 
 
+def get_enterprise_admin_user(db, enterprise_id: int) -> dict | None:
+    """获取企业的管理员账号（role=enterprise 且 parent_id=该企业ID）。
+    用于超管代该企业查看/导出数据时，按该企业自己的模板配置（费率公式/固定值等）解析，
+    而不是误用超管自己的账号配置。"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT id, phone, role, parent_id FROM users WHERE role = %s AND parent_id = %s "
+            "ORDER BY id ASC LIMIT 1",
+            (ROLE_ENTERPRISE, enterprise_id)
+        )
+        return cursor.fetchone()
+    finally:
+        conn.close()
+
+
 def create_enterprise(db, name: str, contact_person: str = "", contact_phone: str = "") -> int:
     """创建企业，返回新企业 ID。
     "预备群"开头的占位企业不记录接入时间(onboarded_at 留空)，等改名为正式客户名称后才首次写入；
