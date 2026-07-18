@@ -373,7 +373,33 @@ def list_all_templates(db) -> dict:
                     "parent_id": r["parent_id"],
                 }
 
-        # 5. 组装结果
+        # 5. 统计各模板的「使用中」情况（客户当前启用的模板，超管自身不计入）
+        #    无 user_active_template 记录时按默认值 own/默认模板 处理，与 get_active_template 一致
+        ent_active = {}     # (enterprise_id, template_name) -> 使用人数
+        user_active = set() # (user_id, template_name)
+        global_active = {}  # template_name -> 使用人数
+        try:
+            cursor.execute(
+                "SELECT u.id AS uid, u.role, u.parent_id, t.active_source, t.template_name "
+                "FROM users u LEFT JOIN user_active_template t ON t.user_id = u.id "
+                "WHERE u.enabled = 1 AND u.role != 'super_admin'"
+            )
+            for r in cursor.fetchall():
+                src = r["active_source"] or "own"
+                tpl_name = r["template_name"] or DEFAULT_TEMPLATE_NAME
+                if src == "system":
+                    global_active[tpl_name] = global_active.get(tpl_name, 0) + 1
+                elif src == "enterprise" or r["role"] == "enterprise":
+                    # 企业管理员的 own 模板即企业模板（parent_id 为企业ID）
+                    if r["parent_id"]:
+                        key = (r["parent_id"], tpl_name)
+                        ent_active[key] = ent_active.get(key, 0) + 1
+                else:
+                    user_active.add((r["uid"], tpl_name))
+        except Exception:
+            logger.debug("统计模板使用情况失败", exc_info=True)
+
+        # 6. 组装结果
         global_templates = []
         ent_map = {}  # enterprise_id -> [templates]
         user_map = {}  # user_id -> [templates]
@@ -381,16 +407,20 @@ def list_all_templates(db) -> dict:
         for row in rows:
             tpl = {"name": row["template_name"], "visible": bool(row["visible"])}
             if row["scope"] == "global":
+                tpl["in_use_count"] = global_active.get(row["template_name"], 0)
                 global_templates.append(tpl)
             elif row["scope"] == "enterprise":
                 eid = row["scope_id"]
+                tpl["in_use_count"] = ent_active.get((eid, row["template_name"]), 0)
                 ent_map.setdefault(eid, []).append(tpl)
             elif row["scope"] == "user":
                 uid = row["scope_id"]
+                tpl["in_use"] = (uid, row["template_name"]) in user_active
                 user_map.setdefault(uid, []).append(tpl)
 
         if not global_templates:
-            global_templates = [{"name": DEFAULT_TEMPLATE_NAME, "visible": False}]
+            global_templates = [{"name": DEFAULT_TEMPLATE_NAME, "visible": False,
+                                 "in_use_count": global_active.get(DEFAULT_TEMPLATE_NAME, 0)}]
 
         enterprises = []
         for eid, templates in ent_map.items():

@@ -404,6 +404,7 @@
                                  onmouseover="if(!this.dataset.active)this.style.background='#f9fafb'" onmouseout="this.style.background=''">
                                 <span v-if="!adminTarget && activeSource==='own' && activeTemplateName===t.name" style="color:var(--primary); flex-shrink:0;">✓</span>
                                 <span style="flex:1;">{{ t.name }}</span>
+                                <span v-if="t.in_use_count" style="font-size:10px; padding:1px 6px; background:#eff6ff; color:#2563eb; border-radius:3px; flex-shrink:0;">{{ t.in_use_count }}人使用中</span>
                                 <span v-if="t.visible" style="font-size:10px; padding:1px 6px; background:#ecfdf5; color:#059669; border-radius:3px; flex-shrink:0;">员工可见</span>
                             </div>
                             <!-- 企业模板（员工视角） -->
@@ -437,7 +438,7 @@
                                 <div style="border-top:1px solid var(--border-light); padding:8px 12px 4px; font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">企业模板</div>
                                 <template v-for="ent in filteredEnterprises" :key="'ent-'+ent.enterprise_id">
                                     <div @click="toggleEnt(ent.enterprise_id)" style="padding:6px 12px; font-size:12px; color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; justify-content:space-between; background:#fafafa;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#fafafa'">
-                                        <span>{{ ent.enterprise_name }} <span style="color:#9ca3af; font-size:11px;">({{ ent.templates.length }})</span></span>
+                                        <span>{{ ent.enterprise_name }} <span style="color:#9ca3af; font-size:11px;">({{ ent.templates.length }})</span><span v-if="entInUse(ent)" style="margin-left:6px; font-size:10px; padding:1px 6px; background:#eff6ff; color:#2563eb; border-radius:3px;">在用: {{ entInUse(ent) }}</span></span>
                                         <span style="font-size:10px; color:#9ca3af;">{{ isEntExpanded(ent) ? '▾' : '▸' }}</span>
                                     </div>
                                     <template v-if="isEntExpanded(ent)">
@@ -448,6 +449,7 @@
                                              onmouseover="this.style.background=this.style.background||'#f9fafb'" onmouseout="this.style.background=''">
                                             <span v-if="adminTarget && adminTarget.scope==='enterprise' && adminTarget.scope_id===ent.enterprise_id && activeTemplateName===t.name" style="color:#92400e; flex-shrink:0;">✓</span>
                                             <span style="flex:1;">{{ t.name }}</span>
+                                            <span v-if="t.in_use_count" style="font-size:10px; padding:1px 6px; background:#eff6ff; color:#2563eb; border-radius:3px; flex-shrink:0;">使用中{{ t.in_use_count > 1 ? ' ×' + t.in_use_count : '' }}</span>
                                             <span v-if="t.visible" style="font-size:10px; padding:1px 6px; background:#ecfdf5; color:#059669; border-radius:3px; flex-shrink:0;">员工可见</span>
                                         </div>
                                     </template>
@@ -458,7 +460,7 @@
                                 <div style="border-top:1px solid var(--border-light); padding:8px 12px 4px; font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase;">员工模板</div>
                                 <template v-for="u in filteredUsers" :key="'user-'+u.user_id">
                                     <div @click="toggleUser(u.user_id)" style="padding:6px 12px; font-size:12px; color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; justify-content:space-between; background:#fafafa;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#fafafa'">
-                                        <span>{{ u.user_name }}<span v-if="u.enterprise_name" style="margin-left:4px; font-size:10px; color:#9ca3af;">（{{ u.enterprise_name }}）</span> <span style="color:#9ca3af; font-size:11px;">({{ u.templates.length }})</span></span>
+                                        <span>{{ u.user_name }}<span v-if="u.enterprise_name" style="margin-left:4px; font-size:10px; color:#9ca3af;">（{{ u.enterprise_name }}）</span> <span style="color:#9ca3af; font-size:11px;">({{ u.templates.length }})</span><span v-if="userInUse(u)" style="margin-left:6px; font-size:10px; padding:1px 6px; background:#eff6ff; color:#2563eb; border-radius:3px;">在用: {{ userInUse(u) }}</span></span>
                                         <span style="font-size:10px; color:#9ca3af;">{{ isUserExpanded(u) ? '▾' : '▸' }}</span>
                                     </div>
                                     <template v-if="isUserExpanded(u)">
@@ -469,6 +471,7 @@
                                              onmouseover="this.style.background=this.style.background||'#f9fafb'" onmouseout="this.style.background=''">
                                             <span v-if="adminTarget && adminTarget.scope==='user' && adminTarget.scope_id===u.user_id && activeTemplateName===t.name" style="color:#92400e; flex-shrink:0;">✓</span>
                                             <span style="flex:1;">{{ t.name }}</span>
+                                            <span v-if="t.in_use" style="font-size:10px; padding:1px 6px; background:#eff6ff; color:#2563eb; border-radius:3px; flex-shrink:0;">使用中</span>
                                         </div>
                                     </template>
                                 </template>
@@ -2126,6 +2129,9 @@ createApp({
         const isUserExpanded = (u) => templateSearch.value.trim() !== '' || expandedUsers.value.has(u.user_id);
         const toggleEnt = (id) => { const s = new Set(expandedEnts.value); s.has(id) ? s.delete(id) : s.add(id); expandedEnts.value = s; };
         const toggleUser = (id) => { const s = new Set(expandedUsers.value); s.has(id) ? s.delete(id) : s.add(id); expandedUsers.value = s; };
+        // 客户当前在用的模板名（显示在分组标题上，折叠时也能看到）
+        const entInUse = (ent) => (ent.templates || []).filter(t => t.in_use_count).map(t => t.name).join('、');
+        const userInUse = (u) => (u.templates || []).filter(t => t.in_use).map(t => t.name).join('、');
 
         const loadTemplates = async () => {
             try {
@@ -2143,6 +2149,12 @@ createApp({
                 // 超管额外数据
                 if (data.all) {
                     allTemplatesData.value = data.all;
+                    // 把系统模板的「使用中」人数合并到超管的模板列表
+                    const g = data.all.global || [];
+                    myTemplates.value.forEach(t => {
+                        const m = g.find(x => x.name === t.name);
+                        if (m && m.in_use_count) t.in_use_count = m.in_use_count;
+                    });
                 }
             } catch (e) {
                 if (e.message !== '未登录') showToast('加载模板列表失败: ' + e.message, 'error');
@@ -2854,7 +2866,7 @@ createApp({
             insertField, insertOp, openFormulaModal, saveFormula, deleteRule,
             listColConfig, exportColConfig, listColItems, exportColItems, fieldHelp,
             exportSearch, availableExportCols, selectedExportCols, filteredAvailableExport,
-            templateSearch, filteredEnterprises, filteredUsers, isEntExpanded, isUserExpanded, toggleEnt, toggleUser,
+            templateSearch, filteredEnterprises, filteredUsers, isEntExpanded, isUserExpanded, toggleEnt, toggleUser, entInUse, userInUse,
             addToExport, removeFromExport, addAllToExport, removeAllFromExport,
             moveExportUp, moveExportDown, moveExportTop, removeCustomColByKey,
             loadColumnConfig, saveColumnConfig, syncExportToList, resetColumnConfig, resetPending, doResetColumn,
