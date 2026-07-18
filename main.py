@@ -157,10 +157,15 @@ def create_app(config: dict) -> Flask:
     app.register_blueprint(renewal_bp)
 
     # 初始化保险报价模块
+    # 2026-07-18 默认停用：外部报价系统 riskapi.wuhuxiche.com 已停止运行（域名已无法解析），
+    # 继续开启只会反复报"请求绑定列表异常"。如需恢复，在 config.yaml 配置 quote.enabled: true
+    quote_enabled = bool((config.get("quote") or {}).get("enabled"))
     quote_handler = QuoteHandler(
         cos_storage=cos_storage,
         app_config=config,
-    )
+    ) if quote_enabled else None
+    if not quote_enabled:
+        logger.info("保险报价模块已停用（quote.enabled 未开启）")
 
     # 登录页（无需认证）
     @app.route("/login")
@@ -423,10 +428,12 @@ def create_app(config: dict) -> Flask:
         # 功能统一从 self.contacts 取，不必区分主/额外企业）
         fetcher.contacts = contacts
 
-        # 将 quote_handler 绑定到 fetcher（用于自动触发报价）
+        # 将 quote_handler 绑定到 fetcher（用于自动触发报价；停用时为 None，
+        # fetcher._check_quote_trigger 取到 None 直接跳过）
         fetcher.quote_handler = quote_handler
-        quote_handler.finance_sdk = finance_sdk
-        quote_handler.sdk_config = sdk_config
+        if quote_handler:
+            quote_handler.finance_sdk = finance_sdk
+            quote_handler.sdk_config = sdk_config
 
         # 保存引用，方便清理
         app.extensions["wxbot"] = {
@@ -472,12 +479,13 @@ def create_app(config: dict) -> Flask:
                         ef["fetcher"].rescan_missed_insurance(lookback_days=5)
                         logger.info("[%s] 启动补扫完成", ef["name"])
 
-                    # 预热报价绑定列表缓存
-                    try:
-                        bindings = quote_handler.binding_service.get_bindings()
-                        logger.info("报价模块就绪：绑定列表 %d 条", len(bindings))
-                    except Exception as e:
-                        logger.warning("报价绑定列表预热失败: %s", e)
+                    # 预热报价绑定列表缓存（模块停用时跳过）
+                    if quote_handler:
+                        try:
+                            bindings = quote_handler.binding_service.get_bindings()
+                            logger.info("报价模块就绪：绑定列表 %d 条", len(bindings))
+                        except Exception as e:
+                            logger.warning("报价绑定列表预热失败: %s", e)
 
                     # 自愈：恢复上次进程被杀死（如 gunicorn 重启）时卡在 processing 状态的记录
                     try:
