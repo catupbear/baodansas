@@ -3108,6 +3108,35 @@
         </div>
     </div>
 
+    <!-- ========== 手动修改字段未覆盖提醒弹窗（需点击确认才关闭） ========== -->
+    <div v-if="manualKeptModal.visible" class="fixed inset-0 flex items-center justify-center" style="z-index:1001;background:rgba(0,0,0,0.4);">
+        <div style="background:white;border-radius:12px;width:min(440px,92vw);box-shadow:0 12px 40px rgba(0,0,0,0.2);overflow:hidden;">
+            <div style="padding:14px 18px;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:8px;">
+                <span style="font-size:18px;">⚠️</span>
+                <span style="font-size:14px;font-weight:600;color:#1f2937;">手动修改字段未被覆盖</span>
+            </div>
+            <div style="padding:16px 18px;font-size:13px;color:#374151;line-height:1.7;">
+                <template v-if="manualKeptModal.fields.length">
+                    重新识别已完成，但以下 <b>{{ manualKeptModal.fields.length }}</b> 个手动修改过的字段已<b>保留原值</b>，未被本次识别结果覆盖：
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;">
+                        <span v-for="f in manualKeptModal.fields" :key="f"
+                              style="padding:2px 10px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:9999px;font-size:12px;">{{ f }}</span>
+                    </div>
+                </template>
+                <template v-else>
+                    批量重新识别已完成，其中 <b>{{ manualKeptModal.count }}</b> 条记录含手动修改过的字段，已<b>保留原值</b>，未被本次识别结果覆盖。
+                </template>
+                <div style="color:#6b7280;font-size:12px;margin-top:4px;">如需采用识别结果，请在对应记录上手动修改这些字段。</div>
+            </div>
+            <div style="padding:10px 18px;border-top:1px solid #f3f4f6;display:flex;justify-content:flex-end;">
+                <button @click="manualKeptModal.visible = false"
+                        style="padding:6px 22px;font-size:13px;border-radius:8px;background:#f97316;color:white;border:none;cursor:pointer;font-weight:500;">
+                    我知道了
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- ========== 批量下载进度浮窗 ========== -->
     <!-- 收起状态：小按钮 -->
     <div v-if="downloadTask.visible && downloadTask.collapsed" class="fixed bottom-6 right-6 z-50"
@@ -7375,6 +7404,8 @@ const _app = createApp({
         const batchProgress = reactive({ total: 0, current: 0, success: 0, failed: 0, currentFile: '' });
         // 批量失败明细弹窗
         const batchFailModal = reactive({ visible: false, errors: [] });
+        // 手动修改字段未覆盖提醒弹窗（fields 单条模式显示字段名，count 批量模式显示记录数）
+        const manualKeptModal = reactive({ visible: false, fields: [], count: 0 });
 
         // 展开勾选里的合并伪行为真实子记录id（批量导出原文件/批量重新识别都需要真实记录，
         // 合并伪行的id是"__merge_xxx"，数据库里不存在这条记录）
@@ -7446,6 +7477,7 @@ const _app = createApp({
                 batchProcessing.value = true;
                 Object.assign(batchProgress, { total: ids.length, current: 0, success: 0, failed: 0, currentFile: '' });
                 const failedItems = [];
+                let manualKeptCount = 0; // 含手动修改字段的记录数（重新识别不覆盖手动值，完成后需告知）
 
                 for (const rid of ids) {
                     const rec = records.value.find(r => r.id === rid);
@@ -7467,6 +7499,7 @@ const _app = createApp({
                                 batchProgress.failed++;
                             } else {
                                 batchProgress.success += (data.data.sync_success || data.data.reocr_success || 0);
+                                manualKeptCount += (data.data.manual_kept || 0);
                             }
                         } else {
                             failedItems.push({ id: rid, filename: fname, error: data.msg || '请求失败', needResend: false });
@@ -7487,6 +7520,13 @@ const _app = createApp({
                 if (failedItems.length > 0) {
                     batchFailModal.errors = failedItems;
                     batchFailModal.visible = true;
+                }
+
+                // 弹窗提醒：手动修改过的字段不会被重新识别覆盖，需用户确认后关闭
+                if (manualKeptCount > 0) {
+                    manualKeptModal.fields = [];
+                    manualKeptModal.count = manualKeptCount;
+                    manualKeptModal.visible = true;
                 }
 
                 setTimeout(() => { batchProcessing.value = false; }, 1500);
@@ -8358,6 +8398,12 @@ const _app = createApp({
                 const data = await resp.json();
                 if (data.code === 0) {
                     showMessage(data.msg || '重新识别完成', true);
+                    // 弹窗提醒：手动修改过的字段未被本次识别覆盖，需用户确认后关闭
+                    if (Array.isArray(data.manual_kept_fields) && data.manual_kept_fields.length) {
+                        manualKeptModal.fields = data.manual_kept_fields;
+                        manualKeptModal.count = 0;
+                        manualKeptModal.visible = true;
+                    }
                     const updated = data.data;
                     Object.assign(record, {
                         ...updated,
@@ -9313,7 +9359,7 @@ const _app = createApp({
             duplicateVisible, duplicateList, confirmSyncSkipDuplicates, confirmSyncUpdateDuplicates, cancelSync,
             // 识别记录
             records, filteredRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
-            isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask, collapseDownloadTask, expandDownloadTask, retryDownloadTask, batchFailModal, batchFailRetry, batchFailUpload,
+            isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask, collapseDownloadTask, expandDownloadTask, retryDownloadTask, batchFailModal, manualKeptModal, batchFailRetry, batchFailUpload,
             roomList, monitorRooms, filteredMonitorRooms, groupedMonitorRoomOptions, onEnterpriseChange, monitorUsers,
             recordFilter, dateTypeSupportsTime, openNativePicker, statusLabel, onSourceTypeChange, clearAllFilters, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
             recordEnterpriseFilter, recordEnterpriseList,

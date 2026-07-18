@@ -2966,10 +2966,24 @@ def reocr_record(record_id):
         if updated_count > 1:
             msg = f"重新识别完成，已同步更新 {updated_count} 条记录"
 
+        # 告知用户：手动修改过的字段被刻意保留（不会被重新识别结果覆盖），
+        # 前端据此弹窗提醒，需用户确认后才关闭
+        manual_kept = set()
+        _mf_sources = [updated.get("manual_fields")] + [s.get("manual_fields") for s in sibling_records]
+        for _mf_raw in _mf_sources:
+            if isinstance(_mf_raw, str):
+                try:
+                    _mf_raw = json.loads(_mf_raw) if _mf_raw else []
+                except (TypeError, json.JSONDecodeError):
+                    _mf_raw = []
+            if isinstance(_mf_raw, list):
+                manual_kept.update(f for f in _mf_raw if f)
+
         return jsonify({
             "code": 0,
             "data": updated,
             "msg": msg,
+            "manual_kept_fields": sorted(manual_kept),
         })
     except Exception as e:
         logger.exception("重新识别保单记录 %d 失败", record_id)
@@ -3073,7 +3087,7 @@ def batch_reocr_sync():
         if not record_ids:
             return jsonify({"code": 400, "msg": "缺少 record_ids 参数"}), 400
 
-        results = {"reocr_success": 0, "reocr_failed": 0, "sync_success": 0, "sync_failed": 0, "errors": []}
+        results = {"reocr_success": 0, "reocr_failed": 0, "sync_success": 0, "sync_failed": 0, "manual_kept": 0, "errors": []}
 
         for rid in record_ids:
             # 1. 获取记录
@@ -3185,6 +3199,16 @@ def batch_reocr_sync():
                 })
                 results["reocr_success"] += 1
 
+                # 统计含手动修改字段的记录（重新识别不覆盖手动值，需告知用户）
+                _mf_raw = record.get("manual_fields")
+                if isinstance(_mf_raw, str):
+                    try:
+                        _mf_raw = json.loads(_mf_raw) if _mf_raw else []
+                    except (TypeError, json.JSONDecodeError):
+                        _mf_raw = []
+                if _mf_raw:
+                    results["manual_kept"] += 1
+
             except Exception as e:
                 logger.exception("批量重新识别 record_id=%d 异常", rid)
                 results["errors"].append({"id": rid, "error": f"识别异常: {str(e)[:200]}"})
@@ -3250,6 +3274,8 @@ def batch_reocr_sync():
             msg_parts.append(f"识别失败 {results['reocr_failed']} 条")
         if results["sync_failed"]:
             msg_parts.append(f"同步失败 {results['sync_failed']} 条")
+        if results["manual_kept"]:
+            msg_parts.append(f"{results['manual_kept']} 条含手动修改字段已保留原值未覆盖")
 
         return jsonify({
             "code": 0,
