@@ -476,6 +476,20 @@ class MessageFetcher:
         "若车牌无误但仍提示未录入，请联系客服处理（已@技术客服跟进）。"
     )
 
+    def _resolve_sender_at_name(self, handler, sender: str) -> str:
+        """解析发送人名称用于群内@。
+
+        只用解析出的真实名称；get_name 解析失败回退成原始 userid 时
+        返回空串 = 不@发送人（FlowBot 按名字匹配，userid @不上），消息照发。
+        """
+        if not sender or not getattr(handler, "contacts", None):
+            return ""
+        try:
+            name = handler.contacts.get_name(sender) or ""
+        except Exception:
+            return ""
+        return "" if name == sender else name
+
     def _notify_policy_fill_miss(self, seq: int, roomid: str, sender: str, plate: str):
         """群内补充文本按车牌命中0条识别记录时，FlowBot 群通知 @发送人 + @技术客服。
 
@@ -502,13 +516,9 @@ class MessageFetcher:
                 logger.info("补充未录入通知跳过：未配置 robot_id seq=%d room=%s", seq, roomid)
                 return
 
-            sender_name = ""
+            sender_name = self._resolve_sender_at_name(handler, sender)
             room_name = ""
             if handler.contacts:
-                try:
-                    sender_name = handler.contacts.get_name(sender) or ""
-                except Exception:
-                    pass
                 try:
                     room_name = handler.contacts.get_room_name(roomid) or ""
                 except Exception:
@@ -669,13 +679,9 @@ class MessageFetcher:
                 robot_id = fail_cfg.get("robot_id")
 
             sender = parsed.get("from", "")
-            sender_name = ""
+            sender_name = self._resolve_sender_at_name(handler, sender)
             room_name = ""
             if handler.contacts:
-                try:
-                    sender_name = handler.contacts.get_name(sender) or ""
-                except Exception:
-                    pass
                 try:
                     room_name = handler.contacts.get_room_name(roomid) or ""
                 except Exception:
@@ -743,13 +749,9 @@ class MessageFetcher:
 
         sender = parsed.get("from", "")
         try:
-            sender_name = ""
+            sender_name = self._resolve_sender_at_name(handler, sender)
             room_name = ""
             if handler.contacts:
-                try:
-                    sender_name = handler.contacts.get_name(sender) or ""
-                except Exception:
-                    pass
                 try:
                     room_name = handler.contacts.get_room_name(roomid) or ""
                 except Exception:
