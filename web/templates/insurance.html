@@ -8709,13 +8709,17 @@ const _app = createApp({
                 if (data.code === 0) {
                     showMessage(data.msg || '重新识别完成', true);
                     // 弹窗提醒：手动修改过的字段未被本次识别覆盖，需用户确认后关闭
-                    // 优先展示差异明细（含识别值，可勾选覆盖）；无明细时回退为字段名标签
-                    if (Array.isArray(data.manual_kept_detail) && data.manual_kept_detail.length) {
-                        manualKeptModal.items = data.manual_kept_detail.map(d => ({ ...d, checked: false }));
-                        manualKeptModal.fields = [];
-                        manualKeptModal.count = 0;
-                        manualKeptModal.visible = true;
+                    // 仅当存在差异明细（识别值与手动值不同）时才弹窗展示，可勾选覆盖；
+                    // 识别值与手动值相同（明细为空数组）时无需处理，不打扰用户
+                    if (Array.isArray(data.manual_kept_detail)) {
+                        if (data.manual_kept_detail.length) {
+                            manualKeptModal.items = data.manual_kept_detail.map(d => ({ ...d, checked: false }));
+                            manualKeptModal.fields = [];
+                            manualKeptModal.count = 0;
+                            manualKeptModal.visible = true;
+                        }
                     } else if (Array.isArray(data.manual_kept_fields) && data.manual_kept_fields.length) {
+                        // 兼容旧后端（无 manual_kept_detail 字段）：回退为字段名标签模式
                         manualKeptModal.items = [];
                         manualKeptModal.fields = data.manual_kept_fields;
                         manualKeptModal.count = 0;
