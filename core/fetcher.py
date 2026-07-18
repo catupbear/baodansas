@@ -621,6 +621,10 @@ class MessageFetcher:
     # 未开通群提醒的群级节流：{roomid: "YYYY-MM-DD"}，同一群每天最多提醒一次（文本/PDF共用）
     _unmonitored_notified: dict = {}
 
+    # 未配置群发「发送台账」命令的提示节流：{roomid: 上次提示时间戳}，同一群10分钟内只提示一次
+    _ledger_unconfigured_notified: dict = {}
+    _LEDGER_UNCONFIGURED_NOTIFY_INTERVAL = 600  # 秒
+
     def _check_unmonitored_group_notice(self, seq: int, parsed: dict):
         """未开通AI机器人识别的群里发补充信息文本/保单PDF时，群内提醒。
 
@@ -725,8 +729,8 @@ class MessageFetcher:
         仅对监控群生效；发送人需能解析出所属账号——优先用其个人绑定
         （user_sender_binding），否则退回监控配置/该企业自己的 enterprise 账号
         （企业管理员一般不建个人绑定，这层兜底让企业管理员本人也能直接触发）。
-        解析不出账号时区分提示：群监控配置未关联企业 → "该群未配置，请联系客服配置"；
-        能定位企业但无可用账号 → "您当前账号无权限，请联系客服开通"。
+        提示区分三种情况：群不在监控列表 / 群监控配置未关联企业 → "该群未配置，
+        请联系客服配置"；能定位企业但无可用账号 → "您当前账号无权限，请联系客服开通"。
         任何环节异常都只记日志，绝不影响消息处理主流程。
 
         ⚠️ 已知风险（2026-07-17 明确评估过、按用户要求恢复此兜底）：这层兜底
@@ -745,9 +749,6 @@ class MessageFetcher:
         roomid = parsed.get("roomid", "")
         if not roomid:
             return
-        watch = handler.get_watch_config()
-        if roomid not in watch.get("rooms", []):
-            return
         _content = parsed.get("content", {}) or {}
         text = _content.get("text") or _content.get("content") or ""
         if not text:
@@ -759,6 +760,40 @@ class MessageFetcher:
             return
 
         sender = parsed.get("from", "")
+        watch = handler.get_watch_config()
+        if roomid not in watch.get("rooms", []):
+            # 未开通监控的群发台账命令 → 提示该群未配置（不再静默忽略），
+            # 同一群10分钟内只提示一次
+            try:
+                last_ts = self._ledger_unconfigured_notified.get(roomid, 0)
+                if time.time() - last_ts < self._LEDGER_UNCONFIGURED_NOTIFY_INTERVAL:
+                    logger.info("台账导出命令：room=%s 不在监控列表，10分钟内已提示过群未配置，跳过 seq=%d",
+                                roomid, seq)
+                    return
+                from insurance.db import get_insurance_config
+                cfg = get_insurance_config(handler.db, "flowbot_fail_notify", {}) or {}
+                robot_id = cfg.get("robot_id")
+                room_name = ""
+                if getattr(self, "contacts", None):
+                    try:
+                        room_name = self.contacts.get_room_name(roomid) or ""
+                        if room_name == roomid:
+                            room_name = ""  # 解析失败时会回退返回roomid，视为无群名
+                    except Exception:
+                        pass
+                if not robot_id or not room_name:
+                    logger.info("台账导出命令：未配置群 room=%s 缺少 robot_id 或群名，无法提示 seq=%d",
+                                roomid, seq)
+                    return
+                sender_name = self._resolve_sender_at_name(sender)
+                from insurance.flowbot_notify import send_flowbot_group_message
+                send_flowbot_group_message(room_name, sender_name, "该群未配置，请联系客服配置", robot_id)
+                self._ledger_unconfigured_notified[roomid] = time.time()
+                logger.info("台账导出命令：room=%s(%s) 不在监控列表，已提示群未配置 seq=%d",
+                            roomid, room_name, seq)
+            except Exception as e:
+                logger.warning("台账导出命令：未配置群提示失败（不影响主流程）seq=%d: %s", seq, e)
+            return
         try:
             sender_name = self._resolve_sender_at_name(sender)
             room_name = ""
