@@ -2191,6 +2191,12 @@
                         {{ tab.count }}
                     </span>
                 </button>
+                <!-- 全部 Tab：过滤非保单勾选项（默认勾选，排除已识别为非保单类型的记录） -->
+                <label v-if="recordActiveTab === 'all'" class="flex items-center gap-1.5 ml-3 text-xs text-gray-600 cursor-pointer flex-shrink-0 select-none"
+                       title="排除电子标志、发票、缴款通知等非保单文档">
+                    <input type="checkbox" v-model="filterNonPolicy" @change="loadRecords()" class="rounded text-orange-600">
+                    过滤非保单
+                </label>
                 <!-- 操作按钮 -->
                 <div class="ml-auto flex items-center gap-2 record-actions">
                     <button @click="pageTab = 'upload'" class="btn btn-primary" style="padding:6px 14px;font-size:13px;" title="手动上传">
@@ -3474,6 +3480,14 @@
                             按车牌合并
                         </label>
                         <span style="font-size:11px; color:#94a3b8;">同车牌多保单合并为一行</span>
+                    </div>
+                    <!-- 全部Tab导出：过滤非保单勾选项（默认勾选） -->
+                    <div v-if="exportPendingType === 'records' && recordActiveTab === 'all'" style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:4px;">
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:500;">
+                            <input type="checkbox" v-model="exportFilterNonPolicy" class="rounded" style="accent-color:#16a34a;">
+                            过滤非保单
+                        </label>
+                        <span style="font-size:11px; color:#94a3b8;">排除电子标志、发票、缴款通知等非保单文档</span>
                     </div>
                     <!-- 导出模式切换：默认模板 / 命名模板(标准版/完整版/自定义保存的模板) / 自定义勾选 -->
                     <div class="flex items-center gap-2 flex-wrap">
@@ -7315,6 +7329,10 @@ const _app = createApp({
         }
         // 状态 Tab（成功=保单且置信度>=0.5，需人工补充=置信度<0.5，非保单=doc_category非保单）
         const recordActiveTab = ref('all');
+        // 「全部」Tab 下过滤非保单（默认勾选），只影响列表/批量操作/导出，不影响 Tab 统计数
+        const filterNonPolicy = ref(true);
+        // 导出弹窗内的过滤非保单勾选（每次打开弹窗重置为勾选）
+        const exportFilterNonPolicy = ref(true);
         // Tab 统计数来自服务端，不再依赖前端 parsed_fields 计算
         const recordTabs = computed(() => [
             { key: 'all', label: '全部', count: recordStats.total },
@@ -7456,6 +7474,8 @@ const _app = createApp({
                     } else if (recordFilter.status) {
                         params.set('status', recordFilter.status);
                     }
+                    // 与列表口径一致：「全部」Tab 勾选过滤非保单时同样排除
+                    if (tab === 'all' && filterNonPolicy.value) params.set('exclude_nonpolicy', '1');
                     if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
                     if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
                     if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
@@ -7653,6 +7673,8 @@ const _app = createApp({
                 } else if (recordFilter.status) {
                     params.set('status', recordFilter.status);
                 }
+                // 与列表口径一致：「全部」Tab 勾选过滤非保单时同样排除
+                if (tab === 'all' && filterNonPolicy.value) params.set('exclude_nonpolicy', '1');
                 if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
                 if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
                 if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
@@ -7803,6 +7825,8 @@ const _app = createApp({
             exportPendingType.value = 'records';
             exportCustomMode.value = false; // 默认使用模板模式
             exportSelectedTemplateName.value = '';
+            exportFilterNonPolicy.value = true; // 过滤非保单默认勾选
+
             const dynamicCols = visibleListColumns.value.map(c => c.key);
             const seen = new Set();
             const allCols = [...recordExtraColumns, ...dynamicCols].filter(c => { if (seen.has(c)) return false; seen.add(c); return true; });
@@ -7864,6 +7888,8 @@ const _app = createApp({
                     } else if (recordFilter.status) {
                         params.set('status', recordFilter.status);
                     }
+                    // 导出弹窗勾选过滤非保单（仅「全部」Tab 显示该选项）：服务端排除非保单
+                    if (tab === 'all' && exportFilterNonPolicy.value) params.set('exclude_nonpolicy', '1');
                     if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
                     if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
                     if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
@@ -7877,6 +7903,11 @@ const _app = createApp({
                     const listResp = await authFetch(`/api/insurance/records?${params.toString()}`);
                     const listJson = await listResp.json();
                     allRecords = (listJson.data || listJson).records || [];
+                }
+
+                // 过滤非保单兜底：勾选记录导出的分支不走服务端查询，这里统一按勾选状态再过滤一次
+                if (recordActiveTab.value === 'all' && exportFilterNonPolicy.value) {
+                    allRecords = allRecords.filter(r => !r.doc_category || r.doc_category === '保单');
                 }
 
                 // 不合并模式：同一辆车的多份保单按险种排序（商业险→交强险→非车险），车与车按上传时间(id)倒序
@@ -8264,6 +8295,8 @@ const _app = createApp({
                 } else if (recordFilter.status) {
                     params.set('status', recordFilter.status);
                 }
+                // 「全部」Tab 且勾选过滤非保单：服务端排除非保单记录
+                if (tab === 'all' && filterNonPolicy.value) params.set('exclude_nonpolicy', '1');
                 if (recordFilter.ocr_engine) params.set('ocr_engine', recordFilter.ocr_engine);
                 if (recordFilter.keyword) params.set('keyword', recordFilter.keyword);
                 if (recordDocTypeFilter.value && tab !== 'done') params.set('doc_category', recordDocTypeFilter.value);
@@ -9364,7 +9397,7 @@ const _app = createApp({
             recordFilter, dateTypeSupportsTime, openNativePicker, statusLabel, onSourceTypeChange, clearAllFilters, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
             recordEnterpriseFilter, recordEnterpriseList,
             recordPagination, visiblePages, recordStats,
-            recordActiveTab, recordTabs, recordCompanyFilter, recordPolicyTypeFilter, recordDocTypeFilter,
+            recordActiveTab, recordTabs, filterNonPolicy, exportFilterNonPolicy, recordCompanyFilter, recordPolicyTypeFilter, recordDocTypeFilter,
             recordCompanyList, loadRecordCompanies, recordDocTypes, exportRecordsExcel,
             loadRecords, loadRecordStats, gotoRecordPage, getParsedField, getRecordMappedValue, formatTime,
             pageMergeByPlate, togglePageMerge,

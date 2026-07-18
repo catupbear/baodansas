@@ -1739,6 +1739,7 @@ def query_insurance_records(
     review_status: str = "",
     sort_by: str = "",
     sort_order: str = "desc",
+    exclude_nonpolicy: bool = False,
 ) -> dict:
     """
     分页查询保单识别记录，支持按群、状态、关键词、来源、识别方式、文档类型筛选。
@@ -1747,6 +1748,7 @@ def query_insurance_records(
     sender: 按发送人 ID 筛选
     ocr_engine: 按识别方式筛选（pdfplumber / baidu）
     doc_category: 按文档类型筛选（保单 / 电子标志 等）
+    exclude_nonpolicy: 过滤非保单（排除 doc_category 非空且不等于"保单"的记录）
     search_*: 关联表字段模糊搜索（承保公司、保单号、车牌、投保人、被保人、业务员）
     sign_date_*/start_date_*/end_date_*: 关联表日期范围筛选
     返回: {"total": 总数, "pages": 总页数, "page": 当前页, "records": [...]}
@@ -1816,6 +1818,11 @@ def query_insurance_records(
         else:
             conditions.append(f"{col_prefix}doc_category = %s")
             params.append(doc_category)
+    # 过滤非保单：只排除"已识别出非保单类型"的记录，doc_category 为空（失败/未识别）的仍保留
+    if exclude_nonpolicy:
+        conditions.append(
+            f"({col_prefix}doc_category = '保单' OR {col_prefix}doc_category IS NULL OR {col_prefix}doc_category = '')"
+        )
     if is_abnormal == "1":
         conditions.append(f"{col_prefix}is_abnormal = 1")
     elif is_abnormal == "0":

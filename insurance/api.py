@@ -456,6 +456,8 @@ def list_records():
     sender = request.args.get("sender", "")
     ocr_engine = request.args.get("ocr_engine", "")
     doc_category = request.args.get("doc_category", "")
+    # 过滤非保单（"全部"Tab 下默认勾选）：排除已识别为非保单类型的记录
+    exclude_nonpolicy = request.args.get("exclude_nonpolicy", "") == "1"
     is_abnormal = request.args.get("is_abnormal", "")
     review_status = request.args.get("review_status", "")
     if g.current_user.get("role") != "super_admin":
@@ -510,6 +512,7 @@ def list_records():
             sender=sender,
             ocr_engine=ocr_engine,
             doc_category=doc_category,
+            exclude_nonpolicy=exclude_nonpolicy,
             is_abnormal=is_abnormal,
             company_short=company_short,
             policy_type=policy_type,
