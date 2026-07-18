@@ -3122,22 +3122,72 @@
                 <span style="font-size:14px;font-weight:600;color:#1f2937;">手动修改字段未被覆盖</span>
             </div>
             <div style="padding:16px 18px;font-size:13px;color:#374151;line-height:1.7;">
-                <template v-if="manualKeptModal.fields.length">
+                <template v-if="manualKeptModal.items.length">
+                    重新识别已完成，以下 <b>{{ manualKeptModal.items.length }}</b> 个手动修改过的字段已<b>保留原值</b>。可勾选需要改用本次识别值的字段：
+                    <div style="margin:10px 0;border:1px solid #f3f4f6;border-radius:8px;overflow:hidden;">
+                        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                            <thead>
+                                <tr style="background:#f9fafb;color:#6b7280;">
+                                    <th style="padding:6px 8px;width:30px;">
+                                        <input type="checkbox"
+                                               :checked="manualKeptModal.items.length > 0 && manualKeptModal.items.every(i => i.checked)"
+                                               @change="manualKeptToggleAll($event.target.checked)"
+                                               style="cursor:pointer;">
+                                    </th>
+                                    <th style="padding:6px 8px;text-align:left;">字段</th>
+                                    <th style="padding:6px 8px;text-align:left;">手动原值</th>
+                                    <th style="padding:6px 8px;text-align:left;">本次识别值</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(item, idx) in manualKeptModal.items" :key="item.record_id + '-' + item.field"
+                                    style="border-top:1px solid #f3f4f6;cursor:pointer;"
+                                    :style="item.checked ? 'background:#fff7ed;' : ''"
+                                    @click="item.checked = !item.checked">
+                                    <td style="padding:6px 8px;text-align:center;">
+                                        <input type="checkbox" v-model="item.checked" @click.stop style="cursor:pointer;">
+                                    </td>
+                                    <td style="padding:6px 8px;color:#c2410c;font-weight:500;white-space:nowrap;">
+                                        {{ item.field }}
+                                        <span v-if="item.policy_type && new Set(manualKeptModal.items.map(i => i.record_id)).size > 1"
+                                              style="color:#9ca3af;font-weight:400;font-size:11px;">（{{ item.policy_type }}）</span>
+                                    </td>
+                                    <td style="padding:6px 8px;color:#374151;word-break:break-all;">{{ item.manual_value || '—' }}</td>
+                                    <td style="padding:6px 8px;color:#059669;word-break:break-all;">{{ item.ocr_value }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="color:#6b7280;font-size:12px;margin-top:4px;">未勾选的字段继续保留手动值；勾选覆盖后该字段解除手动标记，之后重新识别会正常更新。</div>
+                </template>
+                <template v-else-if="manualKeptModal.fields.length">
                     重新识别已完成，但以下 <b>{{ manualKeptModal.fields.length }}</b> 个手动修改过的字段已<b>保留原值</b>，未被本次识别结果覆盖：
                     <div style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;">
                         <span v-for="f in manualKeptModal.fields" :key="f"
                               style="padding:2px 10px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:9999px;font-size:12px;">{{ f }}</span>
                     </div>
+                    <div style="color:#6b7280;font-size:12px;margin-top:4px;">本次识别值与手动值相同或为空，无需处理。</div>
                 </template>
                 <template v-else>
                     批量重新识别已完成，其中 <b>{{ manualKeptModal.count }}</b> 条记录含手动修改过的字段，已<b>保留原值</b>，未被本次识别结果覆盖。
+                    <div style="color:#6b7280;font-size:12px;margin-top:4px;">如需采用识别结果，请在对应记录上单独重新识别后勾选覆盖。</div>
                 </template>
-                <div style="color:#6b7280;font-size:12px;margin-top:4px;">如需采用识别结果，请在对应记录上手动修改这些字段。</div>
             </div>
-            <div style="padding:10px 18px;border-top:1px solid #f3f4f6;display:flex;justify-content:flex-end;">
+            <div style="padding:10px 18px;border-top:1px solid #f3f4f6;display:flex;justify-content:flex-end;gap:10px;">
                 <button @click="manualKeptModal.visible = false"
-                        style="padding:6px 22px;font-size:13px;border-radius:8px;background:#f97316;color:white;border:none;cursor:pointer;font-weight:500;">
-                    我知道了
+                        :style="manualKeptModal.items.length
+                            ? 'padding:6px 18px;font-size:13px;border-radius:8px;background:white;color:#374151;border:1px solid #d1d5db;cursor:pointer;'
+                            : 'padding:6px 22px;font-size:13px;border-radius:8px;background:#f97316;color:white;border:none;cursor:pointer;font-weight:500;'">
+                    {{ manualKeptModal.items.length ? '保留原值' : '我知道了' }}
+                </button>
+                <button v-if="manualKeptModal.items.length"
+                        @click="applyManualOverwrite"
+                        :disabled="manualKeptModal.busy || !manualKeptModal.items.some(i => i.checked)"
+                        :style="'padding:6px 18px;font-size:13px;border-radius:8px;border:none;font-weight:500;'
+                            + (manualKeptModal.busy || !manualKeptModal.items.some(i => i.checked)
+                                ? 'background:#fed7aa;color:white;cursor:not-allowed;'
+                                : 'background:#f97316;color:white;cursor:pointer;')">
+                    {{ manualKeptModal.busy ? '覆盖中…' : ('覆盖为识别值（' + manualKeptModal.items.filter(i => i.checked).length + '）') }}
                 </button>
             </div>
         </div>
@@ -7422,8 +7472,57 @@ const _app = createApp({
         const batchProgress = reactive({ total: 0, current: 0, success: 0, failed: 0, currentFile: '' });
         // 批量失败明细弹窗
         const batchFailModal = reactive({ visible: false, errors: [] });
-        // 手动修改字段未覆盖提醒弹窗（fields 单条模式显示字段名，count 批量模式显示记录数）
-        const manualKeptModal = reactive({ visible: false, fields: [], count: 0 });
+        // 手动修改字段未覆盖提醒弹窗
+        // items 单条模式带识别值差异明细（可勾选覆盖），fields 单条模式仅字段名，count 批量模式显示记录数
+        const manualKeptModal = reactive({ visible: false, fields: [], count: 0, items: [], busy: false });
+
+        // 差异明细表：全选/取消全选
+        function manualKeptToggleAll(checked) {
+            manualKeptModal.items.forEach(i => { i.checked = checked; });
+        }
+
+        // 将勾选的手动字段覆盖为本次识别值（按记录分组调用后端，解除手动标记）
+        async function applyManualOverwrite() {
+            const checked = manualKeptModal.items.filter(i => i.checked);
+            if (!checked.length || manualKeptModal.busy) return;
+            manualKeptModal.busy = true;
+            try {
+                const byRecord = {};
+                checked.forEach(i => {
+                    (byRecord[i.record_id] = byRecord[i.record_id] || {})[i.field] = i.ocr_value;
+                });
+                let ok = 0, fail = 0;
+                for (const [rid, fields] of Object.entries(byRecord)) {
+                    try {
+                        const resp = await authFetch(`/api/insurance/records/${rid}/overwrite-manual`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ fields }),
+                        });
+                        const data = await resp.json();
+                        if (data.code === 0) ok += Object.keys(fields).length;
+                        else fail += Object.keys(fields).length;
+                    } catch (_e) {
+                        fail += Object.keys(fields).length;
+                    }
+                }
+                showMessage(fail ? `已覆盖 ${ok} 个字段，${fail} 个失败` : `已覆盖 ${ok} 个字段为识别值`, !fail);
+                manualKeptModal.visible = false;
+                // 刷新列表与预览面板数据
+                loadRecords(false);
+                if (previewAutoRecord.value) {
+                    try {
+                        const detailResp = await authFetch(`/api/insurance/records/${previewAutoRecord.value.id}`);
+                        const detailJson = await detailResp.json();
+                        if (detailJson.code === 0 && detailJson.data) {
+                            Object.assign(previewAutoRecord.value, detailJson.data);
+                        }
+                    } catch (_e) { /* 预览刷新失败不影响主流程 */ }
+                }
+            } finally {
+                manualKeptModal.busy = false;
+            }
+        }
 
         // 展开勾选里的合并伪行为真实子记录id（批量导出原文件/批量重新识别都需要真实记录，
         // 合并伪行的id是"__merge_xxx"，数据库里不存在这条记录）
@@ -7544,6 +7643,7 @@ const _app = createApp({
 
                 // 弹窗提醒：手动修改过的字段不会被重新识别覆盖，需用户确认后关闭
                 if (manualKeptCount > 0) {
+                    manualKeptModal.items = [];
                     manualKeptModal.fields = [];
                     manualKeptModal.count = manualKeptCount;
                     manualKeptModal.visible = true;
@@ -8432,7 +8532,14 @@ const _app = createApp({
                 if (data.code === 0) {
                     showMessage(data.msg || '重新识别完成', true);
                     // 弹窗提醒：手动修改过的字段未被本次识别覆盖，需用户确认后关闭
-                    if (Array.isArray(data.manual_kept_fields) && data.manual_kept_fields.length) {
+                    // 优先展示差异明细（含识别值，可勾选覆盖）；无明细时回退为字段名标签
+                    if (Array.isArray(data.manual_kept_detail) && data.manual_kept_detail.length) {
+                        manualKeptModal.items = data.manual_kept_detail.map(d => ({ ...d, checked: false }));
+                        manualKeptModal.fields = [];
+                        manualKeptModal.count = 0;
+                        manualKeptModal.visible = true;
+                    } else if (Array.isArray(data.manual_kept_fields) && data.manual_kept_fields.length) {
+                        manualKeptModal.items = [];
                         manualKeptModal.fields = data.manual_kept_fields;
                         manualKeptModal.count = 0;
                         manualKeptModal.visible = true;
@@ -9392,7 +9499,7 @@ const _app = createApp({
             duplicateVisible, duplicateList, confirmSyncSkipDuplicates, confirmSyncUpdateDuplicates, cancelSync,
             // 识别记录
             records, filteredRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
-            isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask, collapseDownloadTask, expandDownloadTask, retryDownloadTask, batchFailModal, manualKeptModal, batchFailRetry, batchFailUpload,
+            isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask, collapseDownloadTask, expandDownloadTask, retryDownloadTask, batchFailModal, manualKeptModal, manualKeptToggleAll, applyManualOverwrite, batchFailRetry, batchFailUpload,
             roomList, monitorRooms, filteredMonitorRooms, groupedMonitorRoomOptions, onEnterpriseChange, monitorUsers,
             recordFilter, dateTypeSupportsTime, openNativePicker, statusLabel, onSourceTypeChange, clearAllFilters, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
             recordEnterpriseFilter, recordEnterpriseList,

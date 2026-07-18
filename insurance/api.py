@@ -1476,6 +1476,75 @@ def update_record_fields(record_id):
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
+@insurance_bp.route("/api/insurance/records/<int:record_id>/overwrite-manual", methods=["POST"])
+def overwrite_manual_with_ocr(record_id):
+    """将勾选的手动修改字段覆盖为识别值，并解除手动标记（此后重新识别可正常更新该字段）。
+
+    body: {"fields": {"字段名": "识别值", ...}}  —— 识别值由重新识别接口的 manual_kept_detail 返回
+    """
+    _require_login()
+    try:
+        record = get_insurance_record(_db, record_id)
+        if not record:
+            return jsonify({"code": 404, "msg": "记录不存在"}), 404
+
+        data = request.get_json(force=True)
+        fields = data.get("fields", {})  # {字段名: 识别值}
+        if not fields or not isinstance(fields, dict):
+            return jsonify({"code": 400, "msg": "未提供覆盖字段"}), 400
+
+        pf = record.get("parsed_fields") or "{}"
+        if isinstance(pf, str):
+            try:
+                pf = json.loads(pf)
+            except (TypeError, json.JSONDecodeError):
+                pf = {}
+
+        mf = record.get("manual_fields") or "[]"
+        if isinstance(mf, str):
+            try:
+                mf = json.loads(mf)
+            except (TypeError, json.JSONDecodeError):
+                mf = []
+        if not isinstance(mf, list):
+            mf = []
+
+        # 写入识别值并解除手动标记
+        for field_name, ocr_value in fields.items():
+            pf[field_name] = ocr_value
+            if field_name in mf:
+                mf.remove(field_name)
+
+        # 同步更新 display_fields（与手动修改字段接口相同的映射逻辑）
+        df = record.get("display_fields") or "{}"
+        if isinstance(df, str):
+            try:
+                df = json.loads(df)
+            except (TypeError, json.JSONDecodeError):
+                df = {}
+        from insurance.field_mapping import get_mapping_for_company
+        field_mapping_table = get_mapping_for_company(pf.get("保险公司简称", ""))
+        display_fields = dict(df)
+        for field_name, ocr_value in fields.items():
+            display_key = field_mapping_table.get(field_name) or field_name
+            display_fields[display_key] = ocr_value
+
+        update_insurance_record(_db, record_id, {
+            "parsed_fields": pf,
+            "manual_fields": mf,
+            "display_fields": display_fields,
+        })
+
+        return jsonify({"code": 0, "msg": "已覆盖为识别值", "data": {
+            "parsed_fields": pf,
+            "manual_fields": mf,
+            "display_fields": display_fields,
+        }})
+    except Exception as e:
+        logger.exception("覆盖手动字段 %d 失败", record_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
 @insurance_bp.route("/api/insurance/records/<int:record_id>/mark-normal", methods=["PUT"])
 def mark_record_normal(record_id):
     """手动标记需人工补充记录为正常，需提供原因"""
@@ -2678,6 +2747,46 @@ def reupload_reocr(record_id):
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
+def _keep_manual_on_reocr(old_record: dict, new_pf: dict) -> tuple:
+    """重新识别时保留手动修改过的字段值（用旧记录中的手动值覆盖回本次识别结果）。
+
+    返回 (手动字段名列表, 差异明细列表)。明细项含手动原值与本次识别值，
+    供前端弹窗展示并由用户勾选是否覆盖为识别值。
+    """
+    mf_raw = old_record.get("manual_fields")
+    if isinstance(mf_raw, str):
+        try:
+            mf_raw = json.loads(mf_raw) if mf_raw else []
+        except (TypeError, json.JSONDecodeError):
+            mf_raw = []
+    if not isinstance(mf_raw, list):
+        mf_raw = []
+    mf = [f for f in mf_raw if f]
+    if not mf:
+        return [], []
+
+    old_pf = old_record.get("parsed_fields") or {}
+    if isinstance(old_pf, str):
+        try:
+            old_pf = json.loads(old_pf) if old_pf else {}
+        except (TypeError, json.JSONDecodeError):
+            old_pf = {}
+    if not isinstance(old_pf, dict):
+        old_pf = {}
+
+    detail = []
+    for f in mf:
+        ocr_val = str(new_pf.get(f, "") or "").strip()
+        manual_val = str(old_pf.get(f, "") or "").strip()
+        # 保留手动值：手动改过的字段以旧记录的值为准
+        if f in old_pf:
+            new_pf[f] = old_pf[f]
+        # 仅当识别值与手动值不同且识别值非空时，才提供"覆盖为识别值"的选项
+        if ocr_val and ocr_val != manual_val:
+            detail.append({"field": f, "manual_value": manual_val, "ocr_value": ocr_val})
+    return mf, detail
+
+
 @insurance_bp.route("/api/insurance/reocr/<int:record_id>", methods=["POST"])
 def reocr_record(record_id):
     """
@@ -2792,14 +2901,24 @@ def reocr_record(record_id):
                     break
         used_policies = {best_idx}
 
+        # 收集各记录被保留的手动字段差异明细（手动原值 vs 本次识别值），供前端勾选覆盖
+        manual_kept_detail = []
+
         # 更新当前记录
-        def _apply_policy_to_record(rec_id, policy, policy_idx):
+        def _apply_policy_to_record(rec_id, policy, policy_idx, old_rec=None):
             pf = policy.get("fields") or {}
             _handler._cross_fill_by_plate(pf, rec_id)
             _handler._cross_fill_by_person(pf, rec_id)
             # TZ-008 专属：车牌为空时用车架号填入车牌号（持久化）
             from insurance.db import apply_tz008_plate_fallback
             apply_tz008_plate_fallback(_db, pf, record.get("enterprise_id"))
+            # 保留手动修改过的字段值（不被识别结果覆盖），差异明细返回给前端
+            if old_rec:
+                _, _kept = _keep_manual_on_reocr(old_rec, pf)
+                for _d in _kept:
+                    _d["record_id"] = rec_id
+                    _d["policy_type"] = pf.get("险种类型", "")
+                    manual_kept_detail.append(_d)
             cs = pf.get("保险公司简称", "")
             mf = apply_mapping(pf, cs)
             doc_cat = policy.get("doc_category", "")
@@ -2828,7 +2947,7 @@ def reocr_record(record_id):
             from insurance.handler import maybe_notify_new_company
             maybe_notify_new_company(_db, pf, doc_cat, cs, filename, rec_id)
 
-        _apply_policy_to_record(record_id, policies[best_idx], best_idx)
+        _apply_policy_to_record(record_id, policies[best_idx], best_idx, old_rec=record)
         updated_count = 1
 
         # 为每条兄弟记录匹配 policy 并更新
@@ -2860,7 +2979,7 @@ def reocr_record(record_id):
                 continue
 
             used_policies.add(matched_idx)
-            _apply_policy_to_record(sib["id"], policies[matched_idx], matched_idx)
+            _apply_policy_to_record(sib["id"], policies[matched_idx], matched_idx, old_rec=sib)
             # 同步归属信息
             if owner_sync:
                 update_insurance_record(_db, sib["id"], owner_sync)
@@ -2987,6 +3106,9 @@ def reocr_record(record_id):
             "data": updated,
             "msg": msg,
             "manual_kept_fields": sorted(manual_kept),
+            # 差异明细：手动原值 vs 本次识别值（仅识别值非空且与手动值不同的字段），
+            # 前端据此展示识别值并支持勾选覆盖
+            "manual_kept_detail": manual_kept_detail,
         })
     except Exception as e:
         logger.exception("重新识别保单记录 %d 失败", record_id)
@@ -3179,6 +3301,9 @@ def batch_reocr_sync():
                 # 同车牌互补 + 按人名互补
                 _handler._cross_fill_by_plate(parsed_fields, rid)
                 _handler._cross_fill_by_person(parsed_fields, rid)
+
+                # 保留手动修改过的字段值（不被识别结果覆盖）
+                _keep_manual_on_reocr(record, parsed_fields)
 
                 # 字段映射
                 company_short = parsed_fields.get("保险公司简称", "")
