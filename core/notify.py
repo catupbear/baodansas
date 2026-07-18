@@ -123,6 +123,34 @@ def notify_error(module: str, method: str, error: str, detail: str = ""):
     ).start()
 
 
+def notify_unmonitored_group(room_desc: str, sender_desc: str, content_desc: str):
+    """
+    未开通AI机器人识别的群收到补充信息/保单文件、且群内提醒发不出去
+    （群名解析不到或FlowBot发送失败）时，钉钉告警兜底通知技术客服。
+
+    复用系统错误告警的钉钉机器人；title 含群标识，同群 15 分钟内去重。
+    """
+    if not _notifier:
+        return
+
+    title = f"📣 未开通群消息提醒 {room_desc}"
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    lines = [
+        "### 📣 未开通群收到待识别消息",
+        f"- **时间**: {ts}",
+        f"- **群**: {room_desc}",
+        f"- **发送人**: {sender_desc or '未知'}",
+        f"- **内容**: {content_desc[:300]}",
+        "",
+        "> 该群尚未开通AI机器人识别，且群内提醒发送失败（群名无法解析或机器人不在群内），请尽快确认是否开通并完成配置。",
+    ]
+    content = "\n".join(lines)
+
+    threading.Thread(
+        target=_notifier.send, args=(title, content), daemon=True
+    ).start()
+
+
 def notify_new_company(company: str, detail: str = "", webhook: str = "", secret: str = ""):
     """
     发现规则外的新保司时通知（钉钉，新保司专用群）。

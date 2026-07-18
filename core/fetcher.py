@@ -404,6 +404,9 @@ class MessageFetcher:
 
             # 检查是否为"发送台账XX"命令文本，命中则导出台账Excel并发回群里@发送人
             self._check_ledger_export_trigger(msg_seq, parsed)
+
+            # 未开通AI机器人识别的群里发补充信息/保单PDF时，群内提醒并@发送人+@技术客服
+            self._check_unmonitored_group_notice(msg_seq, parsed)
         except json.JSONDecodeError as e:
             logger.error("%s消息JSON解析失败, seq=%d: %s", self._log_prefix, msg_seq, e)
             notify_error("消息解析", "_process_item", f"JSON解析失败, seq={msg_seq}", str(e))
@@ -517,7 +520,8 @@ class MessageFetcher:
             tech_name = cfg.get("tech_support_name") or "技术客服（午虎保单台账系统）"
             template = cfg.get("template") or self._POLICY_FILL_MISS_TEMPLATE
             msg = template.replace("{plate}", plate or "未知")
-            at_list = [n for n in (sender_name, tech_name) if n]
+            # 去重：发送人本身就是技术客服账号时只@一次
+            at_list = list(dict.fromkeys(n for n in (sender_name, tech_name) if n))
 
             from insurance.flowbot_notify import send_flowbot_group_message
             send_flowbot_group_message(room_name, at_list, msg, robot_id)
@@ -584,6 +588,119 @@ class MessageFetcher:
                 self._no_template_notified[roomid] = today
         except Exception as e:
             logger.warning("未配置模板提醒发送失败（不影响主流程）seq=%d: %s", seq, e)
+
+    # 未开通群提醒的默认文案（{plate}/{filename} 动态替换）
+    _UNMONITORED_TEXT_TEMPLATE = (
+        "⚠️ 本群暂未开通AI机器人识别，补充信息（车牌：{plate}）未被记录。\n"
+        "技术客服将尽快开通，开通后重发一次即可。"
+    )
+    _UNMONITORED_PDF_TEMPLATE = (
+        "⚠️ 本群暂未开通AI机器人识别，保单文件（{filename}）未被识别。\n"
+        "技术客服将尽快开通，开通后重发一次即可。"
+    )
+    # 保单类 PDF 文件名特征：含车牌号或保险相关关键词才提醒，避免无关 PDF 误触发
+    _POLICY_PDF_KEYWORDS = ("保单", "保险", "投保", "批单", "交强", "商业", "驾意", "电子保单")
+
+    # 未开通群提醒的群级节流：{roomid: "YYYY-MM-DD"}，同一群每天最多提醒一次（文本/PDF共用）
+    _unmonitored_notified: dict = {}
+
+    def _check_unmonitored_group_notice(self, seq: int, parsed: dict):
+        """未开通AI机器人识别的群里发补充信息文本/保单PDF时，群内提醒。
+
+        @发送人 + @技术客服；群名解析不到或FlowBot发送失败时，走钉钉告警兜底。
+        配置键 unmonitored_group_notify（insurance_config 表）：
+          enabled           开关（默认关闭）
+          robot_id          FlowBot 机器人 ID，缺省复用 flowbot_fail_notify
+          tech_support_name 技术客服微信名
+          text_template     补充文本提醒文案（{plate} 占位）
+          pdf_template      保单PDF提醒文案（{filename} 占位）
+        同一群每天最多提醒一次。旁路通知：任何异常只记日志，不影响主流程。
+        """
+        handler = getattr(self, "insurance_handler", None)
+        if not handler:
+            return
+        try:
+            roomid = parsed.get("roomid", "")
+            msgtype = parsed.get("msgtype", "")
+            if not roomid or msgtype not in ("text", "file"):
+                return
+            # 已开通（监控中）的群走正常识别/回填链路，这里只管未开通的群
+            watch = handler.get_watch_config()
+            if roomid in watch.get("rooms", []):
+                return
+
+            import time as _time
+            today = _time.strftime("%Y-%m-%d")
+            if self._unmonitored_notified.get(roomid) == today:
+                return
+
+            from insurance.db import get_insurance_config
+            cfg = get_insurance_config(handler.db, "unmonitored_group_notify", {}) or {}
+            if not cfg.get("enabled"):
+                return
+
+            content = parsed.get("content", {}) or {}
+            if msgtype == "text":
+                text = content.get("text") or content.get("content") or ""
+                if not text:
+                    return
+                from insurance.policy_quote_fill import parse_policy_quote_text
+                info = parse_policy_quote_text(text)
+                if not info:
+                    return
+                template = cfg.get("text_template") or self._UNMONITORED_TEXT_TEMPLATE
+                msg = template.replace("{plate}", info.get("plate", "未知"))
+                content_desc = f"车牌 {info.get('plate', '未知')} 的补充信息"
+            else:
+                filename = content.get("filename", "") or ""
+                if not filename.lower().endswith(".pdf"):
+                    return
+                from insurance.policy_quote_fill import _PLATE_RE
+                if not (_PLATE_RE.search(filename)
+                        or any(k in filename for k in self._POLICY_PDF_KEYWORDS)):
+                    return
+                template = cfg.get("pdf_template") or self._UNMONITORED_PDF_TEMPLATE
+                msg = template.replace("{filename}", filename)
+                content_desc = f"保单文件 {filename}"
+
+            robot_id = cfg.get("robot_id")
+            if not robot_id:
+                fail_cfg = get_insurance_config(handler.db, "flowbot_fail_notify", {}) or {}
+                robot_id = fail_cfg.get("robot_id")
+
+            sender = parsed.get("from", "")
+            sender_name = ""
+            room_name = ""
+            if handler.contacts:
+                try:
+                    sender_name = handler.contacts.get_name(sender) or ""
+                except Exception:
+                    pass
+                try:
+                    room_name = handler.contacts.get_room_name(roomid) or ""
+                except Exception:
+                    pass
+
+            tech_name = cfg.get("tech_support_name") or "技术客服（午虎保单台账系统）"
+            sent = False
+            if room_name and robot_id:
+                at_list = list(dict.fromkeys(n for n in (sender_name, tech_name) if n))
+                from insurance.flowbot_notify import send_flowbot_group_message
+                sent = send_flowbot_group_message(room_name, at_list, msg, robot_id)
+                logger.info("未开通群提醒: seq=%d room=%s(%s) %s 发送%s",
+                            seq, roomid, room_name, content_desc, "成功" if sent else "失败")
+            else:
+                logger.info("未开通群提醒: seq=%d room=%s 群名或robot_id缺失，走钉钉兜底", seq, roomid)
+
+            if not sent:
+                # 群内发不出去（群名解析不到/机器人不在群/接口失败）→ 钉钉告警兜底
+                from core.notify import notify_unmonitored_group
+                notify_unmonitored_group(
+                    f"{room_name or roomid}", sender_name or sender, content_desc)
+            # 无论走哪个通道，当天该群不再重复提醒
+            self._unmonitored_notified[roomid] = today
+        except Exception as e:
+            logger.warning("未开通群提醒失败（不影响主流程）seq=%d: %s", seq, e)
 
     def _check_ledger_export_trigger(self, seq: int, parsed: dict):
         """群内"发送台账+今日/本周/本月"文本 -> 生成保单台账Excel，
