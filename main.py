@@ -155,6 +155,13 @@ def create_app(config: dict) -> Flask:
     init_insurance_api(db, handler=insurance_handler, contacts=contacts)
     app.register_blueprint(insurance_bp)
 
+    # FlowBot 群通知：推送日志落库 + 送达结果回调（/flowbot/callback）
+    from insurance.flowbot_notify import init_flowbot_db
+    from insurance.flowbot_callback import flowbot_bp, init_flowbot_callback
+    init_flowbot_db(db)
+    init_flowbot_callback(db)
+    app.register_blueprint(flowbot_bp)
+
     # 初始化续保任务模块
     init_renewal_tables(db)
     init_renewal_api(db, cos_storage=cos_storage)

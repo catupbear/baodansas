@@ -501,6 +501,25 @@ def init_insurance_tables(db):
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='保单内部管理备注(仅超管,每日追加日志)'
         """)
 
+        # FlowBot 群通知推送日志（发送时落库，回调按 taskId 更新结果/触发重发）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS flowbot_push_log (
+                id          INT PRIMARY KEY AUTO_INCREMENT,
+                task_id     VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'FlowBot 任务ID',
+                robot_id    VARCHAR(64) NOT NULL DEFAULT '' COMMENT '机器人ID',
+                group_name  VARCHAR(255) NOT NULL DEFAULT '' COMMENT '目标群名',
+                message     TEXT COMMENT '消息正文',
+                payload     TEXT COMMENT '发送任务 taskList JSON（失败重发用）',
+                status      TINYINT NOT NULL DEFAULT 0 COMMENT '0=推送中 1=成功 2=失败',
+                retry_count INT NOT NULL DEFAULT 0 COMMENT '回调失败后的重发次数',
+                error_msg   VARCHAR(500) NOT NULL DEFAULT '' COMMENT '失败原因',
+                created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                KEY idx_fbl_task (task_id),
+                KEY idx_fbl_created (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='FlowBot群通知推送日志'
+        """)
+
         conn.commit()
         logger.info("保单识别数据库表初始化完成（DDL）")
     finally:
