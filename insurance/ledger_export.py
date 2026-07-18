@@ -157,8 +157,11 @@ def export_ledger_via_binding(db, user_id: int, enterprise_id, label: str, date_
     token = generate_token(user["id"], user["phone"], user["role"])
     headers = {"Authorization": f"Bearer {token}"}
 
+    # 口径与网页「成功」Tab 一致：已完成、非异常、仅保单；
+    # exclude_nonpolicy 为显式双保险（doc_category=保单 本身已排除非保单）
     list_params = {
         "status": "done", "is_abnormal": "0", "doc_category": "保单",
+        "exclude_nonpolicy": "1",
         "dedup": "1", "page": 1, "page_size": 10000,
     }
     if date_start:

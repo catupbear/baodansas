@@ -824,7 +824,9 @@ class MessageFetcher:
                 logger.warning("台账导出：cos_storage 未配置，无法上传文件 seq=%d", seq)
                 return
             cos_key_suffix = f"ledger_exports/{int(time.time())}_{sender}.xlsx"
-            url = handler.cos_storage.upload_bytes(excel_bytes, cos_key_suffix)
+            # 下载文件名与推送文案里的文件名保持一致（通过 Content-Disposition 指定）
+            url = handler.cos_storage.upload_bytes(excel_bytes, cos_key_suffix,
+                                                   download_filename=filename)
             if not url:
                 logger.warning("台账导出：上传COS失败 seq=%d", seq)
                 return

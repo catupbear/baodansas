@@ -60,20 +60,30 @@ class CosStorage:
             logger.error("上传COS失败: %s", e)
             return ""
 
-    def upload_bytes(self, data: bytes, cos_key_suffix: str) -> str:
+    def upload_bytes(self, data: bytes, cos_key_suffix: str, download_filename: str = "") -> str:
         """
         直接上传字节流到COS（不落盘）
         Args:
             data: 文件字节流
             cos_key_suffix: COS 上的相对路径（如 insurance/roomid/sender/file.pdf）
+            download_filename: 下载时保存的文件名（可选，支持中文）。COS key 保持
+                ASCII 避免 URL 含中文被微信/浏览器截断链接，下载文件名通过对象的
+                Content-Disposition 响应头指定
         返回: 文件的访问URL
         """
         cos_key = f"{self.prefix}{cos_key_suffix}"
         try:
+            extra = {}
+            if download_filename:
+                from urllib.parse import quote
+                extra["ContentDisposition"] = (
+                    f"attachment; filename*=UTF-8''{quote(download_filename)}"
+                )
             self.client.put_object(
                 Bucket=self.bucket,
                 Key=cos_key,
                 Body=data,
+                **extra,
             )
             url = self._make_url(cos_key)
             logger.info("上传COS成功(bytes): %s", url)
