@@ -1662,10 +1662,58 @@ def delete_record(record_id):
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
+# 预览文件扩展名 → MIME 类型
+_PREVIEW_MIME_MAP = {
+    "pdf": "application/pdf",
+    "jpg": "image/jpeg", "jpeg": "image/jpeg",
+    "png": "image/png", "bmp": "image/bmp",
+}
+
+
+def _preview_mimetype(filename):
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "pdf"
+    return _PREVIEW_MIME_MAP.get(ext, "application/octet-stream")
+
+
+@insurance_bp.route("/api/insurance/records/<int:record_id>/preview-url", methods=["GET"])
+def get_record_preview_url(record_id):
+    """获取保单文件的 COS 预签名直连 URL（浏览器直连 COS 加载，免服务端中转，加载更快）
+    注意：COS「强制下载」策略对浏览器导航加载可能强制 attachment，因此前端 PDF 一律
+    通过 fetch 字节流使用该 URL（pdf.js 渲染或转 blob URL 给 iframe），不直接导航加载。
+    COS 未配置或签名失败时返回非 0 code，前端回退代理接口 /preview。
+    """
+    try:
+        record = get_insurance_record(_db, record_id)
+        if not record:
+            return jsonify({"code": 404, "msg": "记录不存在"}), 404
+
+        cos_url = record.get("cos_url", "")
+        if not cos_url:
+            return jsonify({"code": 404, "msg": "文件 URL 不存在"}), 404
+
+        if not _handler or not getattr(_handler, "cos_storage", None):
+            return jsonify({"code": 404, "msg": "COS 未配置"}), 404
+
+        url = _handler.cos_storage.get_presigned_url_from_url(
+            cos_url,
+            expires=3600,
+            response_content_type=_preview_mimetype(record.get("filename", "file.pdf")),
+            inline=True,
+        )
+        if not url:
+            return jsonify({"code": 500, "msg": "生成预签名URL失败"}), 500
+
+        return jsonify({"code": 0, "data": {"url": url, "expires_in": 3600}})
+    except Exception as e:
+        logger.exception("获取保单预览URL %d 失败", record_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
 @insurance_bp.route("/api/insurance/records/<int:record_id>/preview", methods=["GET"])
 def preview_record_file(record_id):
-    """代理预览保单文件（避免 COS 直接下载）"""
+    """代理预览保单文件（直连 COS 失败时的兜底路径，流式转发避免整文件缓冲）"""
     import requests as http_requests
+    from flask import Response
 
     try:
         record = get_insurance_record(_db, record_id)
@@ -1676,25 +1724,22 @@ def preview_record_file(record_id):
         if not cos_url:
             return jsonify({"code": 404, "msg": "文件 URL 不存在"}), 404
 
-        # 请求 COS 文件
+        # 请求 COS 文件，边下边传（此前是整文件读入内存后才开始响应，首字节等待久）
         resp = http_requests.get(cos_url, timeout=30, stream=True)
         if resp.status_code != 200:
             return jsonify({"code": 502, "msg": "文件下载失败"}), 502
 
         filename = record.get("filename", "file.pdf")
-        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "pdf"
-        mime_map = {
-            "pdf": "application/pdf",
-            "jpg": "image/jpeg", "jpeg": "image/jpeg",
-            "png": "image/png", "bmp": "image/bmp",
-        }
-        mimetype = mime_map.get(ext, "application/octet-stream")
+        headers = {}
+        if resp.headers.get("Content-Length"):
+            headers["Content-Length"] = resp.headers["Content-Length"]
+        from urllib.parse import quote
+        headers["Content-Disposition"] = f"inline; filename*=UTF-8''{quote(filename)}"
 
-        return send_file(
-            io.BytesIO(resp.content),
-            mimetype=mimetype,
-            as_attachment=False,
-            download_name=filename,
+        return Response(
+            resp.iter_content(chunk_size=64 * 1024),
+            mimetype=_preview_mimetype(filename),
+            headers=headers,
         )
     except Exception as e:
         logger.exception("预览保单文件 %d 失败", record_id)

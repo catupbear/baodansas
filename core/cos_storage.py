@@ -97,6 +97,40 @@ class CosStorage:
         cos_key = f"{self.prefix}{filename}"
         return self._make_url(cos_key)
 
+    def get_presigned_url_from_url(self, url: str, expires: int = 3600,
+                                   response_content_type: str = "",
+                                   inline: bool = False) -> str:
+        """
+        根据已存储的 COS/CDN URL 生成预签名直连 URL（浏览器直接访问 COS，免服务端中转）
+        Args:
+            url: 库中存储的文件访问 URL（COS 源站或 CDN 域名均可，按 path 反推 key）
+            expires: 签名有效期（秒）
+            response_content_type: 覆盖响应 Content-Type（如 application/pdf，
+                解决历史对象未设置 Content-Type 导致浏览器强制下载的问题）
+            inline: 覆盖响应 Content-Disposition 为 inline，确保内嵌预览而非下载
+        返回: 预签名 URL，失败返回空字符串
+        """
+        from urllib.parse import urlparse, unquote
+        try:
+            cos_key = unquote(urlparse(url).path.lstrip("/"))
+            if not cos_key:
+                return ""
+            params = {}
+            if response_content_type:
+                params["response-content-type"] = response_content_type
+            if inline:
+                params["response-content-disposition"] = "inline"
+            return self.client.get_presigned_url(
+                Bucket=self.bucket,
+                Key=cos_key,
+                Method="GET",
+                Expired=expires,
+                Params=params,
+            )
+        except Exception as e:
+            logger.error("生成预签名URL失败 url=%s: %s", url, e)
+            return ""
+
     def file_exists(self, filename: str) -> bool:
         """检查文件是否已存在于COS"""
         cos_key = f"{self.prefix}{filename}"
