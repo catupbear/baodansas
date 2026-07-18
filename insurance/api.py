@@ -1752,6 +1752,84 @@ def get_record_raw_text(record_id):
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
+@insurance_bp.route("/api/insurance/records/<int:record_id>/ocr-compare", methods=["GET"])
+def get_record_ocr_compare(record_id):
+    """对缓存原文重新解析保单字段，返回纯识别结果（不含手动修改/跨保单互补/公式字段），
+    供内部超级管理员在预览弹窗中与列表数据逐字段对比，验证识别是否正确。仅超级管理员。"""
+    import requests as http_requests
+
+    _require_login()
+    if g.current_user.get("role") != ROLE_SUPER_ADMIN:
+        return jsonify({"code": 403, "msg": "无权限"}), 403
+    try:
+        record = get_insurance_record(_db, record_id)
+        if not record:
+            return jsonify({"code": 404, "msg": "记录不存在"}), 404
+
+        # 取原文：优先 PDF 提取缓存，其次 OCR 缓存，最后从 COS 下载提取
+        text = record.get("raw_text") or ""
+        text_source = "pdf"
+        if not text and record.get("ocr_text"):
+            text = record.get("ocr_text")
+            text_source = "ocr"
+        if not text:
+            cos_url = record.get("cos_url", "")
+            if cos_url:
+                resp = http_requests.get(cos_url, timeout=30)
+                if resp.status_code == 200:
+                    try:
+                        from insurance.ocr_service import extract_text_from_pdf_bytes
+                        result = extract_text_from_pdf_bytes(resp.content)
+                        if result.get("success"):
+                            text = result.get("text", "")
+                            if text:
+                                update_insurance_record(_db, record_id, {"raw_text": text})
+                    except Exception as e:
+                        logger.warning("识别对比提取原文失败: %s", e)
+        if not text:
+            return jsonify({"code": 404, "msg": "无可用原文，无法重新解析对比"}), 404
+
+        from .ocr_service import clean_text
+        policies = parse_policy_text_multi(clean_text(text))
+        valid = [p for p in policies if p.get("fields")]
+        if not valid:
+            return jsonify({"code": 0, "data": {
+                "ocr_fields": {}, "confidence": 0, "policy_count": 0,
+                "text_source": text_source, "matched_by": "",
+            }})
+
+        # 多保单时匹配当前记录对应的保单：优先保单号，其次 policy_index
+        pf = record.get("parsed_fields") or "{}"
+        if isinstance(pf, str):
+            try:
+                pf = json.loads(pf)
+            except (TypeError, json.JSONDecodeError):
+                pf = {}
+        chosen = valid[0]
+        matched_by = "single" if len(valid) == 1 else "index"
+        if len(valid) > 1:
+            policy_no = pf.get("保单号", "") if isinstance(pf, dict) else ""
+            hit = next((p for p in valid if policy_no and p.get("fields", {}).get("保单号", "") == policy_no), None)
+            if hit:
+                chosen = hit
+                matched_by = "policy_no"
+            else:
+                idx = (record.get("policy_index") or 1) - 1
+                if 0 <= idx < len(valid):
+                    chosen = valid[idx]
+
+        return jsonify({"code": 0, "data": {
+            "ocr_fields": chosen.get("fields") or {},
+            "confidence": chosen.get("confidence", 0),
+            "policy_count": len(valid),
+            "text_source": text_source,
+            "matched_by": matched_by,
+        }})
+    except Exception as e:
+        logger.exception("识别对比 %d 失败", record_id)
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
 _stats_cache = {}
 _STATS_TTL = 30  # stats 缓存 30 秒
 

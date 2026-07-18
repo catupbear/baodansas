@@ -3776,7 +3776,7 @@
                         </span>
                     </div>
                     <div class="flex items-center gap-2 preview-actions">
-                        <button @click="previewShowFields = !previewShowFields; if(previewShowFields) { previewShowRaw = false; previewShowRules = false; }"
+                        <button @click="previewShowFields = !previewShowFields; if(previewShowFields) { previewShowRaw = false; previewShowRules = false; previewShowCompare = false; }"
                                 class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;"
                                 :class="previewShowFields ? 'btn-success' : 'btn-outline'">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3785,13 +3785,24 @@
                             {{ previewShowFields ? '隐藏列表' : '查看列表信息' }}
                         </button>
                         <button v-if="previewHasRawText"
-                                @click="previewShowRaw = !previewShowRaw; if(previewShowRaw) { previewShowFields = false; previewShowRules = false; if(previewAutoRecord && !previewRawText) loadAutoRecordRawText(); }"
+                                @click="previewShowRaw = !previewShowRaw; if(previewShowRaw) { previewShowFields = false; previewShowRules = false; previewShowCompare = false; if(previewAutoRecord && !previewRawText) loadAutoRecordRawText(); }"
                                 class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;"
                                 :class="previewShowRaw ? 'btn-primary' : 'btn-outline'">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                             </svg>
                             {{ previewShowRaw ? '隐藏原文' : '查看原文' }}
+                        </button>
+                        <!-- 识别对比（仅内部超级管理员）：提取识别值 vs 列表当前值 -->
+                        <button v-if="isSuperAdmin && previewAutoRecord"
+                                @click="togglePreviewCompare"
+                                class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;"
+                                :class="previewShowCompare ? 'btn-primary' : 'btn-outline'"
+                                :style="previewShowCompare ? '' : 'color:#7c3aed;border-color:#7c3aed;'">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10l-4-4m4 4l4-4m4-6v10m0-10l4 4m-4-4l-4 4"/>
+                            </svg>
+                            {{ previewShowCompare ? '隐藏对比' : '识别对比' }}
                         </button>
                         <!-- 查看规则按钮已隐藏 -->
                         <!-- 标记正常（预览弹窗内，仅异常记录显示） -->
@@ -3957,6 +3968,84 @@
                             </div>
                             <div v-else class="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed font-mono"
                                  v-html="formattedRawText"></div>
+                        </div>
+                    </div>
+                    <!-- 右侧：识别对比（仅内部超级管理员，提取识别值 vs 列表当前值） -->
+                    <div v-if="previewShowCompare && isSuperAdmin && previewAutoRecord" class="border-l flex flex-col preview-side" style="width: 520px; min-width: 380px;">
+                        <div class="px-3 py-2 border-b flex-shrink-0 flex items-center justify-between" style="background:#f5f3ff;">
+                            <span class="text-xs font-medium" style="color:#6d28d9;">识别对比（列表值 vs 提取值）</span>
+                            <div class="flex items-center gap-2">
+                                <span v-if="previewCompareFields && !previewCompareLoading" class="text-xs"
+                                      :class="previewCompareDiffCount ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'">
+                                    {{ previewCompareDiffCount ? previewCompareDiffCount + ' 处差异' : '完全一致 ✓' }}
+                                </span>
+                                <span v-if="previewCompareMeta.text_source" class="text-xs text-gray-400">
+                                    {{ previewCompareMeta.text_source === 'ocr' ? 'OCR原文' : 'PDF原文' }}
+                                </span>
+                                <button @click="loadPreviewCompare(true)" :disabled="previewCompareLoading"
+                                        class="px-2 py-0.5 rounded text-xs cursor-pointer transition-colors bg-white text-gray-500 hover:text-gray-700 hover:bg-gray-100 border border-gray-200">
+                                    刷新
+                                </button>
+                            </div>
+                        </div>
+                        <!-- 加载中 -->
+                        <div v-if="previewCompareLoading" class="flex-1 flex flex-col items-center justify-center text-gray-400">
+                            <svg class="w-8 h-8 animate-spin mb-3" style="color:#8b5cf6;" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                            <span class="text-sm text-gray-500">正在对原文重新解析...</span>
+                        </div>
+                        <!-- 加载失败 -->
+                        <div v-else-if="previewCompareError" class="flex-1 flex flex-col items-center justify-center text-gray-400 px-6 text-center">
+                            <span class="text-sm text-red-500 mb-2">{{ previewCompareError }}</span>
+                            <button @click="loadPreviewCompare(true)" class="btn btn-outline" style="padding:4px 12px;font-size:12px;">重试</button>
+                        </div>
+                        <!-- 对比表 -->
+                        <div v-else class="flex-1 overflow-auto p-3 pt-2">
+                            <div class="text-xs text-gray-400 mb-2 leading-relaxed">
+                                「提取值」为对原文重新解析的纯识别结果（不含手动修改、跨保单互补与公式字段）。
+                                <span style="color:#dc2626;">红色</span>=两边不一致；
+                                <span style="color:#9ca3af;">未提取</span>=列表值来自互补/手动/公式；
+                                <span class="inline-block w-1.5 h-1.5 rounded-full bg-orange-400"></span>=手动修改过。
+                            </div>
+                            <table class="w-full text-sm" style="border-collapse:collapse;">
+                                <thead>
+                                    <tr class="text-xs text-gray-500" style="background:#f9fafb;">
+                                        <th class="px-2 py-1.5 text-left font-medium" style="width:90px;">字段</th>
+                                        <th class="px-2 py-1.5 text-left font-medium">列表值</th>
+                                        <th class="px-2 py-1.5 text-left font-medium">提取值</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="row in previewCompareList" :key="row.key"
+                                        class="border-b border-gray-100"
+                                        :style="row.status === 'diff' ? 'background:#fef2f2;' : ''">
+                                        <td class="px-2 py-1.5 text-gray-500 align-top">
+                                            <span class="flex items-center gap-1">
+                                                {{ row.label }}
+                                                <span v-if="isManualField(row.key)"
+                                                      class="inline-block w-1.5 h-1.5 rounded-full bg-orange-400 flex-shrink-0"
+                                                      title="已手动修改"></span>
+                                            </span>
+                                        </td>
+                                        <td class="px-2 py-1.5 align-top" style="word-break:break-all;"
+                                            :class="row.listValue ? 'text-gray-800' : 'text-gray-300'">
+                                            {{ row.listValue || '—' }}
+                                        </td>
+                                        <td class="px-2 py-1.5 align-top" style="word-break:break-all;"
+                                            :class="row.status === 'diff' ? 'text-red-600 font-medium'
+                                                  : row.status === 'not_extracted' ? 'text-gray-300'
+                                                  : 'text-gray-600'">
+                                            <template v-if="row.status === 'not_extracted'">未提取</template>
+                                            <template v-else>{{ row.ocrValue || '—' }}</template>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <div v-if="previewCompareMeta.policy_count > 1" class="text-xs text-gray-400 mt-2">
+                                该 PDF 共解析出 {{ previewCompareMeta.policy_count }} 份保单，当前按{{ previewCompareMeta.matched_by === 'policy_no' ? '保单号' : '序号' }}匹配。
+                            </div>
                         </div>
                     </div>
                     <!-- 右侧：提取规则 -->
@@ -4918,6 +5007,13 @@ const _app = createApp({
         const extractionRules = ref({});
         const previewReocring = ref(false);
 
+        // 识别对比（仅超级管理员）：对原文重新解析的纯识别结果，与列表当前值对比
+        const previewShowCompare = ref(false);
+        const previewCompareFields = ref(null);   // 纯识别字段（OCR 字段名 → 值）
+        const previewCompareMeta = ref({});       // {policy_count, text_source, confidence, matched_by}
+        const previewCompareLoading = ref(false);
+        const previewCompareError = ref('');
+
         // 字段编辑相关状态
         const editingField = ref(null);       // 当前正在编辑的字段名
         const editingValue = ref('');         // 编辑中的值
@@ -5009,6 +5105,80 @@ const _app = createApp({
                 return { label: col.display_name, value, key: col.key };
             });
         });
+
+        // 识别对比列表：列表当前值 vs 原文重新解析的提取值（按导出列映射对齐）
+        const previewCompareList = computed(() => {
+            if (!previewCompareFields.value) return [];
+            const ocrFields = previewCompareFields.value;
+            // 记录级字段（非 OCR 提取）不参与对比
+            const skipKeys = ['文件名', '文档类型', '状态', '创建时间', '识别时间', '群名', '发送人'];
+            const mapping = mappingConfig.value.default_mapping || {};
+            return previewFieldsList.value.filter(i => !skipKeys.includes(i.key)).map(item => {
+                // 与 previewFieldsList 相同的映射逻辑：先按列名直取，再按 OCR字段→导出列映射取
+                let ocrValue = ocrFields[item.key] || '';
+                if (!ocrValue) {
+                    for (const [ocrField, outCol] of Object.entries(mapping)) {
+                        if (outCol === item.key && ocrFields[ocrField]) { ocrValue = ocrFields[ocrField]; break; }
+                    }
+                }
+                const listNorm = String(item.value ?? '').trim();
+                const ocrNorm = String(ocrValue ?? '').trim();
+                // same=一致；not_extracted=提取值为空（列表值来自互补/手动/公式）；diff=两边不一致
+                let status = 'same';
+                if (listNorm !== ocrNorm) {
+                    status = ocrNorm === '' ? 'not_extracted' : 'diff';
+                }
+                return { key: item.key, label: item.label, listValue: item.value, ocrValue, status };
+            });
+        });
+        const previewCompareDiffCount = computed(() =>
+            previewCompareList.value.filter(r => r.status === 'diff').length);
+
+        // 切换识别对比面板（与其他右侧面板互斥）
+        function togglePreviewCompare() {
+            previewShowCompare.value = !previewShowCompare.value;
+            if (previewShowCompare.value) {
+                previewShowFields.value = false;
+                previewShowRaw.value = false;
+                previewShowRules.value = false;
+                if (previewAutoRecord.value && !previewCompareFields.value && !previewCompareLoading.value) {
+                    loadPreviewCompare();
+                }
+            }
+        }
+
+        // 请求后端对原文重新解析（force=true 强制刷新）
+        async function loadPreviewCompare(force = false) {
+            const record = previewAutoRecord.value;
+            if (!record || !record.id) return;
+            if (previewCompareFields.value && !force) return;
+            previewCompareLoading.value = true;
+            previewCompareError.value = '';
+            if (force) previewCompareFields.value = null;
+            try {
+                const resp = await authFetch(`/api/insurance/records/${record.id}/ocr-compare`);
+                const json = await resp.json();
+                if (json.code === 0 && json.data) {
+                    previewCompareFields.value = json.data.ocr_fields || {};
+                    previewCompareMeta.value = json.data;
+                } else {
+                    previewCompareError.value = json.msg || '加载失败';
+                }
+            } catch (e) {
+                previewCompareError.value = e.message || '加载失败';
+            } finally {
+                previewCompareLoading.value = false;
+            }
+        }
+
+        // 重置识别对比状态（切换预览记录/重新识别后调用）
+        function resetPreviewCompare() {
+            previewShowCompare.value = false;
+            previewCompareFields.value = null;
+            previewCompareMeta.value = {};
+            previewCompareError.value = '';
+            previewCompareLoading.value = false;
+        }
 
         // 当前展示的原文内容（根据 tab 切换）
         const activeRawText = computed(() => {
@@ -5872,7 +6042,7 @@ const _app = createApp({
             previewLoading.value = false;
             previewFileName.value = file.name;
             loadPreviewRawText(file.name);
-            previewShowRaw.value = false; previewShowFields.value = false; previewShowRules.value = false;
+            previewShowRaw.value = false; previewShowFields.value = false; previewShowRules.value = false; resetPreviewCompare();
             previewType.value = file.type;
             if (file.type === 'pdf' && PDF_CANVAS_MODE) {
                 // 微信/移动端：pdf.js 渲染 canvas
@@ -5900,7 +6070,7 @@ const _app = createApp({
                 if (stored) {
                     previewFileName.value = r.file_name;
                     loadPreviewRawText(r.file_name);
-                    previewShowRaw.value = false; previewShowFields.value = false; previewShowRules.value = false;
+                    previewShowRaw.value = false; previewShowFields.value = false; previewShowRules.value = false; resetPreviewCompare();
                     if (PDF_CANVAS_MODE) {
                         previewSrc.value = '';
                         previewVisible.value = true;
@@ -6035,6 +6205,7 @@ const _app = createApp({
             previewShowRaw.value = false;
             previewShowFields.value = true;  // 自动展开列表信息
             previewShowRules.value = false;
+            resetPreviewCompare();
             previewSiblings.value = [];
             siblingDropdownOpen.value = false;
             const ext = (record.filename || '').split('.').pop().toLowerCase();
@@ -6097,6 +6268,11 @@ const _app = createApp({
                     previewRawText.value = '';
                     previewOcrRawText.value = '';
                     previewRawTextTab.value = 'pdf';
+                    // 切换保单后清空识别对比缓存（面板开着则立即按新记录重新解析）
+                    previewCompareFields.value = null;
+                    previewCompareMeta.value = {};
+                    previewCompareError.value = '';
+                    if (previewShowCompare.value) loadPreviewCompare(true);
                     // 跳转到对应起始页（同一 PDF，iframe 通过 hash 跳页，canvas 模式滚动到对应页）
                     const startPage = getStartPage(detail.page_range);
                     Vue.nextTick(() => {
@@ -8522,6 +8698,7 @@ const _app = createApp({
             previewShowFields.value = true;
             previewShowRaw.value = false;
             previewShowRules.value = false;
+            previewShowCompare.value = false;
             try {
                 const resp = await authFetch(`/api/insurance/reocr/${record.id}`, { method: 'POST' });
                 const ct = resp.headers.get('content-type') || '';
@@ -8559,6 +8736,10 @@ const _app = createApp({
                     previewOcrRawText.value = '';
                     previewRawTextTab.value = 'pdf';
                     loadAutoRecordRawText();
+                    // 重新识别后原文/字段可能变化，清空识别对比缓存
+                    previewCompareFields.value = null;
+                    previewCompareMeta.value = {};
+                    previewCompareError.value = '';
                     // 刷新兄弟保单列表（重新识别可能新增/更新了兄弟记录）
                     try {
                         const detailResp = await authFetch(`/api/insurance/records/${record.id}`);
@@ -9228,6 +9409,7 @@ const _app = createApp({
             previewShowFields.value = true;
             previewShowRaw.value = false;
             previewShowRules.value = false;
+            previewShowCompare.value = false;
             try {
                 const result = await recognizeFile(file);
                 const expanded = expandMultiPolicies(result);
@@ -9468,6 +9650,7 @@ const _app = createApp({
             previewVisible, previewSrc, previewLoading, previewIsImage, previewOcrEngine, previewUseCanvas,
             previewType, previewFileName, previewHasRawText, previewShowRaw, previewShowFields, previewShowRules,
             previewRawText, previewOcrRawText, previewRawTextTab, activeRawText, formattedRawText, previewFieldsList, rawTextCopied, copyRawText,
+            previewShowCompare, previewCompareList, previewCompareDiffCount, previewCompareMeta, previewCompareLoading, previewCompareError, togglePreviewCompare, loadPreviewCompare,
             extractionRules, loadExtractionRules,
             rawTextVisible, rawTextContent, rawTextFileName,
             successResults, abnormalResults, nonPolicyResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal, getPolicyHint, getRecordHint, getFailHint,
