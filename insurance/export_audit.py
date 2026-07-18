@@ -153,6 +153,11 @@ def record_export(*, user_id=None, user_name="", enterprise_id=None, enterprise_
         finally:
             conn.close()
 
+        logger.info("导出审计: 记录 #%d 已入库 类型=%s 触发=%s 操作人=%s 企业=%s 条数=%d 文件=%s 副本=%s",
+                    record_id, export_type, trigger_way, user_name or user_id,
+                    enterprise_name or enterprise_id or "-", int(row_count or 0),
+                    filename or "-", copy_status)
+
         # 副本交给后台队列异步上传，客户主流程零等待
         if copy_status == "pending":
             _get_executor().submit(_upload_copy, record_id, file_bytes,
@@ -169,11 +174,15 @@ def _upload_copy(record_id, file_bytes, export_type, enterprise_id, user_id, fil
         ext = (filename or "").rsplit(".", 1)[-1].lower() if "." in (filename or "") else "xlsx"
         cos_key_suffix = (f"export_audit/{datetime.now().strftime('%Y%m')}/"
                           f"{enterprise_id or 0}/{int(time.time())}_{export_type}_{user_id or 0}.{ext}")
+        logger.info("导出审计: 开始上传副本 记录#%d 文件=%s (%d 字节) → %s",
+                    record_id, filename or "-", len(file_bytes or b""), cos_key_suffix)
         url = _cos.upload_bytes(file_bytes, cos_key_suffix, download_filename=filename or "")
         if url:
             _update_copy_status(record_id, "done", cos_key_suffix, url, "")
+            logger.info("导出审计: 副本上传完成 记录#%d 文件=%s", record_id, filename or "-")
         else:
             _update_copy_status(record_id, "failed", "", "", "副本上传 COS 失败")
+            logger.warning("导出审计: 副本上传失败 记录#%d 文件=%s", record_id, filename or "-")
     except Exception as e:
         logger.warning("导出审计副本上传失败 record_id=%s: %s", record_id, e)
         try:
