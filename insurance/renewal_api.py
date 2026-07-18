@@ -491,6 +491,30 @@ def export():
     wb.save(output)
     output.seek(0)
     filename = f"续保任务_{len(tasks)}条.xlsx"
+
+    # 导出审计（内部功能）：try 包裹，任何异常绝不影响导出主流程
+    try:
+        from .export_audit import record_export, EXPORT_TYPE_RENEWAL
+        record_export(
+            user_id=g.current_user["user_id"],
+            enterprise_id=enterprise_id or g.current_user.get("parent_id"),
+            export_type=EXPORT_TYPE_RENEWAL,
+            trigger_way="web",
+            params={
+                "status": filters.get("status", ""),
+                "date_start": filters.get("date_start", ""),
+                "date_end": filters.get("date_end", ""),
+                "keyword": filters.get("keyword", ""),
+                "assignee": filters.get("assignee", ""),
+                "operator_role": g.current_user["role"],
+            },
+            row_count=len(tasks),
+            filename=filename,
+            file_bytes=output.getvalue(),
+        )
+    except Exception:
+        logger.warning("续保导出审计埋点失败（不影响导出）", exc_info=True)
+
     resp = send_file(
         output,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

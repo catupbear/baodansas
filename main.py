@@ -155,6 +155,10 @@ def create_app(config: dict) -> Flask:
     init_insurance_api(db, handler=insurance_handler, contacts=contacts)
     app.register_blueprint(insurance_bp)
 
+    # 导出行为审计（内部功能，仅超管）：建表 + 注入 COS 用于副本异步上传
+    from insurance.export_audit import init_export_audit
+    init_export_audit(db, cos_storage)
+
     # FlowBot 群通知：推送日志落库 + 送达结果回调（/flowbot/callback）
     from insurance.flowbot_notify import init_flowbot_db
     from insurance.flowbot_callback import flowbot_bp, init_flowbot_callback
@@ -235,6 +239,11 @@ def create_app(config: dict) -> Flask:
     @app.route("/admin/users")
     def admin_users_page():
         return render_template("admin_users.html")
+
+    # 导出记录审计（内部功能，超管专属，前端校验权限 + 数据接口 @admin_required）
+    @app.route("/admin/export-records")
+    def admin_export_records_page():
+        return render_template("export_records.html")
 
     # 企业信息收集表（公开页面，凭专属 token 访问，无需登录）
     @app.route("/enterprise-survey/<token>")

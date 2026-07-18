@@ -562,6 +562,15 @@
                     </svg>
                     客户管理
                 </a>
+                <!-- 导出记录审计（内部功能，仅超管可见） -->
+                <a v-if="currentUser && currentUser.role === 'super_admin'" href="/admin/export-records"
+                   class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;text-decoration:none;"
+                   title="导出记录">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    导出记录
+                </a>
                 <!-- 个人中心 -->
                 <button @click="profileVisible = true; loadQuota()" class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;" title="个人中心">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display:inline;vertical-align:middle;margin-right:3px">

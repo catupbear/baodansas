@@ -68,7 +68,7 @@ from .policy_parser import get_extraction_rules, parse_policy_text, parse_policy
 from .ocr_service import extract_text_from_pdf
 from . import remark_options_db
 from . import internal_notes_db
-from auth.decorators import login_required
+from auth.decorators import login_required, admin_required
 from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, ROLE_EMPLOYEE, ROLE_SALES, get_sender_user_name_map, get_sender_alias_map
 from core.notify import notify_error
 
@@ -4539,6 +4539,29 @@ def export_enterprise_report():
         wb.save(output)
         output.seek(0)
         fname = f"{ent_name}_经营报告_{date_start}_{date_end}.xlsx"
+
+        # 导出审计（内部功能）：try 包裹，任何异常绝不影响导出主流程
+        try:
+            from .export_audit import record_export, EXPORT_TYPE_ENTERPRISE_REPORT
+            record_export(
+                user_id=g.current_user["user_id"],
+                enterprise_id=int(enterprise_id),
+                enterprise_name=ent_name,
+                export_type=EXPORT_TYPE_ENTERPRISE_REPORT,
+                trigger_way="web",
+                params={
+                    "enterprise_id": enterprise_id,
+                    "enterprise_name": ent_name,
+                    "date_start": date_start,
+                    "date_end": date_end,
+                },
+                row_count=int((data.get("summary") or {}).get("total", 0) or 0),
+                filename=fname,
+                file_bytes=output.getvalue(),
+            )
+        except Exception:
+            logger.warning("企业报告导出审计埋点失败（不影响导出）", exc_info=True)
+
         return send_file(
             output,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -5075,6 +5098,41 @@ def export_excel():
         output.seek(0)
 
         download_name = _build_export_filename(body, export_label)
+
+        # 导出审计（内部功能）：try 包裹，任何异常绝不影响客户导出主流程
+        try:
+            from .export_audit import record_export, EXPORT_TYPE_LEDGER_EXCEL
+            audit_eid = None
+            if user["role"] == ROLE_SUPER_ADMIN:
+                try:
+                    audit_eid = int(body.get("enterprise_id")) if body.get("enterprise_id") else None
+                except (TypeError, ValueError):
+                    audit_eid = None
+            else:
+                audit_eid = user.get("parent_id")
+            record_export(
+                user_id=user["user_id"],
+                enterprise_id=audit_eid,
+                export_type=EXPORT_TYPE_LEDGER_EXCEL,
+                trigger_way="web",
+                params={
+                    "export_type": export_type,
+                    "export_label": export_label,
+                    "sheet_name": sheet_name,
+                    "date_start": body.get("date_start", ""),
+                    "date_end": body.get("date_end", ""),
+                    "merge_by_plate": bool(body.get("merge_by_plate", False)),
+                    "enterprise_id": body.get("enterprise_id"),
+                    "field_names": field_names,
+                    "operator_role": user["role"],
+                },
+                row_count=len(invoices),
+                filename=download_name,
+                file_bytes=output.getvalue(),
+            )
+        except Exception:
+            logger.warning("导出审计埋点失败（不影响导出）", exc_info=True)
+
         return send_file(
             output,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -5198,6 +5256,27 @@ def batch_download_start():
         t = threading.Thread(target=_do_batch_download, args=(task_id, files_to_zip), daemon=True)
         t.start()
 
+        # 导出审计（内部功能）：ZIP 不存副本（原文 PDF 已在 COS，记 record_ids 即可回溯）
+        try:
+            from .export_audit import record_export, EXPORT_TYPE_BATCH_ZIP
+            user = g.current_user
+            audit_eid = user.get("parent_id") if user["role"] != ROLE_SUPER_ADMIN else None
+            record_export(
+                user_id=user["user_id"],
+                enterprise_id=audit_eid,
+                export_type=EXPORT_TYPE_BATCH_ZIP,
+                trigger_way="web",
+                params={
+                    "record_ids": record_ids,
+                    "file_count": len(files_to_zip),
+                    "operator_role": user["role"],
+                },
+                row_count=len(files_to_zip),
+                filename="保单文件批量下载.zip",
+            )
+        except Exception:
+            logger.warning("批量下载审计埋点失败（不影响下载）", exc_info=True)
+
         return jsonify({"code": 0, "data": {"task_id": task_id, "total": len(files_to_zip)}})
     except Exception as e:
         logger.exception("启动批量下载任务失败")
@@ -5246,6 +5325,51 @@ def batch_download_file(task_id):
         as_attachment=True,
         download_name="保单文件批量下载.zip",
     )
+
+
+# ============================================================
+# 导出记录审计（内部功能，仅超级管理员）
+# ============================================================
+
+@insurance_bp.route("/api/insurance/export-records", methods=["GET"])
+@admin_required
+def list_export_records():
+    """分页查询导出审计记录（仅超管），附带汇总统计"""
+    try:
+        from .export_audit import query_export_records
+        result = query_export_records(
+            _db,
+            page=int(request.args.get("page", 1) or 1),
+            page_size=min(int(request.args.get("page_size", 20) or 20), 100),
+            enterprise_id=request.args.get("enterprise_id", "").strip() or None,
+            export_type=request.args.get("export_type", "").strip(),
+            trigger_way=request.args.get("trigger_way", "").strip(),
+            user_keyword=request.args.get("user_keyword", "").strip(),
+            date_start=request.args.get("date_start", "").strip(),
+            date_end=request.args.get("date_end", "").strip(),
+        )
+        return jsonify({"code": 0, "data": result})
+    except Exception as e:
+        logger.exception("查询导出审计记录失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/export-records/<int:record_id>/download", methods=["GET"])
+@admin_required
+def download_export_record_copy(record_id):
+    """回看下载审计副本（仅超管）：302 跳转 COS 地址"""
+    try:
+        from .export_audit import get_export_record
+        record = get_export_record(_db, record_id)
+        if not record:
+            return jsonify({"code": 404, "msg": "记录不存在"}), 404
+        if record.get("copy_status") != "done" or not record.get("cos_url"):
+            return jsonify({"code": 400, "msg": "该记录无可下载副本（%s）" % record.get("copy_status", "none")}), 400
+        from flask import redirect
+        return redirect(record["cos_url"])
+    except Exception as e:
+        logger.exception("下载导出审计副本失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
 
 
 @insurance_bp.route("/api/insurance/extraction-rules", methods=["GET"])

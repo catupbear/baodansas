@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>导出记录审计功能方案（内部功能 · 仅超级管理员）</title>
+<style>
+  :root {
+    --primary: #1a56db;
+    --primary-light: #e8f0fe;
+    --text: #1f2937;
+    --text-sub: #6b7280;
+    --border: #e5e7eb;
+    --bg: #f9fafb;
+    --warn-bg: #fffbeb;
+    --warn-border: #f59e0b;
+    --ok-bg: #f0fdf4;
+    --ok-border: #22c55e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--text); background: var(--bg); line-height: 1.75; }
+  .container { max-width: 1000px; margin: 0 auto; padding: 40px 24px 80px; }
+  header { border-bottom: 3px solid var(--primary); padding-bottom: 20px; margin-bottom: 32px; }
+  header h1 { font-size: 26px; color: var(--primary); }
+  header .meta { color: var(--text-sub); font-size: 13px; margin-top: 8px; }
+  header .meta span { margin-right: 20px; }
+  .tag { display: inline-block; background: var(--primary-light); color: var(--primary); font-size: 12px; padding: 2px 10px; border-radius: 10px; margin-right: 6px; }
+  .tag.red { background: #fef2f2; color: #dc2626; }
+  h2 { font-size: 20px; margin: 40px 0 16px; padding-left: 12px; border-left: 4px solid var(--primary); }
+  h3 { font-size: 16px; margin: 24px 0 10px; color: var(--primary); }
+  p { margin: 8px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; background: #fff; font-size: 13.5px; }
+  th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--primary-light); color: var(--primary); font-weight: 600; white-space: nowrap; }
+  tr:nth-child(even) td { background: #fafbfc; }
+  code { background: #eef1f6; color: #c7254e; padding: 1px 6px; border-radius: 4px; font-size: 12.5px; font-family: "SF Mono", Menlo, Consolas, monospace; }
+  pre { background: #1e293b; color: #e2e8f0; padding: 16px 20px; border-radius: 8px; overflow-x: auto; font-size: 12.5px; line-height: 1.6; margin: 12px 0 20px; font-family: "SF Mono", Menlo, Consolas, monospace; }
+  pre code { background: none; color: inherit; padding: 0; }
+  .box { border-radius: 8px; padding: 14px 18px; margin: 14px 0; font-size: 14px; }
+  .box.warn { background: var(--warn-bg); border-left: 4px solid var(--warn-border); }
+  .box.ok { background: var(--ok-bg); border-left: 4px solid var(--ok-border); }
+  .box .title { font-weight: 600; margin-bottom: 6px; }
+  ul, ol { margin: 8px 0 12px 24px; }
+  li { margin: 4px 0; }
+  .flow { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 12px 0 20px; text-align: center; }
+  .flow .node { display: inline-block; background: var(--primary-light); color: var(--primary); border: 1px solid #b6ccf5; border-radius: 6px; padding: 8px 16px; margin: 6px 4px; font-size: 13px; }
+  .flow .node.gray { background: #f3f4f6; color: var(--text-sub); border-color: var(--border); }
+  .flow .arrow { color: var(--text-sub); margin: 0 4px; font-size: 15px; }
+  .toc { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 16px 24px; margin-bottom: 8px; }
+  .toc a { color: var(--primary); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .small { font-size: 12.5px; color: var(--text-sub); }
+
+  /* ===== 原型界面样式（proto- 前缀，与文档样式隔离） ===== */
+  .proto-frame { border: 1px solid #d1d5db; border-radius: 10px; background: #fff; margin: 16px 0 28px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,.06); font-size: 13px; }
+  .proto-frame .proto-caption { background: #f3f4f6; border-bottom: 1px solid var(--border); padding: 6px 14px; font-size: 12px; color: var(--text-sub); }
+  .proto-nav { display: flex; align-items: center; gap: 4px; padding: 10px 16px 0; border-bottom: 1px solid var(--border); background: #fff; }
+  .proto-nav .pt { padding: 8px 16px; border-radius: 8px 8px 0 0; color: var(--text-sub); cursor: default; }
+  .proto-nav .pt.active { color: var(--primary); border: 1px solid var(--border); border-bottom: 2px solid #fff; margin-bottom: -1px; font-weight: 600; background: #fff; }
+  .proto-nav .pt.new { position: relative; }
+  .proto-nav .pt.new::after { content: "仅超管"; position: absolute; top: -6px; right: -8px; background: #dc2626; color: #fff; font-size: 10px; padding: 0 5px; border-radius: 8px; line-height: 15px; }
+  .proto-body { padding: 16px; background: #f9fafb; }
+  .proto-stats { display: flex; gap: 12px; margin-bottom: 14px; }
+  .proto-stat { flex: 1; background: linear-gradient(135deg, #eff6ff, #e0e7ff); border: 1px solid #c7d2fe; border-radius: 10px; padding: 12px 16px; }
+  .proto-stat .num { font-size: 22px; font-weight: 700; color: var(--primary); }
+  .proto-stat .lbl { font-size: 12px; color: var(--text-sub); margin-top: 2px; }
+  .proto-stat.warn2 { background: linear-gradient(135deg, #fff7ed, #ffedd5); border-color: #fed7aa; }
+  .proto-stat.warn2 .num { color: #ea580c; }
+  .proto-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: center; }
+  .proto-filter .fi { background: #fff; border: 1px solid #d1d5db; border-radius: 6px; padding: 5px 10px; color: var(--text-sub); display: inline-flex; align-items: center; gap: 6px; }
+  .proto-filter .fi b { color: var(--text); font-weight: 500; }
+  .proto-filter .fi .caret { font-size: 10px; }
+  .proto-filter .btn { background: var(--primary); color: #fff; border-radius: 6px; padding: 5px 16px; border: none; }
+  .proto-filter .btn.plain { background: #fff; color: var(--text-sub); border: 1px solid #d1d5db; }
+  .proto-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; }
+  .proto-table th { background: #f3f4f6; color: #374151; font-weight: 600; padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; font-size: 12.5px; }
+  .proto-table td { padding: 9px 10px; border-bottom: 1px solid #f1f3f5; vertical-align: middle; }
+  .proto-table tr:last-child td { border-bottom: none; }
+  .pill { display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: 11.5px; white-space: nowrap; }
+  .pill.blue { background: #dbeafe; color: #1d4ed8; }
+  .pill.green { background: #dcfce7; color: #15803d; }
+  .pill.purple { background: #f3e8ff; color: #7e22ce; }
+  .pill.orange { background: #ffedd5; color: #c2410c; }
+  .pill.gray { background: #f3f4f6; color: #4b5563; }
+  .pill.red { background: #fee2e2; color: #b91c1c; }
+  .pill.cyan { background: #cffafe; color: #0e7490; }
+  .rc-badge { display: inline-block; background: #fef3c7; color: #b45309; font-weight: 700; padding: 1px 10px; border-radius: 10px; font-size: 12.5px; }
+  .plink { color: var(--primary); cursor: default; margin-right: 8px; white-space: nowrap; }
+  .plink.disabled { color: #9ca3af; }
+  .proto-pager { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 10px; color: var(--text-sub); font-size: 12px; }
+  .proto-pager .pg { border: 1px solid #d1d5db; background: #fff; border-radius: 5px; padding: 2px 9px; }
+  .proto-pager .pg.cur { background: var(--primary); color: #fff; border-color: var(--primary); }
+  /* 弹窗原型 */
+  .proto-modal-mask { background: rgba(17,24,39,.45); padding: 30px; display: flex; justify-content: center; }
+  .proto-modal { background: #fff; border-radius: 12px; width: 560px; max-width: 100%; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+  .proto-modal .pm-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); font-weight: 600; }
+  .proto-modal .pm-head .x { color: var(--text-sub); font-weight: 400; }
+  .proto-modal .pm-body { padding: 16px 18px; }
+  .kv { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .kv td { border: 1px solid #eef0f3; padding: 6px 10px; }
+  .kv td:first-child { background: #f9fafb; color: var(--text-sub); width: 130px; white-space: nowrap; }
+  .proto-modal .pm-foot { padding: 12px 18px; border-top: 1px solid var(--border); text-align: right; }
+  .proto-modal .pm-foot .btn { background: var(--primary); color: #fff; border-radius: 6px; padding: 6px 18px; border: none; margin-left: 8px; }
+  .proto-modal .pm-foot .btn.plain { background: #fff; color: var(--text-sub); border: 1px solid #d1d5db; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>导出记录审计功能方案</h1>
+  <div class="meta">
+    <span>📅 2026-07-18</span>
+    <span>📂 状态：待评审（docs/review）</span>
+  </div>
+  <div style="margin-top:10px">
+    <span class="tag red">内部功能</span>
+    <span class="tag">仅 super_admin 可见</span>
+    <span class="tag">审计不阻断业务</span>
+  </div>
+</header>
+
+<div class="toc">
+  <strong>目录</strong>
+  <ol>
+    <li><a href="#goal">需求目标</a></li>
+    <li><a href="#current">现状：5 个导出入口盘点</a></li>
+    <li><a href="#arch">方案架构</a></li>
+    <li><a href="#db">数据库设计（export_records 表）</a></li>
+    <li><a href="#hook">各入口埋点方案</a></li>
+    <li><a href="#cos">导出文件副本 · COS 存储规则</a></li>
+    <li><a href="#api">后端 API 设计</a></li>
+    <li><a href="#front">前端页面设计</a></li>
+    <li><a href="#proto">原型界面</a></li>
+    <li><a href="#compat">兼容性与降级策略</a></li>
+    <li><a href="#deploy">改动文件清单与部署步骤</a></li>
+    <li><a href="#question">待确认问题</a></li>
+  </ol>
+</div>
+
+<h2 id="goal">一、需求目标</h2>
+<ul>
+  <li>记录<strong>所有客户的每一次导出行为</strong>，包括前端页面导出和群内命令（发送台账）触发的导出</li>
+  <li>记录当时的<strong>完整导出参数</strong>：筛选条件、时间范围、导出类型、字段模板、操作人、所属企业等</li>
+  <li>每次导出的<strong>数据条数</strong>要显著记录并在列表中提醒展示</li>
+  <li>导出产物（Excel 文件）<strong>同步上传 COS 指定审计目录</strong>，随时可回看当时导出的真实数据</li>
+  <li>本功能为<strong>内部复查功能，仅超级管理员（super_admin）可见</strong>，客户侧无任何感知</li>
+</ul>
+
+<h2 id="current">二、现状：5 个导出入口盘点</h2>
+<p>调研代码后确认，系统当前共有 5 个导出入口，<strong>均无任何审计记录</strong>：</p>
+<table>
+  <tr><th>#</th><th>入口</th><th>代码位置</th><th>触发方式</th><th>格式</th><th>当前交付方式</th></tr>
+  <tr><td>1</td><td>台账 Excel 导出（主入口）</td><td><code>insurance/api.py:4599</code> <code>export_excel()</code></td><td>页面</td><td>.xlsx</td><td>HTTP 直接下载</td></tr>
+  <tr><td>2</td><td>企业经营报告</td><td><code>insurance/api.py:4405</code> <code>export_enterprise_report()</code></td><td>页面（超管）</td><td>.xlsx</td><td>HTTP 直接下载</td></tr>
+  <tr><td>3</td><td>批量下载保单原文</td><td><code>insurance/api.py:5150</code> 异步任务</td><td>页面</td><td>.zip</td><td>异步打包 → HTTP 下载</td></tr>
+  <tr><td>4</td><td>群命令台账导出</td><td><code>core/fetcher.py:721</code> + <code>insurance/ledger_export.py:136</code></td><td>群内「发送台账xxx」</td><td>.xlsx</td><td>已上传 COS（<code>ledger_exports/</code>）+ 群内推链接</td></tr>
+  <tr><td>5</td><td>续保任务导出</td><td><code>insurance/renewal_api.py:455</code> <code>export()</code></td><td>页面</td><td>.xlsx</td><td>HTTP 直接下载</td></tr>
+</table>
+
+<h2 id="arch">三、方案架构</h2>
+<p>核心思路：<strong>一个统一的审计封装 + 各入口一行埋点</strong>。不改变任何现有接口签名和响应行为，审计动作全部在导出成功后追加执行，失败静默降级。</p>
+
+<div class="flow">
+  <div class="node">5 个导出入口<br><span class="small">导出成功后</span></div>
+  <span class="arrow">→</span>
+  <div class="node"><strong>export_audit.record_export()</strong><br><span class="small">统一审计封装（新模块）</span></div>
+  <span class="arrow">→</span>
+  <div class="node">写入 export_records 表<br><span class="small">参数 JSON + 条数（毫秒级，立即返回）</span></div>
+  <span class="arrow">→</span>
+  <div class="node">后台上传队列<br><span class="small">副本传 COS export_audit/ 后回写记录</span></div>
+  <br>
+  <div class="node gray">超管前端「导出记录」页签</div>
+  <span class="arrow">←</span>
+  <div class="node gray">GET /api/insurance/export-records（@admin_required）</div>
+</div>
+
+<h3>新增模块：<code>insurance/export_audit.py</code></h3>
+<p>对外只暴露一个函数，5 个入口统一调用：</p>
+<pre><code>def record_export(db, cos, *,
+                  user_id, user_name, enterprise_id, enterprise_name,
+                  export_type,          # ledger_excel / enterprise_report / batch_zip / ledger_cmd / renewal
+                  trigger_way,          # web / cmd
+                  params: dict,         # 当时的完整导出参数（原样 JSON 存储）
+                  row_count: int,       # 本次导出数据条数
+                  filename: str,
+                  file_bytes: bytes = None,   # 传入则上传审计副本
+                  cos_url: str = "",          # 已有 COS 地址（群命令场景）直接复用
+                  status="success", error_message=""):
+    """记录一次导出行为。内部整体 try/except，任何异常只打日志，绝不影响导出主流程。
+
+    副本上传在后台线程执行：主流程只做一次轻量写库（copy_status=pending）后立即返回，
+    file_bytes 交给单线程 ThreadPoolExecutor 队列异步上传 COS，
+    上传完成后回写 cos_key / cos_url / copy_status=done（失败则 copy_status=failed）。
+    客户的导出响应耗时与审计前完全一致。"""</code></pre>
+
+<h2 id="db">四、数据库设计（export_records 表）</h2>
+<p>沿用现有幂等建表模式：在 <code>insurance/db.py</code> 新增 <code>init_export_records_table(db)</code>，在 <code>main.py</code> 的 <code>init_insurance_tables(db)</code> 附近调用，首次启动自动建表。</p>
+<pre><code>CREATE TABLE IF NOT EXISTS export_records (
+    id              INT PRIMARY KEY AUTO_INCREMENT,
+    user_id         INT NOT NULL COMMENT '操作人 users.id（群命令为绑定账号）',
+    user_name       VARCHAR(64)  DEFAULT '' COMMENT '操作人姓名（冗余，防账号删除后无法追溯）',
+    enterprise_id   INT          DEFAULT NULL COMMENT '导出数据所属企业',
+    enterprise_name VARCHAR(128) DEFAULT '' COMMENT '企业名称（冗余）',
+    export_type     VARCHAR(32)  NOT NULL COMMENT 'ledger_excel/enterprise_report/batch_zip/ledger_cmd/renewal',
+    trigger_way     VARCHAR(16)  NOT NULL DEFAULT 'web' COMMENT 'web=页面 / cmd=群命令',
+    params          TEXT COMMENT '导出时的完整参数 JSON（筛选条件/时间范围/字段模板等）',
+    row_count       INT          DEFAULT 0 COMMENT '本次导出数据条数',
+    filename        VARCHAR(256) DEFAULT '' COMMENT '导出文件名',
+    file_size       INT          DEFAULT 0 COMMENT '文件大小（字节）',
+    cos_key         VARCHAR(512) DEFAULT '' COMMENT '审计副本 COS 路径',
+    cos_url         TEXT COMMENT '审计副本访问地址',
+    status          VARCHAR(16)  DEFAULT 'success' COMMENT 'success / failed',
+    copy_status     VARCHAR(16)  DEFAULT 'pending' COMMENT '副本上传状态 pending/done/failed/none（none=ZIP等无副本类型）',
+    error_message   TEXT COMMENT '失败原因',
+    roomid          VARCHAR(128) DEFAULT '' COMMENT '群命令场景：触发群ID',
+    trigger_text    VARCHAR(128) DEFAULT '' COMMENT '群命令场景：原始命令文本，如"发送台账本月"',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '导出时间',
+    INDEX idx_enterprise (enterprise_id),
+    INDEX idx_type (export_type),
+    INDEX idx_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='导出行为审计记录（内部功能）';</code></pre>
+
+<div class="box ok">
+  <div class="title">✅ 冗余字段说明</div>
+  user_name / enterprise_name 做冗余存储，保证账号或企业被删除后审计记录仍完整可读；params 原样存 JSON，前端弹窗展示完整参数，无需关联其他表。
+</div>
+
+<h2 id="hook">五、各入口埋点方案</h2>
+<table>
+  <tr><th>入口</th><th>埋点位置</th><th>记录的 params</th><th>row_count 来源</th><th>副本处理</th></tr>
+  <tr>
+    <td>1. 台账 Excel</td>
+    <td><code>export_excel()</code> 生成 Excel bytes 后、<code>send_file</code> 前</td>
+    <td>export_type / date_start / date_end / export_label / merge_by_plate / field_names / enterprise_id / 前端传入的筛选摘要</td>
+    <td><code>len(invoices)</code></td>
+    <td>Excel bytes 上传审计副本</td>
+  </tr>
+  <tr>
+    <td>2. 企业经营报告</td>
+    <td><code>export_enterprise_report()</code> 生成后</td>
+    <td>enterprise_id / enterprise_name / date_start / date_end / format</td>
+    <td>报告覆盖的记录条数</td>
+    <td>Excel bytes 上传审计副本</td>
+  </tr>
+  <tr>
+    <td>3. 批量下载原文 ZIP</td>
+    <td>异步任务打包完成时</td>
+    <td>record_ids 列表 + 数量</td>
+    <td><code>len(record_ids)</code></td>
+    <td><strong>不上传副本</strong>（原文 PDF 本就在 COS，存 record_ids 即可完整回溯，避免 ZIP 占用双倍存储）</td>
+  </tr>
+  <tr>
+    <td>4. 群命令台账</td>
+    <td><code>core/fetcher.py</code> 上传 COS、群发消息成功后</td>
+    <td>trigger_text（原始命令）/ label / date_start / date_end / sender / roomid / 绑定账号</td>
+    <td>现有流程已统计的 count</td>
+    <td><strong>复用已有 COS 文件</strong>（<code>ledger_exports/</code> 已是持久副本，直接记 cos_key，不重复上传）</td>
+  </tr>
+  <tr>
+    <td>5. 续保任务导出</td>
+    <td><code>renewal_api.export()</code> 生成后</td>
+    <td>status / date_start / date_end / keyword / assignee</td>
+    <td>导出行数</td>
+    <td>Excel bytes 上传审计副本</td>
+  </tr>
+</table>
+
+<p>另外建议：<strong>导出失败也记一条</strong>（status=failed + error_message），失败行为同样有复查价值（如群命令因权限被拒、参数解析失败等）。</p>
+
+<h2 id="cos">六、导出文件副本 · COS 存储规则</h2>
+<p>审计副本统一存放在独立目录，按月 + 企业分层，方便按客户回看和后续生命周期管理：</p>
+<pre><code>{prefix}export_audit/{YYYYMM}/{enterprise_id}/{unix_timestamp}_{export_type}_{user_id}.xlsx
+
+示例：wxbot/media/export_audit/202607/12/1752830000_ledger_excel_35.xlsx</code></pre>
+<ul>
+  <li>使用现有 <code>CosStorage.upload_bytes(data, cos_key_suffix, download_filename)</code>，无需扩展 COS 封装</li>
+  <li><strong>上传在后台线程执行</strong>：模块内维护一个单线程 <code>ThreadPoolExecutor</code> 上传队列（与保单识别 Queue 串行消费同思路，控制内存与并发），客户主流程零等待；上传完成后回写记录的 <code>copy_status</code></li>
+  <li><code>download_filename</code> 传原始中文文件名，回看下载时文件名与客户当时下载的一致（Content-Disposition）</li>
+  <li>群命令台账已上传的 <code>ledger_exports/</code> 文件不搬移、不复制，审计记录直接引用其 cos_key</li>
+  <li>保留策略：默认<strong>永久保留</strong>（审计属性），如后续存储成本敏感可在 COS 控制台对 <code>export_audit/</code> 前缀配置生命周期规则（如 2 年转低频/归档），不在代码中做自动删除</li>
+</ul>
+
+<h2 id="api">七、后端 API 设计</h2>
+<p>新增 2 个接口，挂在现有 insurance Blueprint 下，统一 <code>@admin_required</code>（复用 <code>auth/decorators.py</code>，仅 super_admin 可访问）：</p>
+
+<h3>1. 查询导出记录列表</h3>
+<pre><code>GET /api/insurance/export-records
+权限：@admin_required（super_admin）
+
+Query 参数（全部可选）：
+  page / page_size        分页（默认 1 / 20）
+  enterprise_id           按企业筛选
+  export_type             按导出类型筛选
+  trigger_way             web / cmd
+  user_keyword            操作人姓名模糊搜索
+  date_start / date_end   导出时间范围
+
+响应：
+{
+  "code": 0,
+  "data": {
+    "total": 138,
+    "list": [{
+      "id": 1, "created_at": "2026-07-18 15:30:22",
+      "user_name": "张三", "enterprise_name": "XX保险代理",
+      "export_type": "ledger_excel", "trigger_way": "web",
+      "params": { "date_start": "2026-07-01", "date_end": "2026-07-18", ... },
+      "row_count": 256,
+      "filename": "保单台账_2026-07-01至2026-07-18.xlsx",
+      "cos_url": "https://...", "status": "success",
+      "roomid": "", "trigger_text": ""
+    }],
+    "summary": { "total_exports": 138, "total_rows": 35670 }   // 顶部统计提醒
+  }
+}</code></pre>
+
+<h3>2. 回看下载审计副本</h3>
+<pre><code>GET /api/insurance/export-records/&lt;id&gt;/download
+权限：@admin_required（super_admin）
+
+行为：按记录的 cos_key 从 COS 拉取后透传下载（或 302 跳转 cos_url）；
+     batch_zip 类型无副本，返回 record_ids 供在台账页按 ID 查询原文。</code></pre>
+
+<h2 id="front">八、前端页面设计</h2>
+<h3>入口与布局</h3>
+<ul>
+  <li><strong>入口不占用主页签</strong>：放在 <code>insurance.html</code> 右上角管理按钮区（<code>.nav-right-btns</code>，与现有「系统设置」「客户管理」并列）新增「导出记录」按钮，<strong>仅 <code>role === 'super_admin'</code> 渲染</strong></li>
+  <li>点击跳转<strong>独立页面 <code>/admin/export-records</code></strong>，新建模板 <code>web/templates/export_records.html</code> —— 与现有 <code>/admin/users</code>（账号管理）、<code>/admin/enterprises</code>（企业管理）完全同一模式：Flask 路由 + <code>@admin_required</code> 页面级鉴权</li>
+  <li>后端数据接口另有 <code>@admin_required</code> 双保险，前端按钮隐藏只是体验层</li>
+  <li>独立页面的好处：不增大本已很大的 insurance.html；审计属于管理后台功能，与「客户管理」归类一致</li>
+</ul>
+
+<div class="box warn">
+  <div class="title">⚠️ 部署形态说明</div>
+  线上 <code>/insurance</code> 是 nginx 静态文件，但 <code>/admin/*</code> 路径现有的账号管理、企业管理页面已由 gunicorn（Flask 模板）正常提供，本方案复用同一路径模式，<strong>预期无需改 nginx</strong>；部署时顺带验证一次 <code>/admin/export-records</code> 可访问即可。insurance.html 仅改右上角按钮区一处，仍需重传静态文件。
+</div>
+
+<h3>页面内容</h3>
+<table>
+  <tr><th>区域</th><th>内容</th></tr>
+  <tr><td>顶部统计条</td><td>醒目展示：本次筛选范围内 <strong>共 N 次导出 / 累计导出 M 条数据</strong>（条数提醒需求）</td></tr>
+  <tr><td>筛选栏</td><td>企业下拉、导出类型、触发方式（页面/群命令）、操作人搜索、时间范围</td></tr>
+  <tr><td>记录列表</td><td>时间 · 操作人 · 企业 · 导出类型（带颜色标签）· 触发方式 · <strong>数据条数（高亮徽标）</strong> · 文件名 · 状态 · 操作</td></tr>
+  <tr><td>操作列</td><td>「查看参数」弹窗展示完整 params JSON（键值对表格化）；「下载副本」回看当时导出的文件；群命令记录额外展示触发群与原始命令文本</td></tr>
+</table>
+
+<h2 id="proto">九、原型界面</h2>
+<p>以下为「导出记录」页签的静态原型（示意数据），布局风格与现有台账页面保持一致。</p>
+
+<h3>原型 0 · 入口位置（/insurance 右上角管理按钮区）</h3>
+<div class="proto-frame">
+  <div class="proto-caption">insurance.html 仅改这一处：右上角按钮区新增「导出记录」，仅 super_admin 渲染，点击新开 /admin/export-records</div>
+  <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--border);">
+    <div style="display:flex; gap:4px; color:var(--text-sub);">
+      <span style="padding:6px 14px; color:var(--primary); font-weight:600; border-bottom:2px solid var(--primary);">台账</span>
+      <span style="padding:6px 14px;">数据看板</span>
+      <span style="padding:6px 14px;">续保提醒</span>
+      <span style="padding:6px 14px;">手动上传</span>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <span class="fi" style="border:1px solid #d1d5db; border-radius:6px; padding:5px 12px; color:var(--text-sub);">⚙️ 系统设置</span>
+      <span class="fi" style="border:1px solid #d1d5db; border-radius:6px; padding:5px 12px; color:var(--text-sub);">👥 客户管理</span>
+      <span class="fi" style="border:1px solid var(--primary); border-radius:6px; padding:5px 12px; color:var(--primary); position:relative; font-weight:600;">📋 导出记录<span style="position:absolute; top:-8px; right:-8px; background:#dc2626; color:#fff; font-size:10px; padding:0 5px; border-radius:8px; line-height:15px;">仅超管</span></span>
+    </div>
+  </div>
+</div>
+
+<h3>原型 1 · 独立页面整体布局（/admin/export-records）</h3>
+<div class="proto-frame">
+  <div class="proto-caption">独立页面，与 /admin/users 客户管理页同一模式（Flask 模板 + @admin_required 页面级鉴权）</div>
+  <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--border);">
+    <div style="font-weight:600; font-size:15px;">📋 导出记录审计 <span class="pill red" style="margin-left:6px;">内部功能</span></div>
+    <span style="color:var(--primary); font-size:12.5px;">← 返回台账</span>
+  </div>
+  <div class="proto-body">
+    <!-- 统计条：条数提醒 -->
+    <div class="proto-stats">
+      <div class="proto-stat"><div class="num">138 次</div><div class="lbl">筛选范围内导出次数</div></div>
+      <div class="proto-stat warn2"><div class="num">35,670 条</div><div class="lbl">累计导出数据条数</div></div>
+      <div class="proto-stat"><div class="num">42 次</div><div class="lbl">群命令触发导出</div></div>
+      <div class="proto-stat"><div class="num" style="color:#dc2626">3 次</div><div class="lbl">失败的导出尝试</div></div>
+    </div>
+    <!-- 筛选栏 -->
+    <div class="proto-filter">
+      <span class="fi">企业：<b>全部</b> <span class="caret">▾</span></span>
+      <span class="fi">导出类型：<b>全部</b> <span class="caret">▾</span></span>
+      <span class="fi">触发方式：<b>全部</b> <span class="caret">▾</span></span>
+      <span class="fi">操作人：<b style="color:#9ca3af">姓名搜索</b></span>
+      <span class="fi">📅 <b>2026-07-01</b> 至 <b>2026-07-18</b></span>
+      <button class="btn">查询</button>
+      <button class="btn plain">重置</button>
+    </div>
+    <!-- 记录列表 -->
+    <table class="proto-table">
+      <tr>
+        <th>导出时间</th><th>操作人</th><th>所属企业</th><th>导出类型</th><th>触发方式</th><th>数据条数</th><th>文件名</th><th>状态</th><th>操作</th>
+      </tr>
+      <tr>
+        <td>07-18 15:30:22</td><td>张三</td><td>XX保险代理</td>
+        <td><span class="pill blue">台账 Excel</span></td>
+        <td><span class="pill gray">页面</span></td>
+        <td><span class="rc-badge">256 条</span></td>
+        <td class="small">保单台账_07-01至07-18.xlsx</td>
+        <td><span class="pill green">成功</span></td>
+        <td><span class="plink">查看参数</span><span class="plink">下载副本</span></td>
+      </tr>
+      <tr>
+        <td>07-18 14:02:10</td><td>李四<span class="small">（绑定账号）</span></td><td>YY车险服务</td>
+        <td><span class="pill purple">群命令台账</span></td>
+        <td><span class="pill orange">群命令</span></td>
+        <td><span class="rc-badge">89 条</span></td>
+        <td class="small">保单台账_本月.xlsx</td>
+        <td><span class="pill green">成功</span></td>
+        <td><span class="plink">查看参数</span><span class="plink">下载副本</span></td>
+      </tr>
+      <tr>
+        <td>07-18 11:47:55</td><td>管理员</td><td>ZZ经纪</td>
+        <td><span class="pill cyan">经营报告</span></td>
+        <td><span class="pill gray">页面</span></td>
+        <td><span class="rc-badge">1,204 条</span></td>
+        <td class="small">企业经营报告_ZZ经纪_6月.xlsx</td>
+        <td><span class="pill green">成功</span></td>
+        <td><span class="plink">查看参数</span><span class="plink">下载副本</span></td>
+      </tr>
+      <tr>
+        <td>07-17 18:20:31</td><td>王五</td><td>XX保险代理</td>
+        <td><span class="pill blue" style="background:#e0f2fe;color:#0369a1">原文 ZIP</span></td>
+        <td><span class="pill gray">页面</span></td>
+        <td><span class="rc-badge">37 条</span></td>
+        <td class="small">保单原文打包.zip</td>
+        <td><span class="pill green">成功</span></td>
+        <td><span class="plink">查看参数</span><span class="plink disabled">无副本</span></td>
+      </tr>
+      <tr>
+        <td>07-17 09:15:08</td><td>赵六</td><td>YY车险服务</td>
+        <td><span class="pill purple">群命令台账</span></td>
+        <td><span class="pill orange">群命令</span></td>
+        <td><span class="rc-badge" style="background:#fee2e2;color:#b91c1c">—</span></td>
+        <td class="small">—</td>
+        <td><span class="pill red">失败</span></td>
+        <td><span class="plink">查看参数</span></td>
+      </tr>
+    </table>
+    <div class="proto-pager">
+      共 138 条记录　<span class="pg">‹</span><span class="pg cur">1</span><span class="pg">2</span><span class="pg">3</span><span class="pg">…</span><span class="pg">7</span><span class="pg">›</span>
+    </div>
+  </div>
+</div>
+
+<h3>原型 2 · 「查看参数」弹窗（页面导出）</h3>
+<div class="proto-frame">
+  <div class="proto-caption">点击「查看参数」→ 完整还原当时的导出参数（params JSON 表格化展示）</div>
+  <div class="proto-modal-mask">
+    <div class="proto-modal">
+      <div class="pm-head"><span>导出参数详情 <span class="pill blue" style="margin-left:6px">台账 Excel</span></span><span class="x">✕</span></div>
+      <div class="pm-body">
+        <table class="kv">
+          <tr><td>导出时间</td><td>2026-07-18 15:30:22</td></tr>
+          <tr><td>操作人</td><td>张三（XX保险代理 · 企业管理员）</td></tr>
+          <tr><td>数据条数</td><td><span class="rc-badge">256 条</span></td></tr>
+          <tr><td>数据时间范围</td><td>2026-07-01 ～ 2026-07-18</td></tr>
+          <tr><td>导出范围</td><td>识别成功（export_type = success）</td></tr>
+          <tr><td>按车牌合并</td><td>是</td></tr>
+          <tr><td>字段模板</td><td>使用用户导出列配置（18 列）：车牌号、被保险人、承保公司、保费…</td></tr>
+          <tr><td>筛选条件</td><td class="small">status=done · is_abnormal=0 · doc_category=保单 · exclude_nonpolicy=1 · dedup=1</td></tr>
+          <tr><td>审计副本</td><td class="small">export_audit/202607/12/1752830000_ledger_excel_35.xlsx</td></tr>
+        </table>
+      </div>
+      <div class="pm-foot"><button class="btn plain">关闭</button><button class="btn">下载当时的文件副本</button></div>
+    </div>
+  </div>
+</div>
+
+<h3>原型 3 · 「查看参数」弹窗（群命令导出）</h3>
+<div class="proto-frame">
+  <div class="proto-caption">群命令记录额外展示：触发群、原始命令文本、绑定账号来源</div>
+  <div class="proto-modal-mask">
+    <div class="proto-modal">
+      <div class="pm-head"><span>导出参数详情 <span class="pill purple" style="margin-left:6px">群命令台账</span> <span class="pill orange">群命令</span></span><span class="x">✕</span></div>
+      <div class="pm-body">
+        <table class="kv">
+          <tr><td>导出时间</td><td>2026-07-18 14:02:10</td></tr>
+          <tr><td>触发群</td><td>YY车险服务对接群（roomid: wrxxxx…）</td></tr>
+          <tr><td>原始命令</td><td><code>发送台账本月</code></td></tr>
+          <tr><td>发送人</td><td>企微用户 wmxxxx…（李四）</td></tr>
+          <tr><td>执行账号</td><td>李四（user_sender_binding 绑定账号）</td></tr>
+          <tr><td>数据条数</td><td><span class="rc-badge">89 条</span></td></tr>
+          <tr><td>数据时间范围</td><td>2026-07-01 ～ 2026-07-18（本月）</td></tr>
+          <tr><td>群内推送文案</td><td class="small">【保单台账导出】保单台账_本月.xlsx　共 89 条　下载链接（请尽快下载）…</td></tr>
+          <tr><td>审计副本</td><td class="small">ledger_exports/1752818530_wmxxxx.xlsx（复用群推送文件）</td></tr>
+        </table>
+      </div>
+      <div class="pm-foot"><button class="btn plain">关闭</button><button class="btn">下载当时的文件副本</button></div>
+    </div>
+  </div>
+</div>
+
+<h2 id="compat">十、兼容性与降级策略</h2>
+<ul>
+  <li><strong>不改任何现有接口签名与响应结构</strong>：埋点全部是导出流程内部追加调用，历史前端版本、群命令流程完全不受影响</li>
+  <li><strong>审计绝不阻断导出</strong>：<code>record_export()</code> 内部整体 try/except；写库失败 → 仅打日志；副本上传失败 → 记录保留（<code>copy_status=failed</code> + error_message），前端「下载副本」按钮置灰并提示</li>
+  <li><strong>副本上传后台异步，客户主流程零影响</strong>：主流程只做一次轻量 INSERT（毫秒级）即返回，Excel bytes 交给后台单线程上传队列处理；服务重启时队列中未完成的上传会丢失，对应记录停留在 <code>copy_status=pending</code>，可在前端识别并提示（参数和条数仍完整可查，仅副本缺失）</li>
+  <li><strong>建表幂等</strong>：CREATE TABLE IF NOT EXISTS，老库升级无感知，无需手工 SQL</li>
+</ul>
+
+<h2 id="deploy">十一、改动文件清单与部署步骤</h2>
+<h3>改动文件（预计）</h3>
+<table>
+  <tr><th>文件</th><th>改动</th></tr>
+  <tr><td><code>insurance/export_audit.py</code></td><td><strong>新增</strong>：统一审计封装（写库 + COS 副本上传）</td></tr>
+  <tr><td><code>insurance/db.py</code></td><td>新增 <code>init_export_records_table()</code> + 查询/插入方法</td></tr>
+  <tr><td><code>main.py</code></td><td>启动时调用建表初始化</td></tr>
+  <tr><td><code>insurance/api.py</code></td><td>入口 1/2/3 埋点 + 新增 2 个查询/下载 API</td></tr>
+  <tr><td><code>core/fetcher.py</code></td><td>入口 4（群命令）埋点</td></tr>
+  <tr><td><code>insurance/renewal_api.py</code></td><td>入口 5 埋点</td></tr>
+  <tr><td><code>web/templates/export_records.html</code></td><td><strong>新增</strong>：导出记录独立页面（/admin/export-records）</td></tr>
+  <tr><td><code>web/api.py</code>（或现有 admin 路由处）</td><td>新增 <code>/admin/export-records</code> 页面路由（@admin_required）</td></tr>
+  <tr><td><code>web/templates/insurance.html</code></td><td>右上角管理按钮区新增「导出记录」入口按钮（仅超管，仅此一处改动）</td></tr>
+</table>
+
+<h3>部署步骤</h3>
+<ol>
+  <li>上传后端改动文件到 <code>/home/wxbot/</code> 对应路径（gunicorn --reload 自动生效）</li>
+  <li>上传前端 <code>insurance.html</code>（去 raw 标记）到 <code>/home/wxbot/web/static/insurance.html</code>；<code>export_records.html</code> 上传到 <code>/home/wxbot/web/templates/</code>（走 Flask 模板渲染）</li>
+  <li>服务重载后自动建表 <code>export_records</code>，无需手工执行 SQL</li>
+  <li>验证 <code>/admin/export-records</code> 可正常访问（与现有 /admin/users 同路径模式，预期无需改 nginx）</li>
+  <li>验证：页面导出一次 + 群内发一次「发送台账今日」→ 超管进入「导出记录」页面核对两条记录、参数、条数与副本下载</li>
+</ol>
+
+<h2 id="question">十二、待确认问题</h2>
+<table>
+  <tr><th>#</th><th>问题</th><th>建议默认值</th></tr>
+  <tr><td>1</td><td>批量下载原文 ZIP 是否需要保存 ZIP 副本？</td><td><strong>不存</strong>，只记 record_ids（原文已在 COS，可完整回溯，省一倍存储）</td></tr>
+  <tr><td>2</td><td>失败的导出尝试（如群命令无权限被拒）是否记录？</td><td><strong>记录</strong>（status=failed），复查价值高</td></tr>
+  <tr><td>3</td><td>审计副本保留期</td><td><strong>永久保留</strong>，成本敏感时在 COS 控制台配生命周期规则</td></tr>
+  <tr><td>4</td><td>✅ 副本上传是否需要异步化？</td><td><strong>已确认：后台异步上传</strong>（单线程上传队列，客户主流程零等待，copy_status 跟踪上传状态）</td></tr>
+  <tr><td>6</td><td>原型界面布局是否符合预期？（统计条 / 筛选栏 / 列表列 / 弹窗内容）</td><td>见第九节原型，可指出需调整的区块</td></tr>
+  <tr><td>5</td><td>是否需要对历史已发生的 <code>ledger_exports/</code> 群命令导出文件做一次性回填入库？</td><td>可选：写一次性脚本扫 COS 目录回填（文件名含时间戳和 sender），按需执行</td></tr>
+</table>
+
+<footer style="margin-top:60px; padding-top:20px; border-top:1px solid var(--border); color:var(--text-sub); font-size:12.5px;">
+  文档路径：docs/review/导出记录审计方案.html · 确认后将移至 docs/design/ 并进入开发排期
+</footer>
+
+</div>
+</body>
+</html>

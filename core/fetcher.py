@@ -850,6 +850,22 @@ class MessageFetcher:
                     logger.info("台账导出命令：sender=%s 未绑定账号且企业(%s)下无可用账号，提示无权限 seq=%d",
                                 sender, config_enterprise_id, seq)
                     send_flowbot_group_message(room_name, sender_name, "您当前账号无权限，请联系客服开通", robot_id)
+                # 导出审计：失败的导出尝试也记录（try 包裹，不影响主流程）
+                try:
+                    from insurance.export_audit import record_export, EXPORT_TYPE_LEDGER_CMD
+                    record_export(
+                        user_name=sender_name or sender,
+                        enterprise_id=config_enterprise_id,
+                        export_type=EXPORT_TYPE_LEDGER_CMD,
+                        trigger_way="cmd",
+                        params={"sender": sender, "sender_name": sender_name, "room_name": room_name},
+                        status="failed",
+                        error_message="群监控配置未关联企业" if not config_enterprise_id else "发送人无可用账号（无权限）",
+                        roomid=roomid,
+                        trigger_text=text[:100],
+                    )
+                except Exception:
+                    pass
                 return
 
             from insurance.ledger_export import export_ledger_via_binding
@@ -861,6 +877,23 @@ class MessageFetcher:
 
             if not excel_bytes:
                 send_flowbot_group_message(room_name, sender_name, f"【保单台账】{label}暂无保单数据", robot_id)
+                # 导出审计：无数据也记一条（row_count=0），方便复查客户触发情况
+                try:
+                    from insurance.export_audit import record_export, EXPORT_TYPE_LEDGER_CMD
+                    record_export(
+                        user_id=config_user_id,
+                        enterprise_id=config_enterprise_id,
+                        export_type=EXPORT_TYPE_LEDGER_CMD,
+                        trigger_way="cmd",
+                        params={"label": label, "date_start": date_start, "date_end": date_end,
+                                "sender": sender, "sender_name": sender_name, "room_name": room_name,
+                                "result": "暂无保单数据"},
+                        row_count=0,
+                        roomid=roomid,
+                        trigger_text=text[:100],
+                    )
+                except Exception:
+                    pass
                 return
 
             if not handler.cos_storage:
@@ -878,6 +911,27 @@ class MessageFetcher:
             send_flowbot_group_message(room_name, sender_name, msg, robot_id)
             logger.info("台账导出命令处理完成: seq=%d room=%s sender=%s period=%s count=%d",
                         seq, roomid, sender, period, count)
+
+            # 导出审计：复用群推送已上传的 COS 文件作为审计副本（try 包裹，不影响主流程）
+            try:
+                from insurance.export_audit import record_export, EXPORT_TYPE_LEDGER_CMD
+                record_export(
+                    user_id=config_user_id,
+                    enterprise_id=config_enterprise_id,
+                    export_type=EXPORT_TYPE_LEDGER_CMD,
+                    trigger_way="cmd",
+                    params={"label": label, "date_start": date_start, "date_end": date_end,
+                            "sender": sender, "sender_name": sender_name, "room_name": room_name,
+                            "push_message": msg[:200]},
+                    row_count=count,
+                    filename=filename,
+                    cos_key=cos_key_suffix,
+                    cos_url=url,
+                    roomid=roomid,
+                    trigger_text=text[:100],
+                )
+            except Exception:
+                logger.warning("台账命令导出审计埋点失败（不影响主流程）seq=%d", seq, exc_info=True)
         except Exception as e:
             logger.error("台账导出命令处理异常 seq=%d: %s", seq, e, exc_info=True)
 
