@@ -549,7 +549,7 @@ _get_policy_type_code = get_policy_type_code
 # 第三步：通用字段提取（各保司共用）
 # ============================================================
 
-def _extract_common_fields(text: str, company_short: str, policy_type: str = "") -> Dict[str, Any]:
+def _extract_common_fields(text: str, company_short: str, policy_type: str = "", from_ocr: bool = False) -> Dict[str, Any]:
     """提取各保司通用的字段"""
     fields = {}
     text_merged = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2',
@@ -582,7 +582,7 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "")
     _fill_same_party_id_number(fields)
 
     # ===== 车辆信息 =====
-    _extract_vehicle_info(text, fields, company_short)
+    _extract_vehicle_info(text, fields, company_short, from_ocr)
 
     # ===== 费用信息 =====
     _extract_premium(text, fields, company_short)
@@ -2756,9 +2756,10 @@ def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: 
 def _normalize_plate(plate: str) -> str:
     """归一化车牌序号中的 OCR 易混字符。
 
-    依据国标 GA 36-2018：车牌序号（第2位发牌机关代号之后的部分）只使用
-    数字 0-9 和字母 A-Z，且不含字母 I、O（即为避免与数字 1、0 混淆）。
-    因此序号里出现的 O/I 必然是 OCR 误识，归一化为 0/1。
+    依据国标 GA 36-2018：车牌序号（第2位发牌机关代号之后的部分）不含
+    字母 I、O（避免与数字 1、0 混淆），序号里出现的 O/I 大概率是 OCR 误识。
+    注意：仅对 OCR 来源的文本调用本函数；PDF 文字层是逐字精确的，且存在
+    序号带 I 的真实车牌（如平安保单"粤E-R705I"），文字层结果必须保持原文。
     省份汉字(第0位)与发牌机关代号字母(第1位)保持不变。
     """
     # 仅处理标准车牌：省份汉字 + 字母 + 序号
@@ -2771,7 +2772,7 @@ def _normalize_plate(plate: str) -> str:
     return plate[:2] + seq
 
 
-def _extract_vehicle_info(text: str, fields: dict, company_short: str):
+def _extract_vehicle_info(text: str, fields: dict, company_short: str, from_ocr: bool = False):
     """提取车牌号、车架号、发动机号等"""
 
     # 车牌号
@@ -2874,8 +2875,9 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str):
         if re.search(r"(?:牌照号码?|号\s*牌\s*号\s*码|号牌号码|车牌号码?)[：:\s]*暂未上牌", text):
             fields["新车未上牌"] = "暂未上牌"
 
-    # 归一化车牌序号中的 OCR 易混字符（O→0、I→1），排除"新车"等占位值
-    if fields.get("车牌号") and fields["车牌号"] != "新车":
+    # 归一化车牌序号中的 OCR 易混字符（O→0、I→1），排除"新车"等占位值。
+    # 仅 OCR 来源文本才归一化：PDF 文字层逐字精确，存在序号含 I 的真实车牌（如"粤E-R705I"）
+    if from_ocr and fields.get("车牌号") and fields["车牌号"] != "新车":
         fields["车牌号"] = _normalize_plate(fields["车牌号"])
 
     # 车架号/VIN
@@ -4383,7 +4385,7 @@ def _dedup_doubled_text(text: str) -> str:
 # 主入口：parse_policy_text
 # ============================================================
 
-def parse_policy_text(text: str) -> Dict[str, Any]:
+def parse_policy_text(text: str, from_ocr: bool = False) -> Dict[str, Any]:
     """
     从保单文本中提取所有关键字段
 
@@ -4391,6 +4393,8 @@ def parse_policy_text(text: str) -> Dict[str, Any]:
 
     Args:
         text: 从PDF提取的完整文本
+        from_ocr: 文本是否来自 OCR 识别（True 时对车牌等做易混字符归一化；
+                  PDF 文字层文本传 False，保持原文不做字符替换）
 
     Returns:
         包含字段和险种明细的结果字典
@@ -4412,7 +4416,7 @@ def parse_policy_text(text: str) -> Dict[str, Any]:
         fields["险种类型"] = policy_type
 
     # ===== 第三步：按保司提取各字段 =====
-    extracted = _extract_common_fields(text, company_short, policy_type or "")
+    extracted = _extract_common_fields(text, company_short, policy_type or "", from_ocr)
     fields.update(extracted)
 
     # ===== 派生字段（供用户自定义导出列「司机乘客/车辆性质」直接取用）=====
@@ -4606,7 +4610,7 @@ def _extract_page_range(text: str) -> str:
     return ",".join(str(p) for p in pages)
 
 
-def parse_policy_text_multi(text: str) -> List[Dict[str, Any]]:
+def parse_policy_text_multi(text: str, from_ocr: bool = False) -> List[Dict[str, Any]]:
     """
     从保单文本中提取所有保单——支持一个 PDF 包含多份保单的情况。
 
@@ -4632,7 +4636,7 @@ def parse_policy_text_multi(text: str) -> List[Dict[str, Any]]:
         page_range = _extract_page_range(text)
         # 清除页码标记后再解析
         clean = re.sub(r'\[PAGE:\d+\]\n?', '', text)
-        result = parse_policy_text(clean)
+        result = parse_policy_text(clean, from_ocr)
         result["page_range"] = page_range
         return [result]
 
@@ -4665,7 +4669,7 @@ def parse_policy_text_multi(text: str) -> List[Dict[str, Any]]:
         page_range = _extract_page_range(segment)
         # 清除页码标记后再解析
         clean_segment = re.sub(r'\[PAGE:\d+\]\n?', '', segment)
-        policy = parse_policy_text(clean_segment)
+        policy = parse_policy_text(clean_segment, from_ocr)
         # 只保留有效的保单：字段非空+置信度>0 之外，再叠加一道核心字段护栏——
         # 车牌号/被保险人/保险起期/保险止期/保单号 至少命中2项才算数，防止标题正则
         # 误判出的封面/告知单等垃圾页面（confidence可能仍>0）被当成一份独立保单入库
@@ -4681,7 +4685,7 @@ def parse_policy_text_multi(text: str) -> List[Dict[str, Any]]:
     if not policies:
         page_range = _extract_page_range(text)
         clean = re.sub(r'\[PAGE:\d+\]\n?', '', text)
-        result = parse_policy_text(clean)
+        result = parse_policy_text(clean, from_ocr)
         result["page_range"] = page_range
         return [result]
 

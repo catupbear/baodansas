@@ -2434,7 +2434,9 @@ def manual_ocr():
                 "error": error_msg, "invoices": [],
             })
 
-        policies = parse_policy_text_multi(extract_result["text"])
+        # OCR 来源文本才做车牌易混字符归一化；pdfplumber 文字层保持原文
+        policies = parse_policy_text_multi(
+            extract_result["text"], from_ocr=(ocr_engine != "pdfplumber"))
 
         # 质量不佳时降级百度 OCR（用第一条保单判断质量）
         first_policy = policies[0] if policies else {}
@@ -2451,7 +2453,7 @@ def manual_ocr():
                 pdf_bytes, max_pages=6)
             ocr_engine = "baidu"
             if extract_result["success"]:
-                policies = parse_policy_text_multi(extract_result["text"])
+                policies = parse_policy_text_multi(extract_result["text"], from_ocr=True)
 
         # 过滤无效保单
         valid_policies = [p for p in policies if p.get("fields") and p.get("confidence", 0) > 0]

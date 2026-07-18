@@ -48,7 +48,7 @@ def _ocr_early_stop_check(combined_text: str) -> bool:
     仅当文本中只包含单份保单时才提前停止，多保单PDF需扫描完整。
     """
     try:
-        result = parse_policy_text(combined_text)
+        result = parse_policy_text(combined_text, from_ocr=True)
         fields = result.get("fields", {})
         import re
         # 人保财险多保单PDF常见（交强+商业+驾乘），直接扫全部页不早停
@@ -1643,7 +1643,8 @@ class InsuranceHandler:
 
         # --- 第三步：解析保单字段（支持多保单拆分） ---
         try:
-            policies = parse_policy_text_multi(text)
+            # OCR 来源文本才做车牌易混字符归一化；pdfplumber 文字层保持原文
+            policies = parse_policy_text_multi(text, from_ocr=(ocr_engine != "pdfplumber"))
         except Exception as e:
             logger.error("保单字段解析失败: %s", e, exc_info=True)
             return {
@@ -1670,7 +1671,7 @@ class InsuranceHandler:
                 if ocr_text:
                     ocr_raw_text = ocr_text
                     try:
-                        ocr_policies = parse_policy_text_multi(ocr_text)
+                        ocr_policies = parse_policy_text_multi(ocr_text, from_ocr=True)
                         if ocr_policies:
                             ocr_fields = ocr_policies[0].get("fields", {})
                             filled = []
@@ -1854,7 +1855,7 @@ class InsuranceHandler:
             # 图片 OCR 需要单独解析字段
             if file_type != "pdf" and text:
                 try:
-                    policy = parse_policy_text(text)
+                    policy = parse_policy_text(text, from_ocr=True)
                 except Exception as e:
                     logger.error("手动上传字段解析失败: %s", e)
                     policy = {"fields": {}, "doc_category": "", "confidence": 0.0}
