@@ -473,19 +473,20 @@ class MessageFetcher:
         "1️⃣ 该车牌的保单是否已发到本群并识别成功\n"
         "2️⃣ 车牌号是否输入有误\n"
         "确认保单已识别后，请重新发送一次补充信息即可。\n"
-        "若车牌无误但仍提示未录入，请联系客服处理（已@技术客服跟进）。"
+        "若车牌无误但仍提示未录入，请联系客服处理（已@客服跟进）。"
     )
 
-    def _resolve_sender_at_name(self, handler, sender: str) -> str:
-        """解析发送人名称用于群内@。
+    def _resolve_sender_at_name(self, sender: str) -> str:
+        """解析发送人名称用于群内@（用本 fetcher 所属企业的通讯录凭证）。
 
         只用解析出的真实名称；get_name 解析失败回退成原始 userid 时
         返回空串 = 不@发送人（FlowBot 按名字匹配，userid @不上），消息照发。
         """
-        if not sender or not getattr(handler, "contacts", None):
+        contacts = getattr(self, "contacts", None)
+        if not sender or not contacts:
             return ""
         try:
-            name = handler.contacts.get_name(sender) or ""
+            name = contacts.get_name(sender) or ""
         except Exception:
             return ""
         return "" if name == sender else name
@@ -496,7 +497,7 @@ class MessageFetcher:
         配置键 quote_fill_miss_notify（insurance_config 表）：
           enabled           开关（默认关闭）
           robot_id          FlowBot 机器人 ID，缺省复用 flowbot_fail_notify 的机器人
-          tech_support_name 技术客服微信名，缺省"技术客服（午虎保单台账系统）"
+          tech_support_name 客服微信名，缺省"客户客服（午虎保单台账系统）"
           template          自定义文案，{plate} 占位符替换车牌
         旁路通知：任何异常只记日志，绝不影响消息处理主流程。
         """
@@ -516,18 +517,21 @@ class MessageFetcher:
                 logger.info("补充未录入通知跳过：未配置 robot_id seq=%d room=%s", seq, roomid)
                 return
 
-            sender_name = self._resolve_sender_at_name(handler, sender)
+            sender_name = self._resolve_sender_at_name(sender)
             room_name = ""
-            if handler.contacts:
+            if getattr(self, "contacts", None):
                 try:
-                    room_name = handler.contacts.get_room_name(roomid) or ""
+                    # 用本 fetcher 所属企业的通讯录凭证解析（勿用 handler.contacts=主企业）
+                    room_name = self.contacts.get_room_name(roomid) or ""
+                    if room_name == roomid:
+                        room_name = ""  # 解析失败时会回退返回roomid，视为无群名
                 except Exception:
                     pass
             if not room_name:
                 logger.info("补充未录入通知跳过：无群名 seq=%d room=%s", seq, roomid)
                 return
 
-            tech_name = cfg.get("tech_support_name") or "技术客服（午虎保单台账系统）"
+            tech_name = cfg.get("tech_support_name") or "客户客服（午虎保单台账系统）"
             template = cfg.get("template") or self._POLICY_FILL_MISS_TEMPLATE
             msg = template.replace("{plate}", plate or "未知")
             # 去重：发送人本身就是技术客服账号时只@一次
@@ -554,7 +558,7 @@ class MessageFetcher:
         配置键 quote_fill_template_notify（insurance_config 表）：
           enabled           开关（默认关闭）
           robot_id          FlowBot 机器人 ID，缺省复用 flowbot_fail_notify 的机器人
-          tech_support_name 技术客服微信名，缺省"技术客服（午虎保单台账系统）"
+          tech_support_name 客服微信名，缺省"客户客服（午虎保单台账系统）"
           template          自定义文案，{plate} 占位符替换车牌
         同一群每天最多提醒一次（内存节流，进程重启后重置）。
         旁路通知：任何异常只记日志，绝不影响消息处理主流程。
@@ -580,16 +584,19 @@ class MessageFetcher:
                 return
 
             room_name = ""
-            if handler.contacts:
+            if getattr(self, "contacts", None):
                 try:
-                    room_name = handler.contacts.get_room_name(roomid) or ""
+                    # 用本 fetcher 所属企业的通讯录凭证解析（勿用 handler.contacts=主企业）
+                    room_name = self.contacts.get_room_name(roomid) or ""
+                    if room_name == roomid:
+                        room_name = ""  # 解析失败时会回退返回roomid，视为无群名
                 except Exception:
                     pass
             if not room_name:
                 logger.info("未配置模板提醒跳过：无群名 seq=%d room=%s", seq, roomid)
                 return
 
-            tech_name = cfg.get("tech_support_name") or "技术客服（午虎保单台账系统）"
+            tech_name = cfg.get("tech_support_name") or "客户客服（午虎保单台账系统）"
             template = cfg.get("template") or self._POLICY_FILL_NO_TEMPLATE_TEMPLATE
             msg = template.replace("{plate}", plate or "未知")
 
@@ -679,15 +686,18 @@ class MessageFetcher:
                 robot_id = fail_cfg.get("robot_id")
 
             sender = parsed.get("from", "")
-            sender_name = self._resolve_sender_at_name(handler, sender)
+            sender_name = self._resolve_sender_at_name(sender)
             room_name = ""
-            if handler.contacts:
+            if getattr(self, "contacts", None):
                 try:
-                    room_name = handler.contacts.get_room_name(roomid) or ""
+                    # 用本 fetcher 所属企业的通讯录凭证解析（勿用 handler.contacts=主企业）
+                    room_name = self.contacts.get_room_name(roomid) or ""
+                    if room_name == roomid:
+                        room_name = ""  # 解析失败时会回退返回roomid，视为无群名
                 except Exception:
                     pass
 
-            tech_name = cfg.get("tech_support_name") or "技术客服（午虎保单台账系统）"
+            tech_name = cfg.get("tech_support_name") or "客户客服（午虎保单台账系统）"
             sent = False
             if room_name and robot_id:
                 at_list = list(dict.fromkeys(n for n in (sender_name, tech_name) if n))
@@ -749,11 +759,14 @@ class MessageFetcher:
 
         sender = parsed.get("from", "")
         try:
-            sender_name = self._resolve_sender_at_name(handler, sender)
+            sender_name = self._resolve_sender_at_name(sender)
             room_name = ""
-            if handler.contacts:
+            if getattr(self, "contacts", None):
                 try:
-                    room_name = handler.contacts.get_room_name(roomid) or ""
+                    # 用本 fetcher 所属企业的通讯录凭证解析（勿用 handler.contacts=主企业）
+                    room_name = self.contacts.get_room_name(roomid) or ""
+                    if room_name == roomid:
+                        room_name = ""  # 解析失败时会回退返回roomid，视为无群名
                 except Exception:
                     pass
 
