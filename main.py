@@ -81,10 +81,14 @@ def create_app(config: dict) -> Flask:
     # 本机开发环境IP未加入企业微信白名单，解析必然失败且会把"不可解析"误写回共享库，
     # 干扰服务器（有白名单权限）后续的正常解析；config.yaml 里配置 dev.disable_contacts_autoresolve
     # 即可在本机关掉这个线程，服务器 config.yaml 没有这个配置项，行为不受影响。
-    if not config.get("dev", {}).get("disable_contacts_autoresolve"):
-        contacts.start_auto_resolve(interval=300)
-    else:
+    # wecom.disable_contacts_autoresolve: 主企业（车物家）级开关，
+    # 用于该企业通讯录 API 权限失效期间临时关闭自动解析（避免每轮全量失败空转）
+    if config.get("dev", {}).get("disable_contacts_autoresolve"):
         logger.warning("本机开发环境：已跳过通讯录自动解析线程（避免误写共享库的不可解析缓存）")
+    elif config["wecom"].get("disable_contacts_autoresolve"):
+        logger.warning("[车物家] 通讯录自动解析已按配置关闭（wecom.disable_contacts_autoresolve）")
+    else:
+        contacts.start_auto_resolve(interval=300)
 
     # 初始化COS存储（可选）
     cos_storage = None
