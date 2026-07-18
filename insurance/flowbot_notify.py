@@ -47,20 +47,28 @@ def send_flowbot_group_message(group_name: str, wechat_name, message: str, robot
         "message": message,
     }]
 
-    try:
-        resp = requests.post(
-            FLOWBOT_API,
-            params={"robotId": robot_id},
-            json={"taskList": task_list},
-            timeout=10,
-        )
-        result = resp.json()
-        if result.get("code") == 200:
-            logger.info("✅ 已发送群通知到【%s】@%s: %s",
-                        group_name, "、".join(at_list) or "-", message)
-            return True
-        logger.warning("⚠ 识别失败群通知发送失败: %s", result)
-        return False
-    except Exception as e:
-        logger.warning("⚠ 识别失败群通知异常（不影响主流程）: %s", e)
-        return False
+    # 发送失败重试最多3次（接口异常/非200都重试），1s/2s 递增退避
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        try:
+            resp = requests.post(
+                FLOWBOT_API,
+                params={"robotId": robot_id},
+                json={"taskList": task_list},
+                timeout=10,
+            )
+            result = resp.json()
+            if result.get("code") == 200:
+                task_ids = [t.get("taskId", "") for t in (result.get("taskList") or [])]
+                logger.info("✅ 已发送群通知到【%s】@%s (taskId=%s): %s",
+                            group_name, "、".join(at_list) or "-",
+                            ",".join(filter(None, task_ids)) or "-", message)
+                return True
+            logger.warning("⚠ 群通知发送失败(第%d/%d次): %s", attempt, max_attempts, result)
+        except Exception as e:
+            logger.warning("⚠ 群通知发送异常(第%d/%d次，不影响主流程): %s",
+                           attempt, max_attempts, e)
+        if attempt < max_attempts:
+            import time
+            time.sleep(attempt)  # 1s, 2s 递增退避
+    return False
