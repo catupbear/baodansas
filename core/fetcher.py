@@ -446,7 +446,7 @@ class MessageFetcher:
             cnt, info = apply_policy_quote(handler.db, text, roomid=roomid,
                                            enterprise_id=enterprise_id)
             if info:
-                logger.info("政策回填: seq=%d room=%s 命中%d条 %s", seq, roomid, cnt, info)
+                logger.info("群内回填: seq=%d room=%s 命中%d条 %s", seq, roomid, cnt, info)
                 if cnt == 0:
                     # 命中0条：补充信息未录入，群内通知 @发送人 和 @技术客服
                     self._notify_policy_fill_miss(
@@ -459,7 +459,7 @@ class MessageFetcher:
                         self._notify_policy_fill_no_template(
                             seq, roomid, info.get("plate", ""))
         except Exception as e:
-            logger.error("政策回填异常 seq=%d: %s", seq, e, exc_info=True)
+            logger.error("群内回填异常 seq=%d: %s", seq, e, exc_info=True)
 
     # 群内补充命中0条时的默认通知文案（{plate} 动态替换为解析到的车牌）
     _POLICY_FILL_MISS_TEMPLATE = (

@@ -77,11 +77,11 @@ def parse_policy_quote_text(text: str):
         return None
     t = text.replace("　", " ")
 
-    pm = _PLATE_RE.search(t)
-    if not pm:
+    # 车牌提取（含"车牌"关键词兜底，不做格式校验），归一化与库中"车牌号"对齐
+    plate = extract_plate(t)
+    if not plate:
         return None
-    # 车牌归一化：去掉连字符/空格，统一大写（与库中"车牌号"对齐）
-    result = {"plate": re.sub(r"[-\s　]", "", pm.group(0)).upper()}
+    result = {"plate": plate}
 
     for field, pat in _FIELD_PATTERNS:
         m = pat.search(t)
@@ -201,10 +201,11 @@ def parse_with_rules(text: str, compiled: list):
         return None
     t = text.replace("　", " ")
 
-    pm = _PLATE_RE.search(t)
-    if not pm:
+    # 车牌提取（含"车牌"关键词兜底，不做格式校验），归一化与库中"车牌号"对齐
+    plate = extract_plate(t)
+    if not plate:
         return None
-    result = {"plate": re.sub(r"[-\s　]", "", pm.group(0)).upper()}
+    result = {"plate": plate}
 
     for target, pat in compiled:
         if target in result:
@@ -216,6 +217,46 @@ def parse_with_rules(text: str, compiled: list):
     if len(result) <= 1:  # 只有车牌、无任何有值项 → 普通聊天
         return None
     return result
+
+
+# "车牌"关键词后客户实际填写的值（到行尾/常见标点截止，允许值内夹空格）
+_PLATE_KEYWORD_RE = re.compile(r"车\s*牌\s*号?\s*[:：]?\s*([^\n，,。、；;？?！!]{1,20})")
+
+
+# 车牌净长度上限：省简称+字母+6位（新能源）= 8；按去掉 - / 空格后的净长度算，
+# 所以"粤E-R705I"带杠也算 7 位有效
+_PLATE_MAX_LEN = 8
+
+
+def extract_plate(t: str):
+    """
+    从文本中提取车牌（已归一化：去连字符/空格/间隔点，大写）。
+
+    优先按标准格式（省简称+字母+4~6位）全文匹配；匹配不到时，退回
+    "车牌"关键词后的值采集，不做格式校验，仅要求：
+      - 含字母或数字（排除"车牌号是多少"之类普通聊天）
+      - 归一化后不超过车牌最大位数（超长视为非车牌，忽略）
+    客户填错格式时照常按车牌匹配记录，命中0条走"未录入"提醒（文案已
+    引导核对车牌）。找不到返回 None。
+    """
+    pm = _PLATE_RE.search(t)
+    if pm:
+        return re.sub(r"[-\s　·.]", "", pm.group(0)).upper()
+    m = _PLATE_KEYWORD_RE.search(t)
+    if m:
+        # 值内允许空格（"粤 A 12345"），按空格分段、在最大位数内逐段拼接，
+        # 避免同行后续内容（"粤111111 业务经理:xx"）被误当车牌的一部分
+        plate = ""
+        for token in m.group(1).split():
+            token = re.sub(r"[-　·.]", "", token).upper()
+            if not token:
+                continue
+            if len(plate) + len(token) > _PLATE_MAX_LEN:
+                break
+            plate += token
+        if plate and re.search(r"[A-Z0-9]", plate):
+            return plate
+    return None
 
 
 def apply_policy_quote(db, text: str, roomid: str = None, enterprise_id: int = None):
@@ -249,7 +290,7 @@ def apply_policy_quote(db, text: str, roomid: str = None, enterprise_id: int = N
 
     records = find_records_by_plate(db, plate, roomid=roomid)
     if not records:
-        logger.info("政策回填：车牌 %s 暂无识别记录，待补 %s", plate, fill)
+        logger.info("群内回填：车牌 %s 暂无识别记录，待补 %s", plate, fill)
         return 0, parsed
 
     cnt = 0
@@ -261,5 +302,5 @@ def apply_policy_quote(db, text: str, roomid: str = None, enterprise_id: int = N
         update_insurance_record(db, rec["id"], {"parsed_fields": pf})
         cnt += 1
 
-    logger.info("政策回填成功：车牌=%s 命中 %d 条，值=%s", plate, cnt, fill)
+    logger.info("群内回填成功：车牌=%s 命中 %d 条，值=%s", plate, cnt, fill)
     return cnt, parsed
