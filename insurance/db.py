@@ -1356,7 +1356,7 @@ def find_records_by_plate(db, plate: str, exclude_id: int = None, roomid: str = 
             "'-',''),'－',''),' ',''),'　',''),'·',''),'.',''))"
         )
         sql = (
-            "SELECT id, parsed_fields FROM insurance_records "
+            "SELECT id, parsed_fields, manual_fields FROM insurance_records "
             "WHERE status = 'done' AND parsed_fields IS NOT NULL "
             f"AND {plate_norm_sql} = %s"
         )
@@ -1397,7 +1397,7 @@ def find_records_by_vin(db, vin: str, exclude_id: int = None) -> list:
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         sql = (
-            "SELECT id, parsed_fields FROM insurance_records "
+            "SELECT id, parsed_fields, manual_fields FROM insurance_records "
             "WHERE status = 'done' AND parsed_fields IS NOT NULL "
             "AND JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.车架号VIN')) = %s"
         )
@@ -1638,7 +1638,7 @@ def find_records_by_person(db, applicant: str = "", insured: str = "", owner: st
             params.extend([name, name, name])
         where = " OR ".join(or_conditions)
         sql = (
-            "SELECT r.id, r.parsed_fields FROM insurance_records r "
+            "SELECT r.id, r.parsed_fields, r.manual_fields FROM insurance_records r "
             "JOIN insurance_policy_fields pf ON pf.record_id = r.id "
             f"WHERE r.status = 'done' AND r.parsed_fields IS NOT NULL AND ({where})"
         )

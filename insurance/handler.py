@@ -1148,8 +1148,19 @@ class InsuranceHandler:
             hist_fields = rec.get("parsed_fields", {})
             if not hist_fields:
                 continue
+            # 历史记录中手动修改过的字段不参与反向回填/替换/覆盖（保护用户手动值，
+            # 否则同车牌新保单入库或兄弟记录重识别会把用户手动修正的值改回识别值）
+            hist_manual = rec.get("manual_fields") or []
+            if isinstance(hist_manual, str):
+                try:
+                    hist_manual = json.loads(hist_manual) or []
+                except (TypeError, json.JSONDecodeError, ValueError):
+                    hist_manual = []
+            hist_manual = set(hist_manual) if isinstance(hist_manual, list) else set()
             back_filled = []
             for field in fill_fields:
+                if field in hist_manual:
+                    continue
                 need_person_check = field in self._PERSON_VALIDATE_FIELDS
                 if not hist_fields.get(field) and current_vals.get(field):
                     if not need_person_check or _is_valid_person(current_vals[field]):
@@ -1159,6 +1170,8 @@ class InsuranceHandler:
             # 反向校验：当前是车险，历史也是车险，人名字段短值被长值替换
             if is_current_vehicle and self._is_vehicle_policy(hist_fields):
                 for field in self._PERSON_VALIDATE_FIELDS:
+                    if field in hist_manual:
+                        continue
                     cur_val = current_vals.get(field, "")
                     hist_val = hist_fields.get(field, "")
                     if cur_val and hist_val and cur_val != hist_val and len(cur_val) > len(hist_val) and _is_valid_person(cur_val):
@@ -1169,6 +1182,8 @@ class InsuranceHandler:
             # 反向覆盖：当前是车险，历史是非车险，覆盖历史非车险的投保人、被保人、车主
             if is_current_vehicle and self._is_non_vehicle_policy(hist_fields):
                 for field in self._PERSON_VALIDATE_FIELDS:
+                    if field in hist_manual:
+                        continue
                     cur_val = current_vals.get(field, "")
                     hist_val = hist_fields.get(field, "")
                     if cur_val and hist_val != cur_val and _is_valid_person(cur_val):
@@ -1259,8 +1274,18 @@ class InsuranceHandler:
             hist_fields = rec.get("parsed_fields", {})
             if not hist_fields:
                 continue
+            # 历史记录中手动修改过的字段不参与反向回填（保护用户手动值）
+            hist_manual = rec.get("manual_fields") or []
+            if isinstance(hist_manual, str):
+                try:
+                    hist_manual = json.loads(hist_manual) or []
+                except (TypeError, json.JSONDecodeError, ValueError):
+                    hist_manual = []
+            hist_manual = set(hist_manual) if isinstance(hist_manual, list) else set()
             back_filled = []
             for field in self.PERSON_FILL_FIELDS:
+                if field in hist_manual:
+                    continue
                 if not hist_fields.get(field) and current_vals.get(field):
                     hist_fields[field] = current_vals[field]
                     back_filled.append(f"{field}={current_vals[field]}")
