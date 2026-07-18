@@ -525,6 +525,13 @@ def init_insurance_tables(db):
     finally:
         conn.close()
 
+    # AI 质检相关表结构（insurance_records 新列 + ai_check_log）
+    try:
+        from .ai_db import init_ai_tables
+        init_ai_tables(db)
+    except Exception as e:
+        logger.warning("AI质检表初始化失败（不影响主流程）: %s", e)
+
     # 数据回填放到后台线程，避免阻塞服务启动
     def _backfill_insurance_data(db_ref):
         backfill_conn = db_ref.pool.connection()
@@ -1535,6 +1542,54 @@ def find_commercial_compulsory_end_dates(db, plates: list) -> dict:
         conn.close()
 
 
+def find_related_policies_batch(db, match_field: str, keys: list) -> dict:
+    """
+    比例规则「关联单条件」批量预取：按 车牌号/车架号/投保人 查询已完成记录的险种与日期。
+    返回 {关联值: [{"rid": record_id, "ptype": 险种, "date": 日期字符串}]}。
+    任何异常返回 {}（关联条件按不存在处理），不影响主流程。
+    """
+    _COLS = {"车牌号": "plate_no", "车架号": "vin", "投保人": "applicant"}
+    col = _COLS.get(match_field)
+    if not col:
+        return {}
+    clean_keys = [str(k).strip() for k in (keys or []) if k and str(k).strip()]
+    if not clean_keys:
+        return {}
+    try:
+        conn = db.pool.connection()
+    except Exception:
+        return {}
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        placeholders = ",".join(["%s"] * len(clean_keys))
+        # applicant 为 TEXT 列（无索引），LIMIT 兜底防止极端情况下拖慢查询
+        cursor.execute(
+            f"SELECT pf.{col} AS match_key, pf.record_id, pf.policy_type, "
+            f"pf.sign_date_iso, pf.start_date, r.created_at "
+            f"FROM insurance_policy_fields pf "
+            f"JOIN insurance_records r ON r.id = pf.record_id "
+            f"WHERE pf.{col} IN ({placeholders}) AND r.status = 'done' "
+            f"ORDER BY r.id DESC LIMIT 5000",
+            clean_keys,
+        )
+        result = {}
+        for row in cursor.fetchall():
+            key = str(row.get("match_key") or "").strip()
+            if not key:
+                continue
+            date_val = row.get("sign_date_iso") or row.get("start_date") or row.get("created_at") or ""
+            result.setdefault(key, []).append({
+                "rid": row.get("record_id"),
+                "ptype": row.get("policy_type") or "",
+                "date": str(date_val),
+            })
+        return result
+    except Exception:
+        return {}
+    finally:
+        conn.close()
+
+
 def find_insurer_info_by_plates(db, plates: list) -> dict:
     """
     批量查询车牌对应的保司信息和人员信息。
@@ -2024,6 +2079,7 @@ def query_insurance_records(
                 "r2.company_short, r2.is_abnormal, r2.hint, r2.display_fields, r2.manual_fields, "
                 "r2.abnormal_override_reason, r2.user_id, r2.file_md5, r2.error_message, "
                 "r2.enterprise_id, r2.first_recognized_at, "
+                "r2.ai_check_status, r2.ai_checked_at, "
                 "pf3.owner AS _pf_owner"
             )
             cursor.execute(

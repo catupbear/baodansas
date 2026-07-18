@@ -149,6 +149,42 @@ def init_insurance_api(db, handler=None, contacts=None):
     _contacts = contacts
 
 
+def _prepare_ratio_related_ctx(user_config, fields_list):
+    """
+    比例规则「关联单条件」批量预取，结果写入 user_config["_related_ctx"]。
+    - 配置里没有关联单条件时零开销（直接返回）
+    - 任何异常置空 ctx，关联条件按「不存在」处理，不影响主流程
+    """
+    try:
+        user_config.pop("_related_ctx", None)
+        user_config.pop("_related_self_id", None)
+        from insurance.field_config_db import config_has_related_ratio_rules, RELATED_MATCH_FIELDS
+        match_bys = config_has_related_ratio_rules(user_config)
+        if not match_bys:
+            return
+        from insurance.db import find_related_policies_batch
+        ctx = {}
+        for mb in match_bys:
+            keys = set()
+            for fields in fields_list or []:
+                if not isinstance(fields, dict):
+                    continue
+                for k in RELATED_MATCH_FIELDS.get(mb, (mb,)):
+                    v = fields.get(k)
+                    if v and str(v).strip():
+                        keys.add(str(v).strip())
+                        break
+            if keys:
+                ctx[mb] = find_related_policies_batch(_db, mb, list(keys))
+        if ctx:
+            user_config["_related_ctx"] = ctx
+    except Exception:
+        try:
+            user_config.pop("_related_ctx", None)
+        except Exception:
+            pass
+
+
 def _try_sdk_download(record: dict) -> bytes:
     """尝试通过企业微信 SDK 重新下载媒体文件，返回 bytes 或 b""。"""
     from flask import current_app
@@ -946,6 +982,12 @@ def list_records():
                 bucket = _plate_end_dates.setdefault(_norm_plate(plate), {})
                 bucket.setdefault(_type_code, end_date)
 
+        # 比例规则关联单条件：批量预取本页记录的关联保单（无关联条件时零开销）
+        try:
+            _prepare_ratio_related_ctx(user_config, [r.get("display_fields") for r in result.get("records", [])])
+        except Exception:
+            pass
+
         # 互补后：计算"保司（带地区）" + 应用用户配置
         for record in result.get("records", []):
             df = record.get("display_fields", {})
@@ -980,6 +1022,11 @@ def list_records():
                     user_config["_manual_fields"] = set(_mf) if isinstance(_mf, list) else set()
                 else:
                     user_config.pop("_manual_fields", None)
+                # 比例规则关联单条件排除自身记录
+                try:
+                    user_config["_related_self_id"] = record.get("id")
+                except Exception:
+                    pass
                 _before_val = record["display_fields"].get("交强到期时间", "<不存在>")
                 record["display_fields"] = apply_user_config_to_fields(user_config, record["display_fields"])
                 _after_val = record["display_fields"].get("交强到期时间", "<不存在>")
@@ -1267,6 +1314,12 @@ def get_record(record_id):
                     user_config["_manual_fields"] = set(_mf) if isinstance(_mf, list) else set()
                 else:
                     user_config.pop("_manual_fields", None)
+                # 比例规则关联单条件：预取本记录的关联保单并排除自身
+                try:
+                    _prepare_ratio_related_ctx(user_config, [record["display_fields"]])
+                    user_config["_related_self_id"] = record_id
+                except Exception:
+                    pass
                 record["display_fields"] = apply_user_config_to_fields(user_config, record["display_fields"])
 
         # 同一 PDF 的兄弟记录摘要（互补前先拿到，兄弟记录也用于互补）
@@ -1462,6 +1515,12 @@ def update_record_fields(record_id):
         user_config = get_effective_config(_db, user["user_id"], user["role"], user.get("parent_id"))
         if user_config and any(user_config.get(k) for k in user_config):
             user_config["_manual_fields"] = set(mf)
+            # 比例规则关联单条件：预取本记录的关联保单并排除自身
+            try:
+                _prepare_ratio_related_ctx(user_config, [display_fields])
+                user_config["_related_self_id"] = record_id
+            except Exception:
+                pass
             display_fields = apply_user_config_to_fields(user_config, display_fields)
 
         logger.info("[DEBUG-保存] apply_user_config后 display_fields中交强到期时间=%s", display_fields.get("交强到期时间", "<不存在>"))
@@ -2856,6 +2915,9 @@ def reupload_reocr(record_id):
             "error_message": "",
             "policy_count": len(policies),
             "policy_index": 1,
+            # 重识别后重置AI质检状态，允许再次自动质检
+            "ai_check_status": None,
+            "ai_checked_at": None,
         })
 
         updated = get_insurance_record(_db, record_id)
@@ -3062,6 +3124,9 @@ def reocr_record(record_id):
                 "policy_count": total_policies,
                 "policy_index": policy_idx + 1,
                 "page_range": policy.get("page_range", ""),
+                # 重识别后重置AI质检状态，允许再次自动质检
+                "ai_check_status": None,
+                "ai_checked_at": None,
             }
             if reocr_ocr_text:
                 updates["ocr_text"] = reocr_ocr_text
@@ -4940,6 +5005,15 @@ def export_excel():
                 if _cv:
                     row_fields["交强与交商终保时间"] = _cv
 
+            # 比例规则关联单条件：批量预取本次导出所有记录的关联保单（无关联条件时零开销）
+            try:
+                if has_config and not skip_config:
+                    _prepare_ratio_related_ctx(
+                        user_config,
+                        [inv.get("fields", {}) for inv in invoices if isinstance(inv, dict)])
+            except Exception:
+                pass
+
             if merge_enabled:
                 # ---- 按车牌合并导出 ----
                 # 判断车牌是否可合并（空、新车、*-* 格式的不合并）
@@ -4961,6 +5035,10 @@ def export_excel():
                 for inv in invoices:
                     fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
                     if has_config and not skip_config:
+                        try:
+                            user_config["_related_self_id"] = inv.get("id") if isinstance(inv, dict) else None
+                        except Exception:
+                            pass
                         fields = apply_user_config_to_fields(user_config, fields)
                     # 记录来源 id，供 return_json 场景下前端精确匹配合并行对应的原始记录
                     # （车牌/车架号/保单号都缺失时前端无法靠字段值再算出同一个分组键）
@@ -5055,6 +5133,11 @@ def export_excel():
 
                 # 合并行重新计算公式：合并行才同时有 商业险保费/交强险保费/非车险保费 拆分列，
                 # 各险种金额、保险公司合计等汇总公式只有在合并行上才能算对。
+                # 合并行由多条记录组成，比例规则关联单条件不做自身排除
+                try:
+                    user_config.pop("_related_self_id", None)
+                except Exception:
+                    pass
                 # 注意 apply_user_config_to_fields 返回新 dict、不改入参，必须把返回值写回。
                 merged_rows = [apply_user_config_to_fields(user_config, _mrow, formula_only=True)
                                for _mrow in merged_rows]
@@ -5096,6 +5179,10 @@ def export_excel():
                 for inv in invoices:
                     fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
                     if has_config and not skip_config:
+                        try:
+                            user_config["_related_self_id"] = inv.get("id") if isinstance(inv, dict) else None
+                        except Exception:
+                            pass
                         fields = apply_user_config_to_fields(user_config, fields)
                     # 注入交强到期时间（原始终保日期，按配置格式格式化；手动填写过的不覆盖）
                     _inject_compulsory_end(fields)
@@ -6498,3 +6585,539 @@ def api_report_feedback():
 
 # 站内通知（报错列表/未读数/标记已读）已下线：报错反馈改为提交时直接发钉钉群。
 # error_reports 表仍保留入库做存档，但不再提供超管读取/已读接口。
+
+
+# ============================================================
+# AI质检（仅超管）：手动AI质检 / 模型配置 / 企业质检配置 / 问题列表 / 流水与统计
+# ============================================================
+
+def _require_super_admin():
+    """AI质检系列接口统一超管校验，非超管返回错误响应，通过返回 None。"""
+    if g.current_user.get("role") != ROLE_SUPER_ADMIN:
+        return jsonify({"code": 403, "msg": "无权限"}), 403
+    return None
+
+
+def _current_operator():
+    """返回 (user_id, 姓名快照)，写 ai_check_log 流水用。"""
+    uid = g.current_user.get("user_id")
+    uname = g.current_user.get("name") or g.current_user.get("username") or ""
+    if not uname and uid:
+        try:
+            from auth.db import get_user_by_id
+            u = get_user_by_id(_db, uid) or {}
+            uname = u.get("name") or u.get("username") or ""
+        except Exception:
+            pass
+    return uid, uname
+
+
+@insurance_bp.route("/api/insurance/ai-extract/<int:record_id>", methods=["POST"])
+def ai_extract_record(record_id):
+    """
+    功能一：手动AI质检。同步调多模态大模型提取字段，返回与当前列表值的逐字段对比。
+    字段值不落库，但必写一条 ai_check_log 流水（manual/extracted，含操作人/耗时/token/差异数）。
+    """
+    resp = _require_super_admin()
+    if resp:
+        return resp
+    from insurance.ai_extractor import extract_fields_from_pdf, download_pdf_from_cos, AIExtractError
+    from insurance.ai_checker import compute_diff
+    from insurance.ai_db import insert_ai_check_log
+    from insurance.policy_parser import FIELD_ORDER
+
+    record = get_insurance_record(_db, record_id)
+    if not record:
+        return jsonify({"code": 404, "msg": "记录不存在"}), 404
+
+    uid, uname = _current_operator()
+    log = {
+        "record_id": record_id,
+        "enterprise_id": record.get("enterprise_id"),
+        "trigger_type": "manual",
+        "operator_user_id": uid,
+        "operator_name": uname,
+    }
+    try:
+        pdf_bytes = download_pdf_from_cos(record)
+        extract = extract_fields_from_pdf(_db, pdf_bytes)
+
+        try:
+            parsed_fields = json.loads(record.get("parsed_fields") or "{}")
+        except (TypeError, json.JSONDecodeError):
+            parsed_fields = {}
+        try:
+            manual_fields = json.loads(record.get("manual_fields") or "[]")
+        except (TypeError, json.JSONDecodeError):
+            manual_fields = []
+
+        # 手动质检展示全字段：FIELD_ORDER + AI 额外提取到的字段
+        compare_fields = list(FIELD_ORDER)
+        for k in extract["fields"]:
+            if k not in compare_fields:
+                compare_fields.append(k)
+        diffs = compute_diff(parsed_fields, extract["fields"], compare_fields, manual_fields)
+
+        # 一致字段列表（前端展示「一致」行）
+        same_fields = []
+        diff_names = {d["field"] for d in diffs}
+        for f in compare_fields:
+            cur = str(parsed_fields.get(f) or "").strip()
+            ai = str(extract["fields"].get(f) or "").strip()
+            if f not in diff_names and (cur or ai):
+                same_fields.append({"field": f, "current": cur, "ai": ai})
+
+        log.update({
+            "model": extract["model"],
+            "result": "extracted",
+            "diff_json": diffs,
+            "prompt_tokens": extract["prompt_tokens"],
+            "completion_tokens": extract["completion_tokens"],
+            "duration_ms": extract["duration_ms"],
+        })
+        log_id = insert_ai_check_log(_db, log)
+
+        return jsonify({"code": 0, "data": {
+            "log_id": log_id,
+            "model": extract["model"],
+            "duration_ms": extract["duration_ms"],
+            "prompt_tokens": extract["prompt_tokens"],
+            "completion_tokens": extract["completion_tokens"],
+            "fallback_used": extract["fallback_used"],
+            "ai_fields": extract["fields"],
+            "diffs": diffs,
+            "same": same_fields,
+            "manual_fields": manual_fields,
+        }})
+    except AIExtractError as e:
+        log.update({"result": "error", "error_message": str(e)[:500]})
+        try:
+            insert_ai_check_log(_db, log)
+        except Exception:
+            pass
+        return jsonify({"code": 500, "msg": str(e)}), 500
+    except Exception as e:
+        logger.exception("手动AI质检失败 record_id=%d", record_id)
+        log.update({"result": "error", "error_message": str(e)[:500]})
+        try:
+            insert_ai_check_log(_db, log)
+        except Exception:
+            pass
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/ai-extract/<int:record_id>/apply", methods=["POST"])
+def ai_extract_apply(record_id):
+    """
+    应用勾选的AI值：{log_id, fields:[字段名...]}。
+    写 parsed_fields/display_fields、备份 ai_corrections，流水更新为 applied。
+    不触发钉钉多维表同步。
+    """
+    resp = _require_super_admin()
+    if resp:
+        return resp
+    from insurance.ai_db import get_ai_check_log, update_ai_check_log
+
+    body = request.get_json(force=True) or {}
+    log_id = body.get("log_id")
+    field_names = body.get("fields") or []
+    if not log_id or not field_names:
+        return jsonify({"code": 400, "msg": "缺少 log_id 或 fields 参数"}), 400
+
+    record = get_insurance_record(_db, record_id)
+    if not record:
+        return jsonify({"code": 404, "msg": "记录不存在"}), 404
+    log = get_ai_check_log(_db, log_id)
+    if not log or log.get("record_id") != record_id:
+        return jsonify({"code": 404, "msg": "流水不存在或与记录不匹配"}), 404
+
+    try:
+        diffs = json.loads(log.get("diff_json") or "[]")
+    except (TypeError, json.JSONDecodeError):
+        diffs = []
+    diff_map = {d["field"]: d for d in diffs if isinstance(d, dict)}
+
+    try:
+        parsed_fields = json.loads(record.get("parsed_fields") or "{}")
+    except (TypeError, json.JSONDecodeError):
+        parsed_fields = {}
+    try:
+        ai_corrections = json.loads(record.get("ai_corrections") or "{}")
+    except (TypeError, json.JSONDecodeError):
+        ai_corrections = {}
+    try:
+        ai_field_list = json.loads(record.get("ai_fields") or "[]")
+    except (TypeError, json.JSONDecodeError):
+        ai_field_list = []
+    try:
+        manual_fields = json.loads(record.get("manual_fields") or "[]")
+    except (TypeError, json.JSONDecodeError):
+        manual_fields = []
+
+    uid, uname = _current_operator()
+    now_str = time.strftime("%Y-%m-%d %H:%M:%S")
+    applied = {}
+    for name in field_names:
+        d = diff_map.get(name)
+        if not d:
+            continue
+        old_val = str(parsed_fields.get(name) or "")
+        parsed_fields[name] = d.get("ai", "")
+        ai_corrections[name] = {
+            "old": old_val, "new": d.get("ai", ""),
+            "time": now_str, "source": "manual", "operator": uname,
+        }
+        if name not in ai_field_list:
+            ai_field_list.append(name)
+        # 人工确认采纳AI值后，该字段不再算「手动修改」保护（值已被明确刷新）
+        if name in manual_fields:
+            manual_fields.remove(name)
+        applied[name] = {"old": old_val, "new": d.get("ai", "")}
+
+    if not applied:
+        return jsonify({"code": 400, "msg": "勾选的字段在本次AI结果中不存在"}), 400
+
+    update_insurance_record(_db, record_id, {
+        "parsed_fields": parsed_fields,
+        "ai_corrections": ai_corrections,
+        "ai_fields": ai_field_list,
+        "manual_fields": manual_fields,
+    })
+    update_ai_check_log(_db, log_id, {"result": "applied", "applied_fields": applied})
+    return jsonify({"code": 0, "msg": f"已应用 {len(applied)} 个字段", "data": {"applied": applied}})
+
+
+@insurance_bp.route("/api/insurance/ai-config", methods=["GET"])
+def get_ai_config():
+    """AI模型配置读取（api_key/notify_secret 打码回显）+ 厂商预设。"""
+    resp = _require_super_admin()
+    if resp:
+        return resp
+    from insurance.ai_db import get_ai_model_config, mask_model_config, PROVIDER_PRESETS
+    cfg = get_ai_model_config(_db)
+    return jsonify({"code": 0, "data": {
+        "config": mask_model_config(cfg),
+        "provider_presets": PROVIDER_PRESETS,
+    }})
+
+
+@insurance_bp.route("/api/insurance/ai-config", methods=["PUT"])
+def save_ai_config():
+    """AI模型配置保存：模型列表增删改/优先级/切换当前/全局开关/Prompt/通知webhook。"""
+    resp = _require_super_admin()
+    if resp:
+        return resp
+    from insurance.ai_db import (
+        get_ai_model_config, save_ai_model_config, merge_masked_model_config,
+        DEFAULT_AI_MODEL_CONFIG,
+    )
+    body = request.get_json(force=True) or {}
+    incoming = body.get("config") or body
+    cfg = {}
+    for key in DEFAULT_AI_MODEL_CONFIG:
+        if key in incoming:
+            cfg[key] = incoming[key]
+        else:
+            cfg[key] = get_ai_model_config(_db).get(key)
+    cfg = merge_masked_model_config(_db, cfg)
+    # active_model_id 校验：必须指向启用的模型，否则自动落到优先级最高者
+    model_ids = {m.get("id") for m in cfg.get("models", []) if m.get("enabled", True)}
+    if cfg.get("active_model_id") not in model_ids:
+        sorted_models = sorted(
+            [m for m in cfg.get("models", []) if m.get("enabled", True)],
+            key=lambda x: x.get("priority", 99),
+        )
+        cfg["active_model_id"] = sorted_models[0]["id"] if sorted_models else ""
+    save_ai_model_config(_db, cfg)
+    return jsonify({"code": 0, "msg": "已保存"})
+
+
+@insurance_bp.route("/api/insurance/ai-config/test", methods=["POST"])
+def test_ai_config():
+    """测试模型连通性：{model_id} 测已保存模型；或直接传模型配置测未保存的。"""
+    resp = _require_super_admin()
+    if resp:
+        return resp
+    from insurance.ai_db import get_ai_model_config
+    from insurance.ai_extractor import test_model_connection
+
+    body = request.get_json(force=True) or {}
+    model_cfg = None
+    if body.get("model_id"):
+        cfg = get_ai_model_config(_db)
+        for m in cfg.get("models", []):
+            if m.get("id") == body["model_id"]:
+                model_cfg = m
+                break
+        if not model_cfg:
+            return jsonify({"code": 404, "msg": "模型不存在"}), 404
+    else:
+        model_cfg = body.get("model") or {}
+        # 未保存的编辑态测试：api_key 打码时回填已存明文
+        if "*" in (model_cfg.get("api_key") or "") and model_cfg.get("id"):
+            cfg = get_ai_model_config(_db)
+            for m in cfg.get("models", []):
+                if m.get("id") == model_cfg["id"]:
+                    model_cfg = {**model_cfg, "api_key": m.get("api_key", "")}
+                    break
+    result = test_model_connection(model_cfg)
+    return jsonify({"code": 0 if result["ok"] else 500, "data": result})
+
+
+@insurance_bp.route("/api/insurance/ai-check/enterprises", methods=["GET"])
+def get_ai_check_enterprises_api():
+    """企业质检配置列表（含企业名/今日质检数），客户管理页用。"""
+    resp = _require_super_admin()
+    if resp:
+        return resp
+    from insurance.ai_db import get_ai_check_enterprises, get_enterprise_check_config
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        try:
+            cursor.execute("SELECT id, name FROM enterprises ORDER BY id")
+            enterprises = [dict(r) for r in cursor.fetchall()]
+        except Exception:
+            enterprises = []
+        cursor.execute(
+            "SELECT enterprise_id, COUNT(*) AS cnt FROM ai_check_log "
+            "WHERE trigger_type='auto' AND created_at >= CURDATE() GROUP BY enterprise_id"
+        )
+        today_counts = {r["enterprise_id"]: int(r["cnt"]) for r in cursor.fetchall()}
+    finally:
+        conn.close()
+
+    data = []
+    for ent in enterprises:
+        cfg = get_enterprise_check_config(_db, ent["id"])
+        data.append({
+            "enterprise_id": ent["id"],
+            "enterprise_name": ent["name"],
+            "config": cfg,
+            "today_checked": today_counts.get(ent["id"], 0),
+        })
+    return jsonify({"code": 0, "data": {"list": data}})
+
+
+@insurance_bp.route("/api/insurance/ai-check/enterprises", methods=["PUT"])
+def save_ai_check_enterprises_api():
+    """保存单个企业的质检配置：{enterprise_id, config: {enabled, auto_fix, scope, compare_fields}}"""
+    resp = _require_super_admin()
+    if resp:
+        return resp
+    from insurance.ai_db import get_ai_check_enterprises, save_ai_check_enterprises
+
+    body = request.get_json(force=True) or {}
+    eid = body.get("enterprise_id")
+    cfg = body.get("config") or {}
+    if not eid:
+        return jsonify({"code": 400, "msg": "缺少 enterprise_id"}), 400
+    all_cfg = get_ai_check_enterprises(_db)
+    all_cfg[str(eid)] = {
+        "enabled": bool(cfg.get("enabled")),
+        "auto_fix": bool(cfg.get("auto_fix")),
+        "scope": cfg.get("scope") or {"mode": "all"},
+        "compare_fields": cfg.get("compare_fields") or [],
+    }
+    save_ai_check_enterprises(_db, all_cfg)
+    return jsonify({"code": 0, "msg": "已保存"})
+
+
+@insurance_bp.route("/api/insurance/ai-check/issues", methods=["GET"])
+def get_ai_check_issues():
+    """AI质检问题列表：筛选企业/状态(flagged待确认/corrected已修正/resolved已处理)/日期。"""
+    resp = _require_super_admin()
+    if resp:
+        return resp
+    from insurance.ai_db import query_ai_check_issues
+    filters = {
+        "status": request.args.get("status", ""),
+        "enterprise_id": request.args.get("enterprise_id", type=int),
+        "date_start": request.args.get("date_start", ""),
+        "date_end": request.args.get("date_end", ""),
+    }
+    page = request.args.get("page", 1, type=int)
+    page_size = min(request.args.get("page_size", 20, type=int), 100)
+    data = query_ai_check_issues(_db, filters, page, page_size)
+    return jsonify({"code": 0, "data": data})
+
+
+@insurance_bp.route("/api/insurance/records/<int:record_id>/ai-check/resolve", methods=["POST"])
+def resolve_ai_check_issue(record_id):
+    """
+    处理质检问题条目：{action: adopt(采纳AI值)/keep(保留原值)/revert(还原自动修正), fields:[...]}
+    adopt/revert 的 fields 为空时对差异/修正的全部字段生效。
+    """
+    resp = _require_super_admin()
+    if resp:
+        return resp
+    body = request.get_json(force=True) or {}
+    action = body.get("action") or ""
+    field_names = body.get("fields") or []
+    if action not in ("adopt", "keep", "revert"):
+        return jsonify({"code": 400, "msg": "action 必须为 adopt/keep/revert"}), 400
+
+    record = get_insurance_record(_db, record_id)
+    if not record:
+        return jsonify({"code": 404, "msg": "记录不存在"}), 404
+    if not record.get("ai_check_status"):
+        return jsonify({"code": 400, "msg": "该记录未经过AI质检"}), 400
+
+    try:
+        parsed_fields = json.loads(record.get("parsed_fields") or "{}")
+    except (TypeError, json.JSONDecodeError):
+        parsed_fields = {}
+    try:
+        ai_corrections = json.loads(record.get("ai_corrections") or "{}")
+    except (TypeError, json.JSONDecodeError):
+        ai_corrections = {}
+    try:
+        ai_field_list = json.loads(record.get("ai_fields") or "[]")
+    except (TypeError, json.JSONDecodeError):
+        ai_field_list = []
+
+    uid, uname = _current_operator()
+    now_str = time.strftime("%Y-%m-%d %H:%M:%S")
+    updates = {"ai_check_status": "resolved"}
+
+    if action == "adopt":
+        # 采纳AI值：从最近一条流水的 diff_json 取AI值写入
+        conn = _db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor.execute(
+                "SELECT diff_json FROM ai_check_log WHERE record_id = %s AND diff_json IS NOT NULL "
+                "ORDER BY id DESC LIMIT 1",
+                (record_id,),
+            )
+            row = cursor.fetchone() or {}
+        finally:
+            conn.close()
+        try:
+            diffs = json.loads(row.get("diff_json") or "[]")
+        except (TypeError, json.JSONDecodeError):
+            diffs = []
+        applied = 0
+        for d in diffs:
+            name = d.get("field")
+            if field_names and name not in field_names:
+                continue
+            old_val = str(parsed_fields.get(name) or "")
+            parsed_fields[name] = d.get("ai", "")
+            ai_corrections[name] = {
+                "old": old_val, "new": d.get("ai", ""),
+                "time": now_str, "source": "resolve", "operator": uname,
+            }
+            if name not in ai_field_list:
+                ai_field_list.append(name)
+            applied += 1
+        if not applied:
+            return jsonify({"code": 400, "msg": "没有可采纳的差异字段"}), 400
+        updates.update({
+            "parsed_fields": parsed_fields,
+            "ai_corrections": ai_corrections,
+            "ai_fields": ai_field_list,
+        })
+    elif action == "revert":
+        # 还原自动修正：按 ai_corrections 恢复原值
+        reverted = 0
+        for name, c in list(ai_corrections.items()):
+            if field_names and name not in field_names:
+                continue
+            if not isinstance(c, dict):
+                continue
+            parsed_fields[name] = c.get("old", "")
+            ai_corrections[name] = {**c, "reverted_at": now_str, "reverted_by": uname}
+            if name in ai_field_list:
+                ai_field_list.remove(name)
+            reverted += 1
+        if not reverted:
+            return jsonify({"code": 400, "msg": "没有可还原的修正字段"}), 400
+        updates.update({
+            "parsed_fields": parsed_fields,
+            "ai_corrections": ai_corrections,
+            "ai_fields": ai_field_list,
+        })
+
+    update_insurance_record(_db, record_id, updates)
+    return jsonify({"code": 0, "msg": "已处理"})
+
+
+@insurance_bp.route("/api/insurance/records/<int:record_id>/ai-check", methods=["GET"])
+def get_record_ai_check_detail(record_id):
+    """某记录的质检详情：状态/修正历史/差异明细/相关流水。"""
+    resp = _require_super_admin()
+    if resp:
+        return resp
+    record = get_insurance_record(_db, record_id)
+    if not record:
+        return jsonify({"code": 404, "msg": "记录不存在"}), 404
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT * FROM ai_check_log WHERE record_id = %s ORDER BY id DESC LIMIT 20",
+            (record_id,),
+        )
+        logs = [dict(r) for r in cursor.fetchall()]
+    finally:
+        conn.close()
+    for l in logs:
+        if l.get("created_at"):
+            l["created_at"] = str(l["created_at"])
+
+    def _load_json(v, default):
+        try:
+            return json.loads(v) if isinstance(v, str) else (v or default)
+        except (TypeError, json.JSONDecodeError):
+            return default
+
+    return jsonify({"code": 0, "data": {
+        "ai_check_status": record.get("ai_check_status"),
+        "ai_checked_at": str(record.get("ai_checked_at") or ""),
+        "ai_fields": _load_json(record.get("ai_fields"), []),
+        "ai_corrections": _load_json(record.get("ai_corrections"), {}),
+        "logs": logs,
+    }})
+
+
+@insurance_bp.route("/api/insurance/ai-check/logs", methods=["GET"])
+def get_ai_check_logs():
+    """AI调用流水列表（手动+自动），筛选企业/触发方式/操作人/结果/日期，含token汇总。"""
+    resp = _require_super_admin()
+    if resp:
+        return resp
+    from insurance.ai_db import query_ai_check_logs
+    filters = {
+        "enterprise_id": request.args.get("enterprise_id", type=int),
+        "trigger_type": request.args.get("trigger_type", ""),
+        "operator_user_id": request.args.get("operator_user_id", type=int),
+        "result": request.args.get("result", ""),
+        "date_start": request.args.get("date_start", ""),
+        "date_end": request.args.get("date_end", ""),
+    }
+    page = request.args.get("page", 1, type=int)
+    page_size = min(request.args.get("page_size", 20, type=int), 100)
+    data = query_ai_check_logs(_db, filters, page, page_size)
+    for row in data.get("list", []):
+        if row.get("created_at"):
+            row["created_at"] = str(row["created_at"])
+    return jsonify({"code": 0, "data": data})
+
+
+@insurance_bp.route("/api/insurance/ai-check/stats", methods=["GET"])
+def get_ai_check_stats_api():
+    """企业质检统计：识别总数/质检数/准确数/修正数/待确认/真实准确率/高频出错字段/token成本。"""
+    resp = _require_super_admin()
+    if resp:
+        return resp
+    from insurance.ai_db import get_ai_check_stats
+    from insurance.ai_checker import estimate_cost
+    date_start = request.args.get("date_start", "")
+    date_end = request.args.get("date_end", "")
+    data = get_ai_check_stats(_db, date_start, date_end)
+    for row in data.get("list", []) + [data.get("total", {})]:
+        row["est_cost"] = round(estimate_cost(row.get("prompt_tokens", 0), row.get("completion_tokens", 0)), 2)
+    return jsonify({"code": 0, "data": data})

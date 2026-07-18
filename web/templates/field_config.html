@@ -517,10 +517,12 @@
                 <button class="tab-btn" :class="{active: activeTab==='alias'}" @click="activeTab='alias'">别名设置</button>
                 <button class="tab-btn" :class="{active: activeTab==='date'}" @click="activeTab='date'">日期格式</button>
                 <button class="tab-btn" :class="{active: activeTab==='formula'}" @click="activeTab='formula'">自动计算公式</button>
+                <button class="tab-btn" :class="{active: activeTab==='ratio'}" @click="activeTab='ratio'">比例规则</button>
                 <button class="tab-btn" :class="{active: activeTab==='listCols'}" @click="activeTab='listCols'">页面列配置</button>
                 <button class="tab-btn" :class="{active: activeTab==='exportCols'}" @click="activeTab='exportCols'">导出列配置</button>
                 <button class="tab-btn" :class="{active: activeTab==='remark'}" @click="activeTab='remark'">备注快捷选择</button>
                 <button class="tab-btn" :class="{active: activeTab==='groupFill'}" @click="activeTab='groupFill'">群内补充</button>
+                <button v-if="currentRole === 'super_admin'" class="tab-btn" :class="{active: activeTab==='ai'}" @click="activeTab='ai'">✨ AI 模型</button>
             </div>
 
             <!-- 企业模板全局只读提示（所有 tab 可见） -->
@@ -673,6 +675,74 @@
                         <tr v-if="filteredFlatRules.length === 0">
                             <td colspan="5" style="text-align:center; color:var(--text-muted); padding:40px 0;">
                                 暂无规则，点击右上角"添加规则"开始配置
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                </div><!-- /.rule-table-wrap -->
+            </div>
+
+            <!-- Tab: 比例规则（按条件取值） -->
+            <div v-show="activeTab==='ratio'" style="padding:24px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+                    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <input v-model="ratioSearch" placeholder="搜索：字段 / 保司 / 险种 / 条件"
+                               style="font-size:13px; padding:5px 10px; border:1px solid var(--border-light); border-radius:4px; width:220px;">
+                        <select v-model="ratioCompanyFilter" style="font-size:13px; padding:4px 8px; border:1px solid var(--border-light); border-radius:4px;">
+                            <option value="">全部保司</option>
+                            <option v-for="c in ratioCompanies" :value="c">{{ c }}</option>
+                        </select>
+                        <span style="font-size:12px; color:var(--text-muted);">共 {{ ratioRules.length }} 条规则，显示 {{ filteredRatioRules.length }} 条</span>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-outline btn-sm" @click="openRatioImport" :disabled="activeSource === 'enterprise'">📥 批量导入</button>
+                        <button class="btn btn-primary btn-sm" @click="openRatioModal(null)" :disabled="activeSource === 'enterprise'">+ 添加规则</button>
+                    </div>
+                </div>
+                <div style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">
+                    按条件给「比例字段」取值（如 应付费率），公式照常引用该字段（如 应付费用 = 保费 × 应付费率）。比例字段需先在「导出列配置」中添加为自定义列。
+                </div>
+                <div class="rule-table-wrap" style="overflow-x:auto;">
+                <table class="rule-table" style="min-width:640px;">
+                    <thead>
+                        <tr>
+                            <th style="width:110px;">比例字段</th>
+                            <th style="width:100px;">保司</th>
+                            <th style="width:90px;">险种</th>
+                            <th>条件 → 比例</th>
+                            <th style="width:100px; text-align:center;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="item in filteredRatioRules" :key="item.field + ':' + item.company + ':' + item.policyType">
+                            <td><span style="font-weight:500; color:var(--primary);">{{ item.field }}</span></td>
+                            <td style="font-weight:500;">{{ item.company }}</td>
+                            <td>{{ item.policyType }}</td>
+                            <td>
+                                <div v-if="item.mode === 'fixed'" style="padding:2px 0;">
+                                    <span style="color:var(--text-muted); font-size:12px;">固定比例</span>
+                                    <strong style="margin-left:8px; color:var(--primary);">{{ fmtPct(item.fixedPct) }}</strong>
+                                </div>
+                                <template v-else>
+                                    <div v-for="(br, bi) in item.branches" :key="bi" style="padding:2px 0; font-size:13px;">
+                                        <span style="background:#eff4ff; color:#2563eb; border-radius:4px; padding:1px 8px; font-size:12px;">{{ br.note || ratioCondText(br) }}</span>
+                                        <span v-if="br.note" style="color:var(--text-muted); font-size:12px; margin-left:6px;">{{ ratioCondText(br) }}</span>
+                                        <strong style="margin-left:8px; color:var(--primary);">{{ fmtPct(br.pct) }}</strong>
+                                    </div>
+                                    <div style="padding:2px 0; font-size:13px;">
+                                        <span style="background:#f1f5f9; color:#64748b; border-radius:4px; padding:1px 8px; font-size:12px;">默认</span>
+                                        <strong style="margin-left:8px; color:var(--primary);">{{ fmtPct(item.defaultPct) }}</strong>
+                                    </div>
+                                </template>
+                            </td>
+                            <td style="text-align:center; white-space:nowrap;">
+                                <button class="btn btn-outline btn-sm" style="margin-right:4px;" @click="editRatioRule(item)" :disabled="activeSource === 'enterprise'">编辑</button>
+                                <button class="btn btn-sm" style="color:var(--danger); background:transparent; border:1px solid #fecaca;" @click="deleteRatioRule(item)" :disabled="activeSource === 'enterprise'">删除</button>
+                            </td>
+                        </tr>
+                        <tr v-if="filteredRatioRules.length === 0">
+                            <td colspan="5" style="text-align:center; color:var(--text-muted); padding:40px 0;">
+                                暂无比例规则，点击右上角"添加规则"或"批量导入"开始配置
                             </td>
                         </tr>
                     </tbody>
@@ -1046,6 +1116,218 @@
                 </div>
             </div>
 
+            <!-- Tab 8: AI 模型（仅超管） -->
+            <div v-show="activeTab==='ai'" style="padding:24px;">
+                <!-- 加载中 -->
+                <div v-if="aiLoading" style="text-align:center; color:var(--text-muted); padding:40px 0; font-size:13px;">加载中...</div>
+
+                <template v-else>
+                    <!-- 顶部说明 -->
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
+                        <span style="font-size:15px; font-weight:600;">✨ AI 大模型管理</span>
+                        <span style="font-size:11px; background:#fef2f2; color:#dc2626; border:1px solid #fecaca; border-radius:999px; padding:1px 10px; font-weight:600;">仅内部超级管理员可见</span>
+                        <span style="font-size:11px; background:#fff7ed; color:var(--primary); border:1px solid rgba(234,88,12,0.2); border-radius:999px; padding:1px 10px;">全局生效</span>
+                    </div>
+
+                    <!-- 总开关 -->
+                    <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px; padding:14px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
+                        <label style="display:flex; align-items:center; gap:10px; font-size:13px; font-weight:500; cursor:pointer;" @click="aiConfig.enabled = !aiConfig.enabled">
+                            <div style="position:relative; width:36px; height:20px; flex-shrink:0;">
+                                <div style="position:absolute; inset:0; border-radius:10px; transition:background 0.2s;" :style="{ background: aiConfig.enabled ? 'var(--primary)' : '#d1d5db' }"></div>
+                                <div style="position:absolute; width:16px; height:16px; top:2px; border-radius:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); transition:left 0.2s;" :style="{ left: aiConfig.enabled ? '18px' : '2px' }"></div>
+                            </div>
+                            启用 AI 能力
+                            <span style="font-size:11px; color:var(--text-muted); font-weight:400;">总开关，关闭后所有 AI 提取/质检不生效</span>
+                        </label>
+                        <div style="height:1px; background:var(--border-light);"></div>
+                        <label style="display:flex; align-items:center; gap:10px; font-size:13px; font-weight:500; cursor:pointer;" @click="aiConfig.allow_auto_fix = !aiConfig.allow_auto_fix">
+                            <div style="position:relative; width:36px; height:20px; flex-shrink:0;">
+                                <div style="position:absolute; inset:0; border-radius:10px; transition:background 0.2s;" :style="{ background: aiConfig.allow_auto_fix ? 'var(--primary)' : '#d1d5db' }"></div>
+                                <div style="position:absolute; width:16px; height:16px; top:2px; border-radius:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); transition:left 0.2s;" :style="{ left: aiConfig.allow_auto_fix ? '18px' : '2px' }"></div>
+                            </div>
+                            允许 AI 直接覆盖
+                            <span style="font-size:11px; color:var(--text-muted); font-weight:400;">全局总闸（默认关）：关闭时所有企业质检强制仅标记+通知；开启后才能在「客户管理」按企业单独放开直接覆盖</span>
+                        </label>
+                    </div>
+
+                    <!-- 模型列表 -->
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                        <span style="font-size:14px; font-weight:600;">模型列表</span>
+                        <button class="btn btn-primary btn-sm" @click="openAiModelModal(null)">＋ 添加模型</button>
+                    </div>
+                    <div class="alias-table-wrap" style="max-height:none; margin-bottom:24px;">
+                        <table class="alias-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:90px;">优先级</th>
+                                    <th>名称</th>
+                                    <th>厂商 / 模型</th>
+                                    <th>API Key</th>
+                                    <th style="width:70px;">状态</th>
+                                    <th style="width:260px;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(m, idx) in aiModelsSorted" :key="m.id || ('new_' + idx)"
+                                    :style="{ background: m.id && m.id === aiConfig.active_model_id ? '#fff7ed' : '' }">
+                                    <!-- 优先级 + 上移下移 -->
+                                    <td>
+                                        <div style="display:flex; align-items:center; gap:4px;">
+                                            <span style="font-size:12px; color:var(--text-secondary); width:16px;">{{ m.priority }}</span>
+                                            <button class="btn btn-sm btn-outline" style="padding:2px 6px;" :disabled="idx === 0" @click="moveModel(idx, -1)">↑</button>
+                                            <button class="btn btn-sm btn-outline" style="padding:2px 6px;" :disabled="idx === aiModelsSorted.length - 1" @click="moveModel(idx, 1)">↓</button>
+                                        </div>
+                                    </td>
+                                    <!-- 名称 -->
+                                    <td>
+                                        <div style="display:flex; align-items:center; gap:6px;">
+                                            <span style="font-weight:500;">{{ m.name || '(未命名)' }}</span>
+                                            <span v-if="m.id && m.id === aiConfig.active_model_id" style="font-size:11px; color:var(--primary); background:#ffedd5; border-radius:999px; padding:1px 8px; white-space:nowrap;">● 当前使用</span>
+                                        </div>
+                                    </td>
+                                    <!-- 厂商/模型 -->
+                                    <td>
+                                        <div style="font-size:12px;">{{ providerLabel(m.provider) }}</div>
+                                        <div style="font-size:11px; color:var(--text-muted);">{{ m.model }}</div>
+                                    </td>
+                                    <!-- API Key（打码） -->
+                                    <td style="font-family:'SF Mono',monospace; font-size:12px; color:var(--text-secondary);">{{ m.api_key || '—' }}</td>
+                                    <!-- 状态开关 -->
+                                    <td>
+                                        <div style="position:relative; width:36px; height:20px; cursor:pointer;" @click="m.enabled = !m.enabled">
+                                            <div style="position:absolute; inset:0; border-radius:10px; transition:background 0.2s;" :style="{ background: m.enabled ? 'var(--success)' : '#d1d5db' }"></div>
+                                            <div style="position:absolute; width:16px; height:16px; top:2px; border-radius:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); transition:left 0.2s;" :style="{ left: m.enabled ? '18px' : '2px' }"></div>
+                                        </div>
+                                    </td>
+                                    <!-- 操作 -->
+                                    <td>
+                                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                            <button class="btn btn-sm btn-outline" @click="testModel(m)" :disabled="aiTestState[m.id]?.testing">
+                                                {{ aiTestState[m.id]?.testing ? '测试中…' : '测试连通' }}
+                                            </button>
+                                            <span v-if="aiTestState[m.id] && !aiTestState[m.id].testing && aiTestState[m.id].done"
+                                                  :style="{ fontSize:'12px', color: aiTestState[m.id].ok ? 'var(--success)' : 'var(--danger)' }">
+                                                {{ aiTestState[m.id].ok ? '✓ ' + (aiTestState[m.id].duration_ms/1000).toFixed(1) + 's' : '✗ ' + (aiTestState[m.id].error || '失败') }}
+                                            </span>
+                                            <button class="btn btn-sm btn-outline" @click="openAiModelModal(idx)">编辑</button>
+                                            <button v-if="m.id && m.id !== aiConfig.active_model_id" class="btn btn-sm btn-outline" @click="setActiveModel(m)">切换为当前</button>
+                                            <button class="btn btn-sm" style="color:var(--danger); background:transparent; border:1px solid #fecaca;" @click="deleteAiModel(idx)">删除</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr v-if="aiModelsSorted.length === 0">
+                                    <td colspan="6" style="text-align:center; color:var(--text-muted); padding:24px 0;">暂无模型，点击右上角「＋ 添加模型」</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 全局参数 -->
+                    <div style="font-size:14px; font-weight:600; margin-bottom:10px;">全局参数</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
+                        <div>
+                            <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">最大页数</label>
+                            <input type="number" min="1" v-model.number="aiConfig.max_pages" style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
+                            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">单份 PDF 送入 AI 的最大页数（默认 4）</div>
+                        </div>
+                        <div>
+                            <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">日成本提醒阈值（元）</label>
+                            <input type="number" min="0" step="0.01" v-model.number="aiConfig.cost_alert_threshold" style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
+                            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">当日 AI 费用超过该值时钉钉通知，0 = 不提醒</div>
+                        </div>
+                        <div>
+                            <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">钉钉通知 Webhook</label>
+                            <input type="text" v-model="aiConfig.notify_webhook" placeholder="https://oapi.dingtalk.com/robot/send?access_token=..." style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
+                        </div>
+                        <div>
+                            <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">加签密钥</label>
+                            <input type="text" v-model="aiConfig.notify_secret" placeholder="SEC..." style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
+                            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">已保存回显为打码值，含 * 表示未修改，直接保存即可</div>
+                        </div>
+                    </div>
+
+                    <!-- 提取 Prompt 模板 -->
+                    <div style="margin-bottom:20px;">
+                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">提取 Prompt 模板</label>
+                        <textarea v-model="aiConfig.prompt_template" rows="10"
+                                  style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; font-family:'SF Mono','Fira Code',monospace; line-height:1.6; resize:vertical;"></textarea>
+                        <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">支持 <code style="background:#fff7ed; color:var(--primary); padding:1px 5px; border-radius:4px;" v-text="fieldListToken"></code> 占位符，运行时会被替换为待提取的字段清单。</div>
+                    </div>
+
+                    <!-- 保存配置 -->
+                    <div style="display:flex; justify-content:flex-end;">
+                        <button class="btn btn-primary" @click="saveAiConfig" :disabled="aiSaving">{{ aiSaving ? '保存中...' : '保存配置' }}</button>
+                    </div>
+                </template>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 添加/编辑 AI 模型弹窗 -->
+    <div class="modal-mask" v-if="showAiModelModal" @click.self="showAiModelModal=false">
+        <div class="modal-body" style="width:520px;">
+            <div style="padding:20px 24px; border-bottom:1px solid var(--border-light); display:flex; align-items:center; justify-content:space-between;">
+                <h3 style="font-size:16px; font-weight:600;">{{ aiModelEditIdx !== null ? '编辑模型' : '添加模型' }}</h3>
+                <span @click="showAiModelModal=false" style="cursor:pointer; color:var(--text-muted); font-size:18px;">✕</span>
+            </div>
+            <div style="padding:24px;">
+                <!-- 名称 -->
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">名称</label>
+                    <input type="text" v-model="aiModelForm.name" placeholder="如：DeepSeek 主用" style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
+                </div>
+                <!-- 厂商预设 -->
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">厂商预设</label>
+                    <select v-model="aiModelForm.provider" @change="onAiProviderChange" style="width:100%; padding:8px 12px;">
+                        <option value="">自定义 / 请选择</option>
+                        <option v-for="p in aiProviderPresets" :key="p.provider" :value="p.provider">{{ p.label }}</option>
+                    </select>
+                    <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">选择后自动带出 base_url 和推荐 model，可再手动修改</div>
+                </div>
+                <!-- base_url -->
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">base_url</label>
+                    <input type="text" v-model="aiModelForm.base_url" placeholder="https://api.example.com/v1" style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px; font-family:'SF Mono',monospace;">
+                </div>
+                <!-- model -->
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">model</label>
+                    <input type="text" v-model="aiModelForm.model" placeholder="如：deepseek-chat" style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px; font-family:'SF Mono',monospace;">
+                </div>
+                <!-- API Key -->
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">API Key</label>
+                    <input type="text" v-model="aiModelForm.api_key" placeholder="sk-..." style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px; font-family:'SF Mono',monospace;">
+                    <div v-if="aiModelEditIdx !== null" style="font-size:11px; color:var(--text-muted); margin-top:4px;">已保存回显为打码值，含 * 表示未修改，直接保存即可（后端自动回填明文）</div>
+                </div>
+                <!-- 超时 + 启用 -->
+                <div style="display:flex; align-items:flex-end; gap:20px; margin-bottom:8px;">
+                    <div style="flex:1;">
+                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">超时（秒）</label>
+                        <input type="number" min="1" v-model.number="aiModelForm.timeout" style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
+                    </div>
+                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; cursor:pointer; padding-bottom:8px;" @click="aiModelForm.enabled = !aiModelForm.enabled">
+                        <div style="position:relative; width:36px; height:20px; flex-shrink:0;">
+                            <div style="position:absolute; inset:0; border-radius:10px; transition:background 0.2s;" :style="{ background: aiModelForm.enabled ? 'var(--primary)' : '#d1d5db' }"></div>
+                            <div style="position:absolute; width:16px; height:16px; top:2px; border-radius:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); transition:left 0.2s;" :style="{ left: aiModelForm.enabled ? '18px' : '2px' }"></div>
+                        </div>
+                        启用
+                    </label>
+                </div>
+                <!-- 弹窗内测试 -->
+                <div style="display:flex; align-items:center; gap:10px; margin-top:8px;">
+                    <button class="btn btn-sm btn-outline" @click="testEditingModel" :disabled="aiModelTesting">{{ aiModelTesting ? '测试中…' : '测试连通' }}</button>
+                    <span v-if="aiModelTestResult" :style="{ fontSize:'12px', color: aiModelTestResult.ok ? 'var(--success)' : 'var(--danger)' }">
+                        {{ aiModelTestResult.ok ? '✓ ' + (aiModelTestResult.duration_ms/1000).toFixed(1) + 's' : '✗ ' + (aiModelTestResult.error || '失败') }}
+                    </span>
+                </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:12px; padding:16px 24px; border-top:1px solid var(--border-light);">
+                <button class="btn btn-outline" @click="showAiModelModal=false">取消</button>
+                <button class="btn btn-primary" @click="saveAiModel">确定</button>
+            </div>
         </div>
     </div>
 
@@ -1154,6 +1436,188 @@
             <div style="display:flex; justify-content:flex-end; gap:12px; padding:16px 24px; border-top:1px solid var(--border-light);">
                 <button class="btn btn-outline" @click="showFormulaModal=false">取消</button>
                 <button class="btn btn-primary" @click="saveFormula">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 比例规则编辑弹窗 -->
+    <div class="modal-mask" v-if="showRatioModal" @click.self="showRatioModal=false">
+        <div class="modal-body" style="max-width:640px;">
+            <div style="padding:20px 24px; border-bottom:1px solid var(--border-light);">
+                <h3 style="font-size:16px; font-weight:600;">{{ editingRatioIdx !== null ? '编辑' : '添加' }}比例规则</h3>
+            </div>
+            <div style="padding:24px; max-height:65vh; overflow-y:auto;">
+                <div class="formula-grid" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:16px;">
+                    <div>
+                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">比例字段</label>
+                        <input v-model="ratioForm.field" list="ratioFieldOptions" placeholder="如：应付费率" style="width:100%; padding:8px 12px; border:1px solid var(--border-light); border-radius:4px;">
+                        <datalist id="ratioFieldOptions">
+                            <option v-for="f in formulaFields" :value="f"></option>
+                        </datalist>
+                    </div>
+                    <div>
+                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">保司</label>
+                        <input v-model="ratioForm.company" list="ratioCompanyOptions" placeholder="简称或全部" style="width:100%; padding:8px 12px; border:1px solid var(--border-light); border-radius:4px;">
+                        <datalist id="ratioCompanyOptions">
+                            <option value="全部"></option>
+                            <option v-for="c in companyShortList" :value="c"></option>
+                        </datalist>
+                    </div>
+                    <div>
+                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">险种</label>
+                        <input v-model="ratioForm.policyType" list="ratioPolicyOptions" placeholder="简称或全部" style="width:100%; padding:8px 12px; border:1px solid var(--border-light); border-radius:4px;">
+                        <datalist id="ratioPolicyOptions">
+                            <option value="全部"></option>
+                            <option value="交强险"></option>
+                            <option value="商业险"></option>
+                            <option value="驾乘险"></option>
+                            <option v-for="p in policyTypeShortList" :value="p"></option>
+                        </datalist>
+                    </div>
+                </div>
+
+                <div style="margin-bottom:16px; display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:13px; font-weight:500; color:var(--text-secondary);">取值方式</span>
+                    <div style="display:inline-flex; border:1px solid var(--border-light); border-radius:6px; overflow:hidden;">
+                        <button :style="ratioForm.mode==='fixed' ? 'background:var(--primary);color:#fff;' : 'background:#f8fafc;color:#475569;'"
+                                style="font-size:13px; padding:6px 16px; border:none; cursor:pointer; font-weight:600;"
+                                @click="ratioForm.mode='fixed'">固定比例</button>
+                        <button :style="ratioForm.mode==='branch' ? 'background:var(--primary);color:#fff;' : 'background:#f8fafc;color:#475569;'"
+                                style="font-size:13px; padding:6px 16px; border:none; cursor:pointer; font-weight:600;"
+                                @click="ratioForm.mode='branch'">条件分支</button>
+                    </div>
+                </div>
+
+                <!-- 固定比例 -->
+                <div v-if="ratioForm.mode==='fixed'" style="margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:13px; color:var(--text-secondary);">比例 =</span>
+                    <input type="number" step="0.01" v-model="ratioForm.fixedPct" style="width:100px; padding:6px 10px; border:1px solid var(--border-light); border-radius:4px; text-align:right; font-weight:600;">
+                    <span>%</span>
+                </div>
+
+                <!-- 条件分支 -->
+                <template v-else>
+                    <div v-for="(br, bi) in ratioForm.branches" :key="bi"
+                         style="border:1.5px dashed #94a3b8; border-radius:8px; padding:12px 14px; margin-bottom:12px; background:#fafcff;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                            <span style="font-weight:600; color:var(--primary); font-size:13px;">分支 {{ bi + 1 }} · 满足以下全部条件</span>
+                            <span style="flex:1;"></span>
+                            <button class="btn btn-sm btn-outline" @click="moveRatioBranch(bi, -1)" :disabled="bi===0">↑</button>
+                            <button class="btn btn-sm btn-outline" @click="moveRatioBranch(bi, 1)" :disabled="bi===ratioForm.branches.length-1">↓</button>
+                            <button class="btn btn-sm" style="color:var(--danger); background:transparent; border:1px solid #fecaca;" @click="ratioForm.branches.splice(bi,1)">删除分支</button>
+                        </div>
+                        <div v-for="(c, ci) in br.conditions" :key="ci"
+                             style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:6px 0; padding:6px 10px; background:#fff; border:1px solid var(--border-light); border-radius:6px; font-size:13px;">
+                            <span v-if="ci>0" style="background:#e0e7ff; color:#4338ca; border-radius:4px; padding:0 6px; font-size:11px; font-weight:700;">且</span>
+                            <select v-model="c.type" style="padding:4px 6px;">
+                                <option value="field">字段条件</option>
+                                <option value="related">关联单条件</option>
+                            </select>
+                            <template v-if="c.type==='related'">
+                                <span style="color:var(--text-muted); font-size:12px;">按</span>
+                                <select v-model="c.match_by" style="padding:4px 6px;">
+                                    <option>车牌号</option><option>车架号</option><option>投保人</option>
+                                </select>
+                                <select v-model="c.op" style="padding:4px 6px;">
+                                    <option value="exists">存在</option>
+                                    <option value="not_exists">不存在</option>
+                                </select>
+                                <span style="color:var(--text-muted); font-size:12px;">险种</span>
+                                <input v-model="c.policy_type" placeholder="如：驾乘险" style="width:90px; padding:4px 6px; border:1px solid var(--border-light); border-radius:4px;">
+                                <span style="color:var(--text-muted); font-size:12px;">前后</span>
+                                <input type="number" v-model="c.days" min="1" style="width:56px; padding:4px 6px; border:1px solid var(--border-light); border-radius:4px;">
+                                <span style="color:var(--text-muted); font-size:12px;">天</span>
+                            </template>
+                            <template v-else>
+                                <input v-model="c.field" list="ratioCondFieldOptions" placeholder="字段名" style="width:110px; padding:4px 6px; border:1px solid var(--border-light); border-radius:4px;">
+                                <select v-model="c.op" style="padding:4px 6px;">
+                                    <option v-for="op in ratioFieldOps" :value="op">{{ op }}</option>
+                                </select>
+                                <input v-if="c.op!=='为空' && c.op!=='不为空'" v-model="c.value" placeholder="比较值" style="width:100px; padding:4px 6px; border:1px solid var(--border-light); border-radius:4px;">
+                            </template>
+                            <button class="btn btn-sm" style="color:var(--danger); background:transparent; border:none;" @click="br.conditions.splice(ci,1)">✕</button>
+                        </div>
+                        <div style="display:flex; gap:8px; margin:8px 0;">
+                            <button class="btn btn-sm btn-outline" @click="addRatioCond(br, 'field')">＋字段条件</button>
+                            <button class="btn btn-sm btn-outline" @click="addRatioCond(br, 'related')">＋关联单条件</button>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:13px; color:var(--text-secondary);">则比例 =</span>
+                            <input type="number" step="0.01" v-model="br.pct" style="width:90px; padding:5px 8px; border:1px solid var(--border-light); border-radius:4px; text-align:right; font-weight:600;">
+                            <span>%</span>
+                            <span style="font-size:13px; color:var(--text-secondary); margin-left:8px;">备注</span>
+                            <input v-model="br.note" placeholder="如：带驾乘险出单" style="width:140px; padding:5px 8px; border:1px solid var(--border-light); border-radius:4px;">
+                        </div>
+                    </div>
+                    <div style="border:1px solid var(--border-light); border-radius:8px; padding:12px 14px; margin-bottom:12px; background:#f8fafc;">
+                        <div style="font-weight:600; color:#64748b; font-size:13px; margin-bottom:8px;">默认（以上条件都不满足时）</div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:13px; color:var(--text-secondary);">比例 =</span>
+                            <input type="number" step="0.01" v-model="ratioForm.defaultPct" style="width:90px; padding:5px 8px; border:1px solid var(--border-light); border-radius:4px; text-align:right; font-weight:600;">
+                            <span>%</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-outline btn-sm" @click="addRatioBranch">＋ 添加分支</button>
+                    <datalist id="ratioCondFieldOptions">
+                        <option value="保费"></option>
+                        <option value="承保险种"></option>
+                        <option value="使用性质"></option>
+                        <option value="车牌号"></option>
+                        <option value="投保人"></option>
+                        <option value="车辆种类"></option>
+                        <option v-for="f in allFields" :value="f"></option>
+                    </datalist>
+                </template>
+                <div v-if="ratioFormError" style="margin-top:12px; font-size:13px; color:var(--danger);">{{ ratioFormError }}</div>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:12px; padding:16px 24px; border-top:1px solid var(--border-light);">
+                <button class="btn btn-outline" @click="showRatioModal=false">取消</button>
+                <button class="btn btn-primary" @click="saveRatioRule">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 比例规则批量导入弹窗 -->
+    <div class="modal-mask" v-if="showRatioImport" @click.self="showRatioImport=false">
+        <div class="modal-body" style="max-width:720px;">
+            <div style="padding:20px 24px; border-bottom:1px solid var(--border-light);">
+                <h3 style="font-size:16px; font-weight:600;">批量导入比例</h3>
+                <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">
+                    粘贴 Excel/CSV 表格（Tab / 逗号分隔均可），5 列：比例字段, 保司, 险种, 条件, 比例。
+                    条件写法：留空/「默认」= 默认比例；「带驾乘险」「不带商业险」= 关联单条件（同车牌 7 天内）；「保费&gt;5000」「使用性质=营运」= 字段条件。比例支持 22% 或 0.22。
+                </div>
+            </div>
+            <div style="padding:20px 24px; max-height:60vh; overflow-y:auto;">
+                <textarea v-model="ratioImportText" rows="8" spellcheck="false"
+                          placeholder="应付费率	前海	交强险	带驾乘险	22%&#10;应付费率	前海	交强险	默认	20%&#10;应付费率	前海	驾乘险		30%"
+                          style="width:100%; font-family:Menlo,Consolas,monospace; font-size:12.5px; border:1px solid var(--border-light); border-radius:6px; padding:10px 12px; resize:vertical;"></textarea>
+                <div v-if="ratioImportErrors.length" style="background:#fef2f2; border:1px solid #fecaca; border-radius:6px; padding:8px 12px; margin-top:10px; font-size:13px; color:var(--danger);">
+                    <div v-for="e in ratioImportErrors">⚠️ {{ e }}</div>
+                </div>
+                <div v-if="ratioImportPreview.length" style="margin-top:12px;">
+                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">解析结果预览（同一「字段+保司+险种」的多行自动合并为一条分支规则）：</div>
+                    <div v-for="r in ratioImportPreview" style="border:1px solid var(--border-light); border-radius:6px; padding:8px 12px; margin-bottom:8px; font-size:13px;">
+                        <div style="font-weight:600;">{{ r.field }} : {{ r.company }} : {{ r.policyType }}
+                            <span style="font-size:12px; color:var(--text-muted); margin-left:6px;">{{ r.mode === 'branch' ? ('条件分支（' + (r.branches.length + 1) + ' 档）') : '固定比例' }}</span>
+                        </div>
+                        <div v-if="r.mode==='fixed'" style="padding:2px 0;">固定比例 <strong style="color:var(--primary);">{{ fmtPct(r.fixedPct) }}</strong></div>
+                        <template v-else>
+                            <div v-for="br in r.branches" style="padding:2px 0;">
+                                <span style="background:#eff4ff; color:#2563eb; border-radius:4px; padding:0 8px; font-size:12px;">{{ br.note || ratioCondText(br) }}</span>
+                                <strong style="margin-left:6px; color:var(--primary);">{{ fmtPct(br.pct) }}</strong>
+                            </div>
+                            <div style="padding:2px 0;">
+                                <span style="background:#f1f5f9; color:#64748b; border-radius:4px; padding:0 8px; font-size:12px;">默认</span>
+                                <strong style="margin-left:6px; color:var(--primary);">{{ fmtPct(r.defaultPct) }}</strong>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:12px; padding:16px 24px; border-top:1px solid var(--border-light);">
+                <button class="btn btn-outline" @click="showRatioImport=false">取消</button>
+                <button class="btn btn-outline" @click="parseRatioImport">解析预览</button>
+                <button class="btn btn-primary" @click="applyRatioImport" :disabled="!ratioImportPreview.length">导入 {{ ratioImportPreview.length ? '(' + ratioImportPreview.length + ' 条规则)' : '' }}</button>
             </div>
         </div>
     </div>
@@ -2096,6 +2560,258 @@ createApp({
             allRules.value[currentFormulaField.value].splice(idx, 1);
         };
 
+        // ========== 比例规则（按条件取值） ==========
+        // 数据模型：{field, company, policyType, mode:'fixed'|'branch', fixedPct, branches:[{conditions, pct, note}], defaultPct}
+        // 存储时比例转小数（22% → 0.22），加载时转回百分数展示
+        const ratioRules = ref([]);
+        const ratioSearch = ref('');
+        const ratioCompanyFilter = ref('');
+        const ratioFieldOps = ['等于', '不等于', '包含', '不包含', '大于', '大于等于', '小于', '小于等于', '为空', '不为空'];
+
+        const ratioCompanies = computed(() => [...new Set(ratioRules.value.map(r => r.company))]);
+        const ratioCondText = (br) => {
+            return (br.conditions || []).map(c => {
+                if (c.type === 'related') return `同${c.match_by}${c.days}天内${c.op === 'exists' ? '存在' : '不存在'}${c.policy_type}`;
+                return `${c.field}${c.op}${['为空', '不为空'].includes(c.op) ? '' : (c.value ?? '')}`;
+            }).join(' 且 ');
+        };
+        const fmtPct = (p) => {
+            const n = parseFloat(p);
+            if (isNaN(n)) return '-';
+            return (Math.round(n * 100) / 100) + '%';
+        };
+        const filteredRatioRules = computed(() => {
+            const q = ratioSearch.value.trim().toLowerCase();
+            return ratioRules.value.filter(r => {
+                if (ratioCompanyFilter.value && r.company !== ratioCompanyFilter.value) return false;
+                if (!q) return true;
+                const text = [r.field, r.company, r.policyType,
+                    ...(r.branches || []).map(b => (b.note || '') + ratioCondText(b) + b.pct),
+                    r.mode === 'fixed' ? r.fixedPct : r.defaultPct].join(' ').toLowerCase();
+                return text.includes(q);
+            });
+        });
+
+        // ---- 编辑弹窗 ----
+        const showRatioModal = ref(false);
+        const editingRatioIdx = ref(null);
+        const ratioForm = ref({ field: '', company: '', policyType: '', mode: 'branch', fixedPct: 20, branches: [], defaultPct: 20 });
+        const ratioFormError = ref('');
+
+        const newRatioCond = (type) => type === 'related'
+            ? { type: 'related', match_by: '车牌号', op: 'exists', policy_type: '驾乘险', days: 7 }
+            : { type: 'field', field: '保费', op: '大于', value: '' };
+        const addRatioCond = (br, type) => { br.conditions.push(newRatioCond(type)); };
+        const addRatioBranch = () => {
+            ratioForm.value.branches.push({ conditions: [newRatioCond('related')], pct: 22, note: '' });
+        };
+        const moveRatioBranch = (bi, d) => {
+            const arr = ratioForm.value.branches;
+            const j = bi + d;
+            if (j < 0 || j >= arr.length) return;
+            [arr[bi], arr[j]] = [arr[j], arr[bi]];
+        };
+        const openRatioModal = (idx) => {
+            ratioFormError.value = '';
+            editingRatioIdx.value = idx;
+            if (idx !== null && ratioRules.value[idx]) {
+                ratioForm.value = JSON.parse(JSON.stringify(ratioRules.value[idx]));
+            } else {
+                ratioForm.value = { field: '', company: '', policyType: '', mode: 'branch', fixedPct: 20,
+                    branches: [{ conditions: [newRatioCond('related')], pct: 22, note: '带驾乘险出单' }], defaultPct: 20 };
+            }
+            showRatioModal.value = true;
+        };
+        const editRatioRule = (item) => {
+            const idx = ratioRules.value.indexOf(item);
+            if (idx >= 0) openRatioModal(idx);
+        };
+        const deleteRatioRule = (item) => {
+            const idx = ratioRules.value.indexOf(item);
+            if (idx >= 0) ratioRules.value.splice(idx, 1);
+        };
+        const saveRatioRule = () => {
+            const f = ratioForm.value;
+            ratioFormError.value = '';
+            if (!f.field || !f.field.trim()) { ratioFormError.value = '请填写比例字段名（如：应付费率）'; return; }
+            if (!f.company || !f.company.trim()) { ratioFormError.value = '请填写保司（或"全部"）'; return; }
+            if (!f.policyType || !f.policyType.trim()) { ratioFormError.value = '请填写险种（或"全部"）'; return; }
+            if (f.mode === 'fixed') {
+                if (isNaN(parseFloat(f.fixedPct))) { ratioFormError.value = '请填写固定比例'; return; }
+            } else {
+                if (!f.branches.length) { ratioFormError.value = '条件分支模式至少需要一个分支'; return; }
+                for (let i = 0; i < f.branches.length; i++) {
+                    const br = f.branches[i];
+                    if (!br.conditions.length) { ratioFormError.value = `分支 ${i + 1} 未添加条件`; return; }
+                    if (isNaN(parseFloat(br.pct))) { ratioFormError.value = `分支 ${i + 1} 未填写比例`; return; }
+                    for (const c of br.conditions) {
+                        if (c.type === 'related' && !(c.policy_type || '').trim()) { ratioFormError.value = `分支 ${i + 1} 的关联单条件未填写险种`; return; }
+                        if (c.type !== 'related' && !(c.field || '').trim()) { ratioFormError.value = `分支 ${i + 1} 的字段条件未填写字段名`; return; }
+                    }
+                }
+                if (isNaN(parseFloat(f.defaultPct))) { ratioFormError.value = '请填写默认比例'; return; }
+            }
+            const rule = JSON.parse(JSON.stringify(f));
+            rule.field = rule.field.trim();
+            rule.company = rule.company.trim();
+            rule.policyType = rule.policyType.trim();
+            // 同 key 规则去重（编辑自身除外）
+            const dupIdx = ratioRules.value.findIndex((r, i) =>
+                i !== editingRatioIdx.value && r.field === rule.field && r.company === rule.company && r.policyType === rule.policyType);
+            if (dupIdx >= 0) { ratioFormError.value = '已存在相同「字段+保司+险种」的规则，请直接编辑那条规则'; return; }
+            if (editingRatioIdx.value !== null) {
+                ratioRules.value[editingRatioIdx.value] = rule;
+            } else {
+                ratioRules.value.push(rule);
+            }
+            showRatioModal.value = false;
+        };
+
+        // ---- 批量导入 ----
+        const showRatioImport = ref(false);
+        const ratioImportText = ref('');
+        const ratioImportPreview = ref([]);
+        const ratioImportErrors = ref([]);
+        const openRatioImport = () => {
+            ratioImportPreview.value = [];
+            ratioImportErrors.value = [];
+            showRatioImport.value = true;
+        };
+        const parseRatioCondCell = (s) => {
+            s = (s || '').trim();
+            if (!s || s === '默认' || s === '其他') return { kind: 'default' };
+            let m = s.match(/^(不带|带|含|不含)(.+?)(出单)?$/);
+            if (m) {
+                const neg = m[1] === '不带' || m[1] === '不含';
+                return { kind: 'cond', cond: { type: 'related', match_by: '车牌号', op: neg ? 'not_exists' : 'exists', policy_type: m[2].trim(), days: 7 } };
+            }
+            m = s.match(/^(.+?)(不包含|包含|>=|＞=|<=|＜=|>|＞|<|＜|=|＝)(.+)$/);
+            if (m) {
+                const opMap = { '>': '大于', '＞': '大于', '>=': '大于等于', '＞=': '大于等于', '<': '小于', '＜': '小于', '<=': '小于等于', '＜=': '小于等于', '=': '等于', '＝': '等于', '包含': '包含', '不包含': '不包含' };
+                return { kind: 'cond', cond: { type: 'field', field: m[1].trim(), op: opMap[m[2]], value: m[3].trim() } };
+            }
+            return { kind: 'error' };
+        };
+        const parseRatioPct = (s) => {
+            // 返回百分数（22 表示 22%）；null = 无法解析
+            s = (s || '').trim();
+            let m = s.match(/^([\d.]+)\s*[%％]$/);
+            if (m) return parseFloat(m[1]);
+            if (/^[\d.]+$/.test(s)) {
+                const n = parseFloat(s);
+                return n <= 1 ? Math.round(n * 10000) / 100 : n;
+            }
+            return null;
+        };
+        const parseRatioImport = () => {
+            const lines = ratioImportText.value.split(/\n/).map(l => l.trim()).filter(Boolean);
+            const groups = {};
+            const errors = [];
+            lines.forEach((line, ln) => {
+                const cells = line.split(/\t|,|，/).map(c => c.trim());
+                if (cells.length < 4) { errors.push(`第 ${ln + 1} 行：列数不足（需 5 列：比例字段,保司,险种,条件,比例）`); return; }
+                const [field, company, policyType] = cells;
+                const cond = cells.length >= 5 ? cells[3] : '';
+                const pRaw = cells.length >= 5 ? cells[4] : cells[3];
+                if (!field || !company || !policyType || !pRaw) { errors.push(`第 ${ln + 1} 行：字段/保司/险种/比例不能为空`); return; }
+                const pct = parseRatioPct(pRaw);
+                if (pct === null) { errors.push(`第 ${ln + 1} 行：比例「${pRaw}」无法识别（支持 22% 或 0.22）`); return; }
+                const pc = parseRatioCondCell(cond);
+                if (pc.kind === 'error') { errors.push(`第 ${ln + 1} 行：条件「${cond}」无法识别`); return; }
+                const key = `${field}:${company}:${policyType}`;
+                groups[key] = groups[key] || { field, company, policyType, rows: [] };
+                groups[key].rows.push({ pc, pct, condText: cond });
+            });
+            ratioImportPreview.value = Object.values(groups).map(g => {
+                const condRows = g.rows.filter(x => x.pc.kind === 'cond');
+                const defRow = g.rows.find(x => x.pc.kind === 'default');
+                if (condRows.length === 0) {
+                    return { field: g.field, company: g.company, policyType: g.policyType, mode: 'fixed',
+                        fixedPct: (defRow || g.rows[0]).pct, branches: [], defaultPct: 20 };
+                }
+                if (!defRow) errors.push(`规则「${g.field}:${g.company}:${g.policyType}」缺少默认行，暂以末分支比例作为默认`);
+                return { field: g.field, company: g.company, policyType: g.policyType, mode: 'branch',
+                    branches: condRows.map(x => ({ conditions: [x.pc.cond], pct: x.pct, note: x.condText })),
+                    fixedPct: 20, defaultPct: defRow ? defRow.pct : condRows[condRows.length - 1].pct };
+            });
+            ratioImportErrors.value = errors;
+        };
+        const applyRatioImport = () => {
+            if (!ratioImportPreview.value.length) return;
+            for (const r of ratioImportPreview.value) {
+                const idx = ratioRules.value.findIndex(x => x.field === r.field && x.company === r.company && x.policyType === r.policyType);
+                if (idx >= 0) ratioRules.value[idx] = JSON.parse(JSON.stringify(r));
+                else ratioRules.value.push(JSON.parse(JSON.stringify(r)));
+            }
+            showToast(`已导入 ${ratioImportPreview.value.length} 条比例规则（重复的已覆盖），保存模板后生效`);
+            showRatioImport.value = false;
+        };
+
+        // ---- 序列化（与后端 ratio_rule 结构互转） ----
+        const pctToDec = (p) => {
+            const n = parseFloat(p);
+            return isNaN(n) ? 0 : Math.round((n / 100) * 1e6) / 1e6;
+        };
+        const decToPct = (v) => {
+            const n = parseFloat(v);
+            return isNaN(n) ? 0 : Math.round(n * 1e6) / 1e4;
+        };
+        const applyRatioConfig = (data) => {
+            try {
+                const rules = [];
+                (data.ratio_rule || []).forEach(item => {
+                    try {
+                        const parts = (item.key || '').split(':');
+                        if (parts.length !== 3) return;
+                        const [field, company, policyType] = parts;
+                        const val = item.value;
+                        if (!val || typeof val !== 'object') return;
+                        if (val.branches) {
+                            rules.push({
+                                field, company, policyType, mode: 'branch', fixedPct: 20,
+                                branches: (val.branches || []).map(b => ({
+                                    conditions: (b.conditions || []).map(c => ({ ...c })),
+                                    pct: decToPct(b.value), note: b.note || '',
+                                })),
+                                defaultPct: decToPct(val.default),
+                            });
+                        } else {
+                            rules.push({ field, company, policyType, mode: 'fixed', fixedPct: decToPct(val.value), branches: [], defaultPct: 20 });
+                        }
+                    } catch (e) { /* 单条规则异常跳过 */ }
+                });
+                ratioRules.value = rules;
+            } catch (e) {
+                ratioRules.value = [];
+            }
+        };
+        const buildRatioConfig = () => {
+            const items = [];
+            for (const r of ratioRules.value) {
+                try {
+                    const key = `${r.field}:${r.company}:${r.policyType}`;
+                    if (r.mode === 'fixed') {
+                        items.push({ key, value: { value: pctToDec(r.fixedPct) } });
+                    } else {
+                        items.push({
+                            key,
+                            value: {
+                                branches: (r.branches || []).map(b => ({
+                                    conditions: (b.conditions || []).map(c => c.type === 'related'
+                                        ? { type: 'related', match_by: c.match_by, policy_type: c.policy_type, op: c.op, days: parseInt(c.days) || 7 }
+                                        : { type: 'field', field: c.field, op: c.op, ...(['为空', '不为空'].includes(c.op) ? {} : { value: c.value ?? '' }) }),
+                                    value: pctToDec(b.pct),
+                                    ...(b.note ? { note: b.note } : {}),
+                                })),
+                                default: pctToDec(r.defaultPct),
+                            },
+                        });
+                    }
+                } catch (e) { /* 单条规则异常跳过 */ }
+            }
+            return items;
+        };
+
         // ========== API 调用 ==========
 
         // 加载模板列表
@@ -2424,6 +3140,9 @@ createApp({
             });
             allRules.value = newRules;
 
+            // 比例规则（按条件取值）
+            applyRatioConfig(data);
+
             // 群内补充关键词规则（异步：未配置时拉取系统默认规则展示）
             applyGroupFillConfig(data);
         };
@@ -2458,6 +3177,9 @@ createApp({
                 }
             }
             config.fee_formula = formulaItems;
+
+            // 比例规则（按条件取值）
+            config.ratio_rule = buildRatioConfig();
 
             return config;
         };
@@ -2821,6 +3543,253 @@ createApp({
             }
         };
 
+        // ========== AI 模型配置（仅超管）==========
+        // 全局 AI 配置对象
+        const aiConfig = reactive({
+            enabled: false,
+            allow_auto_fix: false,
+            models: [],
+            active_model_id: '',
+            max_pages: 4,
+            cost_alert_threshold: 0,
+            notify_webhook: '',
+            notify_secret: '',
+            prompt_template: '',
+        });
+        const aiProviderPresets = ref([]);   // [{provider, label, base_url, model_hint}]
+        const aiLoaded = ref(false);          // 是否已懒加载
+        const aiLoading = ref(false);
+        const aiSaving = ref(false);
+        // 列表内测试连通状态：{ [model_id]: {testing, done, ok, duration_ms, error} }
+        const aiTestState = reactive({});
+
+        // 添加/编辑模型弹窗
+        const showAiModelModal = ref(false);
+        const aiModelEditIdx = ref(null);     // null=新增 | 数字=编辑 aiModelsSorted 中的下标
+        const aiModelForm = reactive({ id: '', name: '', provider: '', base_url: '', model: '', api_key: '', timeout: 60, enabled: true });
+        const aiModelTesting = ref(false);
+        const aiModelTestResult = ref(null);  // {ok, duration_ms, error}
+        // Prompt 占位符字面量（放 JS 常量避免 Vue 模板嵌套花括号解析出错）
+        const fieldListToken = '{{FIELD_LIST}}';
+
+        // 模型列表按优先级排序（priority 数字小=优先级高）
+        const aiModelsSorted = computed(() =>
+            [...aiConfig.models].sort((a, b) => (a.priority || 0) - (b.priority || 0))
+        );
+
+        // 厂商 provider → 展示名
+        const providerLabel = (provider) => {
+            const p = aiProviderPresets.value.find(x => x.provider === provider);
+            return p ? p.label : (provider || '自定义');
+        };
+
+        // 懒加载 AI 配置
+        async function loadAiConfig() {
+            if (currentRole.value !== 'super_admin') return;
+            aiLoading.value = true;
+            try {
+                const resp = await authFetch('/api/insurance/ai-config');
+                const json = await resp.json();
+                if (json.code === 0 && json.data) {
+                    const cfg = json.data.config || {};
+                    aiConfig.enabled = !!cfg.enabled;
+                    aiConfig.allow_auto_fix = !!cfg.allow_auto_fix;
+                    aiConfig.models = Array.isArray(cfg.models) ? cfg.models : [];
+                    aiConfig.active_model_id = cfg.active_model_id || '';
+                    aiConfig.max_pages = cfg.max_pages != null ? cfg.max_pages : 4;
+                    aiConfig.cost_alert_threshold = cfg.cost_alert_threshold != null ? cfg.cost_alert_threshold : 0;
+                    aiConfig.notify_webhook = cfg.notify_webhook || '';
+                    aiConfig.notify_secret = cfg.notify_secret || '';
+                    aiConfig.prompt_template = cfg.prompt_template || '';
+                    aiProviderPresets.value = Array.isArray(json.data.provider_presets) ? json.data.provider_presets : [];
+                    aiLoaded.value = true;
+                } else {
+                    showToast(json.msg || json.message || 'AI 配置加载失败', 'error');
+                }
+            } catch (e) {
+                if (e.message !== '未登录') showToast('AI 配置加载失败: ' + e.message, 'error');
+            } finally {
+                aiLoading.value = false;
+            }
+        }
+
+        // 保存 AI 配置（整体 PUT）；silent=true 时不弹提示（用于「切换为当前」内部调用）
+        async function saveAiConfig(silent) {
+            aiSaving.value = true;
+            try {
+                const resp = await authFetch('/api/insurance/ai-config', {
+                    method: 'PUT',
+                    body: JSON.stringify({ config: JSON.parse(JSON.stringify(aiConfig)) }),
+                });
+                const json = await resp.json();
+                if (json.code === 0) {
+                    if (silent !== true) showToast('AI 配置已保存', 'success');
+                    // 保存后重新拉取，回填后端生成的模型 id / 打码值
+                    await loadAiConfig();
+                    return true;
+                } else {
+                    showToast(json.msg || json.message || '保存失败', 'error');
+                    return false;
+                }
+            } catch (e) {
+                if (e.message !== '未登录') showToast('保存失败: ' + e.message, 'error');
+                return false;
+            } finally {
+                aiSaving.value = false;
+            }
+        }
+
+        // 打开添加/编辑弹窗
+        function openAiModelModal(idx) {
+            aiModelEditIdx.value = idx;
+            aiModelTestResult.value = null;
+            if (idx === null) {
+                // 新增：默认值
+                Object.assign(aiModelForm, { id: '', name: '', provider: '', base_url: '', model: '', api_key: '', timeout: 60, enabled: true });
+            } else {
+                // 编辑：从排序列表复制一份（避免直接改动未确认）
+                const m = aiModelsSorted.value[idx];
+                Object.assign(aiModelForm, {
+                    id: m.id || '', name: m.name || '', provider: m.provider || '',
+                    base_url: m.base_url || '', model: m.model || '',
+                    api_key: m.api_key || '', timeout: m.timeout != null ? m.timeout : 60,
+                    enabled: m.enabled !== false,
+                });
+            }
+            showAiModelModal.value = true;
+        }
+
+        // 选择厂商预设后自动带出 base_url 和推荐 model
+        function onAiProviderChange() {
+            const p = aiProviderPresets.value.find(x => x.provider === aiModelForm.provider);
+            if (p) {
+                if (p.base_url) aiModelForm.base_url = p.base_url;
+                if (p.model_hint) aiModelForm.model = p.model_hint;
+            }
+        }
+
+        // 保存模型（写入 aiConfig.models，不立即提交后端，需点「保存配置」）
+        function saveAiModel() {
+            if (!aiModelForm.name.trim()) { showToast('请填写模型名称', 'warning'); return; }
+            if (!aiModelForm.base_url.trim()) { showToast('请填写 base_url', 'warning'); return; }
+            if (!aiModelForm.model.trim()) { showToast('请填写 model', 'warning'); return; }
+            const payload = {
+                name: aiModelForm.name.trim(),
+                provider: aiModelForm.provider,
+                base_url: aiModelForm.base_url.trim(),
+                model: aiModelForm.model.trim(),
+                api_key: aiModelForm.api_key,
+                timeout: aiModelForm.timeout || 60,
+                enabled: aiModelForm.enabled,
+            };
+            if (aiModelEditIdx.value === null) {
+                // 新增：分配最低优先级（数字最大 + 1），id 留空由后端生成
+                const maxPriority = aiConfig.models.reduce((mx, m) => Math.max(mx, m.priority || 0), 0);
+                aiConfig.models.push({ ...payload, id: '', priority: maxPriority + 1 });
+            } else {
+                // 编辑：定位到原对象（排序列表是副本，需按 id 或引用回写）
+                const target = aiModelsSorted.value[aiModelEditIdx.value];
+                const real = aiConfig.models.find(m => m === target) ||
+                             aiConfig.models.find(m => m.id && m.id === target.id);
+                if (real) Object.assign(real, payload);
+            }
+            showAiModelModal.value = false;
+            showToast('已更新，请点击底部「保存配置」生效', 'success');
+        }
+
+        // 删除模型
+        function deleteAiModel(idx) {
+            const m = aiModelsSorted.value[idx];
+            if (!confirm(`确认删除模型「${m.name || '未命名'}」？删除后需点「保存配置」生效。`)) return;
+            const i = aiConfig.models.findIndex(x => x === m || (x.id && x.id === m.id));
+            if (i >= 0) aiConfig.models.splice(i, 1);
+            // 若删除的是当前模型，清空 active
+            if (m.id && m.id === aiConfig.active_model_id) aiConfig.active_model_id = '';
+        }
+
+        // 上移/下移：交换相邻两个模型的 priority
+        function moveModel(idx, dir) {
+            const list = aiModelsSorted.value;
+            const target = idx + dir;
+            if (target < 0 || target >= list.length) return;
+            const a = list[idx], b = list[target];
+            const pa = a.priority, pb = b.priority;
+            // 交换 priority；相等时兜底重排
+            if (pa === pb) {
+                list.forEach((m, i) => { m.priority = i + 1; });
+                const tmp = a.priority; a.priority = b.priority; b.priority = tmp;
+            } else {
+                a.priority = pb; b.priority = pa;
+            }
+        }
+
+        // 切换为当前模型（立即保存）
+        async function setActiveModel(m) {
+            if (!m.id) { showToast('该模型尚未保存，请先「保存配置」', 'warning'); return; }
+            if (!confirm(`确认将「${m.name}」切换为当前使用的模型？`)) return;
+            aiConfig.active_model_id = m.id;
+            const ok = await saveAiConfig(true);
+            if (ok) showToast(`已切换为「${m.name}」`, 'success');
+        }
+
+        // 列表内测试连通（已保存模型用 model_id，未保存新模型用完整配置）
+        async function testModel(m) {
+            const key = m.id || ('__row_' + aiConfig.models.indexOf(m));
+            aiTestState[key] = { testing: true, done: false };
+            try {
+                let body;
+                if (m.id) {
+                    body = { model_id: m.id };
+                } else {
+                    body = { model: { name: m.name, provider: m.provider, base_url: m.base_url, model: m.model, api_key: m.api_key, timeout: m.timeout } };
+                }
+                const resp = await authFetch('/api/insurance/ai-config/test', {
+                    method: 'POST', body: JSON.stringify(body),
+                });
+                const json = await resp.json();
+                const d = json.data || {};
+                aiTestState[key] = { testing: false, done: true, ok: !!d.ok, duration_ms: d.duration_ms || 0, error: d.error || (json.code !== 0 ? (json.msg || '失败') : '') };
+            } catch (e) {
+                aiTestState[key] = { testing: false, done: true, ok: false, duration_ms: 0, error: e.message };
+            }
+        }
+
+        // 弹窗内测试连通（编辑态未保存，用完整配置；若为已存模型且 key 未改动含 * 则用 model_id）
+        async function testEditingModel() {
+            aiModelTesting.value = true;
+            aiModelTestResult.value = null;
+            try {
+                let body;
+                if (aiModelForm.id && aiModelForm.api_key.includes('*')) {
+                    // 编辑已存模型且未改 key（打码值），用 model_id 让后端取明文
+                    body = { model_id: aiModelForm.id };
+                } else {
+                    body = { model: {
+                        name: aiModelForm.name, provider: aiModelForm.provider,
+                        base_url: aiModelForm.base_url, model: aiModelForm.model,
+                        api_key: aiModelForm.api_key, timeout: aiModelForm.timeout,
+                    } };
+                }
+                const resp = await authFetch('/api/insurance/ai-config/test', {
+                    method: 'POST', body: JSON.stringify(body),
+                });
+                const json = await resp.json();
+                const d = json.data || {};
+                aiModelTestResult.value = { ok: !!d.ok, duration_ms: d.duration_ms || 0, error: d.error || (json.code !== 0 ? (json.msg || '失败') : '') };
+            } catch (e) {
+                aiModelTestResult.value = { ok: false, duration_ms: 0, error: e.message };
+            } finally {
+                aiModelTesting.value = false;
+            }
+        }
+
+        // 切到 AI Tab 时懒加载配置
+        watch(activeTab, (tab) => {
+            if (tab === 'ai' && !aiLoaded.value && currentRole.value === 'super_admin') {
+                loadAiConfig();
+            }
+        });
+
         // ========== 页面初始化 ==========
         onMounted(async () => {
             await loadTemplates();
@@ -2861,9 +3830,17 @@ createApp({
             formulaFields, currentFormulaField, currentRules, allRules,
             formulaFilter, flatRules, filteredFlatRules, editFlatRule, deleteFlatRule,
             showFormulaModal, editingRuleIdx, formulaInput, formulaForm,
-            companyShortList, policyTypeShortList, availableFields, operators,
+            companyShortList, policyTypeShortList, availableFields, allFields, operators,
             formulaError, previewExpression, previewResult,
             insertField, insertOp, openFormulaModal, saveFormula, deleteRule,
+            // 比例规则
+            ratioRules, ratioSearch, ratioCompanyFilter, ratioCompanies, filteredRatioRules,
+            ratioCondText, fmtPct, ratioFieldOps,
+            showRatioModal, editingRatioIdx, ratioForm, ratioFormError,
+            openRatioModal, editRatioRule, deleteRatioRule, saveRatioRule,
+            addRatioCond, addRatioBranch, moveRatioBranch,
+            showRatioImport, ratioImportText, ratioImportPreview, ratioImportErrors,
+            openRatioImport, parseRatioImport, applyRatioImport,
             listColConfig, exportColConfig, listColItems, exportColItems, fieldHelp,
             exportSearch, availableExportCols, selectedExportCols, filteredAvailableExport,
             templateSearch, filteredEnterprises, filteredUsers, isEntExpanded, isUserExpanded, toggleEnt, toggleUser, entInUse, userInUse,
@@ -2884,6 +3861,12 @@ createApp({
             groupFillTargetOptions, onGroupFillTargetChange, addGroupFillKeyword, addGroupFillRule, importCustomFieldsAsRules,
             saveGroupFillRules, groupFillCopyText, copyGroupFillFormat,
             skipKeywords, skipKeywordInput, skipKeywordsSaving, addSkipKeyword, saveSkipKeywords,
+            // AI 模型配置（仅超管）
+            aiConfig, aiProviderPresets, aiLoading, aiSaving, aiTestState,
+            aiModelsSorted, providerLabel, fieldListToken,
+            showAiModelModal, aiModelEditIdx, aiModelForm, aiModelTesting, aiModelTestResult,
+            loadAiConfig, saveAiConfig, openAiModelModal, onAiProviderChange, saveAiModel,
+            deleteAiModel, moveModel, setActiveModel, testModel, testEditingModel,
         };
     }
 }).mount('#app');

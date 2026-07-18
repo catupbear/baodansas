@@ -23,7 +23,8 @@ _ACTIVE_TPL_TTL = 60
 
 # 支持的 config_type 类型
 CONFIG_TYPES = ["company_alias", "policy_type_alias", "date_format", "fee_formula",
-                "list_columns", "export_columns", "remark_selector", "group_fill_keywords"]
+                "list_columns", "export_columns", "remark_selector", "group_fill_keywords",
+                "ratio_rule"]
 
 # 默认模板名
 DEFAULT_TEMPLATE_NAME = "默认模板"
@@ -1550,6 +1551,302 @@ def _split_fee_context(fields: dict) -> dict:
     return {**fields, **extra}
 
 
+# ==================== 比例规则（按条件取值） ====================
+# 存储在 user_field_config（config_type='ratio_rule'），key 格式与公式一致：
+#   "比例字段:公司简称:险种简称"
+# value 结构：
+#   固定比例：{"value": 0.22}
+#   条件分支：{"branches": [{"conditions": [...], "value": 0.22, "note": "带驾乘险出单"}], "default": 0.20}
+# 条件类型：
+#   字段条件：  {"type": "field", "field": "保费", "op": "大于", "value": "5000"}
+#   关联单条件：{"type": "related", "match_by": "车牌号", "policy_type": "驾乘险", "op": "exists", "days": 7}
+# 比例值支持 0.22 / "22%" 两种写法（_ratio_num 统一归一为小数）。
+# 命中的比例在公式计算前注入记录字段（如"应付费率"），普通公式（保费 × 应付费率）直接引用。
+# 本模块所有入口均 try 包裹：任何异常只跳过比例注入，不影响别名/日期/公式等现有流程。
+
+# 关联单条件的关联依据 → display_fields 中的候选取值字段
+RELATED_MATCH_FIELDS = {
+    "车牌号": ("车牌号", "车牌"),
+    "车架号": ("车架号", "车架号VIN"),
+    "投保人": ("投保人",),
+}
+
+# 字段条件的字段名候选（兼容同义字段）
+_COND_FIELD_FALLBACKS = {
+    "承保险种": ("承保险种", "险种类型", "险种"),
+    "险种类型": ("险种类型", "险种", "承保险种"),
+    "险种":     ("险种", "险种类型", "承保险种"),
+    "保险公司": ("保险公司", "保险公司简称", "承保公司"),
+    "承保公司": ("承保公司", "保险公司简称", "保险公司"),
+    "车牌号":   ("车牌号", "车牌"),
+}
+
+
+def _ratio_num(v):
+    """比例值归一化为小数：0.22 → 0.22，"22%" → 0.22。无法解析返回 None。"""
+    try:
+        if v is None or v == "":
+            return None
+        if isinstance(v, (int, float)):
+            return float(v)
+        txt = str(v).strip().replace("，", "").replace(",", "")
+        pct = txt.endswith("%") or txt.endswith("％")
+        txt = txt.rstrip("%％")
+        num = float(txt)
+        return num / 100.0 if pct else num
+    except (ValueError, TypeError):
+        return None
+
+
+def _cond_num(v):
+    """条件数值比较用：提取数字（去掉 元/逗号/% 等），失败返回 None。"""
+    try:
+        txt = re.sub(r"[^\d.\-]", "", str(v or ""))
+        if txt in ("", "-", ".", "-."):
+            return None
+        return float(txt)
+    except (ValueError, TypeError):
+        return None
+
+
+def _extract_date(text):
+    """从字符串提取日期（支持 2026-07-11 / 2026/7/11 / 2026年7月11日），失败返回 None。"""
+    try:
+        if not text:
+            return None
+        m = re.search(r"(\d{4})[-/年.](\d{1,2})[-/月.](\d{1,2})", str(text))
+        if not m:
+            return None
+        from datetime import date
+        return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except Exception:
+        return None
+
+
+def check_field_condition(cond: dict, fields: dict) -> bool:
+    """字段条件判断。任何异常返回 False（视为不命中）。"""
+    try:
+        field = str(cond.get("field") or "").strip()
+        op = str(cond.get("op") or "").strip()
+        target = cond.get("value", "")
+        if not field or not op:
+            return False
+        raw = ""
+        for k in _COND_FIELD_FALLBACKS.get(field, (field,)):
+            if fields.get(k) not in (None, ""):
+                raw = fields.get(k)
+                break
+        v = str(raw).strip()
+        t = str(target).strip()
+        if op == "等于":
+            return v == t
+        if op == "不等于":
+            return v != t
+        if op == "包含":
+            return bool(t) and t in v
+        if op == "不包含":
+            return not (bool(t) and t in v)
+        if op == "为空":
+            return v == ""
+        if op == "不为空":
+            return v != ""
+        nv, nt = _cond_num(v), _cond_num(t)
+        if nv is None or nt is None:
+            return False
+        if op == "大于":
+            return nv > nt
+        if op == "大于等于":
+            return nv >= nt
+        if op == "小于":
+            return nv < nt
+        if op == "小于等于":
+            return nv <= nt
+        return False
+    except Exception:
+        return False
+
+
+def _related_policy_type_match(rule_ptype: str, ptype: str) -> bool:
+    """关联单险种匹配：双向包含，兜底用险种分类（驾乘险 ↔ 驾乘人员意外险等）。"""
+    if not rule_ptype or rule_ptype == "全部":
+        return True
+    if rule_ptype in ptype or (ptype and ptype in rule_ptype):
+        return True
+    try:
+        from insurance.policy_parser import get_policy_type_code
+        _, rule_short = get_policy_type_code(rule_ptype)
+        _, entry_short = get_policy_type_code(ptype)
+        return bool(rule_short) and rule_short == entry_short
+    except Exception:
+        return False
+
+
+def check_related_condition(cond: dict, fields: dict, related_ctx, self_record_id=None) -> bool:
+    """
+    关联单条件判断：同车牌/车架号/投保人在前后 N 天内是否存在某险种的其他保单。
+    related_ctx 由 API 入口批量预取（build 见 db.find_related_policies_batch），
+    格式 {"车牌号": {值: [{"rid":.., "ptype":.., "date":..}]}}。
+    ctx 缺失或异常时按「不存在」处理（exists→False / not_exists→True 中取保守值 False/True）。
+    """
+    try:
+        match_by = str(cond.get("match_by") or "车牌号").strip()
+        op = str(cond.get("op") or "exists").strip()
+        key_val = ""
+        for k in RELATED_MATCH_FIELDS.get(match_by, (match_by,)):
+            if fields.get(k):
+                key_val = str(fields.get(k)).strip()
+                break
+        if not key_val:
+            return op == "not_exists"
+        entries = ((related_ctx or {}).get(match_by) or {}).get(key_val) or []
+        rule_ptype = str(cond.get("policy_type") or "").strip()
+        try:
+            days = int(cond.get("days") or 7)
+        except (ValueError, TypeError):
+            days = 7
+        self_date = None
+        for dk in ("签单日期", "出单日期", "保险起期", "起保日期", "创建时间"):
+            self_date = _extract_date(fields.get(dk))
+            if self_date:
+                break
+        found = False
+        for e in entries:
+            try:
+                if self_record_id is not None and e.get("rid") == self_record_id:
+                    continue
+                if not _related_policy_type_match(rule_ptype, str(e.get("ptype") or "")):
+                    continue
+                edate = _extract_date(e.get("date"))
+                # 任一侧日期缺失时不做时间窗过滤（宁可命中，运营可通过备注核对）
+                if self_date and edate and abs((edate - self_date).days) > days:
+                    continue
+                found = True
+                break
+            except Exception:
+                continue
+        return found if op == "exists" else not found
+    except Exception:
+        return False
+
+
+def match_ratio_rules(config: dict, fields: dict) -> list:
+    """筛选匹配当前记录的比例规则，返回 [(target_field, value_dict)]。保司/险种匹配逻辑与 match_fee_formulas 一致。"""
+    matched = []
+    try:
+        rules = (config or {}).get("ratio_rule") or []
+        if not rules:
+            return matched
+        record_company = fields.get("保险公司简称") or fields.get("承保公司") or fields.get("保险公司") or ""
+        record_policy_type = fields.get("险种类型") or fields.get("险种") or ""
+        for item in rules:
+            try:
+                raw_key = item.get("key", "")
+                raw_value = item.get("value", "")
+                if not raw_key or not isinstance(raw_value, dict):
+                    continue
+                parts = raw_key.split(":", 2)
+                target_field = parts[0]
+                rule_company = parts[1] if len(parts) > 1 else ""
+                rule_policy_type = parts[2] if len(parts) > 2 else ""
+                if not target_field:
+                    continue
+                if rule_company and rule_company != "全部" and rule_company not in record_company and record_company not in rule_company:
+                    continue
+                if rule_policy_type and rule_policy_type != "全部" and rule_policy_type not in record_policy_type and record_policy_type not in rule_policy_type:
+                    continue
+                matched.append((target_field, raw_value))
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return matched
+
+
+def resolve_ratio_value(value_obj: dict, fields: dict, related_ctx=None, self_record_id=None):
+    """
+    解析一条比例规则的最终取值：分支自上而下首个命中者生效，都不命中走 default。
+    返回 (比例小数值 float 或 None, 命中备注 str)。
+    """
+    try:
+        if "branches" not in value_obj:
+            return _ratio_num(value_obj.get("value")), ""
+        for br in value_obj.get("branches") or []:
+            try:
+                conds = br.get("conditions") or []
+                if not conds:
+                    continue
+                ok = True
+                for c in conds:
+                    if not isinstance(c, dict):
+                        ok = False
+                        break
+                    if c.get("type") == "related":
+                        if not check_related_condition(c, fields, related_ctx, self_record_id):
+                            ok = False
+                            break
+                    else:
+                        if not check_field_condition(c, fields):
+                            ok = False
+                            break
+                if ok:
+                    return _ratio_num(br.get("value")), str(br.get("note") or "")
+            except Exception:
+                continue
+        return _ratio_num(value_obj.get("default")), "默认"
+    except Exception:
+        return None, ""
+
+
+def apply_ratio_rules(config: dict, result: dict, manual_fields=None) -> list:
+    """
+    将比例规则应用到一条记录（原地写入 result），返回注入的字段名列表。
+    - 手动修改过的字段不覆盖
+    - 未命中/解析失败则不写入（字段保持原状，公式按缺字段 0 处理，与现有行为一致）
+    - 任何异常整体跳过，返回 []
+    """
+    injected = []
+    try:
+        if not (config or {}).get("ratio_rule"):
+            return injected
+        manual_fields = manual_fields or set()
+        related_ctx = (config or {}).get("_related_ctx")
+        self_id = (config or {}).get("_related_self_id")
+        for target_field, value_obj in match_ratio_rules(config, result):
+            try:
+                if target_field in manual_fields:
+                    continue
+                val, _note = resolve_ratio_value(value_obj, result, related_ctx, self_id)
+                if val is None:
+                    continue
+                result[target_field] = f"{val:g}"
+                injected.append(target_field)
+            except Exception:
+                continue
+    except Exception:
+        logger.debug("比例规则应用失败，已跳过", exc_info=True)
+    return injected
+
+
+def config_has_related_ratio_rules(config: dict) -> set:
+    """
+    返回比例规则中用到的关联依据集合（如 {"车牌号"}），无关联单条件时返回空集。
+    API 入口据此决定是否需要批量预取关联单（零配置时零开销）。
+    """
+    match_bys = set()
+    try:
+        for item in (config or {}).get("ratio_rule") or []:
+            value = item.get("value")
+            if not isinstance(value, dict):
+                continue
+            for br in value.get("branches") or []:
+                for c in (br.get("conditions") or []):
+                    if isinstance(c, dict) and c.get("type") == "related":
+                        match_bys.add(str(c.get("match_by") or "车牌号").strip())
+    except Exception:
+        return set()
+    return match_bys
+
+
 def match_fee_formulas(config: dict, fields: dict) -> list:
     """
     筛选出匹配当前记录的公式列表。
@@ -1734,11 +2031,20 @@ def apply_user_config_to_fields(config: dict, fields: dict, formula_only: bool =
         if re.fullmatch(r"-?\d+(\.\d+)?", txt):
             result[_pf] = str(float(txt) / 100)
 
+    # 3.6 比例规则（按条件取值）：在公式计算前把命中的比例注入比例字段（如"应付费率"），
+    # 下方普通公式（如 保费 × 应付费率）即可直接引用。整体 try 包裹，异常不影响现有流程。
+    ratio_injected = []
+    try:
+        ratio_injected = apply_ratio_rules(config, result, manual_fields)
+    except Exception:
+        ratio_injected = []
+
     # 4. 公式计算（key格式："目标字段:公司简称:险种简称"）
     # 先用原始数值计算所有公式，最后再转百分比显示，避免"率"字段被提前转成"10%"影响后续公式
     # 多轮计算：公式之间可能有依赖（如"合计应付手续费"依赖"应付费率"），
     # 第一轮计算后，用更新的值再算一轮，确保依赖链正确传递
-    rate_fields = []  # 记录需要转百分比的字段
+    # 比例规则注入的"率/比例"字段也随公式目标字段一起在末尾转百分比显示
+    rate_fields = [f for f in ratio_injected if ("率" in f or "比例" in f)]
 
     # 预处理：筛选出匹配当前记录的公式列表（含 is_computed 标记，逻辑统一在 match_fee_formulas）
     matched_formulas = match_fee_formulas(config, result)
