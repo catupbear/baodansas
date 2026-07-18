@@ -725,7 +725,8 @@ class MessageFetcher:
         仅对监控群生效；发送人需能解析出所属账号——优先用其个人绑定
         （user_sender_binding），否则退回监控配置/该企业自己的 enterprise 账号
         （企业管理员一般不建个人绑定，这层兜底让企业管理员本人也能直接触发）。
-        两者都解析不出时回复"您当前账号无权限，请联系客服开通"。
+        解析不出账号时区分提示：群监控配置未关联企业 → "该群未配置，请联系客服配置"；
+        能定位企业但无可用账号 → "您当前账号无权限，请联系客服开通"。
         任何环节异常都只记日志，绝不影响消息处理主流程。
 
         ⚠️ 已知风险（2026-07-17 明确评估过、按用户要求恢复此兜底）：这层兜底
@@ -804,9 +805,16 @@ class MessageFetcher:
                 if ent_users:
                     config_user_id = ent_users[0]["id"]
             if not config_user_id:
-                logger.info("台账导出命令：sender=%s 未绑定账号且找不到所属企业账号，提示无权限 seq=%d", sender, seq)
                 from insurance.flowbot_notify import send_flowbot_group_message
-                send_flowbot_group_message(room_name, sender_name, "您当前账号无权限，请联系客服开通", robot_id)
+                if not config_enterprise_id:
+                    # 群的监控配置没有关联企业 → 是配置问题，不是发送人权限问题
+                    logger.info("台账导出命令：room=%s 监控配置未关联企业，提示群未配置 seq=%d", roomid, seq)
+                    send_flowbot_group_message(room_name, sender_name, "该群未配置，请联系客服配置", robot_id)
+                else:
+                    # 能定位到企业但解析不出可用账号（无个人绑定且企业账号不可用）
+                    logger.info("台账导出命令：sender=%s 未绑定账号且企业(%s)下无可用账号，提示无权限 seq=%d",
+                                sender, config_enterprise_id, seq)
+                    send_flowbot_group_message(room_name, sender_name, "您当前账号无权限，请联系客服开通", robot_id)
                 return
 
             from insurance.ledger_export import export_ledger_via_binding
