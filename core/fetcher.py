@@ -447,8 +447,143 @@ class MessageFetcher:
                                            enterprise_id=enterprise_id)
             if info:
                 logger.info("政策回填: seq=%d room=%s 命中%d条 %s", seq, roomid, cnt, info)
+                if cnt == 0:
+                    # 命中0条：补充信息未录入，群内通知 @发送人 和 @技术客服
+                    self._notify_policy_fill_miss(
+                        seq, roomid, parsed.get("from", ""), info.get("plate", ""))
+                else:
+                    # 录入成功但企业从未配置过群内补充模板（走的默认写死规则）：
+                    # 提醒 @技术客服 尽快为该企业配置专属模板
+                    from insurance.policy_quote_fill import get_compiled_rules
+                    if get_compiled_rules(handler.db, enterprise_id) is None:
+                        self._notify_policy_fill_no_template(
+                            seq, roomid, info.get("plate", ""))
         except Exception as e:
             logger.error("政策回填异常 seq=%d: %s", seq, e, exc_info=True)
+
+    # 群内补充命中0条时的默认通知文案（{plate} 动态替换为解析到的车牌）
+    _POLICY_FILL_MISS_TEMPLATE = (
+        "⚠️ 补充信息未录入\n"
+        "车牌：{plate}\n"
+        "系统暂未找到该车牌的保单识别记录，本次补充的信息（业务经理、业务专员、保险公司经办人等）未能生效。\n"
+        "请检查：\n"
+        "1️⃣ 该车牌的保单是否已发到本群并识别成功\n"
+        "2️⃣ 车牌号是否输入有误\n"
+        "确认保单已识别后，请重新发送一次补充信息即可。\n"
+        "若车牌无误但仍提示未录入，请联系客服处理（已@技术客服跟进）。"
+    )
+
+    def _notify_policy_fill_miss(self, seq: int, roomid: str, sender: str, plate: str):
+        """群内补充文本按车牌命中0条识别记录时，FlowBot 群通知 @发送人 + @技术客服。
+
+        配置键 quote_fill_miss_notify（insurance_config 表）：
+          enabled           开关（默认关闭）
+          robot_id          FlowBot 机器人 ID，缺省复用 flowbot_fail_notify 的机器人
+          tech_support_name 技术客服微信名，缺省"技术客服（午虎保单台账系统）"
+          template          自定义文案，{plate} 占位符替换车牌
+        旁路通知：任何异常只记日志，绝不影响消息处理主流程。
+        """
+        handler = getattr(self, "insurance_handler", None)
+        if not handler:
+            return
+        try:
+            from insurance.db import get_insurance_config
+            cfg = get_insurance_config(handler.db, "quote_fill_miss_notify", {}) or {}
+            if not cfg.get("enabled"):
+                return
+            robot_id = cfg.get("robot_id")
+            if not robot_id:
+                fail_cfg = get_insurance_config(handler.db, "flowbot_fail_notify", {}) or {}
+                robot_id = fail_cfg.get("robot_id")
+            if not robot_id:
+                logger.info("补充未录入通知跳过：未配置 robot_id seq=%d room=%s", seq, roomid)
+                return
+
+            sender_name = ""
+            room_name = ""
+            if handler.contacts:
+                try:
+                    sender_name = handler.contacts.get_name(sender) or ""
+                except Exception:
+                    pass
+                try:
+                    room_name = handler.contacts.get_room_name(roomid) or ""
+                except Exception:
+                    pass
+            if not room_name:
+                logger.info("补充未录入通知跳过：无群名 seq=%d room=%s", seq, roomid)
+                return
+
+            tech_name = cfg.get("tech_support_name") or "技术客服（午虎保单台账系统）"
+            template = cfg.get("template") or self._POLICY_FILL_MISS_TEMPLATE
+            msg = template.replace("{plate}", plate or "未知")
+            at_list = [n for n in (sender_name, tech_name) if n]
+
+            from insurance.flowbot_notify import send_flowbot_group_message
+            send_flowbot_group_message(room_name, at_list, msg, robot_id)
+        except Exception as e:
+            logger.warning("补充未录入通知发送失败（不影响主流程）seq=%d: %s", seq, e)
+
+    # 企业未配置群内补充模板时的默认提醒文案（{plate} 动态替换车牌）
+    _POLICY_FILL_NO_TEMPLATE_TEMPLATE = (
+        "⚠️ 群内补充提醒：车牌 {plate} 的补充信息已收到，"
+        "但贵司暂未配置补充信息模板，部分内容可能未生效。\n"
+        "技术客服将尽快为贵司完成配置，请留意群内通知。"
+    )
+
+    # 未配置模板提醒的群级节流：{roomid: "YYYY-MM-DD"}，同一群每天最多提醒一次
+    _no_template_notified: dict = {}
+
+    def _notify_policy_fill_no_template(self, seq: int, roomid: str, plate: str):
+        """企业未配置群内补充模板但客户已在发补充文本时，FlowBot 群通知 @技术客服。
+
+        配置键 quote_fill_template_notify（insurance_config 表）：
+          enabled           开关（默认关闭）
+          robot_id          FlowBot 机器人 ID，缺省复用 flowbot_fail_notify 的机器人
+          tech_support_name 技术客服微信名，缺省"技术客服（午虎保单台账系统）"
+          template          自定义文案，{plate} 占位符替换车牌
+        同一群每天最多提醒一次（内存节流，进程重启后重置）。
+        旁路通知：任何异常只记日志，绝不影响消息处理主流程。
+        """
+        handler = getattr(self, "insurance_handler", None)
+        if not handler:
+            return
+        try:
+            today = time.strftime("%Y-%m-%d")
+            if self._no_template_notified.get(roomid) == today:
+                return
+
+            from insurance.db import get_insurance_config
+            cfg = get_insurance_config(handler.db, "quote_fill_template_notify", {}) or {}
+            if not cfg.get("enabled"):
+                return
+            robot_id = cfg.get("robot_id")
+            if not robot_id:
+                fail_cfg = get_insurance_config(handler.db, "flowbot_fail_notify", {}) or {}
+                robot_id = fail_cfg.get("robot_id")
+            if not robot_id:
+                logger.info("未配置模板提醒跳过：未配置 robot_id seq=%d room=%s", seq, roomid)
+                return
+
+            room_name = ""
+            if handler.contacts:
+                try:
+                    room_name = handler.contacts.get_room_name(roomid) or ""
+                except Exception:
+                    pass
+            if not room_name:
+                logger.info("未配置模板提醒跳过：无群名 seq=%d room=%s", seq, roomid)
+                return
+
+            tech_name = cfg.get("tech_support_name") or "技术客服（午虎保单台账系统）"
+            template = cfg.get("template") or self._POLICY_FILL_NO_TEMPLATE_TEMPLATE
+            msg = template.replace("{plate}", plate or "未知")
+
+            from insurance.flowbot_notify import send_flowbot_group_message
+            if send_flowbot_group_message(room_name, tech_name, msg, robot_id):
+                self._no_template_notified[roomid] = today
+        except Exception as e:
+            logger.warning("未配置模板提醒发送失败（不影响主流程）seq=%d: %s", seq, e)
 
     def _check_ledger_export_trigger(self, seq: int, parsed: dict):
         """群内"发送台账+今日/本周/本月"文本 -> 生成保单台账Excel，

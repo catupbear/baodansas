@@ -1317,16 +1317,29 @@ def find_records_by_plate(db, plate: str, exclude_id: int = None, roomid: str = 
 
     roomid: 可选，传入时只匹配同一个群的记录（如群内文本回填场景），
     避免不同群里凑巧同车牌号的保单互相串数据。
+
+    车牌匹配两侧均做归一化（去连字符/空格、转大写），兼容
+    "粤E-R705I"/"粤ER705I"/手动修改成小写等写法。
     """
+    if not plate:
+        return []
+    # 与 SQL 侧同样的归一化：去半/全角连字符、半/全角空格、间隔点，转大写
+    plate = _re.sub(r"[-－\s　·.]", "", plate).upper()
     if not plate:
         return []
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        # 库中"车牌号"可能是OCR识别或手动修改后的值（带-、带空格、小写等），逐层剥掉再比对
+        plate_norm_sql = (
+            "UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE("
+            "JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.车牌号')),"
+            "'-',''),'－',''),' ',''),'　',''),'·',''),'.',''))"
+        )
         sql = (
             "SELECT id, parsed_fields FROM insurance_records "
             "WHERE status = 'done' AND parsed_fields IS NOT NULL "
-            "AND JSON_UNQUOTE(JSON_EXTRACT(parsed_fields, '$.车牌号')) = %s"
+            f"AND {plate_norm_sql} = %s"
         )
         params = [plate]
         if exclude_id:
