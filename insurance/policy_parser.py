@@ -187,7 +187,7 @@ def _is_valid_person(val: str) -> bool:
     val_no_paren = re.sub(r'[（(][^）)]*[）)]$', '', val)
     # 含"(地名)"的企业名（如"中设(深圳)设备检验检测"）也视为公司名
     has_location_paren = bool(re.search(r'[\u4e00-\u9fff][（(][\u4e00-\u9fff]{2,4}[）)][\u4e00-\u9fff]', val))
-    if re.search(r'公司|集团|合伙|工厂|商行|服务行|经营行|贸易行|百货行|批发行|批发部|五金行|建材行|机电行|文具行|商贸|车行(?!驶)|车队|事务所|经营部|经营店|经销商|专营店|服务部|加工厂|养殖场|合作社|研究院|研究所|设计院|分院|医院|卫生院|学院|小学|中学|大学|幼儿园|学校|村民委员会|居民委员会|村委会|居委会|管理处|中心|个体工商户|协会|商会|学会|联合会|促进会|基金会', val) or val_no_paren.endswith(('店', '厂', '铺')) or has_location_paren:
+    if re.search(r'公司|集团|合伙|工厂|商行|服务行|经营行|贸易行|百货行|批发行|批发部|五金行|建材行|机电行|文具行|商贸|车行(?!驶)|车队|事务所|经营部|经营店|经销商|专营店|服务部|加工厂|养殖场|合作社|回收站|收购站|废品站|加油站|加气站|充电站|换电站|维修站|服务站|研究院|研究所|设计院|分院|医院|卫生院|学院|小学|中学|大学|幼儿园|学校|村民委员会|居民委员会|村委会|居委会|管理处|中心|个体工商户|协会|商会|学会|联合会|促进会|基金会', val) or val_no_paren.endswith(('店', '厂', '铺')) or has_location_paren:
         # 公司名允许长一些，但不能超过 30 字
         # 排除含动词/条款用语/保险术语的句子片段（如"向本公司提出的申请"）
         if re.search(r'提出|提供|负责|承担|向.*公司|本公司.*的|申请|告知|声明|附加.*险|附加.*费|损失费|保险费|约定|载明', val):
@@ -1927,7 +1927,7 @@ def _extract_insured_pingan(text: str, text_merged: str, fields: dict):
         if m:
             val = m.group(1).strip()
             # 如果公司名不完整（不以"公司/集团/商行/店/批发部"等结尾），尝试从下一行拼接
-            if val and not re.search(r'(?:公司|集团|商行|商贸|店|工厂|事务所|批发部)$', val):
+            if val and not re.search(r'(?:公司|集团|商行|商贸|店|工厂|事务所|批发部|站)$', val):
                 for j in range(i + 1, min(i + 3, len(lines))):
                     next_line = lines[j].strip()
                     # 下一行开头可能有"险人"等干扰，提取第一个有意义的中文片段
@@ -1935,10 +1935,10 @@ def _extract_insured_pingan(text: str, text_merged: str, fields: dict):
                     for part in parts:
                         # 尝试拼接每个片段，看是否能组成完整公司名
                         candidate = val + part
-                        if re.search(r'(?:公司|集团|商行|商贸|店|工厂|事务所|批发部)$', candidate):
+                        if re.search(r'(?:公司|集团|商行|商贸|店|工厂|事务所|批发部|站)$', candidate):
                             val = candidate
                             break
-                    if re.search(r'(?:公司|集团|商行|商贸|店|工厂|事务所|批发部)$', val):
+                    if re.search(r'(?:公司|集团|商行|商贸|店|工厂|事务所|批发部|站)$', val):
                         break
             val = _clean_person_name(val)
             if _is_valid_person(val):
