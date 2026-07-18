@@ -383,6 +383,19 @@ class MessageFetcher:
             if "群公告" in _notice_text:
                 return
 
+            # 全局跳过关键词黑名单（内部管理员维护，默认空）：命中则跳过
+            # 全部关键词触发链路，仅正常存档。在「群公告」硬编码过滤之后叠加
+            if _notice_text and getattr(self, "insurance_handler", None):
+                try:
+                    from insurance.db import get_fill_skip_keywords
+                    _skips = get_fill_skip_keywords(self.insurance_handler.db)
+                    _hit = next((k for k in _skips if k in _notice_text), None)
+                    if _hit:
+                        logger.info("命中跳过关键词「%s」，忽略关键词触发, seq=%d", _hit, msg_seq)
+                        return
+                except Exception:
+                    logger.debug("跳过关键词黑名单检查异常, seq=%d", msg_seq, exc_info=True)
+
             # 检查是否需要触发保险报价
             self._check_quote_trigger(msg_seq, msg_data, parsed)
 
@@ -421,7 +434,17 @@ class MessageFetcher:
             return
         try:
             from insurance.policy_quote_fill import apply_policy_quote
-            cnt, info = apply_policy_quote(handler.db, text, roomid=roomid)
+            # 群所属企业：配置过关键词规则的企业走可配置引擎，否则走原写死逻辑
+            enterprise_id = None
+            try:
+                for m in handler._get_matched_monitors(roomid, parsed.get("sender", "")):
+                    if m.get("enterprise_id"):
+                        enterprise_id = m["enterprise_id"]
+                        break
+            except Exception:
+                logger.debug("解析群所属企业失败 room=%s", roomid, exc_info=True)
+            cnt, info = apply_policy_quote(handler.db, text, roomid=roomid,
+                                           enterprise_id=enterprise_id)
             if info:
                 logger.info("政策回填: seq=%d room=%s 命中%d条 %s", seq, roomid, cnt, info)
         except Exception as e:

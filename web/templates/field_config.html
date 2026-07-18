@@ -498,7 +498,7 @@
     <!-- 代管提示条 -->
     <div v-if="adminTarget" style="background:#fef3c7; border-bottom:1px solid #fcd34d; padding:8px 24px; display:flex; align-items:center; justify-content:center; gap:12px;">
         <span style="font-size:13px; color:#92400e;">正在代管编辑：<b>{{ adminTarget.label }}</b> 的「{{ activeTemplateName }}」模板（{{ adminTarget.scope === 'enterprise' ? '企业级' : '员工级' }}），修改将直接保存到对方配置</span>
-        <button @click="adminTarget = null; loadTemplates(); loadConfig(); loadColumnConfig('list_columns'); loadColumnConfig('export_columns'); loadMergeConfig(); loadPlateFormatConfig(); loadRemarkCfg();" style="font-size:12px; padding:3px 12px; background:#fff; border:1px solid #fcd34d; border-radius:4px; cursor:pointer; color:#92400e;">退出代管</button>
+        <button @click="adminTarget = null; loadTemplates(); loadConfig(); loadColumnConfig('list_columns'); loadColumnConfig('export_columns'); loadMergeConfig(); loadPlateFormatConfig(); loadRemarkCfg(); loadGroupFillTargets();" style="font-size:12px; padding:3px 12px; background:#fff; border:1px solid #fcd34d; border-radius:4px; cursor:pointer; color:#92400e;">退出代管</button>
     </div>
 
     <!-- 主内容区 -->
@@ -517,6 +517,7 @@
                 <button class="tab-btn" :class="{active: activeTab==='listCols'}" @click="activeTab='listCols'">页面列配置</button>
                 <button class="tab-btn" :class="{active: activeTab==='exportCols'}" @click="activeTab='exportCols'">导出列配置</button>
                 <button class="tab-btn" :class="{active: activeTab==='remark'}" @click="activeTab='remark'">备注快捷选择</button>
+                <button class="tab-btn" :class="{active: activeTab==='groupFill'}" @click="activeTab='groupFill'">群内补充</button>
             </div>
 
             <!-- 企业模板全局只读提示（所有 tab 可见） -->
@@ -930,6 +931,116 @@
             <div style="margin-top:8px; font-size:11px; color:var(--text-muted);">
                 上传 Excel 后选择要导入的 sheet（默认最后一个），点击导入即清空旧池并写入。
             </div>
+            </div>
+
+            <!-- Tab: 群内补充 -->
+            <div v-show="activeTab==='groupFill'" style="padding:24px;">
+                <div style="font-size:13px; color:var(--text-muted); margin-bottom:12px; line-height:1.6;">
+                    群成员在监控群发送「车牌 + 关键词：值」格式的消息，系统自动按车牌回填到对应字段。
+                    一个字段可配多个关键词（别名）；成员发送时缺哪个关键词、或带了关键词没填值，对应字段就不处理、不覆盖原值。
+                </div>
+                <div v-if="groupFillIsDefault" style="display:flex; align-items:flex-start; gap:6px; margin-bottom:12px; padding:8px 12px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; font-size:12px; color:#1d4ed8; line-height:1.5;">
+                    <span style="flex-shrink:0;">ℹ</span>
+                    <span>当前模板尚未配置规则，系统按内置默认行为处理。按需「添加规则」并保存后，本模板即启用自定义规则。</span>
+                </div>
+                <div v-if="currentRole === 'employee' && !adminTarget" style="display:flex; align-items:flex-start; gap:6px; margin-bottom:12px; padding:8px 12px; background:#fffbeb; border:1px solid #fde68a; border-radius:8px; font-size:12px; color:#92400e; line-height:1.5;">
+                    <span style="flex-shrink:0;">⚠</span>
+                    <span>群消息回填按<b>企业</b>生效：只有企业管理员保存的规则会参与群消息识别，员工个人保存的规则仅在此处备用展示。</span>
+                </div>
+
+                <table class="alias-table" style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th style="width:200px;">目标字段</th>
+                            <th>关键词（可多个）</th>
+                            <th style="width:110px;">值类型</th>
+                            <th style="width:60px;">启用</th>
+                            <th style="width:50px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(rule, idx) in groupFillRules" :key="idx" :class="{ disabled: !rule.enabled }">
+                            <td>
+                                <select v-model="rule.target" @change="onGroupFillTargetChange(rule)" :disabled="groupFillReadonly"
+                                        style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
+                                    <option value="" disabled>选择字段…</option>
+                                    <option v-for="t in groupFillTargetOptions(rule)" :key="t.key" :value="t.key">
+                                        {{ t.display_name }}{{ t.is_system ? '（识别字段）' : '（自定义）' }}
+                                    </option>
+                                </select>
+                            </td>
+                            <td>
+                                <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+                                    <span v-for="(kw, ki) in rule.keywords" :key="ki"
+                                          style="display:inline-flex; align-items:center; gap:4px; background:#eff6ff; color:#1d4ed8; border-radius:5px; padding:2px 8px; font-size:12px;">
+                                        {{ kw }}
+                                        <span v-if="!groupFillReadonly" @click="rule.keywords.splice(ki,1)" style="cursor:pointer; opacity:.55;">×</span>
+                                    </span>
+                                    <input v-if="!groupFillReadonly" v-model="rule._kwInput" @keyup.enter="addGroupFillKeyword(rule)" @blur="addGroupFillKeyword(rule)"
+                                           placeholder="+ 关键词，回车添加"
+                                           style="width:130px; padding:3px 8px; border:1px dashed var(--border); border-radius:5px; font-size:12px;">
+                                </div>
+                            </td>
+                            <td>
+                                <select v-model="rule.value_type" :disabled="groupFillReadonly"
+                                        style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
+                                    <option value="text">文本</option>
+                                    <option value="number">数字</option>
+                                    <option value="phone">手机号</option>
+                                    <option value="percent">百分比</option>
+                                </select>
+                            </td>
+                            <td style="text-align:center;"><input type="checkbox" v-model="rule.enabled" :disabled="groupFillReadonly"></td>
+                            <td style="text-align:center;">
+                                <span v-if="!groupFillReadonly" @click="groupFillRules.splice(idx,1)" style="cursor:pointer; color:var(--danger, #dc2626); font-size:12px;">删除</span>
+                            </td>
+                        </tr>
+                        <tr v-if="!groupFillRules.length">
+                            <td colspan="5" style="text-align:center; padding:32px; color:var(--text-muted);">暂无自定义规则，点击下方「添加规则」按需配置</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div style="display:flex; align-items:center; gap:10px; margin-top:14px; flex-wrap:wrap;">
+                    <button class="btn btn-outline btn-sm" @click="addGroupFillRule" :disabled="groupFillReadonly">＋ 添加规则</button>
+                    <button class="btn btn-outline btn-sm" @click="importCustomFieldsAsRules" :disabled="groupFillReadonly" title="把本模板列配置里的所有自定义字段一键生成规则（字段名即关键词）">⚡ 一键导入自定义字段</button>
+                    <button class="btn btn-outline btn-sm" @click="copyGroupFillFormat">📋 一键复制发送格式</button>
+                    <button class="btn btn-primary btn-sm" style="margin-left:auto;" @click="saveGroupFillRules" :disabled="groupFillSaving || groupFillReadonly">
+                        {{ groupFillSaving ? '保存中…' : '保存规则' }}</button>
+                </div>
+
+                <div style="margin-top:16px;">
+                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">复制格式预览（发到群里让成员照格式填写，冒号后填值）：</div>
+                    <pre style="background:var(--surface-secondary); border:1px dashed var(--border); border-radius:8px; padding:12px 16px; font-size:13px; white-space:pre-wrap; margin:0;">{{ groupFillCopyText }}</pre>
+                </div>
+
+                <!-- 全局跳过关键词黑名单（仅内部超级管理员可见） -->
+                <div v-if="currentRole === 'super_admin'" style="margin-top:24px; padding:16px 18px; border:1px solid #fecaca; border-radius:10px; background:#fffafa;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
+                        <span style="font-size:14px; font-weight:600;">🚫 全局跳过关键词</span>
+                        <span style="font-size:11px; background:#fef2f2; color:#dc2626; border:1px solid #fecaca; border-radius:999px; padding:1px 10px;">全局生效 · 所有企业</span>
+                        <span style="font-size:11px; background:#fff; color:#dc2626; border:1px solid #fecaca; border-radius:999px; padding:1px 10px; font-weight:600;">仅内部超级管理员可见</span>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px; line-height:1.6;">
+                        群消息文本<b>包含</b>以下任一关键词时，直接跳过所有关键词触发功能（保险报价 / 政策回填 / 台账导出），仅正常存档。
+                        与模板无关、对所有企业所有监控群生效；「群公告」已内置过滤，无需配置。
+                    </div>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 12px; border:1px dashed var(--border); border-radius:8px; background:#fff;">
+                        <span v-for="(kw, i) in skipKeywords" :key="i"
+                              style="display:inline-flex; align-items:center; gap:5px; background:#fef2f2; color:#b91c1c; border-radius:6px; padding:3px 10px; font-size:13px;">
+                            {{ kw }}
+                            <span @click="skipKeywords.splice(i,1)" style="cursor:pointer; opacity:.55;">×</span>
+                        </span>
+                        <input v-model="skipKeywordInput" @keyup.enter="addSkipKeyword" @blur="addSkipKeyword"
+                               placeholder="+ 添加关键词，回车确认"
+                               style="width:180px; padding:5px 10px; border:1px dashed var(--border); border-radius:6px; font-size:13px; outline:none;">
+                        <button class="btn btn-primary btn-sm" style="margin-left:auto;" @click="saveSkipKeywords" :disabled="skipKeywordsSaving">
+                            {{ skipKeywordsSaving ? '保存中…' : '保存黑名单' }}</button>
+                    </div>
+                    <div style="font-size:11px; color:var(--text-muted); margin-top:8px;">
+                        注意：是「包含即跳过」的子串匹配，请勿配置过短/过宽泛的词（至少 2 个字符，上限 50 个），否则会误伤正常补充消息；保存后约 1 分钟内生效。
+                    </div>
+                </div>
             </div>
 
         </div>
@@ -2038,6 +2149,201 @@ createApp({
             }
         };
 
+        // ========== 群内补充关键词 ==========
+        const groupFillRules = ref([]);
+        const groupFillTargets = ref([]);        // 可选目标字段（来自列配置）
+        const groupFillIsDefault = ref(false);   // 当前展示的是系统默认规则（未保存）
+        const groupFillSaving = ref(false);
+        const groupFillReadonly = computed(() =>
+            !adminTarget.value && (activeSource.value === 'enterprise' || activeSource.value === 'system'));
+
+        async function loadGroupFillTargets() {
+            try {
+                // 超管代管模式：带上 target_scope，读被代管对象的列配置（与页面列配置同源）
+                let url = '/api/insurance/field-config/fill-targets';
+                if (adminTarget.value) {
+                    url += `?target_scope=${adminTarget.value.scope}`;
+                    if (adminTarget.value.scope_id != null) url += `&target_scope_id=${adminTarget.value.scope_id}`;
+                }
+                const resp = await authFetch(url);
+                const json = await resp.json();
+                if (json.code === 0 && json.data) groupFillTargets.value = json.data.targets || [];
+            } catch (e) { /* 静默 */ }
+        }
+
+        // 目标字段下拉：可选字段 + 当前已选值（确保已配置项始终可选、不出现空白）
+        function groupFillTargetOptions(rule) {
+            const opts = [...groupFillTargets.value];
+            if (rule.target && !opts.some(t => t.key === rule.target)) {
+                opts.unshift({ key: rule.target, display_name: rule.target, custom: true, is_system: false });
+            }
+            return opts;
+        }
+
+        function onGroupFillTargetChange(rule) {
+            const t = groupFillTargets.value.find(x => x.key === rule.target);
+            if (t && t.is_system) {
+                showToast(`「${t.display_name}」是保单识别字段，群内补充会覆盖识别结果；建议改用自定义列（如 ${t.display_name}#2）`, 'warning');
+            }
+        }
+
+        function addGroupFillKeyword(rule) {
+            const kw = (rule._kwInput || '').trim();
+            if (!kw) return;
+            if (kw.length < 2) { showToast('关键词至少 2 个字符，过短容易误命中普通聊天', 'warning'); return; }
+            if (!rule.keywords.includes(kw)) rule.keywords.push(kw);
+            rule._kwInput = '';
+        }
+
+        function addGroupFillRule() {
+            groupFillRules.value.push({ target: '', keywords: [], value_type: 'text', enabled: true, _kwInput: '' });
+        }
+
+        // 一键导入：把本模板列配置里的所有自定义字段生成规则（字段名即关键词），已有规则的字段跳过
+        function importCustomFieldsAsRules() {
+            const existing = new Set(groupFillRules.value.map(r => r.target).filter(Boolean));
+            let added = 0;
+            for (const t of groupFillTargets.value) {
+                if (!t.custom || existing.has(t.key)) continue;
+                // 关键词取显示名（去掉 #2 这类后缀，群里发的是自然叫法）；不足2字则用原名
+                let kw = (t.display_name || t.key).replace(/#\d+$/, '').trim();
+                if (kw.length < 2) kw = t.display_name || t.key;
+                groupFillRules.value.push({
+                    target: t.key, keywords: [kw],
+                    value_type: /费率|比例/.test(t.key) ? 'percent' : (/电话|手机/.test(t.key) ? 'phone' : 'text'),
+                    enabled: true, _kwInput: '',
+                });
+                existing.add(t.key);
+                added++;
+            }
+            if (added) showToast(`已导入 ${added} 个自定义字段，可调整关键词后点「保存规则」`, 'success');
+            else showToast('本模板的自定义字段都已有规则，无可导入项', 'warning');
+        }
+
+        // 从模板配置解析规则；未配置时留空（客户按需自行添加，不展示默认值）
+        function applyGroupFillConfig(data) {
+            const items = data.group_fill_keywords || [];
+            const rulesItem = items.find(i => i.key === 'rules');
+            const rules = rulesItem && Array.isArray(rulesItem.value) ? rulesItem.value : null;
+            groupFillIsDefault.value = !rules;
+            groupFillRules.value = (rules || []).map(r => ({
+                target: r.target || '', keywords: [...(r.keywords || [])],
+                value_type: r.value_type || 'text', enabled: r.enabled !== false, _kwInput: '',
+            }));
+        }
+
+        async function saveGroupFillRules() {
+            if (groupFillReadonly.value) { showToast('企业模板（只读），需要管理员才可以修改', 'warning'); return; }
+            // 校验并清洗：去掉临时输入字段，剔除无目标/无关键词的行
+            const clean = [];
+            for (const r of groupFillRules.value) {
+                if (r._kwInput && r._kwInput.trim()) addGroupFillKeyword(r);   // 未回车的输入一并收录
+                const keywords = (r.keywords || []).map(k => String(k).trim()).filter(k => k.length >= 2);
+                if (!r.target || !keywords.length) continue;
+                clean.push({ target: r.target, keywords: [...new Set(keywords)],
+                             value_type: r.value_type || 'text', enabled: !!r.enabled });
+            }
+            if (!clean.length) { showToast('至少需要一条有效规则（目标字段 + 关键词）', 'warning'); return; }
+            const dup = clean.map(r => r.target).filter((t, i, a) => a.indexOf(t) !== i);
+            if (dup.length) { showToast(`目标字段「${dup[0]}」配置了多条规则，请合并关键词`, 'warning'); return; }
+
+            groupFillSaving.value = true;
+            try {
+                const currentTpl = myTemplates.value.find(t => t.name === activeTemplateName.value);
+                const body = {
+                    template_name: activeTemplateName.value,
+                    config: { group_fill_keywords: [{ key: 'rules', value: clean }] },
+                    visible: currentTpl ? !!currentTpl.visible : false,
+                };
+                if (adminTarget.value) {
+                    body.target_scope = adminTarget.value.scope;
+                    if (adminTarget.value.scope_id != null) body.target_scope_id = adminTarget.value.scope_id;
+                }
+                const resp = await authFetch('/api/insurance/field-config/save-and-apply', {
+                    method: 'POST', body: JSON.stringify(body),
+                });
+                const json = await resp.json();
+                if (json.code !== 0) { showToast(json.msg || json.message || '保存失败', 'error'); return; }
+                groupFillIsDefault.value = false;
+                showToast('群内补充规则已保存', 'success');
+            } catch (e) {
+                if (e.message !== '未登录') showToast('保存失败: ' + e.message, 'error');
+            } finally {
+                groupFillSaving.value = false;
+            }
+        }
+
+        // ---- 全局跳过关键词黑名单（仅内部超级管理员，与模板无关） ----
+        const skipKeywords = ref([]);
+        const skipKeywordInput = ref('');
+        const skipKeywordsSaving = ref(false);
+
+        async function loadSkipKeywords() {
+            if (currentRole.value !== 'super_admin') return;
+            try {
+                const resp = await authFetch('/api/insurance/config/fill-skip-keywords');
+                const json = await resp.json();
+                if (json.code === 0 && json.data) skipKeywords.value = json.data.keywords || [];
+            } catch (e) { /* 静默 */ }
+        }
+
+        function addSkipKeyword() {
+            const kw = (skipKeywordInput.value || '').trim();
+            if (!kw) return;
+            if (kw.length < 2) { showToast('关键词至少 2 个字符，过短会误伤正常消息', 'warning'); return; }
+            if (skipKeywords.value.length >= 50) { showToast('跳过关键词最多 50 个', 'warning'); return; }
+            if (!skipKeywords.value.includes(kw)) skipKeywords.value.push(kw);
+            skipKeywordInput.value = '';
+        }
+
+        async function saveSkipKeywords() {
+            addSkipKeyword();   // 未回车的输入一并收录
+            skipKeywordsSaving.value = true;
+            try {
+                const resp = await authFetch('/api/insurance/config/fill-skip-keywords', {
+                    method: 'POST', body: JSON.stringify({ keywords: skipKeywords.value }),
+                });
+                const json = await resp.json();
+                if (json.code === 0) {
+                    skipKeywords.value = (json.data && json.data.keywords) || skipKeywords.value;
+                    showToast('跳过关键词已保存（约 1 分钟内生效）', 'success');
+                } else {
+                    showToast(json.msg || json.message || '保存失败', 'error');
+                }
+            } catch (e) {
+                if (e.message !== '未登录') showToast('保存失败: ' + e.message, 'error');
+            } finally {
+                skipKeywordsSaving.value = false;
+            }
+        }
+
+        // 复制格式：车牌行固定第一行（不带示例车牌），每条启用规则取第一个关键词
+        const groupFillCopyText = computed(() => {
+            const lines = ['车牌：'];
+            for (const r of groupFillRules.value) {
+                if (r.enabled && r.keywords && r.keywords.length) lines.push(`${r.keywords[0]}：`);
+            }
+            return lines.join('\n');
+        });
+
+        function copyGroupFillFormat() {
+            const text = groupFillCopyText.value;
+            const done = () => showToast('已复制，可直接粘贴到群里让成员照格式填写', 'success');
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopyGroupFill(text, done));
+            } else {
+                fallbackCopyGroupFill(text, done);
+            }
+        }
+        function fallbackCopyGroupFill(text, done) {
+            const ta = document.createElement('textarea');
+            ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); done(); }
+            catch (e) { showToast('复制失败，请手动复制预览内容', 'error'); }
+            document.body.removeChild(ta);
+        }
+
         // 加载配置
         const loadConfig = async (templateName, source) => {
             loading.value = true;
@@ -2105,6 +2411,9 @@ createApp({
                 }
             });
             allRules.value = newRules;
+
+            // 群内补充关键词规则（异步：未配置时拉取系统默认规则展示）
+            applyGroupFillConfig(data);
         };
 
         // 构建配置对象
@@ -2310,6 +2619,7 @@ createApp({
                 // 切换模板时同步重载列配置和合并开关
                 await Promise.all([loadColumnConfig('list_columns'), loadColumnConfig('export_columns'), loadMergeConfig(), loadPlateFormatConfig()]);
                 loadRemarkCfg();
+                loadGroupFillTargets();
                 if (source === 'system') {
                     showToast('已切换到系统模板「' + name + '」（只读）', 'warning');
                 } else if (source === 'enterprise') {
@@ -2337,6 +2647,7 @@ createApp({
                 loadMergeConfig(), loadPlateFormatConfig(),
             ]);
             loadRemarkCfg();
+            loadGroupFillTargets();
             configLoaded = true;
             showToast('正在代管编辑：' + label + ' 的「' + name + '」模板', 'warning');
         };
@@ -2513,6 +2824,9 @@ createApp({
             });
             // 加载备注快捷选择配置
             loadRemarkCfg();
+            // 加载群内补充目标字段候选 + 全局跳过关键词（仅超管）
+            loadGroupFillTargets();
+            loadSkipKeywords();
             // 初始加载完成后才启用自动保存
             nextTick(() => { configLoaded = true; });
         });
@@ -2553,6 +2867,11 @@ createApp({
             remarkCfg, remarkStats, remarkFieldKeys, remarkSheets, remarkSheet,
             remarkSaving, remarkImporting, remarkImportMissing, remarkFileEl,
             onRemarkFile, doRemarkImport, saveRemarkCfg, clearRemarkPool, fmtRemarkTime,
+            // 群内补充关键词
+            groupFillRules, groupFillTargets, groupFillIsDefault, groupFillSaving, groupFillReadonly,
+            groupFillTargetOptions, onGroupFillTargetChange, addGroupFillKeyword, addGroupFillRule, importCustomFieldsAsRules,
+            saveGroupFillRules, groupFillCopyText, copyGroupFillFormat,
+            skipKeywords, skipKeywordInput, skipKeywordsSaving, addSkipKeyword, saveSkipKeywords,
         };
     }
 }).mount('#app');

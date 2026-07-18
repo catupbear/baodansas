@@ -2043,6 +2043,40 @@ def get_insurance_config(db, key: str, default=None):
         conn.close()
 
 
+# 群内补充·全局跳过关键词黑名单缓存（60s TTL；默认空 = 行为与无此功能时一致）
+_skip_keywords_cache = None
+_skip_keywords_expire = 0.0
+
+FILL_SKIP_KEYWORDS_CONFIG_KEY = "group_fill_skip_keywords"
+
+
+def get_fill_skip_keywords(db) -> list:
+    """
+    获取全局跳过关键词黑名单（内部管理员在设置页维护）。
+    群消息文本包含任一关键词时，跳过全部关键词触发链路（报价/回填/台账导出）。
+    60s 内存缓存，读取失败返回空列表（不影响消息主流程）。
+    """
+    global _skip_keywords_cache, _skip_keywords_expire
+    import time as _time
+    if _skip_keywords_cache is not None and _time.time() < _skip_keywords_expire:
+        return _skip_keywords_cache
+    try:
+        val = get_insurance_config(db, FILL_SKIP_KEYWORDS_CONFIG_KEY, [])
+        keywords = [str(k).strip() for k in val if str(k).strip()] if isinstance(val, list) else []
+    except Exception:
+        logger.debug("读取跳过关键词黑名单失败")
+        keywords = []
+    _skip_keywords_cache = keywords
+    _skip_keywords_expire = _time.time() + 60
+    return keywords
+
+
+def invalidate_fill_skip_keywords_cache():
+    """保存黑名单后调用，让本进程缓存立即失效。"""
+    global _skip_keywords_cache
+    _skip_keywords_cache = None
+
+
 _TZ008_ENTERPRISE_IDS = None
 
 

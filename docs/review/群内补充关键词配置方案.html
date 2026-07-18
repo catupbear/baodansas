@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>群内补充关键词配置 — 实现方案</title>
+<style>
+  :root {
+    --primary: #2563eb; --primary-light: #eff6ff;
+    --green: #16a34a; --green-light: #f0fdf4;
+    --orange: #ea580c; --orange-light: #fff7ed;
+    --red: #dc2626; --red-light: #fef2f2;
+    --gray: #64748b; --border: #e2e8f0; --bg: #f8fafc;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: #1e293b; line-height: 1.7; padding: 32px 16px; }
+  .container { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 26px; margin-bottom: 4px; }
+  .subtitle { color: var(--gray); font-size: 14px; margin-bottom: 24px; }
+  .card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 24px 28px; margin-bottom: 20px; }
+  h2 { font-size: 19px; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 2px solid var(--primary-light); display: flex; align-items: center; gap: 8px; }
+  h2 .num { background: var(--primary); color: #fff; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  h3 { font-size: 15px; margin: 16px 0 8px; color: #334155; }
+  p { margin-bottom: 10px; }
+  ul, ol { padding-left: 22px; margin-bottom: 10px; }
+  li { margin-bottom: 5px; }
+  code { background: #f1f5f9; padding: 1px 6px; border-radius: 4px; font-size: 13px; font-family: "SF Mono", Menlo, monospace; color: #be185d; }
+  pre { background: #0f172a; color: #e2e8f0; padding: 16px; border-radius: 8px; font-size: 13px; overflow-x: auto; margin: 10px 0; font-family: "SF Mono", Menlo, monospace; line-height: 1.6; }
+  pre code { background: none; color: inherit; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--primary-light); font-weight: 600; }
+  .tag { display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .tag-blue { background: var(--primary-light); color: var(--primary); }
+  .tag-green { background: var(--green-light); color: var(--green); }
+  .tag-orange { background: var(--orange-light); color: var(--orange); }
+  .tag-red { background: var(--red-light); color: var(--red); }
+  .callout { border-left: 4px solid; border-radius: 0 8px 8px 0; padding: 12px 16px; margin: 12px 0; font-size: 14px; }
+  .callout-info { border-color: var(--primary); background: var(--primary-light); }
+  .callout-warn { border-color: var(--orange); background: var(--orange-light); }
+  .callout-ok { border-color: var(--green); background: var(--green-light); }
+  .mock { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin: 14px 0; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+  .mock-header { background: #f8fafc; border-bottom: 1px solid var(--border); padding: 10px 16px; font-size: 13px; color: var(--gray); display: flex; gap: 6px; align-items: center; }
+  .mock-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .mock-body { padding: 18px; }
+  .mock-tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin-bottom: 16px; }
+  .mock-tab { padding: 7px 16px; font-size: 13px; color: var(--gray); border-radius: 8px 8px 0 0; }
+  .mock-tab.active { background: var(--primary); color: #fff; font-weight: 600; }
+  .mock-row { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; font-size: 13px; flex-wrap: wrap; }
+  .mock-select { border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 26px 4px 10px; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E") no-repeat right 8px center; font-size: 13px; color: #334155; }
+  .mock-kw { background: var(--primary-light); color: var(--primary); border-radius: 5px; padding: 2px 8px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+  .mock-kw i { font-style: normal; opacity: .5; cursor: pointer; }
+  .mock-add-kw { border: 1px dashed #cbd5e1; color: var(--gray); border-radius: 5px; padding: 2px 8px; font-size: 12px; }
+  .mock-btn { border-radius: 8px; padding: 7px 18px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; }
+  .mock-btn-primary { background: var(--primary); color: #fff; }
+  .mock-btn-ghost { background: #fff; color: var(--primary); border: 1px solid var(--primary); }
+  .mock-switch { width: 34px; height: 19px; border-radius: 999px; background: var(--green); position: relative; display: inline-block; }
+  .mock-switch::after { content: ""; position: absolute; right: 2px; top: 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff; }
+  .mock-del { color: var(--red); font-size: 12px; margin-left: auto; cursor: pointer; }
+  .copy-preview { background: #f8fafc; border: 1px dashed #94a3b8; border-radius: 8px; padding: 12px 16px; font-family: "SF Mono", Menlo, monospace; font-size: 13px; white-space: pre; color: #334155; margin: 10px 0; }
+  .flow { display: flex; flex-direction: column; gap: 0; margin: 14px 0; }
+  .flow-step { display: flex; gap: 12px; align-items: flex-start; }
+  .flow-marker { display: flex; flex-direction: column; align-items: center; }
+  .flow-dot { width: 28px; height: 28px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+  .flow-line { width: 2px; flex: 1; background: #cbd5e1; min-height: 18px; }
+  .flow-content { padding-bottom: 18px; font-size: 14px; }
+  .flow-content b { display: block; margin-bottom: 2px; }
+  .file-badge { display: inline-block; background: #f1f5f9; border: 1px solid var(--border); border-radius: 6px; padding: 2px 10px; font-size: 12px; font-family: Menlo, monospace; color: #475569; margin: 2px 4px 2px 0; }
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+  .toc a { text-decoration: none; font-size: 13px; background: #fff; border: 1px solid var(--border); border-radius: 999px; padding: 5px 14px; color: #475569; }
+  .toc a:hover { border-color: var(--primary); color: var(--primary); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>📋 群内补充关键词配置 — 实现方案</h1>
+<div class="subtitle">方案状态：<span class="tag tag-green">已实现（2026-07-18，见 docs/changelog/2026-07/2026-07-18-10-45更新记录.md）</span>　生成时间：2026-07-18　目标：把写死在代码里的群消息关键词规则，改为模板内可配置</div>
+
+<div class="toc">
+  <a href="#s1">① 需求与现状</a>
+  <a href="#s2">② 页面原型</a>
+  <a href="#s3">③ 数据结构</a>
+  <a href="#s4">④ 后端改造</a>
+  <a href="#s5">⑤ 运行时匹配</a>
+  <a href="#s6">⑥ 一键复制</a>
+  <a href="#s7">⑦ 全局跳过关键词</a>
+  <a href="#s8">⑧ 兼容与风控</a>
+  <a href="#s9">⑨ 改动文件与部署</a>
+</div>
+
+<!-- ================= 1 需求与现状 ================= -->
+<div class="card" id="s1">
+<h2><span class="num">1</span>需求与现状</h2>
+<p><b>需求</b>：客户在群里发「<code>车牌：粤G168T1　业务员：小明　出单渠道：演示渠道</code>」这类文本，系统按车牌把信息回填到保单记录。现在支持哪些关键词、填到哪个字段，全部<b>写死</b>在 <code>insurance/policy_quote_fill.py</code> 的 <code>_FIELD_PATTERNS</code> 里，每加一个关键词都要改代码发版。</p>
+<p><b>目标</b>：做一个配置页面（挂到现有<b>字段配置模板</b>体系内），支持：</p>
+<ul>
+  <li>指定「关键词 → 系统字段」的映射，目标字段可选<b>系统识别字段</b>或<b>自定义列</b></li>
+  <li>同一个字段可配<b>多个关键词</b>（别名），如「业务员 / 跟单员 / 经办」都填到同一列</li>
+  <li>配置完成后<b>一键复制</b>最终的群消息格式模板，直接发给群成员照着填</li>
+</ul>
+<div class="callout callout-info">
+<b>为什么挂到模板体系？</b>现有 <code>user_field_config</code> 表已支持 global / enterprise / user 三级作用域 + 命名模板 + 员工可见性，列配置、别名、日期格式、公式都存在里面。关键词规则天然是「企业级、随模板走」的配置，复用这套体系零建表成本，且切换模板时规则跟着切。
+</div>
+</div>
+
+<!-- ================= 2 页面原型 ================= -->
+<div class="card" id="s2">
+<h2><span class="num">2</span>页面原型</h2>
+<p>在 <code>/insurance</code> 前端「字段配置」弹窗里新增一个标签页：<b>群内补充</b>（与现有「公司别名 / 险种别名 / 日期格式 / 列配置」并列）。</p>
+
+<div class="mock">
+  <div class="mock-header">
+    <span class="mock-dot" style="background:#f87171"></span>
+    <span class="mock-dot" style="background:#fbbf24"></span>
+    <span class="mock-dot" style="background:#34d399"></span>
+    字段配置 — 当前模板：标准版
+  </div>
+  <div class="mock-body">
+    <div class="mock-tabs">
+      <div class="mock-tab">公司别名</div>
+      <div class="mock-tab">险种别名</div>
+      <div class="mock-tab">日期格式</div>
+      <div class="mock-tab">列配置</div>
+      <div class="mock-tab active">群内补充</div>
+    </div>
+
+    <div style="font-size:13px;color:#64748b;margin-bottom:12px">
+      群成员在监控群发送「车牌 + 关键词：值」格式的消息，系统自动按车牌回填到对应字段。每行一条规则，一个字段可配多个关键词。
+    </div>
+
+    <div class="mock-row">
+      <span class="mock-select">业务员#2（自定义）</span>
+      <span style="color:#94a3b8">←</span>
+      <span class="mock-kw">业务员 <i>×</i></span>
+      <span class="mock-kw">跟单员 <i>×</i></span>
+      <span class="mock-add-kw">+ 关键词</span>
+      <span class="mock-select">文本</span>
+      <span class="mock-switch"></span>
+      <span class="mock-del">删除</span>
+    </div>
+    <div class="mock-row">
+      <span class="mock-select">出单渠道#2（自定义）</span>
+      <span style="color:#94a3b8">←</span>
+      <span class="mock-kw">出单渠道 <i>×</i></span>
+      <span class="mock-kw">渠道 <i>×</i></span>
+      <span class="mock-add-kw">+ 关键词</span>
+      <span class="mock-select">文本</span>
+      <span class="mock-switch"></span>
+      <span class="mock-del">删除</span>
+    </div>
+    <div class="mock-row">
+      <span class="mock-select">政策商业险（自定义）</span>
+      <span style="color:#94a3b8">←</span>
+      <span class="mock-kw">商业 <i>×</i></span>
+      <span class="mock-add-kw">+ 关键词</span>
+      <span class="mock-select">数字</span>
+      <span class="mock-switch"></span>
+      <span class="mock-del">删除</span>
+    </div>
+
+    <div style="margin:14px 0 6px">
+      <button class="mock-btn mock-btn-ghost">＋ 添加规则</button>
+      <button class="mock-btn mock-btn-ghost" style="margin-left:8px">📋 一键复制发送格式</button>
+      <button class="mock-btn mock-btn-primary" style="float:right">保存</button>
+    </div>
+
+    <div style="font-size:12px;color:#94a3b8;margin-top:14px">复制格式预览：</div>
+    <div class="copy-preview">车牌：
+业务员：
+出单渠道：
+商业：</div>
+  </div>
+</div>
+
+<h3>每条规则的字段说明</h3>
+<table>
+  <tr><th style="width:130px">控件</th><th>说明</th></tr>
+  <tr><td>目标字段（下拉）</td><td>可选项 = 当前模板「列配置」里的全部列：系统识别字段（承保公司、业务员…）+ 自定义列（业务员#2、政策商业险…）。下拉里标注 <span class="tag tag-blue">系统</span> / <span class="tag tag-green">自定义</span>，选中<b>系统识别字段</b>时弹出覆盖警告（见第⑦节）</td></tr>
+  <tr><td>关键词（多个）</td><td>Tag 式输入，回车添加，可删除。匹配时自动兼容分隔符写法：全角冒号「业务员：小明」、半角冒号「业务员:小明」、空格「业务员 小明」、直接相连「业务员小明」以及字间空格「业 务 员」均可命中；分隔空白仅限行内空格、不跨行（防止「业务员：」换行后误吃下一行内容）</td></tr>
+  <tr><td>值类型（下拉）</td><td><b>文本</b>（截止到空格/标点，≤20字）／<b>数字</b>（含小数）／<b>手机号</b>（11位）／<b>百分比</b>（数字+可选%）。决定值的正则捕获方式</td></tr>
+  <tr><td>启用开关</td><td>关闭后规则保留但不参与匹配、不出现在复制格式里</td></tr>
+</table>
+</div>
+
+<!-- ================= 3 数据结构 ================= -->
+<div class="card" id="s3">
+<h2><span class="num">3</span>数据结构（不新建表）</h2>
+<p>复用 <code>user_field_config</code> 表，新增一种 <code>config_type = "group_fill_keywords"</code>，<code>config_key = "rules"</code>，整体存一条 JSON（与 <code>list_columns</code> 的存法一致）：</p>
+<pre><code>[
+  {
+    "target":   "业务员#2",          // 目标字段 key（与列配置的 key 对应）
+    "keywords": ["业务员", "跟单员"],  // 多个关键词别名
+    "value_type": "text",            // text | number | phone | percent
+    "enabled":  true
+  },
+  {
+    "target":   "出单渠道#2",
+    "keywords": ["出单渠道", "渠道"],
+    "value_type": "text",
+    "enabled":  true
+  }
+]</code></pre>
+<ul>
+  <li>作用域与其他模板配置一致：超管存 global、企业管理员存 enterprise、员工存 user；随模板名隔离、随「对员工可见」开关下发</li>
+  <li><code>field_config_db.py</code> 的 <code>CONFIG_TYPES</code> 列表追加 <code>"group_fill_keywords"</code>，即可自动被 <code>get_template_config / save_template_config</code>（模板读写）、模板复制/删除/重命名逻辑覆盖，<b>无需写新的存储代码</b></li>
+</ul>
+</div>
+
+<!-- ================= 4 后端改造 ================= -->
+<div class="card" id="s4">
+<h2><span class="num">4</span>后端 API</h2>
+<table>
+  <tr><th style="width:320px">接口</th><th>说明</th></tr>
+  <tr><td><code>GET /api/insurance/field-config/group-fill</code></td><td>读当前模板的规则列表（内部走 <code>get_template_config</code>），无配置时返回由现有 <code>_FIELD_PATTERNS</code> 转换来的<b>默认规则（仅前端展示参考，不落库）</b>——只有管理员点保存后该企业才切换到新引擎</td></tr>
+  <tr><td><code>POST /api/insurance/field-config/group-fill</code></td><td>保存规则列表（内部走 <code>save_template_config</code>）。校验：target 非空、keywords 非空且去重、同一 target 不重复、关键词不含正则特殊符号风险（统一 <code>re.escape</code> 处理，无需拒绝）</td></tr>
+  <tr><td><code>GET /api/insurance/field-config/fill-targets</code></td><td>返回可选目标字段列表 = 当前模板列配置（list_columns ∪ export_columns）里 <code>type != "record"</code> 的列，标注是否自定义列、是否 OCR 系统字段（用于前端覆盖警告）</td></tr>
+  <tr><td><code>GET / POST /api/insurance/config/fill-skip-keywords</code></td><td>全局跳过关键词黑名单读/存（<code>insurance_config</code> 表），<b>仅 super_admin</b>，详见第⑦节</td></tr>
+</table>
+<p style="font-size:13px;color:#64748b">权限沿用现有字段配置接口的角色判定（super_admin → global / enterprise → 企业 / employee → 个人），不新增权限逻辑。</p>
+</div>
+
+<!-- ================= 5 运行时匹配 ================= -->
+<div class="card" id="s5">
+<h2><span class="num">5</span>运行时匹配（policy_quote_fill.py 改造）</h2>
+<div class="flow">
+  <div class="flow-step">
+    <div class="flow-marker"><div class="flow-dot">1</div><div class="flow-line"></div></div>
+    <div class="flow-content"><b>群消息进入</b>fetcher._check_policy_fill_trigger：仅监控群的文本消息触发；文本命中<b>全局跳过关键词黑名单</b>（第⑦节，「群公告」为默认项）时直接忽略</div>
+  </div>
+  <div class="flow-step">
+    <div class="flow-marker"><div class="flow-dot">2</div><div class="flow-line"></div></div>
+    <div class="flow-content"><b>roomid → 企业 →规则（新增）</b>查 <code>monitor_configs</code>（enterprise_id + rooms JSON）反查该群所属企业，再读该企业启用模板的 <code>group_fill_keywords</code> 规则。结果按 roomid 缓存 60 秒（TTL 与 <code>_active_tpl_cache</code> 同款），避免每条群聊消息都查库</div>
+  </div>
+  <div class="flow-step">
+    <div class="flow-marker"><div class="flow-dot">3</div><div class="flow-line"></div></div>
+    <div class="flow-content"><b>动态构建正则（新增）</b>每条规则编译为：<code>关键词(逐字 re.escape 后插 \s*) + [:：]? + 值捕获</code>。值捕获按 value_type：数字 <code>(\d+(?:\.\d+)?)</code>、文本 <code>([^\s，,。、；;]{1,20})</code>、手机号 <code>(1[3-9]\d{9})</code>、百分比 <code>(\d+(?:\.\d+)?%?)</code>。编译结果随规则一起缓存</div>
+  </div>
+  <div class="flow-step">
+    <div class="flow-marker"><div class="flow-dot">4</div><div class="flow-line"></div></div>
+    <div class="flow-content"><b>解析判定（逻辑不变）</b>必须「车牌 + 至少命中一条启用规则<b>且该项有有效值</b>」才认定为补充文本，否则当普通聊天忽略。车牌归一化、按 roomid 限定同群同车牌记录、update parsed_fields —— 全部沿用现有 <code>apply_policy_quote</code></div>
+  </div>
+  <div class="flow-step">
+    <div class="flow-marker"><div class="flow-dot">5</div><div class="flow-line"></div></div>
+    <div class="flow-content"><b>双轨制：无配置企业走原代码路径（一行不改）</b>企业没保存过规则时，<b>直接执行现有的 <code>parse_policy_quote_text</code> + <code>_FIELD_PATTERNS</code> 原函数原逻辑</b>——不是"转换成默认规则再走新引擎"，而是新引擎只在「该企业显式保存过规则」时才接管。写死逻辑代码保持原样，紫金宝安等线上客户走的代码路径与今天完全相同、零风险</div>
+  </div>
+  <div class="flow-step">
+    <div class="flow-marker"><div class="flow-dot">6</div></div>
+    <div class="flow-content"><b>只写「有值」的项（新增约束）</b>客户发送时不必带全所有配置的关键词，缺哪个、哪个没填值，就不处理哪个，详见下方规则表</div>
+  </div>
+</div>
+
+<h3>缺项 / 空值处理规则（即使规则全部启用也按此执行）</h3>
+<table>
+  <tr><th style="width:280px">客户发送情况</th><th>处理方式</th></tr>
+  <tr><td>文本里<b>没出现</b>某个已配置关键词</td><td>该字段完全不处理，记录里的原值（含 OCR 识别值/历史补充值）保持不动</td></tr>
+  <tr><td>带了关键词但<b>没填值</b>（如「业务员：」后面是行尾、只有标点，或紧跟下一个关键词）</td><td>该项视为未填，跳过——<b>不写空值、不清空、不覆盖</b>原有内容</td></tr>
+  <tr><td>值类型不符（数字类字段填了文字等）</td><td>正则天然不命中，等同未填，跳过</td></tr>
+  <tr><td>只有部分关键词有值</td><td>只回填有值的那几项，其余不动（部分更新，不是整体替换）</td></tr>
+</table>
+<div class="callout callout-info">
+<b>实现要点</b>：① 值捕获正则本身要求至少 1 个有效字符，「关键词：」后无内容天然不匹配；② 文本类值按<b>行内</b>捕获（不跨行），并在解析前把「其他已配置关键词」作为截止边界，避免「业务员：出单渠道：演示」这类同行粘连时把下一个关键词误当成值；③ 写库前统一过滤：<code>fill = {k: v for k, v in parsed.items() if v and v.strip()}</code>，空串/空白一律剔除后再 update parsed_fields（复制格式冒号后留空，不存在占位符残留问题）。
+</div>
+</div>
+
+<!-- ================= 6 一键复制 ================= -->
+<div class="card" id="s6">
+<h2><span class="num">6</span>一键复制发送格式</h2>
+<p>纯前端实现，不需要接口。点击「📋 一键复制发送格式」按启用规则生成文本并写入剪贴板（<code>navigator.clipboard</code>，失败降级 <code>document.execCommand('copy')</code>，与页面现有复制逻辑保持一致）：</p>
+<div class="copy-preview">车牌：
+业务员：
+出单渠道：
+商业：</div>
+<ul>
+  <li>第一行固定为「车牌：」（车牌是匹配主键，必填），<b>不带示例车牌</b>（已确认）</li>
+  <li>每条启用规则取<b>第一个关键词</b>作为行首标签，冒号后留空，群成员直接在每行后补值即可</li>
+  <li>值为空的行（成员没填的项）按第⑤节规则自动跳过，不会写空值</li>
+  <li>复制成功后 toast 提示「已复制，可直接粘贴到群里让成员照格式填写」</li>
+</ul>
+</div>
+
+<!-- ================= 7 全局跳过关键词 ================= -->
+<div class="card" id="s7">
+<h2><span class="num">7</span>全局跳过关键词（黑名单，内部管理员维护）</h2>
+<p>文本中<b>只要包含</b>任一跳过关键词，直接不进入回填解析（当普通聊天忽略）。<b>全局生效</b>（所有企业、所有群），仅内部管理员（super_admin）可编辑。</p>
+<h3>存储</h3>
+<ul>
+  <li>与模板体系<b>无关</b>，存 <code>insurance_config</code> 表（现有全局配置表，监控群等配置同款），key = <code>group_fill_skip_keywords</code>，value 为 JSON 数组：<code>["接龙", "撤回了一条消息"]</code></li>
+  <li>现有写死在 <code>fetcher.py:383</code> 的「群公告」过滤<b>原样保留、不迁移</b>；黑名单是在其后<b>叠加</b>的一道过滤（默认空数组 = 行为与现在完全一致），避免动线上已验证的拦截逻辑</li>
+</ul>
+<h3>配置入口</h3>
+<p>放在 <code>/insurance</code> 页现有「设置管理」区新增一张卡片「群内补充 · 跳过关键词」：Tag 式输入 + 保存，仅 super_admin 角色可见（沿用设置区现有权限判定）。</p>
+<div class="mock">
+  <div class="mock-header">
+    <span class="mock-dot" style="background:#f87171"></span>
+    <span class="mock-dot" style="background:#fbbf24"></span>
+    <span class="mock-dot" style="background:#34d399"></span>
+    设置管理 — 仅内部管理员可见
+  </div>
+  <div class="mock-body">
+    <div style="font-size:14px;font-weight:600;margin-bottom:6px">🚫 群内补充 · 跳过关键词（全局生效）</div>
+    <div style="font-size:12px;color:#94a3b8;margin-bottom:10px">群消息文本包含以下任一关键词时，直接跳过关键词回填处理（所有企业生效）</div>
+    <div class="mock-row" style="border-style:dashed">
+      <span class="mock-kw">群公告 <i>×</i></span>
+      <span class="mock-kw">接龙 <i>×</i></span>
+      <span class="mock-kw">撤回了一条消息 <i>×</i></span>
+      <span class="mock-add-kw">+ 添加</span>
+      <button class="mock-btn mock-btn-primary" style="margin-left:auto">保存</button>
+    </div>
+  </div>
+</div>
+<h3>运行时判定位置</h3>
+<ul>
+  <li>在 <code>fetcher._process_item</code> 现有「群公告」过滤处改为读黑名单（内存缓存 60s，与规则缓存同款），命中则 return —— 即<b>同时跳过</b>保险报价、政策回填、台账导出三条关键词链路，与现在「群公告」的拦截范围一致</li>
+  <li>普通存档不受影响：消息照常入库，只是不触发关键词功能</li>
+</ul>
+<div class="callout callout-warn">
+<b>注意</b>：黑名单是「包含即跳过」的子串匹配，配置过于宽泛的词（如单字「保」）会导致正常补充文本被误跳过。保存时校验：≥2 字、去重、上限 50 个。
+</div>
+</div>
+
+<!-- ================= 8 兼容与风控 ================= -->
+<div class="card" id="s8">
+<h2><span class="num">8</span>兼容性与风险控制</h2>
+<table>
+  <tr><th style="width:220px">风险点</th><th>处理方式</th></tr>
+  <tr><td><span class="tag tag-red">覆盖 OCR 识别值</span></td><td>目标字段选中「业务员」「出单渠道」等 OCR 系统字段时，前端弹确认框：「该字段是保单识别字段，群内补充会覆盖识别结果，建议改用自定义列（如 业务员#2）」。允许坚持选择（有客户就是想覆盖），但默认引导到自定义列 —— 延续 <code>afd60c0</code> 那次「#2 独立字段」的设计原则</td></tr>
+  <tr><td><span class="tag tag-orange">关键词误命中聊天</span></td><td>① 判定门槛不变：必须同车牌一起出现；② 保存时禁止单字关键词（≤1 字提示过短）；③ 规则正则用 <code>re.escape</code>，用户输入不会破坏正则</td></tr>
+  <tr><td><span class="tag tag-orange">跨企业数据串写</span></td><td>沿用现有 roomid 限定：只回填触发群所在群的同车牌记录，不同企业同车牌互不影响</td></tr>
+  <tr><td><span class="tag tag-blue">存量客户兼容（双轨制）</span></td><td>写死逻辑（<code>_FIELD_PATTERNS</code>、「群公告」过滤）<b>原代码原样保留</b>，新引擎仅对「显式保存过规则的企业」生效，黑名单默认空数组——上线当天所有线上客户执行路径与升级前逐行相同；后续哪家企业要用新配置，单独给哪家配置，天然灰度。文十七（企业24）的「业务员/出单渠道只允许手动填写」剔除逻辑在 <code>insurance/db.py</code> 独立生效，不受影响</td></tr>
+  <tr><td><span class="tag tag-blue">性能</span></td><td>规则 + 编译后正则按 roomid 缓存 60s；未配置企业缓存「使用默认」标记，普通聊天群消息只多一次内存判断</td></tr>
+  <tr><td><span class="tag tag-blue">文本先到、保单后到</span></td><td>现状限制保持不变（文本早于保单入库则不回填、仅记日志）。如需「暂存待补」属独立需求，本期不做，方案里明确留待后续</td></tr>
+</table>
+</div>
+
+<!-- ================= 9 改动文件 ================= -->
+<div class="card" id="s9">
+<h2><span class="num">9</span>改动文件与部署</h2>
+<h3>代码改动（6 个文件，无数据库表结构变更）</h3>
+<table>
+  <tr><th style="width:340px">文件</th><th>改动</th></tr>
+  <tr><td><span class="file-badge">insurance/field_config_db.py</span></td><td><code>CONFIG_TYPES</code> 追加 <code>group_fill_keywords</code>；新增 <code>get_group_fill_rules(db, enterprise_id)</code>（按企业启用模板读规则 + 默认回退）</td></tr>
+  <tr><td><span class="file-badge">insurance/policy_quote_fill.py</span></td><td><b>现有 <code>_FIELD_PATTERNS</code> / <code>parse_policy_quote_text</code> 一行不改</b>；新增独立的规则→正则编译器 + roomid 级 60s 缓存；<code>apply_policy_quote</code> 入口加一个分支：企业有配置走新引擎，否则走原函数</td></tr>
+  <tr><td><span class="file-badge">insurance/api.py</span></td><td>新增 4 个接口：读/存规则、可选目标字段列表、全局跳过关键词读/存（仅 super_admin）</td></tr>
+  <tr><td><span class="file-badge">core/fetcher.py</span></td><td>「群公告」硬编码过滤<b>保留不动</b>，其后叠加读全局跳过关键词黑名单（60s 内存缓存，默认空 = 无行为变化），命中跳过全部关键词链路</td></tr>
+  <tr><td><span class="file-badge">web/templates/insurance.html</span></td><td>字段配置弹窗新增「群内补充」标签页（规则表格 + 一键复制）；设置管理区新增「跳过关键词」卡片（仅 super_admin 可见）</td></tr>
+  <tr><td><span class="file-badge">auth/db.py 或 insurance/db.py</span></td><td>新增 <code>find_enterprise_by_room(db, roomid)</code>（查 monitor_configs，如已有类似函数则复用）</td></tr>
+</table>
+<h3>部署步骤</h3>
+<ol>
+  <li>后端：上传上述 py 文件到 <code>/home/wxbot/</code> 对应路径（<b>需重启 gunicorn，须先征得同意</b>）</li>
+  <li>前端：insurance.html 去 raw 标记后上传 <code>/home/wxbot/web/static/insurance.html</code>（nginx 静态，无需重启）</li>
+  <li>无 SQL 变更，<code>user_field_config</code> 表结构不动，新 config_type 直接可写</li>
+  <li>验证：① 未配置企业群内发原格式文本回填正常（回归）；② 配置新关键词后群内发送命中；③ 一键复制格式正确；④ 含「群公告」的文本仍被跳过（黑名单默认值回归）；⑤ 新增跳过关键词后命中文本不触发回填</li>
+</ol>
+<div class="callout callout-ok">
+<b>工作量预估</b>：后端约 0.5 天（规则读写 + 动态正则 + 缓存），前端约 0.5~1 天（标签页 UI + 复制），联调回归 0.5 天。合计约 1.5~2 天。
+</div>
+<div class="callout callout-warn">
+<b>待确认的点</b>：① 「群内补充」配置放在字段配置弹窗做标签页（本方案），还是放「设置」页独立卡片？② 是否允许把关键词映射到 OCR 系统字段（本方案：允许但警告）？③ <s>复制格式里车牌行是否需要示例车牌</s>——已确认<b>不需要</b>，冒号后留空；④ 全局跳过关键词的拦截范围：本方案与现有「群公告」一致——同时跳过保险报价/政策回填/台账导出三条关键词链路；如只想跳过回填链路请指出
+</div>
+</div>
+
+</div>
+</body>
+</html>

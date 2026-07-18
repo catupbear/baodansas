@@ -23,7 +23,7 @@ _ACTIVE_TPL_TTL = 60
 
 # 支持的 config_type 类型
 CONFIG_TYPES = ["company_alias", "policy_type_alias", "date_format", "fee_formula",
-                "list_columns", "export_columns", "remark_selector"]
+                "list_columns", "export_columns", "remark_selector", "group_fill_keywords"]
 
 # 默认模板名
 DEFAULT_TEMPLATE_NAME = "默认模板"
@@ -1371,6 +1371,74 @@ def save_remark_selector_config(db, scope: str, scope_id, config: dict, template
                 [scope, scope_id, json_val, template_name]
             )
         conn.commit()
+    finally:
+        conn.close()
+
+
+# ------------------------------------------------------------------ #
+# 群内补充关键词规则（group_fill_keywords），企业级
+# ------------------------------------------------------------------ #
+
+def get_group_fill_rules(db, enterprise_id):
+    """
+    读取企业的「群内补充」关键词规则，供消息回填运行时使用。
+
+    模板选取顺序：企业管理员当前启用的模板 → 默认模板 → 该企业任意一条。
+    返回规则列表 [{"target", "keywords", "value_type", "enabled"}, ...]；
+    企业从未保存过规则时返回 None（调用方据此走原写死逻辑，双轨制）。
+    """
+    if enterprise_id is None:
+        return None
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        # 企业管理员启用的模板名（企业管理员 parent_id 即企业ID）
+        preferred = []
+        try:
+            cursor.execute(
+                "SELECT t.template_name FROM user_active_template t "
+                "JOIN users u ON u.id = t.user_id "
+                "WHERE u.role = 'enterprise' AND u.parent_id = %s LIMIT 1",
+                (enterprise_id,)
+            )
+            row = cursor.fetchone()
+            if row and row.get("template_name"):
+                preferred.append(row["template_name"])
+        except Exception:
+            logger.debug("查询企业管理员启用模板失败: eid=%s", enterprise_id)
+        if DEFAULT_TEMPLATE_NAME not in preferred:
+            preferred.append(DEFAULT_TEMPLATE_NAME)
+
+        for tpl in preferred:
+            cursor.execute(
+                "SELECT config_value FROM user_field_config "
+                "WHERE scope = 'enterprise' AND scope_id = %s "
+                "AND config_type = 'group_fill_keywords' AND config_key = 'rules' "
+                "AND template_name = %s LIMIT 1",
+                (enterprise_id, tpl)
+            )
+            row = cursor.fetchone()
+            if row:
+                break
+        else:
+            # 兜底：该企业任意模板下的规则
+            cursor.execute(
+                "SELECT config_value FROM user_field_config "
+                "WHERE scope = 'enterprise' AND scope_id = %s "
+                "AND config_type = 'group_fill_keywords' AND config_key = 'rules' "
+                "ORDER BY id LIMIT 1",
+                (enterprise_id,)
+            )
+            row = cursor.fetchone()
+
+        if not row:
+            return None
+        try:
+            rules = json.loads(row["config_value"])
+        except (TypeError, json.JSONDecodeError):
+            return None
+        return rules if isinstance(rules, list) else None
     finally:
         conn.close()
 

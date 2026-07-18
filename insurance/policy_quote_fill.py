@@ -110,7 +110,113 @@ def parse_policy_quote_text(text: str):
     return result
 
 
-def apply_policy_quote(db, text: str, roomid: str = None):
+# ------------------------------------------------------------------ #
+# 可配置关键词规则引擎（企业级，双轨制）
+#
+# 企业在「字段配置 → 群内补充」保存过规则时走这里；从未保存过的企业
+# 仍走上面的 parse_policy_quote_text 原写死逻辑，行为与线上完全一致。
+# ------------------------------------------------------------------ #
+
+# 值类型 -> 捕获正则片段（文本类另在编译时注入"其他关键词"截止边界）
+_VALUE_PATTERNS = {
+    "number": r"(\d+(?:\.\d+)?)",
+    "phone": r"(1[3-9]\d{9})",
+    "percent": r"(\d+(?:\.\d+)?%?)",
+}
+
+# 企业规则缓存：{enterprise_id: (compiled_or_None, 过期时间戳)}
+_rules_cache: dict = {}
+_RULES_TTL = 60
+
+
+def _keyword_regex(keyword: str) -> str:
+    """关键词逐字 re.escape 并允许字间空格（兼容"业 务 员"写法）。"""
+    return r"[ \t]*".join(re.escape(ch) for ch in keyword.strip())
+
+
+def compile_fill_rules(rules: list):
+    """
+    把配置规则编译为 [(target, compiled_regex), ...]。
+
+    分隔符兼容：全/半角冒号可选、行内空格可选（\\s 不跨行，"业务员："
+    后换行不会误吃下一行内容）。文本类值以"其他已配置关键词"为截止
+    边界，防止"业务员：出单渠道：演示"同行粘连时把下个关键词误当值。
+    非法规则（无 target/keywords）跳过；全部非法返回空列表。
+    """
+    valid = [r for r in (rules or [])
+             if r.get("enabled", True) and r.get("target")
+             and [k for k in (r.get("keywords") or []) if k and str(k).strip()]]
+
+    all_keywords = [str(k).strip() for r in valid for k in r["keywords"] if str(k).strip()]
+    kw_alt = "|".join(_keyword_regex(k) for k in sorted(all_keywords, key=len, reverse=True))
+    # 文本值：非空白/常见标点，且任意位置不吸入其他关键词（含冒号形式）
+    text_char = r"[^\s，,。、；;:：]"
+    if kw_alt:
+        text_value = rf"((?:(?!(?:{kw_alt}))(?:{text_char})){{1,20}})"
+    else:
+        text_value = rf"({text_char}{{1,20}})"
+
+    compiled = []
+    for r in valid:
+        vt = (r.get("value_type") or "text").lower()
+        value_pat = _VALUE_PATTERNS.get(vt, text_value)
+        for kw in r["keywords"]:
+            kw = str(kw).strip()
+            if not kw:
+                continue
+            pat = re.compile(rf"{_keyword_regex(kw)}[ \t]*[:：]?[ \t]*{value_pat}")
+            compiled.append((r["target"], pat))
+    return compiled
+
+
+def get_compiled_rules(db, enterprise_id):
+    """读取并编译企业规则，60s TTL 缓存。企业未配置返回 None。"""
+    import time
+    if enterprise_id is None:
+        return None
+    entry = _rules_cache.get(enterprise_id)
+    if entry and time.time() < entry[1]:
+        return entry[0]
+    from insurance.field_config_db import get_group_fill_rules
+    try:
+        rules = get_group_fill_rules(db, enterprise_id)
+    except Exception:
+        logger.exception("读取群内补充规则失败: eid=%s", enterprise_id)
+        rules = None
+    compiled = compile_fill_rules(rules) if rules is not None else None
+    _rules_cache[enterprise_id] = (compiled, time.time() + _RULES_TTL)
+    return compiled
+
+
+def parse_with_rules(text: str, compiled: list):
+    """
+    用企业配置规则解析文本。
+    判定门槛与写死逻辑一致：车牌 + 至少一条规则命中且有有效值。
+    带了关键词没填值（正则天然不命中）、没带的关键词 → 对应字段不处理。
+    返回 None 或 {"plate": ..., 字段: 值}。
+    """
+    if not text or not text.strip() or not compiled:
+        return None
+    t = text.replace("　", " ")
+
+    pm = _PLATE_RE.search(t)
+    if not pm:
+        return None
+    result = {"plate": re.sub(r"[-\s　]", "", pm.group(0)).upper()}
+
+    for target, pat in compiled:
+        if target in result:
+            continue  # 同一目标多个关键词，取先命中的
+        m = pat.search(t)
+        if m and m.group(1) and m.group(1).strip():
+            result[target] = m.group(1).strip()
+
+    if len(result) <= 1:  # 只有车牌、无任何有值项 → 普通聊天
+        return None
+    return result
+
+
+def apply_policy_quote(db, text: str, roomid: str = None, enterprise_id: int = None):
     """
     解析文本并按车牌回填到所有同车牌记录。
     返回 (matched_count, parsed_dict)：
@@ -120,15 +226,24 @@ def apply_policy_quote(db, text: str, roomid: str = None):
 
     roomid: 触发这条文本的群，只回填同一个群里的同车牌记录，
     避免不同群（不同企业）凑巧同车牌号时数据串到别的企业。
+    enterprise_id: 该群所属企业；企业配置过关键词规则时走新引擎，
+    否则走 parse_policy_quote_text 原写死逻辑（双轨制）。
     """
     from insurance.db import find_records_by_plate, update_insurance_record
 
-    parsed = parse_policy_quote_text(text)
+    compiled = get_compiled_rules(db, enterprise_id)
+    if compiled is not None:
+        parsed = parse_with_rules(text, compiled)
+    else:
+        parsed = parse_policy_quote_text(text)
     if not parsed:
         return 0, None
 
     plate = parsed["plate"]
-    fill = {k: v for k, v in parsed.items() if k != "plate"}
+    # 空串/空白值一律不写库（带了关键词没填值的项不处理、不覆盖原值）
+    fill = {k: v for k, v in parsed.items() if k != "plate" and v and str(v).strip()}
+    if not fill:
+        return 0, None
 
     records = find_records_by_plate(db, plate, roomid=roomid)
     if not records:

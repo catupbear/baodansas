@@ -92,6 +92,11 @@ def main():
     def monitor_config_page():
         return render_template("monitor_config.html")
 
+    # 客户管理（销售跟进视图，超管专属，前端校验权限）
+    @app.route("/admin/customers")
+    def admin_customers_page():
+        return render_template("customers.html")
+
     @app.route("/admin/enterprises")
     def admin_enterprises_page():
         return render_template("admin_enterprises.html")

@@ -5816,6 +5816,97 @@ def validate_formula():
         return jsonify({"code": 400, "msg": f"公式错误：{str(e)}"}), 400
 
 
+@insurance_bp.route("/api/insurance/field-config/fill-targets", methods=["GET"])
+def get_group_fill_targets():
+    """
+    「群内补充」规则的可选目标字段列表：
+    当前用户列配置（页面列 ∪ 导出列）中非记录级的列。
+    is_system=True 表示保单 OCR 识别字段（前端选中时提示会覆盖识别值）。
+    """
+    try:
+        user = g.current_user
+
+        # 超管代管模式：读被代管对象的列配置（与 column-config 接口同款逻辑），
+        # 否则「一键导入自定义字段」会错拿超管自己的字段列表
+        def _query_columns(config_type):
+            target_scope = request.args.get("target_scope")
+            target_scope_id = request.args.get("target_scope_id")
+            if user["role"] == ROLE_SUPER_ADMIN and target_scope:
+                sid = int(target_scope_id) if target_scope_id else None
+                if target_scope == "enterprise":
+                    return get_column_config(_db, config_type, sid, "enterprise", sid)
+                if target_scope == "user":
+                    from auth.db import get_user_by_id
+                    target_user = get_user_by_id(_db, sid)
+                    return get_column_config(_db, config_type, sid, "employee",
+                                             target_user.get("parent_id") if target_user else None)
+                return get_column_config(_db, config_type, 0, "super_admin", None)
+            return get_column_config(_db, config_type, user["user_id"], user["role"], user.get("parent_id"))
+
+        target_map = {}
+        for config_type in ("list_columns", "export_columns"):
+            cfg = _query_columns(config_type)
+            for c in cfg.get("columns", []):
+                key = c.get("key")
+                if not key or c.get("type") == "record" or c.get("merge"):
+                    continue
+                # custom 严格按列配置的 custom 标记（前端列配置里带「自定义」徽标的列），
+                # 与「一键导入自定义字段」的范围一致；页面列/导出列任一侧标记即算自定义
+                if key in target_map:
+                    target_map[key]["custom"] = target_map[key]["custom"] or bool(c.get("custom"))
+                else:
+                    target_map[key] = {
+                        "key": key,
+                        "display_name": c.get("display_name") or key,
+                        "custom": bool(c.get("custom")),
+                    }
+        targets = [{**t, "is_system": not t["custom"]} for t in target_map.values()]
+        return jsonify({"code": 0, "data": {"targets": targets}})
+    except Exception as e:
+        logger.exception("获取群内补充目标字段失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/config/fill-skip-keywords", methods=["GET", "POST"])
+def fill_skip_keywords_api():
+    """
+    群内补充·全局跳过关键词黑名单（仅内部管理员）。
+    文本包含任一关键词时跳过全部关键词触发链路（报价/回填/台账导出）。
+    """
+    try:
+        user = g.current_user
+        if user["role"] != ROLE_SUPER_ADMIN:
+            return jsonify({"code": 403, "msg": "仅内部管理员可操作"}), 403
+
+        from .db import FILL_SKIP_KEYWORDS_CONFIG_KEY, invalidate_fill_skip_keywords_cache
+
+        if request.method == "GET":
+            val = get_insurance_config(_db, FILL_SKIP_KEYWORDS_CONFIG_KEY, [])
+            keywords = val if isinstance(val, list) else []
+            return jsonify({"code": 0, "data": {"keywords": keywords}})
+
+        body = request.get_json(force=True) or {}
+        raw = body.get("keywords", [])
+        if not isinstance(raw, list):
+            return jsonify({"code": 400, "msg": "keywords 必须为数组"}), 400
+        keywords = []
+        for k in raw:
+            k = str(k).strip()
+            if not k or k in keywords:
+                continue
+            if len(k) < 2:
+                return jsonify({"code": 400, "msg": f"关键词「{k}」过短（至少2个字符），过于宽泛会误伤正常消息"}), 400
+            keywords.append(k)
+        if len(keywords) > 50:
+            return jsonify({"code": 400, "msg": "跳过关键词最多 50 个"}), 400
+        set_insurance_config(_db, FILL_SKIP_KEYWORDS_CONFIG_KEY, keywords)
+        invalidate_fill_skip_keywords_cache()
+        return jsonify({"code": 0, "msg": "已保存", "data": {"keywords": keywords}})
+    except Exception as e:
+        logger.exception("跳过关键词配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
 @insurance_bp.route("/api/insurance/field-config/defaults", methods=["GET"])
 def get_field_config_defaults():
     """
