@@ -59,6 +59,15 @@ def create_app(config: dict) -> Flask:
         secret=notify_cfg.get("secret", ""),
     )
 
+    # 初始化群文本消息钉钉转发（外部联系人群聊文本，独立机器人，与错误告警分开）
+    text_msg_cfg = config.get("text_msg_notify", {})
+    if text_msg_cfg.get("enabled"):
+        from core.notify import init_text_msg_notifier
+        init_text_msg_notifier(
+            webhook_url=text_msg_cfg.get("webhook_url", ""),
+            secret=text_msg_cfg.get("secret", ""),
+        )
+
     # 初始化数据库（MySQL 连接池，传入主企业 corpid 用于回填历史消息）
     db = Database(config["mysql"], main_corpid=config["wecom"]["corpid"])
 

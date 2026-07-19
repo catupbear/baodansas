@@ -38,6 +38,12 @@ notify:
   webhook_url: "https://oapi.dingtalk.com/robot/send?access_token=your_token"
   secret: "SECxxxxxxxx"
 
+# 群文本消息钉钉转发（可选；外部联系人群聊文本；内部员工/文件/命令文本不转发）
+text_msg_notify:
+  enabled: false
+  webhook_url: "https://oapi.dingtalk.com/robot/send?access_token=your_token"
+  secret: "SECxxxxxxxx"
+
 cos:
   secret_id: "your_cos_secret_id"
   secret_key: "your_cos_secret_key"

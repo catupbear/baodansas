@@ -377,6 +377,9 @@ class MessageFetcher:
             # 检查是否需要触发保单识别
             self._check_insurance_trigger(msg_seq, msg_data, parsed)
 
+            # 外部联系人的群聊文本转发钉钉（内部员工/文件/命令文本不转发）
+            self._check_text_msg_dingtalk_notify(msg_seq, parsed)
+
             # "群公告"文本（机器人自己发的入群欢迎语/系统公告）只正常存档，
             # 不识别、不触发任何关键词类功能（保险报价/回填/台账导出等），避免误命中
             _notice_text = (parsed.get("content") or {}).get("text") or "" if parsed.get("msgtype") == "text" else ""
@@ -410,6 +413,76 @@ class MessageFetcher:
         except json.JSONDecodeError as e:
             logger.error("%s消息JSON解析失败, seq=%d: %s", self._log_prefix, msg_seq, e)
             notify_error("消息解析", "_process_item", f"JSON解析失败, seq={msg_seq}", str(e))
+
+    def _check_text_msg_dingtalk_notify(self, seq: int, parsed: dict):
+        """外部联系人在群里发的普通聊天文本 → 转发到钉钉群（消息转发机器人）。
+
+        过滤规则：
+          - 仅群文本消息（msgtype=text 且 roomid 非空），文件/图片等不转发
+          - 内部员工发的不转发：外部联系人 userid 以 wm/wo 开头（wb=互联企业），
+            其余视为本企业内部成员（与 contacts.get_name 的判断规则一致）
+          - 命令文本不转发：「发送台账xx」台账导出命令、政策补充/报价回填文本
+          - 「群公告」机器人广播不转发
+        通知内容含：归属企业、群名、发送人、时间、消息内容。
+        旁路通知：任何异常只记日志，绝不影响消息处理主流程。
+        """
+        try:
+            from core.notify import text_msg_notify_enabled, notify_group_text
+            if not text_msg_notify_enabled():
+                return
+            if parsed.get("msgtype", "") != "text":
+                return
+            roomid = parsed.get("roomid", "")
+            if not roomid:
+                return
+            _content = parsed.get("content", {}) or {}
+            text = _content.get("text") or _content.get("content") or ""
+            if not text:
+                return
+            sender = parsed.get("from", "")
+            # 过滤内部人员：非 wm/wo/wb 开头的 userid 视为本企业内部员工
+            if not sender.startswith(("wm", "wo", "wb")):
+                return
+            if "群公告" in text:
+                return
+            # 过滤命令文本：台账导出命令（发送台账+今日/本周/本月）
+            try:
+                from insurance.ledger_export import match_ledger_trigger
+                if match_ledger_trigger(text):
+                    return
+            except Exception:
+                pass
+            # 过滤命令文本：政策补充/报价回填（车牌+商业/交强/驾意）
+            try:
+                from insurance.policy_quote_fill import parse_policy_quote_text
+                if parse_policy_quote_text(text):
+                    return
+            except Exception:
+                pass
+
+            # 解析群名/发送人名（用本 fetcher 所属企业的通讯录凭证），失败回退原始 id
+            room_name = roomid
+            sender_name = sender
+            if getattr(self, "contacts", None):
+                try:
+                    room_name = self.contacts.get_room_name(roomid) or roomid
+                except Exception:
+                    pass
+                try:
+                    sender_name = self.contacts.get_name(sender) or sender
+                except Exception:
+                    pass
+
+            msg_time = ""
+            ts = parsed.get("msgtime", 0)
+            if ts:
+                msg_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts / 1000))
+
+            notify_group_text(room_name, sender_name, text,
+                              enterprise=self.enterprise_name, msg_time=msg_time)
+            logger.info("群文本消息已转发钉钉: seq=%d room=%s sender=%s", seq, roomid, sender)
+        except Exception as e:
+            logger.warning("群文本消息转发钉钉失败（不影响主流程）seq=%d: %s", seq, e)
 
     def _check_policy_fill_trigger(self, seq: int, parsed: dict):
         """群内"政策报价"文本（车牌 + 商业X/交强X/驾意X）按车牌回填政策字段。

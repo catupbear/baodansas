@@ -44,22 +44,24 @@ class DingTalkNotifier:
         sign = urllib.parse.quote_plus(base64.b64encode(hmac_code))
         return f"{self.webhook_url}&timestamp={timestamp}&sign={sign}"
 
-    def send(self, title: str, content: str):
+    def send(self, title: str, content: str, dedup: bool = True):
         """
         发送 Markdown 格式消息到钉钉群。
-        自动去重：相同 title 在 5 分钟内不重复发送。
+        自动去重：相同 title 在 15 分钟内不重复发送（dedup=False 时逐条发送不去重，
+        用于消息转发类通知，每条内容都不同、不能被 title 去重吞掉）。
         """
-        dedup_key = title
-        now = time.time()
-        with _lock:
-            last_time = _recent_errors.get(dedup_key, 0)
-            if now - last_time < _DEDUP_INTERVAL:
-                return
-            _recent_errors[dedup_key] = now
-            # 清理过期的去重记录
-            expired = [k for k, v in _recent_errors.items() if now - v > _DEDUP_INTERVAL]
-            for k in expired:
-                del _recent_errors[k]
+        if dedup:
+            dedup_key = title
+            now = time.time()
+            with _lock:
+                last_time = _recent_errors.get(dedup_key, 0)
+                if now - last_time < _DEDUP_INTERVAL:
+                    return
+                _recent_errors[dedup_key] = now
+                # 清理过期的去重记录
+                expired = [k for k, v in _recent_errors.items() if now - v > _DEDUP_INTERVAL]
+                for k in expired:
+                    del _recent_errors[k]
 
         url = self._sign() if self.secret else self.webhook_url
         payload = {
@@ -241,6 +243,58 @@ def notify_error_report(description: str, detail: str = "", webhook: str = "", s
     notifier = DingTalkNotifier(webhook, secret)
     threading.Thread(
         target=notifier.send, args=(title, content), daemon=True
+    ).start()
+
+
+# 群文本消息转发通知器（独立 webhook，与系统错误告警机器人分开）
+_text_msg_notifier = None
+
+
+def init_text_msg_notifier(webhook_url: str, secret: str = ""):
+    """初始化群文本消息转发通知器（外部联系人群聊文本 → 钉钉）"""
+    global _text_msg_notifier
+    if webhook_url:
+        _text_msg_notifier = DingTalkNotifier(webhook_url, secret)
+        logger.info("群文本消息钉钉转发已启用")
+
+
+def text_msg_notify_enabled() -> bool:
+    """群文本消息转发是否已启用（调用方先判断，避免白做通讯录解析）"""
+    return _text_msg_notifier is not None
+
+
+def notify_group_text(room_name: str, sender_name: str, text: str,
+                      enterprise: str = "", msg_time: str = ""):
+    """
+    群内普通聊天文本转发到钉钉（异步不阻塞）。
+
+    与错误告警不同：逐条发送、不做 title 去重（每条消息内容都不同）。
+
+    Args:
+        room_name:   消息所在群名（解析失败时为 roomid）
+        sender_name: 发送人名称（解析失败时为原始 userid）
+        text:        消息文本内容
+        enterprise:  归属企业名（多企业部署时区分来源，可选）
+        msg_time:    消息时间（可选，缺省用当前时间）
+    """
+    if not _text_msg_notifier:
+        return
+
+    title = f"💬 {room_name}"
+    lines = [
+        "### 💬 群消息",
+        f"- **群**: {room_name}",
+        f"- **发送人**: {sender_name or '未知'}",
+        f"- **时间**: {msg_time or time.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"- **内容**: {text[:1000]}",
+    ]
+    if enterprise:
+        lines.insert(1, f"- **企业**: {enterprise}")
+    content = "\n".join(lines)
+
+    threading.Thread(
+        target=_text_msg_notifier.send, args=(title, content),
+        kwargs={"dedup": False}, daemon=True
     ).start()
 
 
