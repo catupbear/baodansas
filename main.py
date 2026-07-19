@@ -164,6 +164,11 @@ def create_app(config: dict) -> Flask:
     init_insurance_api(db, handler=insurance_handler, contacts=contacts)
     app.register_blueprint(insurance_bp)
 
+    # 群内补充「待匹配池」：建表 + 延迟提醒/过期作废扫描线程
+    # （命中0条不再立即提示未录入，延迟N分钟仍未匹配才提醒，识别成功自动回填）
+    from insurance.fill_pending import init_fill_pending
+    init_fill_pending(db)
+
     # 导出行为审计（内部功能，仅超管）：建表 + 注入 COS 用于副本异步上传
     from insurance.export_audit import init_export_audit
     init_export_audit(db, cos_storage)
