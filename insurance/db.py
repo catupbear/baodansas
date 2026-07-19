@@ -507,6 +507,8 @@ def init_insurance_tables(db):
                 id          INT PRIMARY KEY AUTO_INCREMENT,
                 task_id     VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'FlowBot 任务ID',
                 robot_id    VARCHAR(64) NOT NULL DEFAULT '' COMMENT '机器人ID',
+                source      VARCHAR(16) NOT NULL DEFAULT 'notify' COMMENT '来源: notify=群通知(失败自动重发) monitor=监控页手动发送(失败手动重发)',
+                roomid      VARCHAR(128) NOT NULL DEFAULT '' COMMENT '目标群roomid（监控页发送时记录，供聊天记录合并显示）',
                 group_name  VARCHAR(255) NOT NULL DEFAULT '' COMMENT '目标群名',
                 message     TEXT COMMENT '消息正文',
                 payload     TEXT COMMENT '发送任务 taskList JSON（失败重发用）',
@@ -519,6 +521,19 @@ def init_insurance_tables(db):
                 KEY idx_fbl_created (created_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='FlowBot群通知推送日志'
         """)
+
+        # 旧表升级：补 source/roomid 列（幂等，监控页发送消息功能用）
+        for alter_sql in [
+            "ALTER TABLE flowbot_push_log ADD COLUMN source VARCHAR(16) NOT NULL DEFAULT 'notify' "
+            "COMMENT '来源: notify=群通知(失败自动重发) monitor=监控页手动发送(失败手动重发)' AFTER robot_id",
+            "ALTER TABLE flowbot_push_log ADD COLUMN roomid VARCHAR(128) NOT NULL DEFAULT '' "
+            "COMMENT '目标群roomid（监控页发送时记录，供聊天记录合并显示）' AFTER source",
+            "CREATE INDEX idx_fbl_room ON flowbot_push_log(roomid, created_at)",
+        ]:
+            try:
+                cursor.execute(alter_sql)
+            except Exception:
+                pass  # 字段/索引已存在，忽略
 
         conn.commit()
         logger.info("保单识别数据库表初始化完成（DDL）")

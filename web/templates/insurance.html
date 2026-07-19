@@ -204,6 +204,79 @@
         .page-tab-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
         .page-tab-btn.active { background: rgba(255,255,255,0.25); color: #fff; border-color: rgba(255,255,255,0.4); }
 
+        /* ==== 销售看板（sd- 前缀） ==== */
+        .sd-tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+        .sd-tabs button { border: 1px solid #e5e7eb; background: #fff; border-radius: 20px; padding: 7px 18px; font-size: 13px; font-weight: 600; color: #6b7280; cursor: pointer; }
+        .sd-tabs button.on { background: #ea580c; border-color: #ea580c; color: #fff; }
+        .sd-chip { font-size: 13px; border: 1px solid #e5e7eb; background: #fff; border-radius: 16px; padding: 5px 14px; color: #6b7280; cursor: pointer; white-space: nowrap; }
+        .sd-chip.on { background: #fff7ed; border-color: #ea580c; color: #ea580c; font-weight: 600; }
+        .sd-card { background: #fff; border-radius: 14px; padding: 18px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); }
+        .sd-h2 { font-size: 15px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; color: #1c1410; }
+        .sd-h2 .bar { display: inline-block; width: 4px; height: 15px; background: #ea580c; border-radius: 2px; margin-right: 8px; }
+        .sd-h2 .mini { font-size: 12px; color: #9ca3af; font-weight: 400; margin-left: 8px; }
+        /* 数据说明 ? 悬停 */
+        .sd-qi { position: relative; display: inline-flex; width: 15px; height: 15px; border-radius: 50%; background: #f3f4f6; color: #9ca3af; font-size: 10px; font-weight: 700; align-items: center; justify-content: center; cursor: help; vertical-align: 1px; flex-shrink: 0; margin-left: 4px; }
+        .sd-qi:hover { background: #ea580c; color: #fff; }
+        .sd-qi .sd-qtip { display: none; position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); width: 250px; background: rgba(28,20,16,0.94); color: #fff; border-radius: 10px; padding: 10px 12px; font-size: 12px; font-weight: 400; line-height: 1.7; z-index: 60; box-shadow: 0 4px 16px rgba(0,0,0,0.25); text-align: left; white-space: pre-line; cursor: default; }
+        .sd-qi .sd-qtip::after { content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: rgba(28,20,16,0.94); }
+        .sd-qi:hover .sd-qtip { display: block; }
+        .sd-qi.qright .sd-qtip { left: auto; right: -10px; transform: none; }
+        .sd-qi.qright .sd-qtip::after { left: auto; right: 14px; transform: none; }
+        /* 目标进度条 */
+        .sd-pbar { height: 6px; background: #f3f4f6; border-radius: 3px; overflow: hidden; }
+        .sd-pbar i { display: block; height: 100%; background: linear-gradient(90deg, #fdba74, #ea580c); border-radius: 3px; }
+        .sd-pbar i.ok { background: linear-gradient(90deg, #86efac, #16a34a); }
+        /* 排行表 */
+        .sd-rank { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
+        .sd-rank th { color: #6b7280; font-weight: 600; text-align: right; padding: 9px 12px; border-bottom: 2px solid #f0efec; }
+        .sd-rank th:nth-child(-n+2), .sd-rank td:nth-child(-n+2) { text-align: left; }
+        .sd-rank td { padding: 9px 12px; border-bottom: 1px solid #f7f6f4; text-align: right; }
+        .sd-rank tbody tr:hover td { background: #faf9f7; }
+        .sd-rk { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: #f3f4f6; color: #6b7280; font-size: 12px; font-weight: 700; align-items: center; justify-content: center; }
+        .sd-rk.r1 { background: #ea580c; color: #fff; } .sd-rk.r2 { background: #fb923c; color: #fff; } .sd-rk.r3 { background: #fdba74; color: #fff; }
+        .sd-cellbar { display: inline-flex; align-items: center; gap: 7px; justify-content: flex-end; }
+        .sd-cellbar .cb { width: 60px; height: 6px; background: #f3f4f6; border-radius: 3px; overflow: hidden; }
+        .sd-cellbar .cb i { display: block; height: 100%; background: #ea580c; }
+        .sd-cellbar .cb i.ok { background: #16a34a; }
+        .sd-cellbar em { font-style: normal; font-weight: 700; color: #ea580c; min-width: 40px; font-size: 12px; }
+        .sd-cellbar em.ok { color: #16a34a; }
+        /* 配置行 */
+        .sd-cfg-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid #f7f6f4; flex-wrap: wrap; }
+        .sd-cfg-row:last-child { border-bottom: none; }
+        .sd-cfg-row input[type=text], .sd-cfg-row select, .sd-cfg-row input[type=number], .sd-cfg-row input[type=date] { border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 10px; font-size: 13px; outline: none; background: #fff; }
+        .sd-cfg-row input:focus, .sd-cfg-row select:focus { border-color: #ea580c; }
+        .sd-lb { font-size: 12px; color: #9ca3af; }
+        .sd-fchip { font-size: 12px; background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; border-radius: 6px; padding: 3px 8px; white-space: nowrap; }
+        .sd-fchip .x { margin-left: 4px; cursor: pointer; opacity: 0.6; }
+        .sd-addlink { font-size: 12px; color: #ea580c; cursor: pointer; border: 1px dashed #fdba74; border-radius: 6px; padding: 3px 10px; background: #fff; white-space: nowrap; }
+        .sd-del { color: #dc2626; font-size: 12px; cursor: pointer; }
+        .sd-hint { font-size: 12px; color: #9ca3af; line-height: 1.8; background: #faf9f7; border-radius: 8px; padding: 10px 14px; }
+        .sd-seg { display: inline-flex; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+        .sd-seg span { font-size: 13px; padding: 6px 15px; cursor: pointer; color: #6b7280; background: #fff; white-space: nowrap; }
+        .sd-seg span.on { background: #fff7ed; color: #ea580c; font-weight: 600; }
+        .sd-ptag { font-size: 11px; border-radius: 4px; padding: 2px 7px; white-space: nowrap; }
+        .sd-ptag.m { background: #fff7ed; color: #ea580c; }
+        .sd-ptag.q { background: #eff6ff; color: #2563eb; }
+        .sd-ptag.y { background: #f0fdf4; color: #16a34a; }
+        .sd-ptag.c { background: #faf5ff; color: #9333ea; }
+        /* 弹窗 */
+        .sd-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
+        .sd-modal { background: #fff; width: 100%; max-width: 560px; border-radius: 16px; box-shadow: 0 12px 48px rgba(0,0,0,0.28); overflow: hidden; }
+        .sd-modal .mh { display: flex; align-items: center; padding: 15px 20px; border-bottom: 1px solid #f0efec; }
+        .sd-modal .mh h3 { font-size: 16px; font-weight: 700; flex: 1; }
+        .sd-modal .mh .mx { font-size: 18px; color: #9ca3af; cursor: pointer; padding: 0 4px; }
+        .sd-modal .mb { padding: 16px 20px; max-height: 62vh; overflow-y: auto; }
+        .sd-mguide { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 11px 14px; font-size: 12px; color: #9a3412; line-height: 1.9; margin-bottom: 14px; }
+        .sd-mguide b.tt { display: block; font-size: 13px; margin-bottom: 2px; }
+        .sd-frow { display: flex; align-items: center; gap: 10px; margin-bottom: 11px; flex-wrap: wrap; }
+        .sd-frow .fl { width: 76px; font-size: 13px; color: #6b7280; flex-shrink: 0; text-align: right; }
+        .sd-frow input, .sd-frow select { border: 1px solid #e5e7eb; border-radius: 8px; padding: 7px 10px; font-size: 13px; outline: none; }
+        .sd-frow input:focus, .sd-frow select:focus { border-color: #ea580c; }
+        .sd-modal .mf { display: flex; gap: 10px; justify-content: flex-end; padding: 13px 20px; border-top: 1px solid #f0efec; background: #faf9f7; }
+        .sd-btn { border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .sd-btn.orange { background: #ea580c; color: #fff; }
+        .sd-btn.ghost { background: #fff; border: 1px solid #e5e7eb; color: #6b7280; }
+
         /* 文件卡片 */
         .file-card {
             border: 1px solid var(--border-light); border-radius: 10px;
@@ -506,6 +579,15 @@
                     <button v-if="isSuperAdmin" @click="pageTab = 'dashboard'; loadDashboard()" :class="pageTab === 'dashboard' ? 'active' : ''" class="page-tab-btn">
                         数据看板
                     </button>
+                    <!-- 销售看板：本期仅内部超管可见，后续放开企业管理员时调整 v-if -->
+                    <button v-if="isSuperAdmin" @click="pageTab = 'sales'; loadSalesDash()" :class="pageTab === 'sales' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;">
+                        销售看板<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">NEW</span>
+                    </button>
+                    <!-- AI质检（仅超管），Tab 名旁显示待处理数量红色徽标 -->
+                    <button v-if="isSuperAdmin" @click="openAiCheckTab()" :class="pageTab === 'aicheck' ? 'active' : ''" class="page-tab-btn" style="position:relative;white-space:nowrap;">
+                        ✨ AI质检
+                        <span v-if="aiIssues.pending > 0" style="position:absolute;top:-8px;right:-8px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.35);">{{ aiIssues.pending > 99 ? '99+' : aiIssues.pending }}</span>
+                    </button>
                     <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="openRenewalTab()" :class="pageTab === 'renewal' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;position:relative;">
                         续保管理系统<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
                         <span v-if="renewalBadgeCount > 0" style="position:absolute;top:-8px;right:-8px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.35);border:2px solid #c2410c;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
@@ -691,6 +773,11 @@
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
                         :style="pageTab==='dashboard'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
                     数据看板
+                </button>
+                <button v-if="isSuperAdmin" @click="pageTab='sales';loadSalesDash();mobileMenuOpen=false"
+                        style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
+                        :style="pageTab==='sales'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
+                    销售看板
                 </button>
                 <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="openRenewalTab();mobileMenuOpen=false"
                         style="display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
@@ -1661,6 +1748,563 @@
         </div>
     </main>
 
+    <!-- ========== AI质检 Tab（仅超管） ========== -->
+    <!-- ==================== 销售看板（本期仅超管） ==================== -->
+    <main v-if="pageTab === 'sales' && isSuperAdmin && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-4 pb-8">
+        <!-- 二级 Tab + 企业选择 -->
+        <div class="sd-tabs">
+            <button :class="salesTab==='board'?'on':''" @click="salesTab='board'; loadSalesDash()">看板</button>
+            <button :class="salesTab==='config'?'on':''" @click="openSalesConfig()">看板配置</button>
+            <button :class="salesTab==='targets'?'on':''" @click="openSalesTargets()">目标管理</button>
+            <span style="flex:1"></span>
+            <span class="sd-lb">企业：</span>
+            <select v-model="salesEnterprise" @change="onSalesEnterpriseChange"
+                class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 outline-none focus:border-orange-400" style="max-width:180px">
+                <option value="">请选择企业...</option>
+                <option v-for="e in dashboardEnterprises" :key="e.id" :value="e.id">{{ e.name }}</option>
+            </select>
+        </div>
+
+        <div v-if="!salesEnterprise" class="flex items-center justify-center py-24 text-gray-400 text-sm">请先在右上角选择要查看的企业</div>
+
+        <template v-else>
+        <!-- ========== 看板 ========== -->
+        <div v-show="salesTab==='board'">
+            <!-- 时间筛选 -->
+            <div class="flex items-center gap-2 mb-3 flex-wrap">
+                <span v-for="opt in salesPeriodOptions" :key="opt.value" class="sd-chip"
+                      :class="salesPeriod===opt.value?'on':''"
+                      @click="salesPeriod=opt.value; opt.value!=='custom' && loadSalesDash()">{{ opt.label }}</span>
+                <template v-if="salesPeriod==='custom'">
+                    <input type="date" v-model="salesDateStart" class="text-xs border border-gray-200 rounded-lg px-2 py-1">
+                    <span class="text-gray-400 text-xs">~</span>
+                    <input type="date" v-model="salesDateEnd" class="text-xs border border-gray-200 rounded-lg px-2 py-1">
+                    <button class="sd-btn orange" style="padding:5px 12px;font-size:12px" @click="loadSalesDash()">查询</button>
+                </template>
+                <span v-if="salesData" class="sd-lb">{{ salesData.date_start }} ~ {{ salesData.date_end }}（按{{ salesData.time_field }}）· {{ salesData.record_count }} 单</span>
+                <span style="flex:1"></span>
+                <span v-if="salesData" class="sd-lb">配置来源：{{ salesData.config_source==='enterprise'?'企业自定义':(salesData.config_source==='global'?'系统默认模板':'内置默认') }}</span>
+            </div>
+
+            <div v-if="salesLoading" class="flex items-center justify-center py-24 text-gray-400 text-sm">加载中...</div>
+            <template v-else-if="salesData">
+            <!-- 指标卡 -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+                <div v-for="c in salesData.cards" :key="c.id||c.title" class="sd-card" style="padding:14px 16px">
+                    <div class="text-xs text-gray-400 flex items-center">{{ c.title }}
+                        <span v-if="c.filters && c.filters.length" style="font-size:10px;background:#fff7ed;color:#ea580c;border:1px solid #fdba74;border-radius:4px;padding:0 4px;margin-left:4px">条件</span>
+                        <span class="sd-qi">?<span class="sd-qtip">{{ c.explain }}</span></span>
+                    </div>
+                    <div class="text-xl font-bold text-gray-800 mt-1.5">{{ sdMoney(c.value, c.is_count) }}<span v-if="c.is_count" class="text-xs font-normal text-gray-400"> 单</span></div>
+                </div>
+            </div>
+
+            <!-- 目标完成 -->
+            <div v-if="salesData.targets && salesData.targets.length" class="sd-card mb-4">
+                <div class="sd-h2"><span class="bar"></span>目标完成<span class="mini">企业 / 条件目标 · 滚动周期自动按当前自然周期起算</span></div>
+                <div v-for="t in salesData.targets" :key="t.id" style="padding:9px 0;border-bottom:1px solid #f7f6f4">
+                    <div class="flex items-center justify-between text-sm mb-1.5">
+                        <span class="font-semibold text-gray-700 flex items-center">{{ t.name }}
+                            <span class="sd-lb" style="margin-left:6px">{{ sdFiltersText(t.filters) || '全部保单' }} · {{ t.period_label }}<template v-if="t.period_type==='custom'">（{{ t.period_start }} ~ {{ t.period_end }}）</template></span>
+                            <span class="sd-qi">?<span class="sd-qtip">{{ t.explain }}</span></span>
+                        </span>
+                        <span class="font-bold" :class="t.rate>=100?'text-green-600':'text-orange-600'">{{ t.rate }}%</span>
+                    </div>
+                    <div class="sd-pbar"><i :class="t.rate>=100?'ok':''" :style="{width: Math.min(t.rate,100)+'%'}"></i></div>
+                    <div class="sd-lb" style="margin-top:4px">{{ sdMoney(t.actual, t.is_count) }} / {{ sdMoney(t.target_value, t.is_count) }}<span v-if="t.rate>=100"> · 已达标 ✓</span></div>
+                </div>
+            </div>
+
+            <!-- 图表 -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                <div v-for="(ch, ci) in salesData.charts" :key="ci" class="sd-card" :class="ch.type==='trend'?'lg:col-span-2':''">
+                    <div class="sd-h2"><span class="bar"></span>{{ ch.title }}
+                        <span class="sd-qi">?<span class="sd-qtip">{{ ch.explain }}</span></span>
+                        <span v-if="ch.type!=='trend' && ch.total" class="mini">合计 {{ sdMoney(ch.total, ch.is_count) }}</span>
+                    </div>
+                    <div v-if="(ch.type==='trend' && (!ch.labels || !ch.labels.length)) || (ch.type!=='trend' && (!ch.items || !ch.items.length))"
+                         class="text-center text-gray-300 text-sm py-14">暂无数据</div>
+                    <canvas v-else :id="'sdChart'+ci" height="250" style="width:100%;display:block"></canvas>
+                </div>
+            </div>
+
+            <!-- 业务员排行 -->
+            <div v-if="salesData.ranking" class="sd-card">
+                <div class="sd-h2"><span class="bar"></span>{{ salesData.ranking.title }}
+                    <span class="mini">按{{ salesData.ranking.dimension }}分组 · 排序依据：{{ salesData.ranking.sort_by }}</span>
+                </div>
+                <div style="overflow-x:auto">
+                    <table class="sd-rank">
+                        <thead><tr>
+                            <th>排名</th><th>{{ salesData.ranking.dimension }}</th>
+                            <th v-for="col in salesData.ranking.columns" :key="col">{{ col }}
+                                <span class="sd-qi qright">?<span class="sd-qtip">{{ salesData.ranking.col_explains[col] }}</span></span>
+                            </th>
+                            <th v-for="tn in salesData.ranking.target_columns" :key="tn">{{ tn }}·完成率
+                                <span class="sd-qi qright">?<span class="sd-qtip">{{ salesData.ranking.col_explains[tn+'·完成率'] }}</span></span>
+                            </th>
+                        </tr></thead>
+                        <tbody>
+                            <tr v-for="(row, ri) in salesData.ranking.rows" :key="row.name">
+                                <td><span class="sd-rk" :class="ri<3?('r'+(ri+1)):''">{{ ri+1 }}</span></td>
+                                <td class="font-medium">{{ row.name }}</td>
+                                <td v-for="col in salesData.ranking.columns" :key="col">{{ sdMoney(row.values[col], col.includes('量')) }}</td>
+                                <td v-for="tn in salesData.ranking.target_columns" :key="tn">
+                                    <span v-if="!row.targets[tn]" class="text-gray-300">未设置</span>
+                                    <span v-else class="sd-cellbar">
+                                        <span class="sd-lb">{{ sdMoney(row.targets[tn].target, false) }}<template v-if="row.targets[tn].personal">（单独）</template></span>
+                                        <span class="cb"><i :class="row.targets[tn].rate>=100?'ok':''" :style="{width: Math.min(row.targets[tn].rate,100)+'%'}"></i></span>
+                                        <em :class="row.targets[tn].rate>=100?'ok':''">{{ row.targets[tn].rate }}%</em>
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr v-if="!salesData.ranking.rows.length"><td :colspan="2+salesData.ranking.columns.length+salesData.ranking.target_columns.length" class="text-center text-gray-300 py-8">暂无数据</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            </template>
+        </div>
+
+        <!-- ========== 看板配置 ========== -->
+        <div v-show="salesTab==='config'">
+            <div v-if="salesConfig" class="space-y-4">
+                <div class="flex items-center gap-2 flex-wrap" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:11px 16px;font-size:13px;color:#9a3412">
+                    <span>当前配置来源：<b>{{ salesConfigSource==='enterprise'?'企业自定义':(salesConfigSource==='global'?'系统默认模板':'内置默认') }}</b>，保存后生成该企业专属配置</span>
+                    <span style="flex:1"></span>
+                    <button class="sd-btn ghost" @click="resetSalesConfig">恢复默认模板</button>
+                    <button class="sd-btn ghost" @click="saveSalesConfig('global')" title="保存为系统默认模板，对所有未自定义的企业生效">存为系统默认</button>
+                    <button class="sd-btn orange" :disabled="salesSaving" @click="saveSalesConfig('enterprise')">{{ salesSaving?'保存中...':'保存配置' }}</button>
+                </div>
+
+                <!-- 指标卡配置 -->
+                <div class="sd-card">
+                    <div class="sd-h2"><span class="bar"></span>指标卡配置<span class="mini">名称 + 统计方式 + 统计字段 + 筛选条件（可叠加）</span>
+                        <span style="flex:1"></span><span class="sd-addlink" @click="sdOpenCardModal">＋ 新增指标卡</span>
+                    </div>
+                    <div v-for="(c, i) in salesConfig.cards" :key="i" class="sd-cfg-row">
+                        <input type="text" v-model="c.title" style="width:110px" placeholder="名称">
+                        <select v-model="c.agg"><option value="sum">求和</option><option value="count">计数</option><option value="avg">平均</option></select>
+                        <select v-if="c.agg!=='count'" v-model="c.field" style="max-width:150px"><option v-for="f in salesFields" :key="f" :value="f">{{ f }}</option></select>
+                        <template v-for="(f, fi) in (c.filters||[])" :key="fi">
+                            <select v-model="f.field" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ d }}</option></select>
+                            <select v-model="f.op" style="width:76px"><option value="contains">包含</option><option value="not_contains">不包含</option><option value="eq">等于</option><option value="ne">不等于</option></select>
+                            <input type="text" v-model="f.value" style="width:90px" placeholder="值">
+                            <span class="sd-del" @click="c.filters.splice(fi,1)">✕</span>
+                        </template>
+                        <span class="sd-addlink" @click="(c.filters=c.filters||[]).push({field:'险种',op:'contains',value:''})">+ 条件</span>
+                        <span style="flex:1"></span>
+                        <span class="sd-del" @click="salesConfig.cards.splice(i,1)">删除</span>
+                    </div>
+                    <div class="sd-hint" style="margin-top:10px">统计字段来自台账列（含费率公式计算字段）；「计数」无需选字段；筛选条件为且（AND）关系。</div>
+                </div>
+
+                <!-- 图表配置 -->
+                <div class="sd-card">
+                    <div class="sd-h2"><span class="bar"></span>图表配置</div>
+                    <div v-for="(ch, i) in salesConfig.charts" :key="i" class="sd-cfg-row">
+                        <label class="flex items-center gap-1 text-sm font-semibold" style="min-width:96px">
+                            <input type="checkbox" :checked="ch.enabled!==false" @change="ch.enabled = $event.target.checked">
+                            {{ ch.type==='trend'?'趋势图':(ch.type==='donut'?'占比图':'分布图') }}
+                        </label>
+                        <input type="text" v-model="ch.title" style="width:140px" placeholder="标题">
+                        <template v-if="ch.type==='trend'">
+                            <span class="sd-lb">粒度：</span>
+                            <select v-model="ch.granularity"><option value="month">按月</option><option value="week">按周</option><option value="day">按日</option></select>
+                            <span class="sd-lb">指标：</span>
+                            <template v-for="(m, mi) in ch.metrics" :key="mi">
+                                <select v-model="m.field" style="max-width:120px" @change="m.label=m.field"><option v-for="f in salesFields" :key="f" :value="f">{{ f }}</option></select>
+                                <span class="sd-del" v-if="ch.metrics.length>1" @click="ch.metrics.splice(mi,1)">✕</span>
+                            </template>
+                            <span class="sd-addlink" v-if="ch.metrics.length<3" @click="ch.metrics.push({label:'保费',agg:'sum',field:'保费'})">+ 指标</span>
+                        </template>
+                        <template v-else>
+                            <span class="sd-lb">维度：</span>
+                            <select v-model="ch.dimension" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ d }}</option></select>
+                            <span class="sd-lb">指标：</span>
+                            <select :value="ch.metric.agg+'|'+(ch.metric.field||'')" @change="sdSetChartMetric(ch, $event.target.value)">
+                                <option v-for="f in salesFields" :key="f" :value="'sum|'+f">{{ f }}·求和</option>
+                                <option value="count|">保单量·计数</option>
+                            </select>
+                            <template v-if="ch.type==='donut'"><span class="sd-lb">Top：</span>
+                            <select v-model.number="ch.top"><option :value="5">5</option><option :value="8">8</option><option :value="10">10</option></select></template>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- 排行配置 -->
+                <div class="sd-card">
+                    <div class="sd-h2"><span class="bar"></span>业务员排行配置</div>
+                    <div class="sd-cfg-row">
+                        <span class="sd-lb">分组维度：</span>
+                        <select v-model="salesConfig.ranking.dimension" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ d }}</option></select>
+                        <span class="sd-lb">排序依据：</span>
+                        <select v-model="salesConfig.ranking.sort_by"><option v-for="col in salesConfig.ranking.columns" :key="col.title" :value="col.title">{{ col.title }}</option></select>
+                    </div>
+                    <div class="sd-cfg-row" style="align-items:flex-start">
+                        <span class="sd-lb" style="margin-top:6px">统计列：</span>
+                        <div class="flex flex-wrap gap-2" style="flex:1">
+                            <template v-for="(col, i) in salesConfig.ranking.columns" :key="i">
+                                <span class="sd-fchip">{{ col.title }}（{{ col.agg==='count'?'计数':col.field }}）<span class="x" @click="salesConfig.ranking.columns.splice(i,1)">✕</span></span>
+                            </template>
+                            <select @change="sdAddRankCol($event)" style="border:1px dashed #fdba74;border-radius:6px;padding:3px 8px;font-size:12px;color:#ea580c;background:#fff">
+                                <option value="">+ 添加列...</option>
+                                <option v-for="f in salesFields" :key="f" :value="'sum|'+f">{{ f }}·求和</option>
+                                <option value="count|保单量">保单量·计数</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="sd-cfg-row">
+                        <span class="sd-lb">目标完成率列：</span>
+                        <label v-for="name in sdEmpItemNames" :key="name" class="text-sm flex items-center gap-1">
+                            <input type="checkbox" :checked="(salesConfig.ranking.target_columns||[]).includes(name)" @change="sdToggleTargetCol(name, $event.target.checked)"> {{ name }}
+                        </label>
+                        <span v-if="!sdEmpItemNames.length" class="sd-lb">暂无员工目标项，请先在「目标管理」中创建</span>
+                    </div>
+                </div>
+            </div>
+            <div v-else class="flex items-center justify-center py-24 text-gray-400 text-sm">加载中...</div>
+        </div>
+
+        <!-- ========== 目标管理 ========== -->
+        <div v-show="salesTab==='targets'">
+            <div class="space-y-4">
+                <!-- 企业/条件目标 -->
+                <div class="sd-card">
+                    <div class="sd-h2"><span class="bar"></span>企业 / 条件目标<span class="mini">周期为「当月/当季/今年」时自动滚动，无需每期重设</span>
+                        <span style="flex:1"></span><button class="sd-btn orange" @click="sdOpenTargetModal()">＋ 新增目标</button>
+                    </div>
+                    <div style="overflow-x:auto">
+                        <table class="sd-rank" style="white-space:nowrap">
+                            <thead><tr><th style="text-align:left">目标名称</th><th style="text-align:left">统计</th><th style="text-align:left">筛选条件</th><th style="text-align:left">周期</th><th>目标值</th><th>状态</th><th>操作</th></tr></thead>
+                            <tbody>
+                                <tr v-for="t in sdEntTargets" :key="t.id">
+                                    <td style="text-align:left" class="font-medium">{{ t.name }}</td>
+                                    <td style="text-align:left">{{ t.metric_agg==='count'?'保单量·计数':(t.metric_field+'·求和') }}</td>
+                                    <td style="text-align:left"><span v-if="!t.filters.length" class="text-gray-300">无（全部保单）</span><span v-else class="sd-fchip">{{ sdFiltersText(t.filters) }}</span></td>
+                                    <td style="text-align:left"><span class="sd-ptag" :class="{m:t.period_type==='month',q:t.period_type==='quarter',y:t.period_type==='year',c:t.period_type==='custom'}">{{ t.period_type==='custom' ? (t.period_start+' ~ '+t.period_end) : ({month:'当月',quarter:'当季度',year:'今年'})[t.period_type] }}</span></td>
+                                    <td>{{ sdMoney(t.target_value, t.metric_agg==='count') }}</td>
+                                    <td>{{ t.enabled?'启用':'停用' }}</td>
+                                    <td><span class="text-orange-500 text-xs cursor-pointer mr-2" @click="sdOpenTargetModal(t)">编辑</span><span class="sd-del" @click="sdDeleteTarget(t)">删除</span></td>
+                                </tr>
+                                <tr v-if="!sdEntTargets.length"><td colspan="7" class="text-center text-gray-300 py-8">暂无目标，点右上角「＋ 新增目标」创建</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 员工业绩目标 -->
+                <div class="sd-card">
+                    <div class="sd-h2"><span class="bar"></span>员工业绩目标<span class="mini">按「目标项」组织，每个目标项可带筛选条件</span></div>
+                    <div class="sd-cfg-row" style="border-bottom:none">
+                        <span class="sd-lb">目标项：</span>
+                        <div class="sd-seg" v-if="sdEmpItemNames.length">
+                            <span v-for="name in sdEmpItemNames" :key="name" :class="sdEmpItem===name?'on':''" @click="sdSelectEmpItem(name)">{{ name }}</span>
+                        </div>
+                        <span v-else class="sd-lb">暂无目标项</span>
+                        <span class="sd-addlink" @click="sdOpenEmpModal">＋ 新增员工目标项</span>
+                        <span v-if="sdEmpItem" class="sd-del" @click="sdDeleteEmpItem(sdEmpItem)">删除此目标项</span>
+                    </div>
+                    <template v-if="sdEmpCurrent">
+                        <div class="sd-cfg-row" style="background:#faf9f7;border-radius:10px;padding:10px 12px;border-bottom:none">
+                            <span class="sd-lb">口径：{{ sdEmpCurrent.meta.metric_agg==='count'?'保单量·计数':(sdEmpCurrent.meta.metric_field+'·求和') }}</span>
+                            <span class="sd-lb">条件：{{ sdFiltersText(sdEmpCurrent.meta.filters) || '无' }}</span>
+                            <span class="sd-lb">周期：{{ sdEmpCurrent.meta.period_type==='custom' ? (sdEmpCurrent.meta.period_start+' ~ '+sdEmpCurrent.meta.period_end) : ({month:'当月',quarter:'当季度',year:'今年'})[sdEmpCurrent.meta.period_type] }}</span>
+                            <span style="flex:1"></span>
+                            <span class="sd-lb">全员统一值：</span>
+                            <input type="number" v-model="sdEmpUnified" style="width:110px;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font-size:13px">
+                            <button class="sd-btn orange" style="padding:6px 12px;font-size:12px" @click="sdApplyUnified">应用到全部业务员</button>
+                        </div>
+                        <div style="overflow-x:auto;margin-top:6px">
+                            <table class="sd-rank">
+                                <thead><tr><th style="text-align:left">业务员</th><th>目标值</th><th style="text-align:left">来源</th><th>操作</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="p in sdEmpPersons" :key="p.name">
+                                        <td style="text-align:left" class="font-medium">{{ p.name }}</td>
+                                        <td>
+                                            <input v-if="p.editing" type="number" v-model="sdEmpEdit[p.name]" style="width:100px;border:1px solid #e5e7eb;border-radius:6px;padding:4px 8px;font-size:13px;text-align:right">
+                                            <template v-else>{{ p.value!=null ? sdMoney(p.value, sdEmpCurrent.meta.metric_agg==='count') : '未设置' }}</template>
+                                        </td>
+                                        <td style="text-align:left">
+                                            <span v-if="p.personal" class="sd-ptag m">单独设置</span>
+                                            <span v-else-if="p.value!=null" class="text-gray-400 text-xs">跟随统一值</span>
+                                            <span v-else class="text-gray-300 text-xs">—</span>
+                                        </td>
+                                        <td>
+                                            <template v-if="p.editing">
+                                                <span class="text-orange-500 text-xs cursor-pointer mr-2" @click="sdSavePerson(p.name)">保存</span>
+                                                <span class="text-gray-400 text-xs cursor-pointer" @click="p.editing=false">取消</span>
+                                            </template>
+                                            <template v-else>
+                                                <span class="sd-addlink" @click="sdEmpEdit[p.name] = p.personal ? p.value : ''; p.editing=true">单独设置</span>
+                                                <span v-if="p.personal" class="sd-del" style="margin-left:8px" @click="sdRestoreUnified(p.name)">恢复统一</span>
+                                            </template>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="!sdEmpPersons.length"><td colspan="4" class="text-center text-gray-300 py-6">台账中暂无业务员数据</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="sd-hint" style="margin-top:10px">业务员名单自动来源于台账「业务员」字段去重值；单独设置优先于统一值；排行表展示哪些目标项的完成率列，在「看板配置 → 业务员排行配置」中勾选。</div>
+                    </template>
+                </div>
+            </div>
+        </div>
+        </template>
+
+        <!-- ===== 弹窗：新增指标卡 ===== -->
+        <div v-if="sdModal.card" class="sd-mask" @click.self="sdModal.card=false">
+            <div class="sd-modal">
+                <div class="mh"><h3>新增指标卡</h3><span class="mx" @click="sdModal.card=false">✕</span></div>
+                <div class="mb">
+                    <div class="sd-mguide">
+                        <b class="tt">💡 操作说明</b>
+                        · 指标卡显示在看板顶部，用于展示一个汇总数字；<br>
+                        · 统计字段来自台账现有列（含费率公式产出的计算字段）；统计方式选「计数」时无需选字段；<br>
+                        · 筛选条件可叠加多个，只统计满足条件的保单。示例：字段选「保费」+ 条件「险种 包含 车险」= 车险保费合计；<br>
+                        · 不加条件则统计时间范围内的全部保单。
+                    </div>
+                    <div class="sd-frow"><span class="fl">名称</span><input type="text" v-model="sdCardForm.title" placeholder="如：车险保费" style="width:200px"></div>
+                    <div class="sd-frow"><span class="fl">统计方式</span>
+                        <select v-model="sdCardForm.agg"><option value="sum">求和</option><option value="count">计数</option><option value="avg">平均</option></select>
+                        <template v-if="sdCardForm.agg!=='count'"><span class="fl" style="width:auto">字段</span>
+                        <select v-model="sdCardForm.field" style="max-width:150px"><option v-for="f in salesFields" :key="f" :value="f">{{ f }}</option></select></template>
+                    </div>
+                    <div class="sd-frow" v-for="(f, fi) in sdCardForm.filters" :key="fi"><span class="fl">{{ fi===0?'筛选条件':'' }}</span>
+                        <select v-model="f.field" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ d }}</option></select>
+                        <select v-model="f.op"><option value="contains">包含</option><option value="not_contains">不包含</option><option value="eq">等于</option><option value="ne">不等于</option></select>
+                        <input type="text" v-model="f.value" placeholder="值，如：车险" style="width:110px">
+                        <span class="sd-del" @click="sdCardForm.filters.splice(fi,1)">✕</span>
+                    </div>
+                    <div class="sd-frow"><span class="fl"></span><span class="sd-addlink" @click="sdCardForm.filters.push({field:'险种',op:'contains',value:''})">＋ 添加条件</span></div>
+                </div>
+                <div class="mf"><button class="sd-btn ghost" @click="sdModal.card=false">取消</button><button class="sd-btn orange" @click="sdAddCard">保存</button></div>
+            </div>
+        </div>
+
+        <!-- ===== 弹窗：新增/编辑 企业条件目标 ===== -->
+        <div v-if="sdModal.target" class="sd-mask" @click.self="sdModal.target=false">
+            <div class="sd-modal">
+                <div class="mh"><h3>{{ sdTargetForm.id ? '编辑目标' : '新增目标' }}</h3><span class="mx" @click="sdModal.target=false">✕</span></div>
+                <div class="mb">
+                    <div class="sd-mguide">
+                        <b class="tt">💡 操作说明</b>
+                        · 目标显示在看板「目标完成」区，完成率 = 周期内实际值 ÷ 目标值；<br>
+                        · 筛选条件可叠加多个（如 保司=平安产险 且 险种包含车险）；不加条件即统计全部保单；<br>
+                        · 周期选「当月 / 当季度 / 今年」为滚动周期：每到新的自然月/季/年自动重新起算，无需每期重设；<br>
+                        · 周期选「自定义区间」为一次性目标（如开门红活动），到期后停止计算；<br>
+                        · 目标值单位：元（保单量目标为「单」）。
+                    </div>
+                    <div class="sd-frow"><span class="fl">目标名称</span><input type="text" v-model="sdTargetForm.name" :disabled="!!sdTargetForm.id" placeholder="如：平安产险季度保费目标" style="width:230px"></div>
+                    <div class="sd-frow"><span class="fl">统计口径</span>
+                        <select v-model="sdTargetForm.metric">
+                            <option v-for="f in salesFields" :key="f" :value="'sum|'+f">{{ f }} · 求和</option>
+                            <option value="count|">保单量 · 计数</option>
+                        </select>
+                    </div>
+                    <div class="sd-frow" v-for="(f, fi) in sdTargetForm.filters" :key="fi"><span class="fl">{{ fi===0?'筛选条件':'' }}</span>
+                        <select v-model="f.field" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ d }}</option></select>
+                        <select v-model="f.op"><option value="eq">等于</option><option value="contains">包含</option><option value="not_contains">不包含</option><option value="ne">不等于</option></select>
+                        <input type="text" v-model="f.value" placeholder="值，如：平安产险" style="width:120px">
+                        <span class="sd-del" @click="sdTargetForm.filters.splice(fi,1)">✕</span>
+                    </div>
+                    <div class="sd-frow"><span class="fl"></span><span class="sd-addlink" @click="sdTargetForm.filters.push({field:'保险公司',op:'eq',value:''})">＋ 添加条件</span></div>
+                    <div class="sd-frow"><span class="fl">周期</span>
+                        <select v-model="sdTargetForm.period_type">
+                            <option value="month">当月</option><option value="quarter">当季度</option><option value="year">今年</option><option value="custom">自定义区间</option>
+                        </select>
+                    </div>
+                    <div class="sd-frow" v-if="sdTargetForm.period_type==='custom'"><span class="fl">起止日期</span>
+                        <input type="date" v-model="sdTargetForm.period_start"><span class="text-gray-400">~</span><input type="date" v-model="sdTargetForm.period_end">
+                    </div>
+                    <div class="sd-frow"><span class="fl">目标值</span><input type="number" v-model="sdTargetForm.target_value" placeholder="如：1300000" style="width:150px"><span class="sd-lb">元</span></div>
+                </div>
+                <div class="mf"><button class="sd-btn ghost" @click="sdModal.target=false">取消</button><button class="sd-btn orange" @click="sdSaveTarget">保存</button></div>
+            </div>
+        </div>
+
+        <!-- ===== 弹窗：新增员工目标项 ===== -->
+        <div v-if="sdModal.emp" class="sd-mask" @click.self="sdModal.emp=false">
+            <div class="sd-modal">
+                <div class="mh"><h3>新增员工目标项</h3><span class="mx" @click="sdModal.emp=false">✕</span></div>
+                <div class="mb">
+                    <div class="sd-mguide">
+                        <b class="tt">💡 操作说明</b>
+                        · 员工目标项 = 一类考核口径（统计字段 + 筛选条件 + 周期），如「车险保费目标」；<br>
+                        · 创建后可先填全员统一值一键应用到所有业务员，再对个别业务员单独设置（单独值优先于统一值）；<br>
+                        · 业务员名单自动取自台账「业务员」字段，无需手动维护；<br>
+                        · 每个目标项可在「看板配置 → 业务员排行配置」中勾选，作为排行表的「目标 / 完成率」列展示。
+                    </div>
+                    <div class="sd-frow"><span class="fl">目标项名称</span><input type="text" v-model="sdEmpForm.name" placeholder="如：车险保费目标" style="width:200px"></div>
+                    <div class="sd-frow"><span class="fl">统计口径</span>
+                        <select v-model="sdEmpForm.metric">
+                            <option v-for="f in salesFields" :key="f" :value="'sum|'+f">{{ f }} · 求和</option>
+                            <option value="count|">保单量 · 计数</option>
+                        </select>
+                    </div>
+                    <div class="sd-frow" v-for="(f, fi) in sdEmpForm.filters" :key="fi"><span class="fl">{{ fi===0?'筛选条件':'' }}</span>
+                        <select v-model="f.field" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ d }}</option></select>
+                        <select v-model="f.op"><option value="contains">包含</option><option value="eq">等于</option><option value="not_contains">不包含</option><option value="ne">不等于</option></select>
+                        <input type="text" v-model="f.value" placeholder="值，如：车险" style="width:110px">
+                        <span class="sd-del" @click="sdEmpForm.filters.splice(fi,1)">✕</span>
+                    </div>
+                    <div class="sd-frow"><span class="fl"></span><span class="sd-addlink" @click="sdEmpForm.filters.push({field:'险种',op:'contains',value:''})">＋ 添加条件</span></div>
+                    <div class="sd-frow"><span class="fl">周期</span>
+                        <select v-model="sdEmpForm.period_type">
+                            <option value="month">当月</option><option value="quarter">当季度</option><option value="year">今年</option><option value="custom">自定义区间</option>
+                        </select>
+                    </div>
+                    <div class="sd-frow" v-if="sdEmpForm.period_type==='custom'"><span class="fl">起止日期</span>
+                        <input type="date" v-model="sdEmpForm.period_start"><span class="text-gray-400">~</span><input type="date" v-model="sdEmpForm.period_end">
+                    </div>
+                    <div class="sd-frow"><span class="fl">全员统一值</span><input type="number" v-model="sdEmpForm.unified_value" placeholder="如：100000" style="width:150px"><span class="sd-lb">元 · 保存后可再按人单独调整</span></div>
+                </div>
+                <div class="mf"><button class="sd-btn ghost" @click="sdModal.emp=false">取消</button><button class="sd-btn orange" @click="sdSaveEmpItem">保存</button></div>
+            </div>
+        </div>
+    </main>
+
+    <main v-if="pageTab === 'aicheck' && isSuperAdmin && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-4 pb-8 space-y-4">
+        <!-- A. 企业统计（可折叠） -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+            <div class="px-5 py-3 flex items-center justify-between border-b border-gray-100 flex-wrap gap-2">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-semibold text-gray-700">企业质检统计</span>
+                    <button @click="aiStats.collapsed = !aiStats.collapsed" class="text-xs text-gray-400 hover:text-orange-500 cursor-pointer">{{ aiStats.collapsed ? '展开' : '收起' }}</button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input type="date" v-model="aiStats.dateStart" @change="loadAiStats()" class="text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-orange-400">
+                    <span class="text-gray-400 text-xs">至</span>
+                    <input type="date" v-model="aiStats.dateEnd" @change="loadAiStats()" class="text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-orange-400">
+                </div>
+            </div>
+            <div v-show="!aiStats.collapsed" style="overflow-x:auto;">
+                <div v-if="aiStats.loading" class="py-10 text-center text-gray-400 text-sm">加载中…</div>
+                <table v-else class="w-full text-sm" style="border-collapse:collapse;">
+                    <thead>
+                        <tr class="text-gray-500" style="background:#f9fafb;">
+                            <th style="padding:8px 12px;text-align:left;white-space:nowrap;">企业</th>
+                            <th style="padding:8px 12px;text-align:right;white-space:nowrap;">识别总数</th>
+                            <th style="padding:8px 12px;text-align:right;white-space:nowrap;">质检数</th>
+                            <th style="padding:8px 12px;text-align:right;white-space:nowrap;">准确数</th>
+                            <th style="padding:8px 12px;text-align:right;white-space:nowrap;">修正数</th>
+                            <th style="padding:8px 12px;text-align:right;white-space:nowrap;">待确认</th>
+                            <th style="padding:8px 12px;text-align:right;white-space:nowrap;">真实准确率</th>
+                            <th style="padding:8px 12px;text-align:left;white-space:nowrap;">高频出错字段TOP3</th>
+                            <th style="padding:8px 12px;text-align:right;white-space:nowrap;">AI成本</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="row in aiStats.list" :key="row.enterprise_id" style="border-top:1px solid #f3f4f6;">
+                            <td style="padding:7px 12px;color:#374151;white-space:nowrap;">{{ row.enterprise_name || '—' }}</td>
+                            <td style="padding:7px 12px;text-align:right;">{{ row.total_records || 0 }}</td>
+                            <td style="padding:7px 12px;text-align:right;">{{ row.checked || 0 }}</td>
+                            <td style="padding:7px 12px;text-align:right;color:#16a34a;">{{ row.passed || 0 }}</td>
+                            <td style="padding:7px 12px;text-align:right;color:#c2410c;">{{ row.corrected || 0 }}</td>
+                            <td style="padding:7px 12px;text-align:right;color:#dc2626;">{{ row.flagged || 0 }}</td>
+                            <td style="padding:7px 12px;text-align:right;font-weight:600;">{{ row.accuracy == null ? '—' : (row.accuracy + '%') }}</td>
+                            <td style="padding:7px 12px;">
+                                <span v-for="(f, i) in (row.top_error_fields || [])" :key="i" style="display:inline-block;margin:1px 3px 1px 0;padding:1px 7px;border-radius:9999px;font-size:11px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;white-space:nowrap;">{{ f.field }} {{ f.count }}</span>
+                                <span v-if="!(row.top_error_fields || []).length" class="text-gray-300">—</span>
+                            </td>
+                            <td style="padding:7px 12px;text-align:right;color:#6b7280;">¥{{ fmtCost(row.est_cost) }}</td>
+                        </tr>
+                        <tr v-if="!aiStats.list.length"><td colspan="9" style="padding:16px;text-align:center;color:#9ca3af;">暂无数据</td></tr>
+                        <!-- 合计行（橙色背景） -->
+                        <tr v-if="aiStats.total" style="border-top:2px solid #fed7aa;background:#fff7ed;font-weight:600;">
+                            <td style="padding:8px 12px;color:#c2410c;">合计</td>
+                            <td style="padding:8px 12px;text-align:right;">{{ aiStats.total.total_records || 0 }}</td>
+                            <td style="padding:8px 12px;text-align:right;">{{ aiStats.total.checked || 0 }}</td>
+                            <td style="padding:8px 12px;text-align:right;color:#16a34a;">{{ aiStats.total.passed || 0 }}</td>
+                            <td style="padding:8px 12px;text-align:right;color:#c2410c;">{{ aiStats.total.corrected || 0 }}</td>
+                            <td style="padding:8px 12px;text-align:right;color:#dc2626;">{{ aiStats.total.flagged || 0 }}</td>
+                            <td style="padding:8px 12px;text-align:right;">{{ aiStats.total.accuracy == null ? '—' : (aiStats.total.accuracy + '%') }}</td>
+                            <td style="padding:8px 12px;"></td>
+                            <td style="padding:8px 12px;text-align:right;color:#c2410c;">¥{{ fmtCost(aiStats.total.est_cost) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- B. 问题列表 -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+            <div class="px-5 py-3 flex items-center justify-between border-b border-gray-100 flex-wrap gap-2">
+                <span class="text-sm font-semibold text-gray-700">质检问题列表</span>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <select v-model="aiIssues.status" @change="loadAiIssues(true)" class="text-xs border border-gray-200 rounded px-2 py-1 bg-white outline-none focus:border-orange-400">
+                        <option value="flagged">待确认</option>
+                        <option value="corrected">已修正</option>
+                        <option value="resolved">已处理</option>
+                        <option value="">全部</option>
+                    </select>
+                    <select v-if="recordEnterpriseList.length" v-model="aiIssues.enterpriseId" @change="loadAiIssues(true)" class="text-xs border border-gray-200 rounded px-2 py-1 bg-white outline-none focus:border-orange-400" style="max-width:150px;">
+                        <option value="">全部企业</option>
+                        <option v-for="e in recordEnterpriseList" :key="e.id" :value="e.id">{{ e.name }}</option>
+                    </select>
+                    <input type="date" v-model="aiIssues.dateStart" @change="loadAiIssues(true)" class="text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-orange-400">
+                    <span class="text-gray-400 text-xs">至</span>
+                    <input type="date" v-model="aiIssues.dateEnd" @change="loadAiIssues(true)" class="text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-orange-400">
+                </div>
+            </div>
+            <div style="overflow-x:auto;">
+                <div v-if="aiIssues.loading" class="py-10 text-center text-gray-400 text-sm">加载中…</div>
+                <table v-else class="w-full text-sm" style="border-collapse:collapse;">
+                    <thead>
+                        <tr class="text-gray-500" style="background:#f9fafb;">
+                            <th style="padding:8px 12px;text-align:left;white-space:nowrap;">时间</th>
+                            <th style="padding:8px 12px;text-align:left;white-space:nowrap;">保司</th>
+                            <th style="padding:8px 12px;text-align:left;">文件名</th>
+                            <th style="padding:8px 12px;text-align:left;">差异字段</th>
+                            <th style="padding:8px 12px;text-align:center;white-space:nowrap;">状态</th>
+                            <th style="padding:8px 12px;text-align:center;white-space:nowrap;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="issue in aiIssues.list" :key="issue.id" style="border-top:1px solid #f3f4f6;">
+                            <td style="padding:7px 12px;color:#6b7280;white-space:nowrap;">{{ issue.ai_checked_at || '—' }}</td>
+                            <td style="padding:7px 12px;color:#374151;white-space:nowrap;">{{ issue.company_short || '—' }}</td>
+                            <td style="padding:7px 12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="issue.filename">{{ issue.filename || '—' }}</td>
+                            <td style="padding:7px 12px;">
+                                <div v-for="(d, i) in parseIssueDiffs(issue)" :key="i" style="font-size:11px;line-height:1.6;">
+                                    <span v-if="d.manual" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#f97316;margin-right:3px;vertical-align:middle;" title="人工修改过"></span>
+                                    <span style="color:#6b7280;">{{ d.field }}:</span>
+                                    <span style="color:#dc2626;">{{ d.current || '空' }}</span>
+                                    <span style="color:#9ca3af;">→</span>
+                                    <span style="color:#16a34a;">{{ d.ai || '空' }}</span>
+                                </div>
+                                <span v-if="!parseIssueDiffs(issue).length" class="text-gray-300">—</span>
+                            </td>
+                            <td style="padding:7px 12px;text-align:center;">
+                                <span class="badge text-xs" :style="aiCheckBadge(issue.ai_check_status).style">{{ aiCheckBadge(issue.ai_check_status).text }}</span>
+                            </td>
+                            <td style="padding:7px 12px;text-align:center;white-space:nowrap;">
+                                <div style="display:inline-flex;gap:4px;flex-wrap:wrap;justify-content:center;">
+                                    <button v-if="issue.cos_url" @click="openIssueFile(issue)" class="btn btn-outline" style="padding:2px 8px;font-size:11px;">查看原件</button>
+                                    <template v-if="issue.ai_check_status === 'flagged'">
+                                        <button @click="resolveAiIssue(issue, 'adopt')" :disabled="issue._busy" class="btn" style="padding:2px 8px;font-size:11px;background:#f0fdf4;border:1px solid #bbf7d0;color:#16a34a;">采纳AI值</button>
+                                        <button @click="resolveAiIssue(issue, 'keep')" :disabled="issue._busy" class="btn" style="padding:2px 8px;font-size:11px;background:#f3f4f6;border:1px solid #d1d5db;color:#6b7280;">保留原值</button>
+                                    </template>
+                                    <button v-else-if="issue.ai_check_status === 'corrected'" @click="resolveAiIssue(issue, 'revert')" :disabled="issue._busy" class="btn" style="padding:2px 8px;font-size:11px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;">还原原值</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr v-if="!aiIssues.list.length"><td colspan="6" style="padding:16px;text-align:center;color:#9ca3af;">暂无问题记录</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <!-- 分页 -->
+            <div v-if="aiIssues.total > 0" class="px-4 py-3 border-t flex items-center justify-between">
+                <span class="text-xs text-gray-400">共 {{ aiIssues.total }} 条，第 {{ aiIssues.page }} / {{ aiIssuesTotalPages }} 页</span>
+                <div class="flex items-center gap-1">
+                    <button class="pagination-btn" :disabled="aiIssues.page <= 1" @click="aiIssuesGotoPage(aiIssues.page - 1)">&lsaquo;</button>
+                    <span class="px-2 text-sm text-gray-500">{{ aiIssues.page }}</span>
+                    <button class="pagination-btn" :disabled="aiIssues.page >= aiIssuesTotalPages" @click="aiIssuesGotoPage(aiIssues.page + 1)">&rsaquo;</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
     <!-- ========== 保司数据 Tab ========== -->
     <main v-if="pageTab === 'companies' && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5">
         <div class="card p-4">
@@ -2291,6 +2935,7 @@
                             </template>
                             <th v-if="isSuperAdmin" style="min-width:70px;">识别方式</th>
                             <th v-if="isSuperAdmin" style="min-width:60px;">置信度</th>
+                            <th v-if="isSuperAdmin" style="min-width:80px;">质检状态</th>
                             <th v-if="isSuperAdmin" style="min-width:220px;">内部备注</th>
                         </tr>
                     </thead>
@@ -2327,6 +2972,13 @@
                                             :disabled="record._reocring"
                                             class="btn btn-primary" style="padding:3px 8px;font-size:11px;">
                                         {{ record._reocring ? '识别中...' : '重新识别' }}
+                                    </button>
+                                    <!-- AI质检（仅超管，有原件才显示） -->
+                                    <button v-if="isSuperAdmin && record.cos_url"
+                                            @click="runAiCheck(record, false)"
+                                            :disabled="record._aiChecking"
+                                            class="btn" style="padding:3px 8px;font-size:11px;background:#f5f3ff;border:1px solid #ddd6fe;color:#6d28d9;">
+                                        {{ record._aiChecking ? '识别中…' : 'AI质检' }}
                                     </button>
                                     <!-- 重新上传保单（失败且无COS URL） -->
                                     <label v-if="record.status === 'failed' && !record.cos_url"
@@ -2493,6 +3145,16 @@
                                             : record.confidence >= 0.5 ? 'badge-warning' : 'badge-danger'">
                                     {{ (record.confidence * 100).toFixed(0) }}%
                                 </span>
+                                <span v-else class="text-gray-400 text-sm">—</span>
+                            </td>
+                            <!-- AI质检状态（仅超管可见） -->
+                            <td v-if="isSuperAdmin">
+                                <span v-if="record.ai_check_status === 'pass'" class="badge text-xs" style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;">✓ 通过</span>
+                                <span v-else-if="['corrected','flagged','resolved'].includes(record.ai_check_status)"
+                                      @click="openAiCheckDetail(record)"
+                                      class="badge text-xs cursor-pointer" title="点击查看质检详情"
+                                      :style="aiCheckBadge(record.ai_check_status).style + 'cursor:pointer;'">{{ aiCheckBadge(record.ai_check_status).text }}</span>
+                                <span v-else-if="record.ai_check_status === 'error'" class="badge text-xs" style="background:#fff;color:#dc2626;border:1px solid #dc2626;">质检失败</span>
                                 <span v-else class="text-gray-400 text-sm">—</span>
                             </td>
                             <!-- 内部管理备注（仅超管） -->
@@ -3202,6 +3864,143 @@
         </div>
     </div>
 
+    <!-- ========== AI质检对比弹窗（仅超管） ========== -->
+    <div v-if="isSuperAdmin && aiCheckModal.visible" class="fixed inset-0 flex items-center justify-center" style="z-index:1002;background:rgba(0,0,0,0.4);" @click.self="aiCheckModal.visible = false">
+        <div style="background:white;border-radius:12px;width:min(680px,94vw);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,0.2);overflow:hidden;">
+            <!-- 标题 -->
+            <div style="padding:14px 18px;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span style="font-size:16px;">✨</span>
+                <span style="font-size:14px;font-weight:600;color:#1f2937;">AI质检对比</span>
+                <span v-if="aiCheckModal.model" style="padding:1px 8px;background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;border-radius:9999px;font-size:11px;">{{ aiCheckModal.model }}</span>
+                <span style="font-size:11px;color:#9ca3af;">耗时 {{ (aiCheckModal.durationMs / 1000).toFixed(1) }}s · 差异 {{ aiCheckModal.diffs.length }}</span>
+                <button @click="aiCheckModal.visible = false" style="margin-left:auto;color:#9ca3af;cursor:pointer;font-size:18px;line-height:1;border:none;background:none;">&times;</button>
+            </div>
+            <!-- 对比表格 -->
+            <div style="overflow-y:auto;flex:1;padding:0 18px;">
+                <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                    <thead>
+                        <tr style="background:#f9fafb;color:#6b7280;position:sticky;top:0;">
+                            <th style="padding:7px 8px;width:34px;text-align:center;">
+                                <input type="checkbox"
+                                       :checked="aiCheckModal.diffs.length > 0 && aiCheckModal.diffs.every(i => i.checked)"
+                                       @change="aiCheckToggleAll($event.target.checked)" style="cursor:pointer;">
+                            </th>
+                            <th style="padding:7px 8px;text-align:left;">字段</th>
+                            <th style="padding:7px 8px;text-align:left;">当前列表值</th>
+                            <th style="padding:7px 8px;text-align:left;">AI提取值</th>
+                            <th style="padding:7px 8px;text-align:center;width:60px;">状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- 差异/补充（默认勾选，手动字段除外，红色高亮差异值） -->
+                        <tr v-for="item in aiCheckModal.diffs" :key="'d-' + item.field"
+                            style="border-top:1px solid #f3f4f6;cursor:pointer;"
+                            :style="item.checked ? 'background:#faf5ff;' : ''"
+                            @click="item.checked = !item.checked">
+                            <td style="padding:6px 8px;text-align:center;"><input type="checkbox" v-model="item.checked" @click.stop style="cursor:pointer;"></td>
+                            <td style="padding:6px 8px;font-weight:500;color:#374151;white-space:nowrap;">
+                                <span v-if="item.manual" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f97316;margin-right:4px;vertical-align:middle;" title="人工修改过"></span>
+                                {{ item.field }}
+                            </td>
+                            <td style="padding:6px 8px;color:#374151;word-break:break-all;">{{ item.current || '—' }}</td>
+                            <td style="padding:6px 8px;color:#dc2626;font-weight:500;word-break:break-all;">{{ item.ai || '—' }}</td>
+                            <td style="padding:6px 8px;text-align:center;">
+                                <span v-if="item.type === 'supplement'" style="padding:1px 6px;border-radius:9999px;font-size:10px;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;white-space:nowrap;">补充</span>
+                                <span v-else style="padding:1px 6px;border-radius:9999px;font-size:10px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;white-space:nowrap;">差异</span>
+                            </td>
+                        </tr>
+                        <tr v-if="!aiCheckModal.diffs.length">
+                            <td colspan="5" style="padding:14px;text-align:center;color:#16a34a;">AI提取结果与当前列表值一致，无差异 🎉</td>
+                        </tr>
+                        <!-- 一致字段（默认折叠） -->
+                        <tr v-if="aiCheckModal.same.length">
+                            <td colspan="5" style="padding:6px 8px;">
+                                <button @click="aiCheckModal.showSame = !aiCheckModal.showSame" style="font-size:11px;color:#6b7280;background:none;border:none;cursor:pointer;">
+                                    {{ aiCheckModal.showSame ? '收起一致字段' : ('显示一致字段(' + aiCheckModal.same.length + ')') }}
+                                </button>
+                            </td>
+                        </tr>
+                        <template v-if="aiCheckModal.showSame">
+                            <tr v-for="item in aiCheckModal.same" :key="'s-' + item.field" style="border-top:1px solid #f9fafb;background:#fafafa;color:#9ca3af;">
+                                <td style="padding:6px 8px;text-align:center;">—</td>
+                                <td style="padding:6px 8px;white-space:nowrap;">{{ item.field }}</td>
+                                <td style="padding:6px 8px;word-break:break-all;">{{ item.current || '—' }}</td>
+                                <td style="padding:6px 8px;word-break:break-all;">{{ item.ai || '—' }}</td>
+                                <td style="padding:6px 8px;text-align:center;"><span style="padding:1px 6px;border-radius:9999px;font-size:10px;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;white-space:nowrap;">一致</span></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            <!-- 底部按钮 -->
+            <div style="padding:10px 18px;border-top:1px solid #f3f4f6;display:flex;justify-content:flex-end;gap:10px;">
+                <button @click="aiCheckModal.visible = false" style="padding:6px 18px;font-size:13px;border-radius:8px;background:white;color:#374151;border:1px solid #d1d5db;cursor:pointer;">取消</button>
+                <button @click="applyAiCheck"
+                        :disabled="aiCheckModal.busy || !aiCheckSelectedCount"
+                        :style="'padding:6px 18px;font-size:13px;border-radius:8px;border:none;font-weight:500;' + ((aiCheckModal.busy || !aiCheckSelectedCount) ? 'background:#ddd6fe;color:white;cursor:not-allowed;' : 'background:#6d28d9;color:white;cursor:pointer;')">
+                    {{ aiCheckModal.busy ? '应用中…' : ('应用勾选的AI值（' + aiCheckSelectedCount + '）') }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== AI质检详情弹窗（仅超管） ========== -->
+    <div v-if="isSuperAdmin && aiCheckDetailModal.visible" class="fixed inset-0 flex items-center justify-center" style="z-index:1002;background:rgba(0,0,0,0.4);" @click.self="aiCheckDetailModal.visible = false">
+        <div style="background:white;border-radius:12px;width:min(640px,94vw);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,0.2);overflow:hidden;">
+            <div style="padding:14px 18px;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span style="font-size:16px;">🔍</span>
+                <span style="font-size:14px;font-weight:600;color:#1f2937;">AI质检详情</span>
+                <span v-if="aiCheckDetailModal.status" class="badge text-xs" :style="aiCheckBadge(aiCheckDetailModal.status).style">{{ aiCheckBadge(aiCheckDetailModal.status).text }}</span>
+                <span v-if="aiCheckDetailModal.checkedAt" style="font-size:11px;color:#9ca3af;">{{ aiCheckDetailModal.checkedAt }}</span>
+                <button @click="aiCheckDetailModal.visible = false" style="margin-left:auto;color:#9ca3af;cursor:pointer;font-size:18px;line-height:1;border:none;background:none;">&times;</button>
+            </div>
+            <div style="overflow-y:auto;flex:1;padding:14px 18px;">
+                <div v-if="aiCheckDetailModal.loading" style="text-align:center;color:#9ca3af;padding:20px;">加载中…</div>
+                <template v-else>
+                    <div style="font-size:12px;color:#6b7280;margin-bottom:6px;font-weight:500;">修正历史</div>
+                    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px;">
+                        <thead>
+                            <tr style="background:#f9fafb;color:#6b7280;">
+                                <th style="padding:6px 8px;text-align:left;white-space:nowrap;">字段</th>
+                                <th style="padding:6px 8px;text-align:left;">原值</th>
+                                <th style="padding:6px 8px;text-align:left;">AI值</th>
+                                <th style="padding:6px 8px;text-align:left;white-space:nowrap;">时间</th>
+                                <th style="padding:6px 8px;text-align:left;">来源</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(c, field) in aiCheckDetailModal.corrections" :key="field" style="border-top:1px solid #f3f4f6;">
+                                <td style="padding:6px 8px;font-weight:500;color:#374151;white-space:nowrap;">{{ field }}</td>
+                                <td style="padding:6px 8px;color:#dc2626;word-break:break-all;">{{ c.old || '—' }}</td>
+                                <td style="padding:6px 8px;color:#16a34a;word-break:break-all;">{{ c.new || '—' }}</td>
+                                <td style="padding:6px 8px;color:#6b7280;white-space:nowrap;">{{ c.time || '—' }}</td>
+                                <td style="padding:6px 8px;color:#6b7280;">{{ c.source || '—' }}<template v-if="c.operator"> · {{ c.operator }}</template></td>
+                            </tr>
+                            <tr v-if="!Object.keys(aiCheckDetailModal.corrections).length">
+                                <td colspan="5" style="padding:12px;text-align:center;color:#9ca3af;">暂无修正记录</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div v-if="aiCheckDetailModal.logs.length">
+                        <div style="font-size:12px;color:#6b7280;margin-bottom:6px;font-weight:500;">操作流水</div>
+                        <div v-for="(log, i) in aiCheckDetailModal.logs" :key="i" style="font-size:11px;color:#6b7280;padding:4px 0;border-top:1px solid #f9fafb;">
+                            <span style="color:#9ca3af;">{{ log.time || log.created_at || '' }}</span>
+                            {{ log.action || log.msg || log.text || '' }}
+                        </div>
+                    </div>
+                </template>
+            </div>
+            <div style="padding:10px 18px;border-top:1px solid #f3f4f6;display:flex;justify-content:flex-end;gap:10px;">
+                <button @click="aiCheckDetailModal.visible = false" style="padding:6px 18px;font-size:13px;border-radius:8px;background:white;color:#374151;border:1px solid #d1d5db;cursor:pointer;">关闭</button>
+                <button v-if="Object.keys(aiCheckDetailModal.corrections).length"
+                        @click="revertAiCheckDetail" :disabled="aiCheckDetailModal.busy"
+                        :style="'padding:6px 18px;font-size:13px;border-radius:8px;border:1px solid #fecaca;font-weight:500;' + (aiCheckDetailModal.busy ? 'background:#fef2f2;color:#f87171;cursor:not-allowed;' : 'background:#fef2f2;color:#dc2626;cursor:pointer;')">
+                    {{ aiCheckDetailModal.busy ? '处理中…' : '还原全部修正' }}
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- ========== 批量下载进度浮窗 ========== -->
     <!-- 收起状态：小按钮 -->
     <div v-if="downloadTask.visible && downloadTask.collapsed" class="fixed bottom-6 right-6 z-50"
@@ -3812,6 +4611,18 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10l-4-4m4 4l4-4m4-6v10m0-10l4 4m-4-4l-4 4"/>
                             </svg>
                             {{ previewShowCompare ? '隐藏对比' : '识别对比' }}
+                        </button>
+                        <!-- AI质检（仅超管，预览弹窗内，复用同一套逻辑） -->
+                        <button v-if="isSuperAdmin && previewAutoRecord && previewAutoRecord.cos_url"
+                                @click="runAiCheck(previewAutoRecord, true)"
+                                :disabled="aiCheckLoadingPreview || previewAutoRecord._aiChecking"
+                                class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;background:#f5f3ff;border:1px solid #ddd6fe;color:#6d28d9;">
+                            <svg v-if="aiCheckLoadingPreview || previewAutoRecord._aiChecking" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                            <span v-else>✨</span>
+                            {{ (aiCheckLoadingPreview || previewAutoRecord._aiChecking) ? '识别中…' : 'AI质检' }}
                         </button>
                         <!-- 查看规则按钮已隐藏 -->
                         <!-- 标记正常（预览弹窗内，仅异常记录显示） -->
@@ -7755,6 +8566,281 @@ const _app = createApp({
             }
         }
 
+        // ============ AI质检（全部仅超管可见） ============
+        // AI质检对比弹窗（操作列/预览弹窗触发）
+        const aiCheckModal = reactive({
+            visible: false,
+            recordId: null,
+            logId: null,
+            model: '',
+            durationMs: 0,
+            promptTokens: 0,
+            completionTokens: 0,
+            diffs: [],       // [{field,current,ai,type:'diff'|'supplement',manual,checked}]
+            same: [],        // [{field,current,ai}]
+            showSame: false, // 是否展开一致字段
+            busy: false,     // 应用中
+        });
+        const aiCheckLoadingPreview = ref(false);  // 预览弹窗内按钮 loading
+        const aiCheckSelectedCount = computed(() => aiCheckModal.diffs.filter(i => i.checked).length);
+
+        // 质检状态徽标样式与文案（列表列/详情/问题列表共用）
+        function aiCheckBadge(status) {
+            switch (status) {
+                case 'pass': return { text: '✓ 通过', style: 'background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;' };
+                case 'corrected': return { text: '已修正', style: 'background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;' };
+                case 'flagged': return { text: '待确认', style: 'background:#fef2f2;color:#dc2626;border:1px solid #fecaca;' };
+                case 'resolved': return { text: '已处理', style: 'background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;' };
+                case 'error': return { text: '质检失败', style: 'background:#fff;color:#dc2626;border:1px solid #dc2626;' };
+                default: return { text: '—', style: 'background:transparent;color:#9ca3af;border:none;' };
+            }
+        }
+        function fmtCost(v) {
+            const n = Number(v || 0);
+            return isNaN(n) ? '0.00' : n.toFixed(2);
+        }
+
+        // 触发单条 AI质检（操作列/预览弹窗共用，fromPreview 控制预览按钮 loading）
+        async function runAiCheck(record, fromPreview) {
+            if (!record || !record.cos_url) { showMessage('该记录无原件，无法AI质检', false); return; }
+            if (record._aiChecking) return;
+            record._aiChecking = true;
+            if (fromPreview) aiCheckLoadingPreview.value = true;
+            try {
+                const resp = await authFetch(`/api/insurance/ai-extract/${record.id}`, { method: 'POST' });
+                const ct = resp.headers.get('content-type') || '';
+                if (!ct.includes('application/json')) {
+                    throw new Error(`服务器繁忙或超时（${resp.status}），请稍后重试`);
+                }
+                const data = await resp.json();
+                if (data.code === 0 && data.data) {
+                    const d = data.data;
+                    // diffs/supplement：默认勾选；手动修改过的字段默认不勾选
+                    const diffs = (d.diffs || []).map(x => ({
+                        field: x.field, current: x.current, ai: x.ai,
+                        type: x.type || 'diff', manual: !!x.manual, checked: !x.manual,
+                    }));
+                    const same = (d.same || []).map(x => ({ field: x.field, current: x.current, ai: x.ai }));
+                    Object.assign(aiCheckModal, {
+                        visible: true,
+                        recordId: record.id,
+                        logId: d.log_id,
+                        model: d.model || '',
+                        durationMs: d.duration_ms || 0,
+                        promptTokens: d.prompt_tokens || 0,
+                        completionTokens: d.completion_tokens || 0,
+                        diffs, same,
+                        showSame: false,
+                        busy: false,
+                    });
+                } else {
+                    showMessage(data.msg || 'AI质检失败', false);
+                }
+            } catch (e) {
+                showMessage(`AI质检失败: ${e.message}`, false);
+            } finally {
+                record._aiChecking = false;
+                if (fromPreview) aiCheckLoadingPreview.value = false;
+            }
+        }
+        // 对比弹窗全选/取消全选（仅作用于可勾选的差异项）
+        function aiCheckToggleAll(checked) {
+            aiCheckModal.diffs.forEach(i => { i.checked = checked; });
+        }
+        // 应用勾选的 AI 值
+        async function applyAiCheck() {
+            const fields = aiCheckModal.diffs.filter(i => i.checked).map(i => i.field);
+            if (!fields.length || aiCheckModal.busy) return;
+            aiCheckModal.busy = true;
+            try {
+                const resp = await authFetch(`/api/insurance/ai-extract/${aiCheckModal.recordId}/apply`, {
+                    method: 'POST',
+                    body: JSON.stringify({ log_id: aiCheckModal.logId, fields }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showMessage(data.msg || `已应用 ${fields.length} 个AI值`, true);
+                    aiCheckModal.visible = false;
+                    loadRecords(false);
+                    refreshAiPending();
+                } else {
+                    showMessage(data.msg || '应用失败', false);
+                }
+            } catch (e) {
+                showMessage(`应用失败: ${e.message}`, false);
+            } finally {
+                aiCheckModal.busy = false;
+            }
+        }
+
+        // 质检详情弹窗（列表质检状态徽标点击）
+        const aiCheckDetailModal = reactive({
+            visible: false, recordId: null, loading: false, busy: false,
+            status: null, checkedAt: '', aiFields: [], corrections: {}, logs: [],
+        });
+        async function openAiCheckDetail(record) {
+            Object.assign(aiCheckDetailModal, {
+                visible: true, recordId: record.id, loading: true, busy: false,
+                status: record.ai_check_status || null, checkedAt: '',
+                aiFields: [], corrections: {}, logs: [],
+            });
+            try {
+                const resp = await authFetch(`/api/insurance/records/${record.id}/ai-check`);
+                const data = await resp.json();
+                if (data.code === 0 && data.data) {
+                    const d = data.data;
+                    aiCheckDetailModal.status = d.ai_check_status;
+                    aiCheckDetailModal.checkedAt = d.ai_checked_at || '';
+                    aiCheckDetailModal.aiFields = d.ai_fields || [];
+                    aiCheckDetailModal.corrections = d.ai_corrections || {};
+                    aiCheckDetailModal.logs = d.logs || [];
+                } else {
+                    showMessage(data.msg || '加载质检详情失败', false);
+                }
+            } catch (e) {
+                showMessage(`加载失败: ${e.message}`, false);
+            } finally {
+                aiCheckDetailModal.loading = false;
+            }
+        }
+        // 还原全部修正
+        async function revertAiCheckDetail() {
+            if (aiCheckDetailModal.busy) return;
+            if (!confirm('确定还原该记录的全部AI修正吗？将恢复为AI质检前的原值。')) return;
+            aiCheckDetailModal.busy = true;
+            try {
+                const resp = await authFetch(`/api/insurance/records/${aiCheckDetailModal.recordId}/ai-check/resolve`, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'revert', fields: [] }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showMessage(data.msg || '已还原全部修正', true);
+                    aiCheckDetailModal.visible = false;
+                    loadRecords(false);
+                    refreshAiPending();
+                } else {
+                    showMessage(data.msg || '还原失败', false);
+                }
+            } catch (e) {
+                showMessage(`还原失败: ${e.message}`, false);
+            } finally {
+                aiCheckDetailModal.busy = false;
+            }
+        }
+
+        // ===== AI质检 Tab：企业统计 + 问题列表 =====
+        const aiStats = reactive({ loading: false, collapsed: false, dateStart: '', dateEnd: '', list: [], total: null });
+        const aiIssues = reactive({
+            loading: false, status: 'flagged', enterpriseId: '', dateStart: '', dateEnd: '',
+            page: 1, pageSize: 20, total: 0, pending: 0, list: [],
+        });
+        const aiIssuesTotalPages = computed(() => Math.max(1, Math.ceil(aiIssues.total / aiIssues.pageSize)));
+        // 默认近30天
+        function _defaultAiRange() {
+            const fmt = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const end = new Date();
+            const start = new Date(); start.setDate(start.getDate() - 29);
+            return { start: fmt(start), end: fmt(end) };
+        }
+        async function loadAiStats() {
+            aiStats.loading = true;
+            try {
+                const qs = new URLSearchParams();
+                if (aiStats.dateStart) qs.set('date_start', aiStats.dateStart);
+                if (aiStats.dateEnd) qs.set('date_end', aiStats.dateEnd);
+                const resp = await authFetch(`/api/insurance/ai-check/stats?${qs.toString()}`);
+                const data = await resp.json();
+                if (data.code === 0 && data.data) {
+                    aiStats.list = data.data.list || [];
+                    aiStats.total = data.data.total || null;
+                }
+            } catch (e) { /* 统计加载失败不阻塞 */ }
+            finally { aiStats.loading = false; }
+        }
+        async function loadAiIssues(resetPage) {
+            if (resetPage) aiIssues.page = 1;
+            aiIssues.loading = true;
+            try {
+                const qs = new URLSearchParams();
+                if (aiIssues.status) qs.set('status', aiIssues.status);
+                if (aiIssues.enterpriseId) qs.set('enterprise_id', aiIssues.enterpriseId);
+                if (aiIssues.dateStart) qs.set('date_start', aiIssues.dateStart);
+                if (aiIssues.dateEnd) qs.set('date_end', aiIssues.dateEnd);
+                qs.set('page', aiIssues.page);
+                qs.set('page_size', aiIssues.pageSize);
+                const resp = await authFetch(`/api/insurance/ai-check/issues?${qs.toString()}`);
+                const data = await resp.json();
+                if (data.code === 0 && data.data) {
+                    aiIssues.list = data.data.list || [];
+                    aiIssues.total = data.data.total || 0;
+                    aiIssues.pending = data.data.pending || 0;
+                }
+            } catch (e) { /* 问题列表加载失败不阻塞 */ }
+            finally { aiIssues.loading = false; }
+        }
+        // 仅刷新待处理数量（Tab 红色徽标）
+        async function refreshAiPending() {
+            if (!isSuperAdmin.value) return;
+            try {
+                const resp = await authFetch('/api/insurance/ai-check/issues?status=flagged&page=1&page_size=1');
+                const data = await resp.json();
+                if (data.code === 0 && data.data) aiIssues.pending = data.data.pending || 0;
+            } catch (e) { /* 忽略 */ }
+        }
+        // 打开 AI质检 Tab（首次进入默认近30天）
+        function openAiCheckTab() {
+            pageTab.value = 'aicheck';
+            if (!aiStats.dateStart) {
+                const r = _defaultAiRange();
+                aiStats.dateStart = r.start; aiStats.dateEnd = r.end;
+                aiIssues.dateStart = r.start; aiIssues.dateEnd = r.end;
+            }
+            loadAiStats();
+            loadAiIssues(true);
+        }
+        function aiIssuesGotoPage(p) {
+            if (p < 1 || p > aiIssuesTotalPages.value) return;
+            aiIssues.page = p;
+            loadAiIssues(false);
+        }
+        // 解析问题列表差异字段（diff_json 可能是字符串或数组，容错）
+        function parseIssueDiffs(issue) {
+            let raw = issue.diff_json;
+            if (!raw) return [];
+            if (typeof raw === 'string') {
+                try { raw = JSON.parse(raw); } catch (e) { return []; }
+            }
+            return Array.isArray(raw) ? raw : [];
+        }
+        function openIssueFile(issue) {
+            if (issue && issue.cos_url) window.open(issue.cos_url, '_blank');
+        }
+        // 问题列表操作：采纳AI值 / 保留原值 / 还原原值
+        async function resolveAiIssue(issue, action) {
+            const labelMap = { adopt: '采纳AI值', keep: '保留原值', revert: '还原原值' };
+            if (!confirm(`确定「${labelMap[action] || action}」该记录？`)) return;
+            issue._busy = true;
+            try {
+                const resp = await authFetch(`/api/insurance/records/${issue.id}/ai-check/resolve`, {
+                    method: 'POST',
+                    body: JSON.stringify({ action, fields: [] }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    showMessage(data.msg || '操作成功', true);
+                    loadAiIssues(false);
+                    refreshAiPending();
+                } else {
+                    showMessage(data.msg || '操作失败', false);
+                }
+            } catch (e) {
+                showMessage(`操作失败: ${e.message}`, false);
+            } finally {
+                issue._busy = false;
+            }
+        }
+
         // 展开勾选里的合并伪行为真实子记录id（批量导出原文件/批量重新识别都需要真实记录，
         // 合并伪行的id是"__merge_xxx"，数据库里不存在这条记录）
         function _expandMergedSelection(ids) {
@@ -9675,6 +10761,8 @@ const _app = createApp({
             // 不阻塞页面显示的后台任务
             loadRecordCompanies();
             loadRemarkSelectorConfig();
+            // AI质检待处理数量（仅超管，用于顶部 Tab 红色徽标）
+            refreshAiPending();
 
             // 记录列表定时自动刷新(30秒)：仅在"识别记录"页、页面可见、无弹窗/预览打开、非加载中、
             // 非按车牌合并模式时静默刷新，保留当前筛选/页码/勾选；页面切到后台标签自动暂停
@@ -9690,12 +10778,506 @@ const _app = createApp({
             }, 30000);
         });
 
+        // ============================================================
+        // 销售看板（本期仅超管；后续放开企业管理员时调整入口 v-if 与后端权限）
+        // ============================================================
+        const salesTab = ref('board');
+        const salesLoading = ref(false);
+        const salesData = ref(null);
+        const salesEnterprise = ref('');
+        const salesPeriod = ref('month');
+        const salesDateStart = ref('');
+        const salesDateEnd = ref('');
+        const salesConfig = ref(null);
+        const salesConfigSource = ref('default');
+        const salesSaving = ref(false);
+        const salesFields = ref(['保费', '佣金', '不含税保费']);
+        const salesDims = ref(['保险公司', '险种', '业务员', '跟单人', '转介绍人']);
+        const salesTargets = ref([]);
+        const salesSalesmen = ref([]);
+        const sdModal = reactive({ card: false, target: false, emp: false });
+        const sdCardForm = reactive({ title: '', agg: 'sum', field: '保费', filters: [] });
+        const sdTargetForm = reactive({ id: null, name: '', metric: 'sum|保费', filters: [], period_type: 'month', period_start: '', period_end: '', target_value: null });
+        const sdEmpForm = reactive({ name: '', metric: 'sum|保费', filters: [], period_type: 'month', period_start: '', period_end: '', unified_value: null });
+        const sdEmpItem = ref('');
+        const sdEmpUnified = ref(null);
+        const sdEmpEdit = reactive({});
+        const sdEmpPersons = ref([]);
+
+        const salesPeriodOptions = [
+            { value: 'month', label: '本月' }, { value: 'last_month', label: '上月' },
+            { value: 'quarter', label: '本季度' }, { value: 'year', label: '今年' },
+            { value: 'custom', label: '自定义' },
+        ];
+        // 筛选条件/分组维度可选字段：维度字段 + 全部台账字段
+        const sdFilterFields = computed(() => {
+            const all = [...salesDims.value];
+            salesFields.value.forEach(f => { if (!all.includes(f)) all.push(f); });
+            return all;
+        });
+
+        function sdPad(n) { return n < 10 ? '0' + n : '' + n; }
+        function sdFmtDate(d) { return d.getFullYear() + '-' + sdPad(d.getMonth() + 1) + '-' + sdPad(d.getDate()); }
+        function sdRange() {
+            const now = new Date();
+            if (salesPeriod.value === 'custom') return [salesDateStart.value, salesDateEnd.value];
+            if (salesPeriod.value === 'last_month') {
+                const s = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                const e = new Date(now.getFullYear(), now.getMonth(), 0);
+                return [sdFmtDate(s), sdFmtDate(e)];
+            }
+            if (salesPeriod.value === 'quarter') {
+                const qm = Math.floor(now.getMonth() / 3) * 3;
+                return [sdFmtDate(new Date(now.getFullYear(), qm, 1)), sdFmtDate(now)];
+            }
+            if (salesPeriod.value === 'year') return [now.getFullYear() + '-01-01', sdFmtDate(now)];
+            return [sdFmtDate(new Date(now.getFullYear(), now.getMonth(), 1)), sdFmtDate(now)];  // month
+        }
+        function sdMoney(v, isCount) {
+            if (v == null) return '—';
+            const n = Number(v);
+            if (isNaN(n)) return String(v);
+            if (isCount) return n.toLocaleString('zh-CN');
+            return '¥' + n.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+        }
+        const sdOpLabel = { contains: '包含', not_contains: '不包含', eq: '等于', ne: '不等于' };
+        function sdFiltersText(filters) {
+            if (!filters || !filters.length) return '';
+            return filters.map(f => `${f.field} ${sdOpLabel[f.op] || f.op}「${f.value}」`).join('；');
+        }
+
+        async function sdEnsureEnterprises() {
+            if (!dashboardEnterprises.value.length) {
+                try {
+                    const r = await authFetch('/api/auth/enterprises');
+                    const j = await r.json();
+                    if (j.code === 0) dashboardEnterprises.value = j.data || [];
+                } catch (e) {}
+            }
+        }
+        function sdQs(extra) {
+            const params = new URLSearchParams({ enterprise_id: salesEnterprise.value, ...(extra || {}) });
+            return params.toString();
+        }
+
+        async function loadSalesDash() {
+            await sdEnsureEnterprises();
+            if (!salesEnterprise.value) return;
+            const [ds, de] = sdRange();
+            if (!ds || !de) return;
+            salesLoading.value = true;
+            try {
+                const r = await authFetch(`/api/insurance/sales-dashboard/data?${sdQs({ date_start: ds, date_end: de })}`);
+                const j = await r.json();
+                if (j.code === 0) {
+                    salesData.value = j.data;
+                    await nextTick();
+                    setTimeout(drawSalesCharts, 60);
+                } else {
+                    alert(j.msg || '看板数据加载失败');
+                }
+            } catch (e) { console.error('销售看板加载失败', e); }
+            finally { salesLoading.value = false; }
+        }
+        function onSalesEnterpriseChange() {
+            salesData.value = null; salesConfig.value = null;
+            salesTargets.value = []; salesSalesmen.value = []; sdEmpItem.value = '';
+            if (salesTab.value === 'config') openSalesConfig();
+            else if (salesTab.value === 'targets') openSalesTargets();
+            else loadSalesDash();
+        }
+
+        // ---- 看板配置 ----
+        async function loadSalesFields() {
+            try {
+                const r = await authFetch(`/api/insurance/sales-dashboard/fields?${sdQs()}`);
+                const j = await r.json();
+                if (j.code === 0) {
+                    salesFields.value = j.data.fields || [];
+                    salesDims.value = j.data.dimensions || salesDims.value;
+                }
+            } catch (e) {}
+        }
+        async function openSalesConfig() {
+            salesTab.value = 'config';
+            await sdEnsureEnterprises();
+            if (!salesEnterprise.value) return;
+            await Promise.all([loadSalesFields(), loadSalesTargetsData()]);
+            try {
+                const r = await authFetch(`/api/insurance/sales-dashboard/config?${sdQs()}`);
+                const j = await r.json();
+                if (j.code === 0) {
+                    const cfg = j.data.config || {};
+                    // 补齐结构默认值，避免模板绑定报错
+                    cfg.cards = cfg.cards || [];
+                    cfg.charts = (cfg.charts || []).map(ch => ({ top: 5, metrics: [], metric: { agg: 'sum', field: '保费' }, ...ch }));
+                    cfg.ranking = Object.assign({ dimension: '业务员', sort_by: '保费', columns: [], target_columns: [] }, cfg.ranking || {});
+                    salesConfig.value = cfg;
+                    salesConfigSource.value = j.data.source;
+                }
+            } catch (e) { console.error(e); }
+        }
+        async function saveSalesConfig(scope) {
+            if (!salesConfig.value) return;
+            if (scope === 'global' && !confirm('确定保存为系统默认模板？将对所有未自定义配置的企业生效。')) return;
+            salesSaving.value = true;
+            try {
+                const r = await authFetch(`/api/insurance/sales-dashboard/config?${sdQs()}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ enterprise_id: salesEnterprise.value, scope: scope, config: salesConfig.value }),
+                });
+                const j = await r.json();
+                if (j.code === 0) { salesData.value = null; await openSalesConfig(); alert('配置已保存'); }
+                else alert(j.msg || '保存失败');
+            } catch (e) { alert('保存失败：' + (e.message || e)); }
+            finally { salesSaving.value = false; }
+        }
+        async function resetSalesConfig() {
+            if (!confirm('确定恢复默认模板？该企业的自定义配置将被删除。')) return;
+            try {
+                const r = await authFetch(`/api/insurance/sales-dashboard/config?${sdQs()}`, {
+                    method: 'PUT', body: JSON.stringify({ enterprise_id: salesEnterprise.value, reset: 1 }),
+                });
+                const j = await r.json();
+                if (j.code === 0) { salesData.value = null; await openSalesConfig(); }
+                else alert(j.msg || '操作失败');
+            } catch (e) { alert('操作失败：' + (e.message || e)); }
+        }
+        function sdOpenCardModal() {
+            Object.assign(sdCardForm, { title: '', agg: 'sum', field: salesFields.value[0] || '保费', filters: [] });
+            sdModal.card = true;
+        }
+        function sdAddCard() {
+            if (!sdCardForm.title.trim()) { alert('请填写指标卡名称'); return; }
+            salesConfig.value.cards.push({
+                id: 'c' + Date.now(), title: sdCardForm.title.trim(), agg: sdCardForm.agg,
+                field: sdCardForm.agg === 'count' ? undefined : sdCardForm.field,
+                filters: sdCardForm.filters.filter(f => f.value),
+            });
+            sdModal.card = false;
+        }
+        function sdSetChartMetric(ch, val) {
+            const [agg, field] = val.split('|');
+            ch.metric = { agg: agg, field: field || undefined };
+        }
+        function sdAddRankCol(ev) {
+            const val = ev.target.value;
+            ev.target.value = '';
+            if (!val) return;
+            const [agg, field] = val.split('|');
+            const title = agg === 'count' ? '保单量' : field;
+            if (salesConfig.value.ranking.columns.some(c => c.title === title)) return;
+            salesConfig.value.ranking.columns.push({ title: title, agg: agg, field: agg === 'count' ? undefined : field });
+        }
+        function sdToggleTargetCol(name, checked) {
+            const list = salesConfig.value.ranking.target_columns = salesConfig.value.ranking.target_columns || [];
+            const idx = list.indexOf(name);
+            if (checked && idx < 0) list.push(name);
+            if (!checked && idx >= 0) list.splice(idx, 1);
+        }
+
+        // ---- 目标管理 ----
+        async function loadSalesTargetsData() {
+            try {
+                const r = await authFetch(`/api/insurance/sales-dashboard/targets?${sdQs()}`);
+                const j = await r.json();
+                if (j.code === 0) {
+                    salesTargets.value = j.data || [];
+                    // 默认选中第一个员工目标项
+                    if (!sdEmpItem.value && sdEmpItemNames.value.length) sdSelectEmpItem(sdEmpItemNames.value[0]);
+                    else if (sdEmpItem.value) rebuildEmpPersons();
+                }
+            } catch (e) { console.error(e); }
+        }
+        async function openSalesTargets() {
+            salesTab.value = 'targets';
+            await sdEnsureEnterprises();
+            if (!salesEnterprise.value) return;
+            await Promise.all([loadSalesFields(), loadSalesTargetsData(), (async () => {
+                try {
+                    const r = await authFetch(`/api/insurance/sales-dashboard/salesmen?${sdQs()}`);
+                    const j = await r.json();
+                    if (j.code === 0) { salesSalesmen.value = j.data || []; rebuildEmpPersons(); }
+                } catch (e) {}
+            })()]);
+        }
+        const sdEntTargets = computed(() => salesTargets.value.filter(t => t.target_type !== 'employee'));
+        const sdEmpItemNames = computed(() => {
+            const names = [];
+            salesTargets.value.forEach(t => {
+                if (t.target_type === 'employee' && !names.includes(t.name)) names.push(t.name);
+            });
+            return names;
+        });
+        const sdEmpCurrent = computed(() => {
+            if (!sdEmpItem.value) return null;
+            const rows = salesTargets.value.filter(t => t.target_type === 'employee' && t.name === sdEmpItem.value);
+            if (!rows.length) return null;
+            const unifiedRow = rows.find(r => !r.employee_name);
+            const persons = {};
+            rows.forEach(r => { if (r.employee_name) persons[r.employee_name] = r.target_value; });
+            return { meta: unifiedRow || rows[0], unified: unifiedRow ? unifiedRow.target_value : null, persons: persons };
+        });
+        function sdSelectEmpItem(name) {
+            sdEmpItem.value = name;
+            const cur = sdEmpCurrent.value;
+            sdEmpUnified.value = cur && cur.unified != null ? cur.unified : null;
+            rebuildEmpPersons();
+        }
+        function rebuildEmpPersons() {
+            const cur = sdEmpCurrent.value;
+            if (!cur) { sdEmpPersons.value = []; return; }
+            const names = [...salesSalesmen.value];
+            Object.keys(cur.persons).forEach(n => { if (!names.includes(n)) names.push(n); });
+            sdEmpPersons.value = names.map(n => ({
+                name: n,
+                personal: n in cur.persons,
+                value: n in cur.persons ? cur.persons[n] : cur.unified,
+                editing: false,
+            }));
+        }
+        function sdEmpBatchBase() {
+            // 员工目标批量保存的公共口径参数（取自当前目标项元数据）
+            const meta = sdEmpCurrent.value.meta;
+            return {
+                name: meta.name, metric_agg: meta.metric_agg, metric_field: meta.metric_field,
+                filters: meta.filters, period_type: meta.period_type,
+                period_start: meta.period_start, period_end: meta.period_end,
+            };
+        }
+        async function sdPostTargets(body) {
+            const r = await authFetch(`/api/insurance/sales-dashboard/targets?${sdQs()}`, {
+                method: 'POST', body: JSON.stringify({ enterprise_id: salesEnterprise.value, ...body }),
+            });
+            const j = await r.json();
+            if (j.code !== 0) throw new Error(j.msg || '保存失败');
+        }
+        async function sdApplyUnified() {
+            if (sdEmpUnified.value == null || sdEmpUnified.value === '') { alert('请填写统一目标值'); return; }
+            try {
+                await sdPostTargets({ employee_batch: { ...sdEmpBatchBase(), unified_value: Number(sdEmpUnified.value) } });
+                await loadSalesTargetsData();
+            } catch (e) { alert(e.message); }
+        }
+        async function sdSavePerson(name) {
+            const raw = sdEmpEdit[name];
+            try {
+                await sdPostTargets({ employee_batch: { ...sdEmpBatchBase(), persons: { [name]: raw === '' || raw == null ? null : Number(raw) } } });
+                await loadSalesTargetsData();
+            } catch (e) { alert(e.message); }
+        }
+        async function sdRestoreUnified(name) {
+            try {
+                await sdPostTargets({ employee_batch: { ...sdEmpBatchBase(), persons: { [name]: null } } });
+                await loadSalesTargetsData();
+            } catch (e) { alert(e.message); }
+        }
+        function sdOpenEmpModal() {
+            Object.assign(sdEmpForm, { name: '', metric: 'sum|保费', filters: [], period_type: 'month', period_start: '', period_end: '', unified_value: null });
+            sdModal.emp = true;
+        }
+        async function sdSaveEmpItem() {
+            if (!sdEmpForm.name.trim()) { alert('请填写目标项名称'); return; }
+            if (sdEmpForm.period_type === 'custom' && (!sdEmpForm.period_start || !sdEmpForm.period_end)) { alert('请选择自定义区间的起止日期'); return; }
+            const [agg, field] = sdEmpForm.metric.split('|');
+            try {
+                await sdPostTargets({ employee_batch: {
+                    name: sdEmpForm.name.trim(), metric_agg: agg, metric_field: field || '保费',
+                    filters: sdEmpForm.filters.filter(f => f.value),
+                    period_type: sdEmpForm.period_type,
+                    period_start: sdEmpForm.period_start || null, period_end: sdEmpForm.period_end || null,
+                    unified_value: sdEmpForm.unified_value != null && sdEmpForm.unified_value !== '' ? Number(sdEmpForm.unified_value) : 0,
+                } });
+                sdModal.emp = false;
+                await loadSalesTargetsData();
+                sdSelectEmpItem(sdEmpForm.name.trim());
+            } catch (e) { alert(e.message); }
+        }
+        async function sdDeleteEmpItem(name) {
+            if (!confirm(`确定删除员工目标项「${name}」？该目标项下所有业务员的目标都会删除。`)) return;
+            try {
+                const r = await authFetch(`/api/insurance/sales-dashboard/targets?${sdQs({ name: name, target_type: 'employee' })}`, { method: 'DELETE' });
+                const j = await r.json();
+                if (j.code !== 0) { alert(j.msg || '删除失败'); return; }
+                sdEmpItem.value = '';
+                await loadSalesTargetsData();
+            } catch (e) { alert('删除失败：' + (e.message || e)); }
+        }
+        function sdOpenTargetModal(t) {
+            if (t) {
+                Object.assign(sdTargetForm, {
+                    id: t.id, name: t.name,
+                    metric: t.metric_agg === 'count' ? 'count|' : ('sum|' + t.metric_field),
+                    filters: JSON.parse(JSON.stringify(t.filters || [])),
+                    period_type: t.period_type, period_start: t.period_start || '', period_end: t.period_end || '',
+                    target_value: t.target_value,
+                });
+            } else {
+                Object.assign(sdTargetForm, { id: null, name: '', metric: 'sum|保费', filters: [], period_type: 'month', period_start: '', period_end: '', target_value: null });
+            }
+            sdModal.target = true;
+        }
+        async function sdSaveTarget() {
+            if (!sdTargetForm.name.trim()) { alert('请填写目标名称'); return; }
+            if (sdTargetForm.target_value == null || sdTargetForm.target_value === '') { alert('请填写目标值'); return; }
+            if (sdTargetForm.period_type === 'custom' && (!sdTargetForm.period_start || !sdTargetForm.period_end)) { alert('请选择自定义区间的起止日期'); return; }
+            const [agg, field] = sdTargetForm.metric.split('|');
+            const filters = sdTargetForm.filters.filter(f => f.value);
+            try {
+                await sdPostTargets({ target: {
+                    target_type: filters.length ? 'condition' : 'enterprise',
+                    name: sdTargetForm.name.trim(), metric_agg: agg, metric_field: field || '保费',
+                    filters: filters, period_type: sdTargetForm.period_type,
+                    period_start: sdTargetForm.period_start || null, period_end: sdTargetForm.period_end || null,
+                    target_value: Number(sdTargetForm.target_value),
+                } });
+                sdModal.target = false;
+                await loadSalesTargetsData();
+            } catch (e) { alert(e.message); }
+        }
+        async function sdDeleteTarget(t) {
+            if (!confirm(`确定删除目标「${t.name}」？`)) return;
+            try {
+                const r = await authFetch(`/api/insurance/sales-dashboard/targets?${sdQs({ id: t.id })}`, { method: 'DELETE' });
+                const j = await r.json();
+                if (j.code !== 0) { alert(j.msg || '删除失败'); return; }
+                await loadSalesTargetsData();
+            } catch (e) { alert('删除失败：' + (e.message || e)); }
+        }
+
+        // ---- 图表绘制（原生 canvas，与经营报告风格一致） ----
+        function sdCanvasCtx(id) {
+            const c = document.getElementById(id);
+            if (!c) return null;
+            const dpr = window.devicePixelRatio || 1;
+            const w = c.clientWidth, h = parseInt(c.getAttribute('height'));
+            c.style.height = h + 'px'; c.width = w * dpr; c.height = h * dpr;
+            const x = c.getContext('2d'); x.scale(dpr, dpr);
+            return { x, w, h };
+        }
+        const SD_COLORS = ['#ea580c', '#2563eb', '#16a34a', '#9333ea', '#eab308'];
+        const SD_PIE = ['#ea580c', '#fb923c', '#fdba74', '#2563eb', '#60a5fa', '#16a34a', '#86efac', '#9333ea', '#d1d5db'];
+        function drawSalesCharts() {
+            if (!salesData.value) return;
+            salesData.value.charts.forEach((ch, i) => {
+                if (ch.type === 'trend') drawSdTrend('sdChart' + i, ch);
+                else if (ch.type === 'donut') drawSdDonut('sdChart' + i, ch);
+                else if (ch.type === 'bar') drawSdBar('sdChart' + i, ch);
+            });
+        }
+        function drawSdTrend(id, ch) {
+            const env = sdCanvasCtx(id);
+            if (!env || !ch.labels.length) return;
+            const { x, w, h } = env;
+            const n = ch.labels.length;
+            const allVals = ch.series.flatMap(s => s.values);
+            const max = Math.max(...allVals, 1) * 1.25;
+            const L = 46, R = 12, T = 18, B = 26, pw = w - L - R, ph = h - T - B;
+            x.strokeStyle = '#f0efec'; x.fillStyle = '#9ca3af'; x.font = '11px sans-serif'; x.textAlign = 'right';
+            for (let i = 0; i <= 4; i++) {
+                const y = T + ph - ph * i / 4;
+                x.beginPath(); x.moveTo(L, y); x.lineTo(w - R, y); x.stroke();
+                x.fillText(sdAxisNum(max * i / 4), L - 6, y + 4);
+            }
+            x.textAlign = 'center';
+            const step = Math.max(1, Math.ceil(n / 12));
+            ch.labels.forEach((lb, i) => { if (i % step === 0) x.fillText(lb, L + pw * (i + 0.5) / n, h - 8); });
+            ch.series.forEach((s, si) => {
+                const color = SD_COLORS[si % SD_COLORS.length];
+                x.beginPath();
+                s.values.forEach((v, i) => {
+                    const px = L + pw * (i + 0.5) / n, py = T + ph - ph * v / max;
+                    i ? x.lineTo(px, py) : x.moveTo(px, py);
+                });
+                x.strokeStyle = color; x.lineWidth = 2.5; x.lineJoin = 'round'; x.stroke();
+                s.values.forEach((v, i) => {
+                    const px = L + pw * (i + 0.5) / n, py = T + ph - ph * v / max;
+                    x.beginPath(); x.arc(px, py, 3.2, 0, 7); x.fillStyle = '#fff'; x.fill();
+                    x.strokeStyle = color; x.lineWidth = 2; x.stroke();
+                    // 数据标签：点上方直接显示数值
+                    if (n <= 15) {
+                        x.fillStyle = color; x.font = 'bold 10px sans-serif'; x.textAlign = 'center';
+                        x.fillText(sdAxisNum(v), px, py - 8);
+                    }
+                });
+            });
+            // 图例
+            x.font = '12px sans-serif'; x.textAlign = 'left';
+            let lx = L + 4;
+            ch.series.forEach((s, si) => {
+                const color = SD_COLORS[si % SD_COLORS.length];
+                x.fillStyle = color; x.fillRect(lx, 2, 14, 3);
+                x.fillStyle = '#6b7280'; x.fillText(s.label, lx + 18, 8);
+                lx += 26 + x.measureText(s.label).width + 14;
+            });
+        }
+        function sdAxisNum(v) {
+            if (v >= 10000) return (v / 10000).toFixed(v >= 100000 ? 0 : 1) + '万';
+            return Math.round(v).toLocaleString('zh-CN');
+        }
+        function drawSdDonut(id, ch) {
+            const env = sdCanvasCtx(id);
+            if (!env || !ch.items.length) return;
+            const { x, w, h } = env;
+            const total = ch.total || 1;
+            const cx = w * 0.30, cy = h / 2, r1 = Math.min(h / 2 - 14, 84), r2 = r1 * 0.62;
+            let a = -Math.PI / 2;
+            ch.items.forEach((it, i) => {
+                const frac = total ? it.value / total : 0;
+                const a2 = a + Math.PI * 2 * frac;
+                x.beginPath(); x.arc(cx, cy, r1, a, a2); x.arc(cx, cy, r2, a2, a, true); x.closePath();
+                x.fillStyle = SD_PIE[i % SD_PIE.length]; x.fill(); a = a2;
+            });
+            x.fillStyle = '#1c1410'; x.font = 'bold 15px sans-serif'; x.textAlign = 'center';
+            x.fillText(ch.is_count ? total.toLocaleString('zh-CN') + '单' : sdAxisNum(total), cx, cy + 1);
+            x.font = '11px sans-serif'; x.fillStyle = '#9ca3af'; x.fillText('合计', cx, cy + 18);
+            let ly = Math.max(cy - ch.items.length * 12, 16);
+            ch.items.forEach((it, i) => {
+                x.fillStyle = SD_PIE[i % SD_PIE.length]; x.fillRect(w * 0.56, ly - 8, 11, 11);
+                x.fillStyle = '#6b7280'; x.font = '12px sans-serif'; x.textAlign = 'left';
+                const pct = total ? (it.value / total * 100).toFixed(1) : 0;
+                x.fillText(`${it.name}  ${sdAxisNum(it.value)} (${pct}%)`, w * 0.56 + 17, ly + 1);
+                ly += 24;
+            });
+        }
+        function drawSdBar(id, ch) {
+            const env = sdCanvasCtx(id);
+            if (!env || !ch.items.length) return;
+            const { x, w, h } = env;
+            const items = ch.items.slice(0, 10);
+            const max = Math.max(...items.map(it => it.value), 1);
+            const L = 100, R = 66, rowH = h / items.length;
+            items.forEach((it, i) => {
+                const y = rowH * i + rowH / 2;
+                x.fillStyle = '#6b7280'; x.font = '12px sans-serif'; x.textAlign = 'right';
+                const name = it.name.length > 7 ? it.name.slice(0, 7) + '…' : it.name;
+                x.fillText(name, L - 10, y + 4);
+                const bw = Math.max(14, (w - L - R) * it.value / max);
+                x.fillStyle = '#fff1e6'; x.beginPath(); x.roundRect(L, y - 8, w - L - R, 16, 8); x.fill();
+                const g = x.createLinearGradient(L, 0, L + bw, 0);
+                g.addColorStop(0, '#fb923c'); g.addColorStop(1, '#ea580c');
+                x.fillStyle = g; x.beginPath(); x.roundRect(L, y - 8, bw, 16, 8); x.fill();
+                x.fillStyle = '#1c1410'; x.textAlign = 'left'; x.font = 'bold 12px sans-serif';
+                x.fillText(ch.is_count ? it.value + '单' : sdAxisNum(it.value), L + bw + 8, y + 4);
+            });
+        }
+
         return {
             // 页面Tab
             pageTab,
             // 数据看板
             dashboardData, dashboardLoading, dashboardDays, dashboardPeriod, periodOptions, periodLabel, loadDashboard, sourceDist, trendCanvas, trendTooltip, onChartMouseMove, onChartMouseLeave, barPct,
             dashboardEnterprise, dashboardCompany, dashboardEnterprises, dashboardCompanies,
+            // 销售看板
+            salesTab, salesLoading, salesData, salesEnterprise, salesPeriod, salesDateStart, salesDateEnd,
+            salesConfig, salesConfigSource, salesSaving, salesFields, salesPeriodOptions, sdFilterFields,
+            loadSalesDash, onSalesEnterpriseChange, openSalesConfig, openSalesTargets,
+            saveSalesConfig, resetSalesConfig, sdMoney, sdFiltersText,
+            sdModal, sdCardForm, sdOpenCardModal, sdAddCard, sdSetChartMetric, sdAddRankCol, sdToggleTargetCol,
+            sdEntTargets, sdEmpItemNames, sdEmpCurrent, sdEmpItem, sdEmpUnified, sdEmpEdit, sdEmpPersons,
+            sdSelectEmpItem, sdApplyUnified, sdSavePerson, sdRestoreUnified,
+            sdOpenEmpModal, sdEmpForm, sdSaveEmpItem, sdDeleteEmpItem,
+            sdOpenTargetModal, sdTargetForm, sdSaveTarget, sdDeleteTarget,
             // 配置状态
             configStatus,
             // 手动上传
@@ -9742,6 +11324,12 @@ const _app = createApp({
             // 识别记录
             records, filteredRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
             isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask, collapseDownloadTask, expandDownloadTask, retryDownloadTask, batchFailModal, manualKeptModal, manualKeptToggleAll, applyManualOverwrite, batchFailRetry, batchFailUpload,
+            // AI质检（仅超管）
+            aiCheckModal, aiCheckLoadingPreview, aiCheckSelectedCount, aiCheckBadge, fmtCost,
+            runAiCheck, aiCheckToggleAll, applyAiCheck,
+            aiCheckDetailModal, openAiCheckDetail, revertAiCheckDetail,
+            aiStats, aiIssues, aiIssuesTotalPages, loadAiStats, loadAiIssues, refreshAiPending,
+            openAiCheckTab, aiIssuesGotoPage, parseIssueDiffs, openIssueFile, resolveAiIssue,
             roomList, monitorRooms, filteredMonitorRooms, groupedMonitorRoomOptions, onEnterpriseChange, monitorUsers,
             recordFilter, dateTypeSupportsTime, openNativePicker, statusLabel, onSourceTypeChange, clearAllFilters, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
             recordEnterpriseFilter, recordEnterpriseList,

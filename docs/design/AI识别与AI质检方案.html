@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI识别 + AI质检 设计方案（待确认）</title>
+<style>
+:root{
+  --primary:#c2410c;
+  --primary-light:#ea580c;
+  --primary-bg:#fff7ed;
+  --border:#e5e7eb;
+  --text:#1f2937;
+  --text-light:#6b7280;
+  --green:#16a34a;
+  --red:#dc2626;
+  --blue:#2563eb;
+  --purple:#7c3aed;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--text);background:#f9fafb;line-height:1.7;font-size:14px;}
+.container{max-width:1080px;margin:0 auto;padding:24px 20px 80px;}
+.hero{background:linear-gradient(135deg,#7c2d12,#c2410c,#ea580c);color:#fff;border-radius:12px;padding:28px 32px;margin-bottom:24px;}
+.hero h1{font-size:22px;margin-bottom:6px;}
+.hero p{opacity:.9;font-size:13px;}
+.hero .tags{margin-top:12px;}
+.hero .tag{display:inline-block;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:2px 12px;font-size:12px;margin-right:8px;}
+h2{font-size:18px;color:var(--primary);margin:36px 0 14px;padding-left:10px;border-left:4px solid var(--primary);}
+h3{font-size:15px;margin:20px 0 10px;color:#374151;}
+p{margin-bottom:8px;}
+.card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:16px;}
+table{width:100%;border-collapse:collapse;margin:10px 0;background:#fff;font-size:13px;}
+th,td{border:1px solid var(--border);padding:7px 10px;text-align:left;vertical-align:top;}
+th{background:var(--primary-bg);color:#9a3412;font-weight:600;white-space:nowrap;}
+code{background:#f3f4f6;border:1px solid #e5e7eb;border-radius:4px;padding:1px 6px;font-size:12px;font-family:Menlo,Consolas,monospace;color:#b91c1c;}
+pre{background:#1f2937;color:#e5e7eb;border-radius:8px;padding:14px 16px;font-size:12.5px;overflow-x:auto;margin:10px 0;font-family:Menlo,Consolas,monospace;line-height:1.6;}
+pre code{background:none;border:none;color:inherit;padding:0;}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0;}
+.flow .step{background:var(--primary-bg);border:1px solid #fed7aa;color:#9a3412;border-radius:8px;padding:8px 14px;font-size:13px;text-align:center;}
+.flow .step.alt{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;}
+.flow .step.warn{background:#fef2f2;border-color:#fecaca;color:#b91c1c;}
+.flow .step.ok{background:#f0fdf4;border-color:#bbf7d0;color:#15803d;}
+.flow .arrow{color:#9ca3af;font-size:16px;}
+.badge{display:inline-block;border-radius:4px;padding:1px 8px;font-size:11px;font-weight:600;}
+.badge.orange{background:#ffedd5;color:#9a3412;}
+.badge.green{background:#dcfce7;color:#15803d;}
+.badge.red{background:#fee2e2;color:#b91c1c;}
+.badge.blue{background:#dbeafe;color:#1d4ed8;}
+.badge.purple{background:#ede9fe;color:#6d28d9;}
+.badge.gray{background:#f3f4f6;color:#6b7280;}
+.tip{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e;margin:10px 0;}
+.note{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;font-size:13px;color:#1e40af;margin:10px 0;}
+
+/* ===== 原型 mockup 通用 ===== */
+.mock{border:2px dashed #d1d5db;border-radius:10px;background:#fff;margin:14px 0;overflow:hidden;}
+.mock-label{background:#f3f4f6;color:#6b7280;font-size:12px;padding:4px 12px;border-bottom:1px dashed #d1d5db;}
+.mock-body{padding:16px;}
+.btn{display:inline-block;border-radius:5px;padding:3px 9px;font-size:11px;border:1px solid var(--border);background:#fff;cursor:pointer;white-space:nowrap;}
+.btn-ai{background:#f5f3ff;border-color:#ddd6fe;color:#6d28d9;font-weight:600;}
+.btn-primary{background:var(--primary);border-color:var(--primary);color:#fff;}
+.btn-plain{background:#fff;color:#374151;}
+.btn-danger{background:#fef2f2;border-color:#fecaca;color:#dc2626;}
+.mock table{font-size:12px;}
+.mock th{background:#f9fafb;color:#6b7280;font-weight:600;}
+.modal-mock{max-width:760px;margin:0 auto;border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.12);overflow:hidden;background:#fff;}
+.modal-head{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid var(--border);background:#fff;}
+.modal-head b{font-size:14px;}
+.modal-foot{display:flex;justify-content:flex-end;gap:10px;padding:12px 18px;border-top:1px solid var(--border);background:#fafafa;}
+.diff-red{color:var(--red);font-weight:600;}
+.diff-green{color:var(--green);font-weight:600;}
+.form-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+.form-row label{width:110px;color:#6b7280;font-size:13px;text-align:right;flex-shrink:0;}
+.input{border:1px solid #d1d5db;border-radius:6px;padding:5px 10px;font-size:13px;min-width:260px;background:#fff;}
+.select{border:1px solid #d1d5db;border-radius:6px;padding:5px 10px;font-size:13px;background:#fff;}
+.switch{display:inline-block;width:36px;height:20px;border-radius:999px;background:#d1d5db;position:relative;vertical-align:middle;}
+.switch.on{background:var(--primary-light);}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;}
+.switch.on::after{left:18px;}
+.tabbar{display:flex;gap:2px;border-bottom:2px solid var(--border);margin-bottom:14px;flex-wrap:wrap;}
+.tabbar .tab{padding:7px 14px;font-size:13px;color:#6b7280;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;}
+.tabbar .tab.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:600;}
+.dingmsg{max-width:420px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.06);}
+.dingmsg .t{font-weight:700;margin-bottom:6px;}
+.q{background:#fff;border:1px solid #fca5a5;border-left:4px solid var(--red);border-radius:8px;padding:12px 16px;margin-bottom:12px;}
+.q b{color:var(--red);}
+.q .opt{margin-top:6px;color:#374151;}
+.q .rec{color:var(--green);font-weight:600;}
+.toc{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 20px;margin-bottom:20px;font-size:13px;}
+.toc a{color:var(--primary);text-decoration:none;margin-right:18px;line-height:2;}
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="hero">
+  <h1>保单识别 · AI大模型识别 + AI自动质检 设计方案</h1>
+  <p>方案日期：2026-07-18 ｜ 状态：<b>待确认</b> ｜ 文档位置：docs/review/</p>
+  <div class="tags">
+    <span class="tag">功能一：内部操作列「AI质检」（手动兜底）</span>
+    <span class="tag">功能二：按客户开启 AI 全量质检 + 自动修正 + 钉钉通知</span>
+    <span class="tag">国产多模态大模型 · 灵活配置</span>
+  </div>
+</div>
+
+<div class="toc">
+  <a href="#s1">一、背景与目标</a>
+  <a href="#s2">二、总体架构</a>
+  <a href="#s3">三、功能一：手动AI质检</a>
+  <a href="#s4">四、功能二：AI自动质检</a>
+  <a href="#s5">五、大模型灵活配置</a>
+  <a href="#s6">六、数据库变更</a>
+  <a href="#s7">七、API设计</a>
+  <a href="#s8">八、改动文件清单</a>
+  <a href="#s9">九、成本与风控</a>
+  <a href="#s10">十、待确认问题 ⚠️</a>
+</div>
+
+<!-- ================= 一 ================= -->
+<h2 id="s1">一、背景与目标</h2>
+<div class="card">
+<p><b>现状：</b>识别流水线为「pdfplumber 文本提取（失败降级 百度/火山 OCR）→ policy_parser 正则规则解析（50+ 保司）」。规则解析对新保司、新版式、扫描件容易出错或漏提，目前只能靠人工在前端逐字段修改。</p>
+<p><b>目标：</b></p>
+<table>
+<tr><th style="width:120px">功能</th><th>说明</th><th style="width:90px">触发方式</th><th style="width:110px">可见范围</th></tr>
+<tr><td><b>AI质检（手动兜底）</b></td><td>识别出错时，内部人员在操作列点「AI质检」，用多模态大模型直接读 PDF 原件提取字段，对比后勾选覆盖</td><td>手动</td><td>仅超管（内部）</td></tr>
+<tr><td><b>AI质检（自动）</b></td><td>按客户（企业）配置开启：该企业每份保单识别完成后，自动用大模型复核提取结果；发现差异按策略自动修正，并发钉钉机器人通知内部</td><td>自动</td><td>后台运行，超管可看质检记录</td></tr>
+</table>
+<p><b>设计原则：</b>大模型只做「兜底 + 质检」，不替换现有规则解析主链路（成本可控、行为可回溯）；模型厂商/模型名/密钥全部走配置，随时可切换。</p>
+</div>
+
+<!-- ================= 二 ================= -->
+<h2 id="s2">二、总体架构</h2>
+<div class="card">
+<h3>2.1 新增模块 <code>insurance/ai_extractor.py</code>（核心，两个功能共用）</h3>
+<div class="flow">
+  <div class="step">输入：record_id</div><div class="arrow">→</div>
+  <div class="step">COS 下载 PDF</div><div class="arrow">→</div>
+  <div class="step">pypdfium2 渲染为图片<br><span style="font-size:11px;opacity:.75">前 N 页，默认 4 页，150dpi</span></div><div class="arrow">→</div>
+  <div class="step alt">多模态大模型<br><span style="font-size:11px;opacity:.75">OpenAI 兼容接口 + JSON 输出</span></div><div class="arrow">→</div>
+  <div class="step">字段名归一化<br><span style="font-size:11px;opacity:.75">对齐 FIELD_ORDER</span></div><div class="arrow">→</div>
+  <div class="step ok">输出：ai_fields JSON</div>
+</div>
+<p>要点：</p>
+<ul style="padding-left:20px;">
+<li>所有国产主流多模态模型均兼容 OpenAI Chat Completions 协议，<b>只需实现一套客户端</b>，通过 base_url + model + api_key 切换厂商，不引入各家专属 SDK。</li>
+<li>Prompt 固定输出 JSON（字段清单来自 <code>policy_parser.FIELD_ORDER</code>），带「未识别到填 null，禁止编造」约束；prompt 模板存配置，可在线调整。</li>
+<li>优先发送 <b>PDF 页面图片</b>（对扫描件、盖章、表格版式最稳）；若 PDF 文本层质量好（raw_text 长度达标），可配置为「图片+文本」双通道输入以提高准确率。</li>
+<li>渲染用 <code>pypdfium2</code>（pdfplumber 新版本身依赖它，无额外系统依赖），图片压缩到长边 ≤1600px 控制 token。</li>
+</ul>
+
+<h3>2.2 两个功能的调用关系</h3>
+<div class="flow">
+  <div class="step warn">功能一：前端点「AI质检」</div><div class="arrow">→</div>
+  <div class="step">POST /ai-extract/&lt;id&gt;（同步等待）</div><div class="arrow">→</div>
+  <div class="step alt">ai_extractor</div><div class="arrow">→</div>
+  <div class="step">弹窗对比 → 勾选覆盖</div>
+</div>
+<div class="flow">
+  <div class="step ok">功能二：_process 识别完成(status=done)</div><div class="arrow">→</div>
+  <div class="step">该企业已开启质检？</div><div class="arrow">→</div>
+  <div class="step alt">入 AI 质检队列（独立线程串行）</div><div class="arrow">→</div>
+  <div class="step alt">ai_extractor</div><div class="arrow">→</div>
+  <div class="step">逐字段比对</div><div class="arrow">→</div>
+  <div class="step warn">差异：按策略修正 + 钉钉通知</div>
+</div>
+<p style="font-size:13px;color:var(--text-light);">质检队列独立于识别队列（复用现有 <code>handler.py</code> 的 Queue+守护线程模式），不阻塞识别主流程；进程重启丢队列可接受（可后续补数据库扫描兜底）。</p>
+</div>
+
+<!-- ================= 三 ================= -->
+<h2 id="s3">三、功能一：内部操作列「AI质检」（手动）</h2>
+<div class="card">
+<h3>3.1 交互流程</h3>
+<ol style="padding-left:20px;">
+<li>超管在记录列表操作列（或预览弹窗工具条）点 <b>AI质检</b>；</li>
+<li>后端同步调大模型（预计 5~20 秒，前端按钮转圈），返回 <code>ai_fields</code>；</li>
+<li>弹出「AI识别对比」弹窗：三列对比（字段 / 当前列表值 / AI提取值），差异红色高亮，手动改过的字段带橙点标记（交互复用现有「识别对比」面板 + 「勾选覆盖」弹窗的模式）；</li>
+<li>勾选要采纳的字段 → 点「应用勾选的AI值」→ 后端写入 <code>parsed_fields</code> / <code>display_fields</code>，被覆盖字段记入 <code>ai_fields</code> 标记（类比 <code>manual_fields</code>），原值备份进 <code>ai_corrections</code>；</li>
+<li><b>不自动同步钉钉多维表</b>：应用 AI 值只改系统内数据；如需更新台账，人工确认后走现有手动同步入口。</li>
+</ol>
+<div class="tip">AI 结果<b>永不自动落库</b>（功能一里），必须人工勾选确认——内部兜底工具，人是最后一道关。</div>
+<div class="note"><b>每次操作必留痕：</b>只要点了「AI质检」，无论最后是否勾选覆盖，都在 <code>ai_check_log</code> 写一条流水（trigger_type=manual）：操作人、记录ID、模型、耗时、token 消耗、差异数、结果状态——未应用为 <code>extracted</code>，应用后更新为 <code>applied</code> 并记录实际覆盖的字段与原值备份。调用失败也记 <code>error</code>。全部流水可在「质检流水」页按操作人/日期筛选（超管）。</div>
+
+<h3>3.2 原型：操作列新增按钮</h3>
+<div class="mock">
+<div class="mock-label">原型 A ｜ 记录列表 · 操作列（仅超管可见紫色「AI质检」按钮）</div>
+<div class="mock-body" style="overflow-x:auto;">
+<table>
+<tr><th>文件名</th><th>保司</th><th>状态</th><th>质检状态</th><th style="width:320px">操作</th></tr>
+<tr>
+  <td>粤A12345-太平洋车险.pdf</td><td>太平洋</td><td><span class="badge green">已完成</span></td><td><span class="badge green">✓ 通过</span></td>
+  <td>
+    <span class="btn btn-plain">预览</span>
+    <span class="btn btn-plain">重新识别</span>
+    <span class="btn btn-ai">✨ AI质检</span>
+    <span class="btn btn-danger">删除</span>
+    <span class="btn btn-plain">报错</span>
+  </td>
+</tr>
+<tr>
+  <td>京B67890-人保商业险.pdf</td><td>人保</td><td><span class="badge red">失败</span></td><td><span class="badge gray">—</span></td>
+  <td>
+    <span class="btn btn-plain">预览</span>
+    <span class="btn btn-plain">重新识别</span>
+    <span class="btn btn-ai">✨ AI质检</span>
+    <span class="btn btn-danger">删除</span>
+    <span class="btn btn-plain">报错</span>
+  </td>
+</tr>
+<tr>
+  <td>沪C00001-平安交强险.pdf</td><td>平安</td><td><span class="badge green">已完成</span></td><td><span class="badge orange">已修正 2 字段</span></td>
+  <td>
+    <span class="btn btn-plain">预览</span>
+    <span class="btn btn-plain">重新识别</span>
+    <span class="btn btn-ai">✨ AI质检</span>
+    <span class="btn btn-danger">删除</span>
+    <span class="btn btn-plain">报错</span>
+  </td>
+</tr>
+</table>
+<p style="font-size:12px;color:#9ca3af;margin-top:8px;">「质检状态」列同为超管专属列（与现有“识别方式/置信度”列一致的显隐逻辑）；徽标：<span class="badge green">✓ 通过</span> / <span class="badge orange">已修正 N 字段</span> / <span class="badge red">待确认</span> / <span class="badge gray">—未质检</span>，可点击查看质检详情。</p>
+</div>
+</div>
+
+<h3>3.3 原型：AI质检对比弹窗</h3>
+<div class="mock">
+<div class="mock-label">原型 B ｜ AI质检结果对比弹窗（差异红色高亮，勾选覆盖）</div>
+<div class="mock-body" style="background:#f3f4f6;padding:24px;">
+<div class="modal-mock">
+  <div class="modal-head">
+    <b>✨ AI质检对比 <span class="badge purple">qwen-vl-max</span> <span style="font-size:12px;color:#9ca3af;">耗时 8.2s · 4 页 · 差异 3 项</span></b>
+    <span style="color:#9ca3af;cursor:pointer;">✕</span>
+  </div>
+  <div style="padding:14px 18px;max-height:340px;overflow:auto;">
+    <table>
+      <tr><th style="width:34px"><input type="checkbox"></th><th style="width:110px">字段</th><th>当前列表值</th><th>AI提取值</th><th style="width:70px">状态</th></tr>
+      <tr><td><input type="checkbox" checked></td><td>车架号</td><td class="diff-red">LGB2E3A56K（截断）</td><td class="diff-green">LGB2E3A56KB123456</td><td><span class="badge red">差异</span></td></tr>
+      <tr><td><input type="checkbox" checked></td><td>保费</td><td class="diff-red">1,256.00</td><td class="diff-green">1,265.00</td><td><span class="badge red">差异</span></td></tr>
+      <tr><td><input type="checkbox"></td><td>被保险人 <span title="手动修改过" style="color:#ea580c;">●</span></td><td>张三运输有限公司</td><td>张三货物运输有限公司</td><td><span class="badge red">差异</span></td></tr>
+      <tr><td></td><td>保单号</td><td colspan="2" style="color:#9ca3af;">602012026123456789（一致）</td><td><span class="badge green">一致</span></td></tr>
+      <tr><td></td><td>车牌号</td><td colspan="2" style="color:#9ca3af;">粤A12345（一致）</td><td><span class="badge green">一致</span></td></tr>
+      <tr><td><input type="checkbox"></td><td>起保日期</td><td style="color:#9ca3af;">（未提取）</td><td class="diff-green">2026-07-20 00:00</td><td><span class="badge blue">补充</span></td></tr>
+    </table>
+    <p style="font-size:12px;color:#9ca3af;margin-top:6px;">● 橙点 = 该字段被人工修改过，默认不勾选，覆盖需谨慎。</p>
+  </div>
+  <div class="modal-foot">
+    <span class="btn btn-plain" style="padding:6px 16px;">取消</span>
+    <span class="btn btn-primary" style="padding:6px 16px;">应用勾选的AI值（3）</span>
+  </div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ================= 四 ================= -->
+<h2 id="s4">四、功能二：按客户开启 AI 自动质检</h2>
+<div class="card">
+<h3>4.1 触发与流程</h3>
+<div class="flow">
+  <div class="step">_process 识别完成<br><span style="font-size:11px;opacity:.75">不限保单类型（非保单也可质检）</span></div><div class="arrow">→</div>
+  <div class="step">读企业质检配置<br><span style="font-size:11px;opacity:.75">开关开启 + 命中质检范围条件（4.2）</span></div><div class="arrow">→</div>
+  <div class="step alt">ai_check_queue.enqueue</div><div class="arrow">→</div>
+  <div class="step alt">AI 提取 ai_fields</div><div class="arrow">→</div>
+  <div class="step">与 parsed_fields 逐字段比对</div>
+</div>
+<div class="flow" style="margin-left:40px;">
+  <div class="step ok">全部一致 → 记录 pass，打「✓ 通过」徽标</div>
+</div>
+<div class="flow" style="margin-left:40px;">
+  <div class="step warn">有差异 → 判断「AI直接覆盖」开关</div><div class="arrow">→</div>
+  <div class="step">开关<b>开</b>：直接覆盖写库+备份原值</div><div class="arrow">或</div>
+  <div class="step">开关<b>关</b>：仅打「待确认」徽标，等人工处理</div><div class="arrow">→</div>
+  <div class="step warn">进入系统「AI质检问题列表」+ 发钉钉机器人通知</div>
+</div>
+<div class="tip"><b>不同步钉钉多维表：</b>AI 质检产生的修正/标记<b>一律不自动推送钉钉多维表</b>，全部差异记录统一进系统内的「AI质检问题列表」（原型 F）由内部查看处理；如需更新台账，人工确认后走现有手动同步入口。</div>
+<div class="note"><b>「AI直接覆盖」双层开关设计：</b>① 全局总开关（AI模型设置页，默认<b>关</b>）——关闭时所有企业强制「仅标记」，一键熔断；② 企业级开关（客户管理页）——总开关开启后，按企业逐个放开直接覆盖。两层都开才会真正自动改数据。</div>
+
+<h3>4.2 质检范围条件 + 比对与修正规则</h3>
+<table>
+<tr><th style="width:160px">规则</th><th>说明</th></tr>
+<tr><td><b>质检范围条件</b></td><td>每个企业可选「全部」或「自定义条件」，自定义为多条件<b>或</b>关系（命中任一即质检），<b>不使用置信度</b>：<br>
+① <b>按状态多选</b>：非保单 / 需人工补充 / 识别异常 / 识别失败 / 正常完成（如勾「非保单」= 用 AI 复核是否被规则误判为非保单；勾「需人工补充」= 用 AI 尝试补齐缺失字段）；<br>
+② <b>按保司多选</b>：只质检勾选的保险公司；<br>
+③ <b>按保司成熟度</b>：该保司历史总识别数 &lt; xx 单的（新保司/小众保司规则不成熟，自动重点质检，随识别量增长自动退出范围）。</td></tr>
+<tr><td>比对范围</td><td>默认核心字段集（保单号、车牌、车架号、被保险人、保费、起/止保日期、保司、险种），可在配置中勾选增减；金额/日期先归一化（去千分位、统一日期格式）再比。</td></tr>
+<tr><td>跳过字段</td><td><code>manual_fields</code> 中人工改过的字段<b>永不自动修正</b>（只提示差异）；公式计算字段、群内补充字段跳过。</td></tr>
+<tr><td>修正条件</td><td>仅当「列表值为空 AI 有值（补充）」或「AI 值与原文可交叉验证」时自动改；AI 也拿不准（返回 null / 与规则值互相矛盾且无法验证）→ 只标记待确认，不改。</td></tr>
+<tr><td>可回溯</td><td>每次修正把 <code>{字段: {原值, AI值, 时间}}</code> 追加进 <code>ai_corrections</code>，前端质检详情可查、可一键还原。</td></tr>
+<tr><td>频控</td><td>同一记录只自动质检一次（重识别后重置）。<b>不设质检额度上限</b>，全量质检；成本通过企业统计看板（原型 G）与日成本提醒监控。</td></tr>
+</table>
+
+<h3>4.3 原型：客户管理 · 质检开关</h3>
+<div class="mock">
+<div class="mock-label">原型 C ｜ 客户管理（企业维度）新增「AI质检」配置列</div>
+<div class="mock-body" style="overflow-x:auto;">
+<table>
+<tr><th>企业</th><th>监控群数</th><th>今日识别</th><th>AI质检</th><th>质检范围</th><th>AI直接覆盖</th><th>今日质检数</th></tr>
+<tr><td>广州XX保险代理</td><td>5</td><td>38</td><td><span class="switch on"></span> <span class="badge green">已开启</span></td><td><span class="badge blue">全部</span> <span class="btn btn-plain">配置</span></td><td><span class="switch on"></span> <span class="badge orange">直接覆盖</span></td><td>38</td></tr>
+<tr><td>深圳YY车服</td><td>3</td><td>12</td><td><span class="switch on"></span> <span class="badge green">已开启</span></td><td><span class="badge purple">自定义·3条件</span> <span class="btn btn-plain">配置</span></td><td><span class="switch"></span> <span class="badge gray">仅标记</span></td><td>4</td></tr>
+<tr><td>东莞ZZ物流</td><td>2</td><td>7</td><td><span class="switch"></span> <span class="badge gray">未开启</span></td><td style="color:#d1d5db;">—</td><td style="color:#d1d5db;">—</td><td style="color:#d1d5db;">—</td></tr>
+</table>
+<p style="font-size:12px;color:#9ca3af;margin-top:6px;">质检范围点「配置」弹窗设置（见下方原型 C2）。<b>AI直接覆盖</b>：开=发现差异直接覆盖写库（<b>不同步钉钉多维表</b>）；关=仅标记「待确认」等人工处理；两种情况都进「AI质检问题列表」并发钉钉通知。开启覆盖时弹二次确认提示。企业级配置存 <code>insurance_config</code>；若全局总开关关闭，此列开关置灰不可开。此页配置<b>仅超管可操作，企业客户不可见</b>。</p>
+</div>
+</div>
+
+<div class="mock">
+<div class="mock-label">原型 C2 ｜ 质检范围配置弹窗（多条件·或关系·支持多选，不使用置信度）</div>
+<div class="mock-body" style="background:#f3f4f6;padding:24px;">
+<div class="modal-mock" style="max-width:560px;">
+  <div class="modal-head"><b>质检范围配置 —— 深圳YY车服</b><span style="color:#9ca3af;cursor:pointer;">✕</span></div>
+  <div style="padding:16px 20px;font-size:13px;">
+    <div style="margin-bottom:12px;">
+      <label style="margin-right:18px;"><input type="radio" name="scope"> 全部（每单都质检）</label>
+      <label><input type="radio" name="scope" checked> 自定义条件（命中任一即质检）</label>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;">
+      <b>① 按状态 <span style="font-weight:400;color:#9ca3af;">（多选）</span></b><br>
+      <label style="margin-right:14px;"><input type="checkbox" checked> 非保单</label>
+      <label style="margin-right:14px;"><input type="checkbox" checked> 需人工补充</label>
+      <label style="margin-right:14px;"><input type="checkbox"> 识别异常</label>
+      <label style="margin-right:14px;"><input type="checkbox"> 识别失败</label>
+      <label><input type="checkbox"> 正常完成</label>
+      <div style="font-size:12px;color:#9ca3af;margin-top:4px;">勾「非保单」= AI 复核是否被误判；勾「需人工补充」= AI 尝试补齐缺失字段</div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;">
+      <b>② 按保司 <span style="font-weight:400;color:#9ca3af;">（多选）</span></b><br>
+      <span class="badge blue">众安 ✕</span> <span class="badge blue">泰康在线 ✕</span> <span class="badge blue">现代财险 ✕</span> <span class="btn btn-plain" style="margin-left:6px;">＋ 选择保司</span>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;">
+      <b>③ 按保司成熟度</b>　<label><input type="checkbox" checked> 保司历史总识别数少于 <span class="input" style="min-width:60px;padding:2px 8px;display:inline-block;">50</span> 单的自动质检</label>
+      <div style="font-size:12px;color:#9ca3af;margin-top:4px;">新保司/小众保司规则不成熟，重点质检；识别量超过阈值后自动退出范围</div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <span class="btn btn-plain" style="padding:6px 16px;">取消</span>
+    <span class="btn btn-primary" style="padding:6px 16px;">保存</span>
+  </div>
+</div>
+</div>
+</div>
+
+<h3>4.4 原型：系统内「AI质检问题列表」（仅超管，核心处理入口）</h3>
+<div class="mock">
+<div class="mock-label">原型 F ｜ 保单识别页新增「AI质检」Tab —— 有问题的记录集中在这里处理，不同步钉钉多维表</div>
+<div class="mock-body" style="overflow-x:auto;">
+<div class="tabbar">
+  <span class="tab">全部记录</span><span class="tab">异常</span><span class="tab active">✨ AI质检 <span class="badge red">3</span></span>
+</div>
+<div style="margin-bottom:10px;font-size:12px;">
+  <span class="select" style="padding:2px 8px;">全部企业 ▾</span>
+  <span class="select" style="padding:2px 8px;">状态：待确认 ▾</span>
+  <span class="select" style="padding:2px 8px;">近7天 ▾</span>
+  <span style="color:#9ca3af;">共 3 条待处理 · 今日质检 54 单 · 通过 49 · 修正 2 · 待确认 3</span>
+</div>
+<table>
+<tr><th>时间</th><th>企业</th><th>文件</th><th>差异字段（列表值 → AI值）</th><th>状态</th><th style="width:230px">操作</th></tr>
+<tr>
+  <td>07-18 10:32</td><td>深圳YY车服</td><td>京B67890-人保商业险.pdf</td>
+  <td>被保险人：<span class="diff-red">张三运输有限公司</span> → <span class="diff-green">张三货物运输有限公司</span> <span style="color:#ea580c;" title="人工修改过">●</span></td>
+  <td><span class="badge red">待确认</span></td>
+  <td><span class="btn btn-plain">查看原件</span> <span class="btn btn-primary">采纳AI值</span> <span class="btn btn-plain">保留原值</span></td>
+</tr>
+<tr>
+  <td>07-18 09:15</td><td>广州XX保险代理</td><td>粤A12345-太平洋车险.pdf</td>
+  <td>车架号：<span class="diff-red">LGB2E3A56K</span> → <span class="diff-green">LGB2E3A56KB123456</span>；保费：<span class="diff-red">1,256.00</span> → <span class="diff-green">1,265.00</span></td>
+  <td><span class="badge orange">已自动修正</span></td>
+  <td><span class="btn btn-plain">查看原件</span> <span class="btn btn-plain">还原原值</span> <span class="badge green" style="font-weight:400;">✓ 已处理</span></td>
+</tr>
+<tr>
+  <td>07-17 16:40</td><td>广州XX保险代理</td><td>粤B88888-平安交强险.pdf</td>
+  <td>起保日期：<span style="color:#9ca3af;">（未提取）</span> → <span class="diff-green">2026-07-20 00:00</span></td>
+  <td><span class="badge red">待确认</span></td>
+  <td><span class="btn btn-plain">查看原件</span> <span class="btn btn-primary">采纳AI值</span> <span class="btn btn-plain">保留原值</span></td>
+</tr>
+</table>
+<p style="font-size:12px;color:#9ca3af;margin-top:8px;">「采纳AI值」= 写入系统字段并标记已处理；「保留原值」= 标记已处理不改数据；「还原原值」= 撤销自动修正。所有操作只改系统内数据，<b>均不触发钉钉多维表同步</b>。处理完成的条目从待处理数中消失，历史可切状态筛选回看。</p>
+</div>
+</div>
+
+<h3>4.5 原型：企业质检统计（仅超管 —— 每个企业的真实准确率看板）</h3>
+<div class="mock">
+<div class="mock-label">原型 G ｜ AI质检 Tab 顶部「企业统计」视图 —— 用 AI 质检结果反推各企业的真实识别准确率</div>
+<div class="mock-body" style="overflow-x:auto;">
+<div style="margin-bottom:10px;font-size:12px;">
+  <span class="select" style="padding:2px 8px;">近30天 ▾</span>
+  <span class="select" style="padding:2px 8px;">全部企业 ▾</span>
+  <span style="color:#9ca3af;">口径：真实准确率 = 通过数 ÷ 质检数（AI 复核后无差异视为准确）；字段准确率 = 无差异字段数 ÷ 比对字段总数</span>
+</div>
+<table>
+<tr><th>企业</th><th>识别总数</th><th>质检数</th><th>准确数<br>(通过)</th><th>修正数<br>(自动)</th><th>待确认</th><th>真实准确率<br>(单据级)</th><th>字段准确率</th><th>高频出错字段 TOP3</th><th>AI成本</th><th style="width:70px">操作</th></tr>
+<tr>
+  <td>广州XX保险代理</td><td>1,120</td><td>1,058</td><td>986</td><td>58</td><td>14</td>
+  <td><b class="diff-green">93.2%</b></td><td>98.7%</td>
+  <td><span class="badge red">车架号 31</span> <span class="badge orange">保费 18</span> <span class="badge orange">起保日期 9</span></td>
+  <td>¥21.4</td><td><span class="btn btn-plain">明细</span></td>
+</tr>
+<tr>
+  <td>深圳YY车服</td><td>386</td><td>102</td><td>99</td><td>0</td><td>3</td>
+  <td><b class="diff-green">97.1%</b></td><td>99.5%</td>
+  <td><span class="badge orange">被保险人 2</span> <span class="badge orange">车牌号 1</span></td>
+  <td>¥2.1</td><td><span class="btn btn-plain">明细</span></td>
+</tr>
+<tr>
+  <td>东莞ZZ物流</td><td>214</td><td style="color:#d1d5db;">0（未开启）</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="btn btn-plain">开启质检</span></td>
+</tr>
+<tr style="background:var(--primary-bg);font-weight:600;">
+  <td>合计</td><td>1,720</td><td>1,160</td><td>1,085</td><td>58</td><td>17</td><td>93.5%</td><td>98.8%</td><td colspan="2" style="font-weight:400;color:#9a3412;">车架号是主要短板 → 反哺 policy_parser 规则优化</td><td></td>
+</tr>
+</table>
+<p style="font-size:12px;color:#9ca3af;margin-top:8px;">数据全部由 <code>ai_check_log</code> 聚合（质检数=该企业 auto 流水数；准确数=result:pass；修正数=corrected；待确认=flagged 未处理）。「高频出错字段」从 diff_json 聚合，直接指出哪个字段、哪家保司的规则最该优化——AI 质检同时充当<b>规则解析的持续评测集</b>。点「明细」跳转该企业的问题列表（原型 F）。</p>
+</div>
+</div>
+
+<h3>4.6 原型：钉钉机器人通知（webhook 后台可配置，仅提醒内部，处理入口在系统）</h3>
+<p style="font-size:13px;color:var(--text-light);margin-bottom:8px;">通知 webhook + 加签密钥在「AI 模型」设置页配置（原型 E），支持发送测试消息验证；<b>留空则回退复用现有系统告警机器人</b>（core/notify.py）。发送逻辑复用 <code>DingTalkNotifier</code> 封装（加签 + 同标题去重）。</p>
+<div class="mock">
+<div class="mock-label">原型 D ｜ 钉钉 markdown 消息样例</div>
+<div class="mock-body" style="background:#f3f4f6;display:flex;gap:20px;flex-wrap:wrap;">
+<div class="dingmsg">
+  <div class="t">🤖 AI质检-发现差异并已自动修正</div>
+  <div>企业：广州XX保险代理<br>群：粤A车队投保群<br>文件：粤A12345-太平洋车险.pdf</div>
+  <div style="margin-top:6px;border-top:1px dashed #e5e7eb;padding-top:6px;">
+    <b>修正 2 项：</b><br>
+    · 车架号：<span class="diff-red">LGB2E3A56K</span> → <span class="diff-green">LGB2E3A56KB123456</span><br>
+    · 保费：<span class="diff-red">1,256.00</span> → <span class="diff-green">1,265.00</span>
+  </div>
+  <div style="margin-top:6px;color:#2563eb;">▸ 前往系统「AI质检问题列表」查看（#10086）</div>
+</div>
+<div class="dingmsg">
+  <div class="t">⚠️ AI质检-发现差异待人工确认</div>
+  <div>企业：深圳YY车服<br>文件：京B67890-人保商业险.pdf</div>
+  <div style="margin-top:6px;border-top:1px dashed #e5e7eb;padding-top:6px;">
+    <b>待确认 1 项（人工修改过，不自动改）：</b><br>
+    · 被保险人：列表「张三运输有限公司」 vs AI「张三货物运输有限公司」
+  </div>
+  <div style="margin-top:6px;color:#2563eb;">▸ 前往系统「AI质检问题列表」处理（#10087）</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ================= 五 ================= -->
+<h2 id="s5">五、大模型灵活配置（国产·多模态）</h2>
+<div class="card">
+<h3>5.1 候选模型（均支持图片输入 + OpenAI 兼容协议）</h3>
+<table>
+<tr><th>厂商</th><th>推荐模型</th><th>base_url</th><th>特点</th></tr>
+<tr><td>阿里·百炼</td><td><code>qwen-vl-max</code> / <code>qwen-vl-plus</code></td><td>dashscope.aliyuncs.com/compatible-mode/v1</td><td>文档/表格识别能力强，生态成熟，<b>建议默认</b></td></tr>
+<tr><td>智谱</td><td><code>glm-4.5v</code> / <code>glm-4v-plus</code></td><td>open.bigmodel.cn/api/paas/v4</td><td>视觉推理强</td></tr>
+<tr><td>火山·方舟</td><td><code>doubao-seed-1.6-vision</code></td><td>ark.cn-beijing.volces.com/api/v3</td><td>便宜，已在用火山 OCR，同一账号体系</td></tr>
+<tr><td>月之暗面</td><td><code>moonshot-v1-32k-vision-preview</code></td><td>api.moonshot.cn/v1</td><td>长文档友好</td></tr>
+<tr><td>腾讯</td><td><code>hunyuan-vision</code></td><td>api.hunyuan.cloud.tencent.com/v1</td><td>与 COS 同云</td></tr>
+</table>
+<p style="font-size:13px;color:var(--text-light);">配置里内置以上「厂商预设」（选厂商自动带出 base_url），同时开放自定义 base_url + model，任何新出的兼容模型无须改代码即可接入。<b>支持配置多个模型</b>：一个设为「当前使用」，其余按优先级作为备用；当前模型调用失败/超时自动按优先级降级到下一个，也可随时手动一键切换。</p>
+
+<h3>5.2 原型：系统设置新增「AI 模型」Tab（field_config.html）—— 多模型管理</h3>
+<div class="mock">
+<div class="mock-label">原型 E ｜ 系统设置 → AI 模型（仅超管）：模型列表 + 一键切换 + 自动降级</div>
+<div class="mock-body">
+<div class="tabbar">
+  <span class="tab">别名设置</span><span class="tab">日期格式</span><span class="tab">自动计算</span><span class="tab">页面列</span><span class="tab">导出列</span><span class="tab active">✨ AI 模型</span>
+</div>
+<div style="max-width:820px;">
+  <div class="form-row"><label>启用 AI 能力</label><span class="switch on"></span> <span style="font-size:12px;color:#9ca3af;">总开关，关闭后按钮隐藏、质检暂停</span></div>
+  <div class="form-row"><label>允许AI直接覆盖</label><span class="switch"></span> <span class="badge gray">默认关闭</span> <span style="font-size:12px;color:#9ca3af;">全局总闸：关闭时所有企业质检强制「仅标记+通知」；开启后才能在客户管理按企业放开「直接覆盖」</span></div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 8px;">
+    <b style="font-size:13px;">模型列表 <span style="font-weight:400;color:#9ca3af;font-size:12px;">（当前模型失败自动按优先级切换下一个可用模型，全程记录在调用流水）</span></b>
+    <span class="btn btn-primary" style="padding:4px 12px;">＋ 添加模型</span>
+  </div>
+  <table>
+    <tr><th style="width:50px">优先级</th><th>名称</th><th>厂商/模型</th><th>API Key</th><th style="width:80px">连通性</th><th style="width:90px">状态</th><th style="width:200px">操作</th></tr>
+    <tr style="background:var(--primary-bg);">
+      <td>1 <span style="color:#d1d5db;">⇅</span></td><td>通义主力</td><td>阿里·百炼 / qwen-vl-max</td><td>sk-****3f2a</td><td><span class="badge green">✓ 1.2s</span></td>
+      <td><span class="badge orange">● 当前使用</span></td>
+      <td><span class="btn btn-plain">测试</span> <span class="btn btn-plain">编辑</span> <span class="btn btn-plain" style="color:#d1d5db;">切换</span></td>
+    </tr>
+    <tr>
+      <td>2 <span style="color:#d1d5db;">⇅</span></td><td>豆包备用</td><td>火山·方舟 / doubao-seed-1.6-vision</td><td>ak-****9c1d</td><td><span class="badge green">✓ 0.9s</span></td>
+      <td><span class="badge green">启用</span></td>
+      <td><span class="btn btn-plain">测试</span> <span class="btn btn-plain">编辑</span> <span class="btn btn-primary">切换为当前</span></td>
+    </tr>
+    <tr>
+      <td>3 <span style="color:#d1d5db;">⇅</span></td><td>智谱备用</td><td>智谱 / glm-4.5v</td><td>****.b8e2</td><td><span class="badge red">✗ 超时</span></td>
+      <td><span class="badge gray">停用</span></td>
+      <td><span class="btn btn-plain">测试</span> <span class="btn btn-plain">编辑</span> <span class="btn btn-danger">删除</span></td>
+    </tr>
+  </table>
+  <p style="font-size:12px;color:#9ca3af;margin:4px 0 12px;">「添加/编辑模型」弹窗字段：名称、厂商预设（自动带出 base_url）、base_url、model、API Key、超时(秒)、启用开关。API Key 保存后打码回显。拖动 ⇅ 调整降级优先级。</p>
+
+  <div class="form-row"><label>最大页数</label><span class="input" style="min-width:60px;">4</span>　<label style="width:auto;">日成本提醒(元)</label><span class="input" style="min-width:70px;">50</span> <span style="font-size:12px;color:#9ca3af;">超过仅钉钉提醒，不拦截调用</span></div>
+  <div class="form-row"><label>钉钉通知webhook</label><span class="input">https://oapi.dingtalk.com/robot/send?access_token=****</span></div>
+  <div class="form-row"><label>加签密钥</label><span class="input" style="min-width:220px;">SEC****************</span>　<span class="btn btn-plain" style="padding:5px 12px;">发送测试消息</span> <span class="badge green">✓ 已送达</span> <span style="font-size:12px;color:#9ca3af;">质检差异/成本提醒发到此机器人；留空则复用系统现有告警机器人</span></div>
+  <div class="form-row" style="align-items:flex-start;"><label>提取 Prompt</label>
+    <textarea class="input" style="min-width:420px;height:72px;font-size:12px;" readonly>你是保险保单信息提取专家。请从保单图片中提取以下字段，输出 JSON：{{FIELD_LIST}}。未识别到的字段填 null，禁止编造…</textarea>
+  </div>
+  <div class="form-row"><label></label><span class="btn btn-primary" style="padding:6px 20px;">保存配置</span>　<span class="btn btn-plain" style="padding:6px 14px;">用样例保单试跑</span></div>
+</div>
+</div>
+</div>
+<div class="note">多模型配置整体存 <code>insurance_config</code>（config_key = <code>ai_model_config</code>，含 models 数组 + active_model_id），接口回显 Key 打码，仅超管可读写；「测试」逐个模型发极小请求验证可用性。每次 AI 调用实际使用的模型记入 <code>ai_check_log.model</code>，切换/降级行为可回溯。</div>
+</div>
+
+<!-- ================= 六 ================= -->
+<h2 id="s6">六、数据库变更</h2>
+<div class="card">
+<h3>6.1 insurance_records 新增列（沿用现有幂等 ADD COLUMN 模式）</h3>
+<pre><code>ALTER TABLE insurance_records ADD COLUMN ai_check_status VARCHAR(16) DEFAULT NULL COMMENT 'AI质检状态: pass/corrected/flagged/error';
+ALTER TABLE insurance_records ADD COLUMN ai_fields LONGTEXT COMMENT '被AI覆盖过的字段名JSON列表(类比manual_fields)';
+ALTER TABLE insurance_records ADD COLUMN ai_corrections LONGTEXT COMMENT 'AI修正历史JSON: {字段:{原值,AI值,时间,来源}}';
+ALTER TABLE insurance_records ADD COLUMN ai_checked_at DATETIME DEFAULT NULL COMMENT 'AI质检时间';</code></pre>
+
+<h3>6.2 新表 ai_check_log（质检/调用流水，成本统计用）</h3>
+<pre><code>CREATE TABLE IF NOT EXISTS ai_check_log (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  record_id INT NOT NULL,
+  enterprise_id INT DEFAULT NULL,
+  trigger_type VARCHAR(16) COMMENT 'manual(功能一)/auto(功能二)',
+  operator_user_id INT DEFAULT NULL COMMENT '操作人（manual 必填，auto 为空）',
+  operator_name VARCHAR(64) DEFAULT NULL COMMENT '操作人姓名快照',
+  model VARCHAR(64),
+  result VARCHAR(16) COMMENT 'extracted(已识别未应用)/applied(已应用)/pass/corrected/flagged/error',
+  diff_json LONGTEXT COMMENT '差异明细',
+  applied_fields LONGTEXT COMMENT '实际应用覆盖的字段及原值备份JSON（未应用为空）',
+  prompt_tokens INT, completion_tokens INT,
+  duration_ms INT, error_message TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_record (record_id), INDEX idx_ent_time (enterprise_id, created_at)
+);</code></pre>
+
+<h3>6.3 insurance_config 新增 KV</h3>
+<table>
+<tr><th style="width:220px">config_key</th><th>内容</th></tr>
+<tr><td><code>ai_model_config</code></td><td>{enabled, <b>allow_auto_fix（全局「允许AI直接覆盖」总闸，默认 false）</b>, <b>models: [{id, name, provider, base_url, model, api_key, timeout, enabled, priority}]（多模型列表）</b>, <b>active_model_id（当前使用）</b>, max_pages, cost_alert_threshold（日成本提醒阈值，仅提醒不拦截）, <b>notify_webhook + notify_secret（钉钉通知机器人，留空回退现有告警机器人）</b>, prompt_template}</td></tr>
+<tr><td><code>ai_check_enterprises</code></td><td>{enterprise_id: {enabled, <b>scope: {mode: all/custom, statuses:[非保单, 需人工补充, 识别异常, 识别失败, 正常完成], companies:[…], company_history_lt: 50}（自定义条件为或关系）</b>, <b>auto_fix: true/false（企业级「AI直接覆盖」开关，默认 false）</b>, compare_fields:[…]}}<br><span style="font-size:12px;color:#6b7280;">实际是否直接覆盖 = 全局 allow_auto_fix <b>且</b> 企业 auto_fix 同时为 true；不设质检额度限制；不使用置信度</span></td></tr>
+</table>
+<p style="font-size:13px;color:var(--text-light);">兼容性：全部为新增列/新表/新 KV，不改任何既有字段与接口语义，老版本前端不受影响。</p>
+</div>
+
+<!-- ================= 七 ================= -->
+<h2 id="s7">七、API 设计（insurance/api.py 新增，全部沿用现有鉴权体系）</h2>
+<div class="card">
+<table>
+<tr><th style="width:330px">接口</th><th style="width:70px">权限</th><th>说明</th></tr>
+<tr><td><code>POST /api/insurance/ai-extract/&lt;id&gt;</code></td><td>超管</td><td>功能一：同步调大模型提取，返回 ai_fields + diff 列表（字段值不落库，但<b>必写一条 ai_check_log 流水</b>：manual/extracted，含操作人、耗时、token、差异数；失败记 error）</td></tr>
+<tr><td><code>POST /api/insurance/ai-extract/&lt;id&gt;/apply</code></td><td>超管</td><td>应用勾选字段：{log_id, fields:[…]}，写 parsed/display_fields、备份 ai_corrections，并把对应流水更新为 applied + applied_fields（<b>不触发钉钉表同步</b>）</td></tr>
+<tr><td><code>GET /api/insurance/ai-check/issues</code></td><td>超管</td><td><b>AI质检问题列表</b>（原型 F）：筛选企业/状态(待确认/已修正/已处理)/日期，返回差异明细与待处理计数</td></tr>
+<tr><td><code>POST /api/insurance/records/&lt;id&gt;/ai-check/resolve</code></td><td>超管</td><td>处理问题条目：{action: adopt(采纳AI值)/keep(保留原值)/revert(还原自动修正), fields:[…]}</td></tr>
+<tr><td><code>GET /api/insurance/records/&lt;id&gt;/ai-check</code></td><td>超管</td><td>查看某记录的质检详情（diff、修正历史）</td></tr>
+<tr><td><code>GET/PUT /api/insurance/ai-config</code></td><td>超管</td><td>AI 配置读写：<b>模型列表增删改、优先级排序、切换当前模型（active_model_id）</b>、全局开关/Prompt（key 打码回显）+ <code>POST /api/insurance/ai-config/test</code> 按模型 id 测试连通性</td></tr>
+<tr><td><code>GET/PUT /api/insurance/ai-check/enterprises</code></td><td>超管</td><td>企业质检开关/策略配置（客户管理页调用）</td></tr>
+<tr><td><code>GET /api/insurance/ai-check/logs</code></td><td>超管</td><td>AI 调用流水列表（含功能一手动识别 + 功能二自动质检，筛选企业/触发方式/<b>操作人</b>/结果/日期，含 token 成本汇总）</td></tr>
+<tr><td><code>GET /api/insurance/ai-check/stats</code></td><td>超管</td><td><b>企业质检统计</b>（原型 G）：按日期范围聚合 ai_check_log，返回每企业的识别总数/质检数/准确数/修正数/待确认数/单据级真实准确率/字段准确率/高频出错字段TOP/AI成本 + 全局合计</td></tr>
+</table>
+<p style="font-size:13px;color:var(--text-light);">records 列表接口在返回中附带 <code>ai_check_status</code>，前端徽标直接渲染，无需新增查询。</p>
+</div>
+
+<!-- ================= 八 ================= -->
+<h2 id="s8">八、改动文件清单</h2>
+<div class="card">
+<table>
+<tr><th style="width:340px">文件</th><th style="width:60px">类型</th><th>改动</th></tr>
+<tr><td><code>insurance/ai_extractor.py</code></td><td><span class="badge green">新增</span></td><td>PDF→图片→大模型→JSON 字段；OpenAI 兼容客户端；厂商预设；<b>多模型按优先级自动降级</b>；token 统计</td></tr>
+<tr><td><code>insurance/ai_checker.py</code></td><td><span class="badge green">新增</span></td><td>质检队列（Queue+守护线程）、字段比对/归一化、修正策略、钉钉通知拼装</td></tr>
+<tr><td><code>insurance/api.py</code></td><td><span class="badge orange">修改</span></td><td>新增第七节 7 组接口</td></tr>
+<tr><td><code>insurance/handler.py</code></td><td><span class="badge orange">修改</span></td><td><code>_process</code> 识别完成后 3~5 行挂钩：命中企业质检配置则入质检队列</td></tr>
+<tr><td><code>insurance/db.py</code></td><td><span class="badge orange">修改</span></td><td>新列/新表建表语句、质检状态读写、ai_check_log 写入</td></tr>
+<tr><td><code>core/notify.py</code></td><td><span class="badge orange">修改</span></td><td>新增 <code>notify_ai_check(...)</code> 封装（复用现有 DingTalkNotifier）</td></tr>
+<tr><td><code>web/templates/insurance.html</code></td><td><span class="badge orange">修改</span></td><td>操作列「AI质检」按钮、AI对比弹窗、质检状态徽标列与详情、<b>「AI质检」问题列表 Tab（原型 F）+ 企业统计（原型 G）</b>——以上全部仅超管可见</td></tr>
+<tr><td><code>web/templates/field_config.html</code></td><td><span class="badge orange">修改</span></td><td>新增「AI 模型」Tab（原型 E）</td></tr>
+<tr><td>客户管理页面</td><td><span class="badge orange">修改</span></td><td>企业行新增 AI 质检开关与策略（原型 C）</td></tr>
+<tr><td><code>requirements.txt</code></td><td><span class="badge orange">修改</span></td><td>新增 <code>pypdfium2</code>、<code>openai</code>（或直接 requests 裸调，二选一，倾向 requests 零新依赖）</td></tr>
+</table>
+<p style="font-size:13px;color:var(--text-light);">建议分两期上线：<b>一期</b>=模型配置 + 功能一（AI识别按钮），风险小见效快；<b>二期</b>=功能二（自动质检+修正+通知），在一期模型效果验证后放开。</p>
+</div>
+
+<!-- ================= 九 ================= -->
+<h2 id="s9">九、成本估算与风控</h2>
+<div class="card">
+<table>
+<tr><th style="width:160px">项</th><th>估算/措施</th></tr>
+<tr><td>单次调用成本</td><td>4 页图片 ≈ 3k~6k 输入 token + ~0.5k 输出；qwen-vl-max 约 <b>¥0.02~0.06/单</b>，qwen-vl-plus / doubao-vision 约低一个档（以官网现价为准，试跑后校准）</td></tr>
+<tr><td>日成本示例</td><td>某企业日均 40 单全量质检 ≈ ¥1~3/天/企业。<b>不设质检额度上限</b>（全量质检），成本靠企业统计看板（原型 G）+ 日成本提醒阈值（超过发钉钉提醒，不拦截）监控</td></tr>
+<tr><td>数据安全</td><td>保单含个人信息，发往大模型 API 前不脱敏（提取需要原文）；仅走官方 API、不开训练授权；API Key 打码回显；建议在客户协议中覆盖</td></tr>
+<tr><td>幻觉防控</td><td>Prompt 强约束「未识别填 null 禁止编造」；自动修正仅限可交叉验证场景（4.2）；人工改过的字段永不自动改；全部修正可还原</td></tr>
+<tr><td>失败降级</td><td>当前模型超时/报错 → 按优先级自动切换下一个「启用」的模型（实际使用的模型记入流水）→ 全部失败记 error 不影响主流程；质检线程异常自动重启（复用 handler 守护线程模式）</td></tr>
+</table>
+</div>
+
+<!-- ================= 十 ================= -->
+<h2 id="s10">十、需求确认记录（Q1/Q3~Q6 已确认，Q2 为建议项）</h2>
+<div class="card">
+<div class="q"><b>Q1. 差异处理策略 —— <span style="color:var(--green)">已确认：做成「AI直接覆盖」双层开关</span></b>
+<div class="opt">全局总闸（AI模型设置页）+ 企业级开关（客户管理页），两层都开才直接覆盖，否则仅标记+通知。两个开关<b>默认均为关闭</b>，建议先「仅标记」跑两周验证准确率后再按企业放开。</div></div>
+<div class="q"><b>Q2. 首批配置哪几个模型？（已按多模型列表设计，可随时增删切换）</b>
+<div class="opt"><span class="rec">建议：优先级1 qwen-vl-max（当前使用，准确率优先）+ 优先级2 doubao-seed-1.6-vision（备用，便宜且已有火山账号）</span>，上线后按统计看板的实际表现调整。</div></div>
+<div class="q"><b>Q3. 「AI识别」按钮开放范围 —— <span style="color:var(--green)">已确认：仅内部超管，不开放给企业客户</span></b>
+<div class="opt">AI质检按钮、质检徽标/问题列表、模型配置、企业质检开关全部仅超管可见可操作。</div></div>
+<div class="q"><b>Q4. 钉钉多维表同步 —— <span style="color:var(--green)">已确认：一律不自动同步</span></b>
+<div class="opt">AI 识别/质检产生的任何修改都不推送钉钉多维表；有问题的记录统一进系统内「AI质检问题列表」（原型 F）处理，需要更新台账时人工走现有同步入口。</div></div>
+<div class="q"><b>Q5. 历史存量保单补跑质检 —— <span style="color:var(--green)">已确认：暂不考虑</span></b>
+<div class="opt">只质检新入库记录，不做历史补跑（后续有需要再排期）。</div></div>
+<div class="q"><b>Q6. 钉钉通知 —— <span style="color:var(--green)">已确认：webhook 后台可配置</span></b>
+<div class="opt">在「AI 模型」设置页配置通知机器人 webhook + 加签密钥，支持发送测试消息；留空则回退复用现有系统告警机器人（core/notify.py）。</div></div>
+</div>
+
+<p style="text-align:center;color:#9ca3af;font-size:12px;margin-top:40px;">wxbot · 保单识别 AI 增强方案 · 2026-07-18 · 确认后移至 docs/design/ 并排期开发</p>
+</div>
+</body>
+</html>

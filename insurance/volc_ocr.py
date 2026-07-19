@@ -25,6 +25,47 @@ _CLAUSE_KEYWORDS = ['总则', '第一条', '第二条', '责任免除', '保险�
                      '理赔申请', '争议处理', '保险金申请', '条款', '注册号']
 
 
+def _reorder_reversed_lines(line_texts: list, line_rects: list) -> list:
+    """检测并修正倒序的 OCR 行序。
+
+    部分保司 PDF（如平安东莞）文字是从页脚往页头绘制的，火山引擎 OCRNormal
+    的 line_texts 按 PDF 绘制顺序返回，导致整页文本倒序（页脚在前、标题在最后），
+    进而使文档类型判定（只看前500字）误判为"未知"、字段抽取错乱。
+
+    仅当相邻行 y 坐标"递减"占多数（即整体自下而上）时才重排，正常文档不受影响。
+    重排方式：按 y 聚类分行（同一视觉行 y 差小于行高的一半），行间按 y 升序、
+    行内按 x 升序。
+    """
+    if not line_rects or len(line_rects) != len(line_texts) or len(line_texts) < 5:
+        return line_texts
+
+    ys = [r.get("y", 0) for r in line_rects]
+    heights = sorted(r.get("height", 0) for r in line_rects)
+    # 同一视觉行的 y 差阈值：取行高中位数的一半（归一化坐标）
+    y_tol = max(heights[len(heights) // 2] * 0.5, 1e-4)
+
+    desc = sum(1 for i in range(1, len(ys)) if ys[i] < ys[i - 1] - y_tol)
+    asc = sum(1 for i in range(1, len(ys)) if ys[i] > ys[i - 1] + y_tol)
+    if desc <= asc:
+        return line_texts
+
+    logger.info("检测到火山OCR行序倒序（desc=%d asc=%d），按坐标重排", desc, asc)
+    # 按 y 升序聚类分行，行内按 x 升序
+    indexed = sorted(range(len(line_texts)),
+                     key=lambda i: (ys[i], line_rects[i].get("x", 0)))
+    rows = []
+    for i in indexed:
+        if rows and abs(ys[i] - rows[-1][0]) < y_tol:
+            rows[-1][1].append(i)
+        else:
+            rows.append((ys[i], [i]))
+    result = []
+    for _, idxs in rows:
+        idxs.sort(key=lambda i: line_rects[i].get("x", 0))
+        result.extend(line_texts[i] for i in idxs)
+    return result
+
+
 def _is_clause_page(text: str) -> bool:
     """判断是否为保险条款页"""
     if not text or len(text) < 50:
@@ -174,6 +215,9 @@ class VolcOCR:
                 "error": "火山引擎OCR未识别到任何文字",
                 "text": "",
             }
+
+        # 部分PDF文字自下而上绘制，接口按绘制顺序返回导致整页倒序，需按坐标修正
+        line_texts = _reorder_reversed_lines(line_texts, data.get("line_rects", []))
 
         text = "\n".join(line_texts)
         return {

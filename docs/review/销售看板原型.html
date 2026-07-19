@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>销售看板 · 原型（待确认）</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f5f3f0; color: #1c1410; }
+.topbar { background: linear-gradient(135deg, #ea580c, #f97316); color: #fff; padding: 14px 28px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.topbar h1 { font-size: 18px; font-weight: 800; }
+.topbar .ent { font-size: 13px; background: rgba(255,255,255,0.18); border-radius: 14px; padding: 4px 12px; }
+.topbar .badge { font-size: 12px; background: #1c1410; border-radius: 12px; padding: 3px 10px; opacity: 0.85; }
+/* 页面级 Tab（沿用 /insurance 现有导航样式，仅新增「销售看板」） */
+.ptabs { display: flex; align-items: center; gap: 8px; margin-left: 10px; flex-wrap: wrap; }
+.ptab { border: 1px solid transparent; background: transparent; color: rgba(255,255,255,0.85); border-radius: 8px; padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; position: relative; }
+.ptab:hover { background: rgba(255,255,255,0.2); color: #fff; }
+.ptab.active { background: rgba(255,255,255,0.25); color: #fff; border-color: rgba(255,255,255,0.4); }
+.ptab .newtag { display: inline-block; margin-left: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; border-radius: 999px; background: #fef08a; color: #92400e; vertical-align: middle; }
+.proto-note { background: #fffbeb; border-bottom: 1px solid #fde68a; color: #92400e; font-size: 13px; padding: 8px 28px; }
+.wrap { width: 100%; margin: 0 auto; padding: 18px 24px 60px; }
+/* 视图切换 */
+.tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.tabs button { border: 1px solid #e5e7eb; background: #fff; border-radius: 20px; padding: 8px 20px; font-size: 14px; font-weight: 600; color: #6b7280; cursor: pointer; }
+.tabs button.on { background: #ea580c; border-color: #ea580c; color: #fff; }
+.view { display: none; }
+.view.on { display: block; }
+/* 工具行 */
+.toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chips span { font-size: 13px; border: 1px solid #e5e7eb; background: #fff; border-radius: 16px; padding: 5px 14px; color: #6b7280; cursor: pointer; }
+.chips span.on { background: #fff7ed; border-color: #ea580c; color: #ea580c; font-weight: 600; }
+.daterange { font-size: 13px; color: #9ca3af; }
+.spacer { flex: 1; }
+.btn { border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn.orange { background: #ea580c; color: #fff; }
+.btn.ghost { background: #fff; border: 1px solid #e5e7eb; color: #6b7280; }
+/* 指标卡 */
+.cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px; }
+.kcard { background: #fff; border-radius: 14px; padding: 16px 16px 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); position: relative; }
+.kcard .t { font-size: 13px; color: #6b7280; display: flex; align-items: center; gap: 6px; }
+.kcard .t .tag { font-size: 10px; background: #fff7ed; color: #ea580c; border: 1px solid #fdba74; border-radius: 4px; padding: 1px 5px; }
+.kcard .v { font-size: 24px; font-weight: 800; margin-top: 6px; }
+.kcard .sub { font-size: 12px; color: #9ca3af; margin-top: 4px; }
+.kcard .sub b { color: #16a34a; font-weight: 700; }
+.pbar { height: 5px; background: #f3f4f6; border-radius: 3px; margin-top: 9px; overflow: hidden; }
+.pbar i { display: block; height: 100%; background: linear-gradient(90deg, #f97316, #ea580c); border-radius: 3px; }
+/* 卡片区块 */
+.card { background: #fff; border-radius: 14px; padding: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); margin-bottom: 16px; }
+.card h2 { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+.card h2 .bar { display: inline-block; width: 4px; height: 15px; background: #ea580c; border-radius: 2px; margin-right: 8px; vertical-align: -2px; }
+.card h2 .mini { font-size: 12px; color: #9ca3af; font-weight: 400; margin-left: 8px; }
+.grid2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+.grid2b { display: grid; grid-template-columns: 1fr 1.5fr; gap: 16px; }
+canvas { width: 100%; display: block; }
+/* 目标进度 */
+.goal { padding: 10px 0; border-bottom: 1px solid #f7f6f4; }
+.goal:last-child { border-bottom: none; }
+.goal .gt { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+.goal .gt .n { font-weight: 600; }
+.goal .gt .n .cond { font-size: 11px; color: #9ca3af; font-weight: 400; margin-left: 6px; }
+.goal .gt .p { color: #ea580c; font-weight: 700; }
+.goal .gt .p.ok { color: #16a34a; }
+.goal .gb { height: 8px; background: #f3f4f6; border-radius: 4px; overflow: hidden; }
+.goal .gb i { display: block; height: 100%; background: linear-gradient(90deg, #fdba74, #ea580c); border-radius: 4px; }
+.goal .gb i.ok { background: linear-gradient(90deg, #86efac, #16a34a); }
+.goal .gs { font-size: 12px; color: #9ca3af; margin-top: 5px; }
+/* 表格 */
+.tbl-wrap { overflow-x: auto; }
+table.rank { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
+table.rank th { color: #6b7280; font-weight: 600; text-align: right; padding: 10px 12px; border-bottom: 2px solid #f0efec; }
+table.rank th:nth-child(-n+2), table.rank td:nth-child(-n+2) { text-align: left; }
+table.rank td { padding: 10px 12px; border-bottom: 1px solid #f7f6f4; text-align: right; }
+table.rank tbody tr:hover td { background: #faf9f7; }
+.rk { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: #f3f4f6; color: #6b7280; font-size: 12px; font-weight: 700; align-items: center; justify-content: center; }
+.rk.r1 { background: #ea580c; color: #fff; } .rk.r2 { background: #fb923c; color: #fff; } .rk.r3 { background: #fdba74; color: #fff; }
+.cellbar { display: inline-flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.cellbar .cb { width: 70px; height: 6px; background: #f3f4f6; border-radius: 3px; overflow: hidden; }
+.cellbar .cb i { display: block; height: 100%; background: #ea580c; }
+.cellbar .cb i.ok { background: #16a34a; }
+.cellbar em { font-style: normal; font-weight: 700; color: #ea580c; min-width: 42px; }
+.cellbar em.ok { color: #16a34a; }
+.muted { color: #9ca3af; }
+/* 数据说明 ? 图标与悬停提示 */
+.qi { position: relative; display: inline-flex; width: 15px; height: 15px; border-radius: 50%; background: #f3f4f6; color: #9ca3af; font-size: 10px; font-weight: 700; align-items: center; justify-content: center; cursor: help; vertical-align: 1px; flex-shrink: 0; }
+.qi:hover { background: #ea580c; color: #fff; }
+.qi .qtip { display: none; position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); width: 240px; background: rgba(28,20,16,0.94); color: #fff; border-radius: 10px; padding: 10px 12px; font-size: 12px; font-weight: 400; line-height: 1.7; z-index: 30; box-shadow: 0 4px 16px rgba(0,0,0,0.25); text-align: left; white-space: normal; cursor: default; }
+.qi .qtip::after { content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: rgba(28,20,16,0.94); }
+.qi:hover .qtip { display: block; }
+.qtip b { color: #fdba74; font-weight: 700; display: block; margin-top: 4px; }
+.qtip b:first-child { margin-top: 0; }
+th .qi { margin-left: 4px; }
+th .qi .qtip { left: auto; right: -10px; transform: none; }
+th .qi .qtip::after { left: auto; right: 14px; transform: none; }
+/* 配置视图 */
+.src-note { display: flex; align-items: center; gap: 10px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 12px 16px; font-size: 13px; color: #9a3412; margin-bottom: 16px; flex-wrap: wrap; }
+.cfg-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid #f7f6f4; flex-wrap: wrap; }
+.cfg-row:last-child { border-bottom: none; }
+.cfg-row input[type=text], .cfg-row select, .cfg-row input[type=number], .cfg-row input[type=date] { border: 1px solid #e5e7eb; border-radius: 8px; padding: 7px 10px; font-size: 13px; outline: none; background: #fff; }
+.cfg-row input[type=text] { width: 120px; }
+.cfg-row label.lb { font-size: 12px; color: #9ca3af; }
+.fchip { font-size: 12px; background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; border-radius: 6px; padding: 3px 8px; }
+.fchip .x { margin-left: 4px; cursor: pointer; opacity: 0.6; }
+.addlink { font-size: 12px; color: #ea580c; cursor: pointer; border: 1px dashed #fdba74; border-radius: 6px; padding: 3px 10px; background: #fff; }
+.del { color: #dc2626; font-size: 12px; cursor: pointer; margin-left: auto; }
+.switch { position: relative; width: 38px; height: 22px; background: #e5e7eb; border-radius: 11px; cursor: pointer; flex-shrink: 0; }
+.switch.on { background: #ea580c; }
+.switch i { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: #fff; border-radius: 50%; transition: left .15s; }
+.switch.on i { left: 18px; }
+.hint { font-size: 12px; color: #9ca3af; line-height: 1.8; background: #faf9f7; border-radius: 8px; padding: 10px 14px; margin-top: 12px; }
+/* 目标管理 */
+.seg { display: inline-flex; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+.seg span { font-size: 13px; padding: 7px 16px; cursor: pointer; color: #6b7280; background: #fff; }
+.seg span.on { background: #fff7ed; color: #ea580c; font-weight: 600; }
+table.cfg { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.cfg th { color: #6b7280; font-weight: 600; text-align: left; padding: 9px 10px; border-bottom: 2px solid #f0efec; }
+table.cfg td { padding: 9px 10px; border-bottom: 1px solid #f7f6f4; }
+table.cfg input { border: 1px solid #e5e7eb; border-radius: 6px; padding: 5px 8px; font-size: 13px; width: 110px; outline: none; }
+.ptag { font-size: 11px; border-radius: 4px; padding: 2px 7px; }
+.ptag.m { background: #fff7ed; color: #ea580c; }
+.ptag.q { background: #eff6ff; color: #2563eb; }
+.ptag.y { background: #f0fdf4; color: #16a34a; }
+.ptag.c { background: #faf5ff; color: #9333ea; }
+/* 技术方案视图 */
+pre.code { background: #1c1410; color: #e7e5e4; border-radius: 10px; padding: 14px 16px; font-size: 12px; line-height: 1.7; overflow-x: auto; font-family: "SF Mono", Menlo, Consolas, monospace; }
+pre.code .k { color: #fdba74; } pre.code .c { color: #78716c; } pre.code .s { color: #86efac; }
+table.doc { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.doc th { background: #faf9f7; color: #6b7280; font-weight: 600; text-align: left; padding: 9px 12px; border: 1px solid #f0efec; }
+table.doc td { padding: 9px 12px; border: 1px solid #f0efec; vertical-align: top; }
+table.doc code, .flowbox code { background: #fff7ed; color: #c2410c; border-radius: 4px; padding: 1px 6px; font-size: 12px; font-family: "SF Mono", Menlo, Consolas, monospace; }
+.flowbox { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.flowbox .step { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; border-radius: 8px; padding: 8px 12px; }
+.flowbox .arr { color: #d1d5db; font-weight: 700; }
+/* 新增/编辑 弹窗 */
+.mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
+.mask.on { display: flex; }
+.modal { background: #fff; width: 100%; max-width: 540px; border-radius: 16px; box-shadow: 0 12px 48px rgba(0,0,0,0.28); overflow: hidden; }
+.modal .mh { display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid #f0efec; }
+.modal .mh h3 { font-size: 16px; font-weight: 700; flex: 1; }
+.modal .mh .mx { font-size: 18px; color: #9ca3af; cursor: pointer; padding: 0 4px; }
+.modal .mb { padding: 18px 20px; }
+.mguide { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 12px 14px; font-size: 12px; color: #9a3412; line-height: 1.9; margin-bottom: 16px; }
+.mguide b { display: block; font-size: 13px; margin-bottom: 2px; }
+.frow { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.frow .fl { width: 74px; font-size: 13px; color: #6b7280; flex-shrink: 0; text-align: right; }
+.frow input[type=text], .frow input[type=number], .frow select, .frow input[type=date] { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; font-size: 13px; outline: none; }
+.frow input:focus, .frow select:focus { border-color: #ea580c; }
+.fnote { font-size: 11px; color: #9ca3af; margin-left: 84px; margin-top: -8px; margin-bottom: 12px; }
+.modal .mf { display: flex; gap: 10px; justify-content: flex-end; padding: 14px 20px; border-top: 1px solid #f0efec; background: #faf9f7; }
+@media (max-width: 900px) { .cards { grid-template-columns: repeat(2, 1fr); } .grid2, .grid2b { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>🛡️ 午虎AI保单台账</h1>
+  <!-- 沿用 /insurance 现有页面级 Tab，仅新增「销售看板」（企业管理员/超管可见） -->
+  <div class="ptabs">
+    <button class="ptab">首页（台账记录）</button>
+    <button class="ptab active">销售看板<span class="newtag">NEW</span></button>
+    <button class="ptab">续保管理系统<span class="newtag">限时免费</span></button>
+  </div>
+  <div class="spacer"></div>
+  <span class="ent">华顺保险代理有限公司</span>
+  <span class="badge">销售看板仅企业管理员可见</span>
+</div>
+<div class="proto-note">⚠️ 界面原型（静态演示数据，仅供方案确认）—— 配套方案文档：docs/review/销售看板方案.md</div>
+
+<div class="wrap">
+  <div class="tabs">
+    <button class="on" onclick="sw(0,this)">看板</button>
+    <button onclick="sw(1,this)">看板配置</button>
+    <button onclick="sw(2,this)">目标管理</button>
+    <button onclick="sw(3,this)">技术方案</button>
+  </div>
+
+  <!-- ═══════════ 视图一：看板 ═══════════ -->
+  <div class="view on" id="v0">
+    <div class="toolbar">
+      <div class="chips">
+        <span class="on">本月</span><span>上月</span><span>本季度</span><span>今年</span><span>自定义</span>
+      </div>
+      <span class="daterange">2026-07-01 ~ 2026-07-18（按签单日期）</span>
+      <div class="spacer"></div>
+      <button class="btn ghost">⚙ 配置看板</button>
+    </div>
+
+    <!-- 指标卡（模板可配置：名称 / 聚合 / 字段 / 筛选条件） -->
+    <div class="cards">
+      <div class="kcard">
+        <div class="t">总保费 <span class="qi">?<span class="qtip"><b>数据来源</b>台账「保费」列求和（含手动修正后的值）<b>统计范围</b>签单日期 2026-07-01 ~ 07-18 · 本企业已识别完成的保单<b>计算公式</b>Σ 保费</span></span></div>
+        <div class="v">¥1,286,430</div>
+        <div class="sub">月度目标 ¥1,650,000 · 完成 <b style="color:#ea580c">78%</b></div>
+        <div class="pbar"><i style="width:78%"></i></div>
+      </div>
+      <div class="kcard">
+        <div class="t">总佣金 <span class="qi">?<span class="qtip"><b>数据来源</b>台账「佣金」列求和（费率公式：保费 × 佣金率）<b>统计范围</b>签单日期 2026-07-01 ~ 07-18<b>计算公式</b>Σ (保费 × 佣金率)</span></span></div>
+        <div class="v">¥187,520</div>
+        <div class="sub">佣金率均值 14.6%</div>
+      </div>
+      <div class="kcard">
+        <div class="t">员工提成 <span class="tag">公式字段</span> <span class="qi">?<span class="qtip"><b>数据来源</b>台账「员工提成」列求和<b>计算公式</b>提成 = 佣金 × 50%（来自「字段配置-费率公式」，按保司/险种匹配）<b>统计范围</b>签单日期 2026-07-01 ~ 07-18</span></span></div>
+        <div class="v">¥93,760</div>
+        <div class="sub">取自费率公式计算结果</div>
+      </div>
+      <div class="kcard">
+        <div class="t">保单量 <span class="qi">?<span class="qtip"><b>数据来源</b>台账保单记录条数<b>统计范围</b>签单日期 2026-07-01 ~ 07-18 · 已识别完成、未删除<b>计算公式</b>COUNT(保单)</span></span></div>
+        <div class="v">326 <span style="font-size:13px;font-weight:400;color:#9ca3af">单</span></div>
+        <div class="sub">日均 18.1 单</div>
+      </div>
+      <div class="kcard">
+        <div class="t">车险保费 <span class="tag">自定义</span> <span class="qi">?<span class="qtip"><b>数据来源</b>台账「保费」列求和<b>筛选条件</b>险种 包含「车险」<b>统计范围</b>签单日期 2026-07-01 ~ 07-18<b>计算公式</b>Σ 保费（仅车险保单）</span></span></div>
+        <div class="v">¥862,100</div>
+        <div class="sub">条件：险种 包含「车险」</div>
+      </div>
+    </div>
+
+    <!-- 目标完成 -->
+    <div class="grid2b">
+      <div class="card">
+        <h2><span class="bar"></span>目标完成<span class="mini">企业 / 条件目标</span></h2>
+        <div class="goal">
+          <div class="gt"><span class="n">月度总保费目标 <span class="qi">?<span class="qtip"><b>数据来源</b>当月（07-01 ~ 07-31）签单保单的「保费」求和<b>计算公式</b>完成率 = 实际保费 ¥1,286,430 ÷ 目标 ¥1,650,000<b>周期</b>当月滚动，每月 1 日自动重新起算</span></span></span><span class="p">78%</span></div>
+          <div class="gb"><i style="width:78%"></i></div>
+          <div class="gs">¥1,286,430 / ¥1,650,000 · 当月滚动</div>
+        </div>
+        <div class="goal">
+          <div class="gt"><span class="n">平安产险保费<span class="cond">保司 = 平安产险 · 当季度</span> <span class="qi">?<span class="qtip"><b>数据来源</b>本季度（07-01 ~ 09-30）签单、保司为「平安产险」的保单「保费」求和<b>计算公式</b>完成率 = ¥1,352,000 ÷ ¥1,300,000</span></span></span><span class="p ok">104%</span></div>
+          <div class="gb"><i class="ok" style="width:100%"></i></div>
+          <div class="gs">¥1,352,000 / ¥1,300,000 · 已达标 ✓</div>
+        </div>
+        <div class="goal">
+          <div class="gt"><span class="n">雇主险保费<span class="cond">险种 包含 雇主 · 今年</span></span><span class="p">61%</span></div>
+          <div class="gb"><i style="width:61%"></i></div>
+          <div class="gs">¥915,000 / ¥1,500,000</div>
+        </div>
+        <div class="goal">
+          <div class="gt"><span class="n">开门红冲刺<span class="cond">自定义 07-01 ~ 09-30</span></span><span class="p">42%</span></div>
+          <div class="gb"><i style="width:42%"></i></div>
+          <div class="gs">¥2,110,000 / ¥5,000,000 · 剩余 74 天</div>
+        </div>
+      </div>
+      <div class="card">
+        <h2><span class="bar"></span>保费与佣金趋势<span class="mini">近 6 个月</span> <span class="qi">?<span class="qtip"><b>数据来源</b>按「签单日期」逐月汇总台账「保费」「佣金」列<b>计算公式</b>每月：Σ 保费、Σ 佣金<b>统计范围</b>本企业已识别完成的保单</span></span></h2>
+        <canvas id="trend" height="230"></canvas>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2><span class="bar"></span>险种保费分布 <span class="qi">?<span class="qtip"><b>数据来源</b>按台账「险种」列分组，对「保费」求和<b>统计范围</b>签单日期 2026-07-01 ~ 07-18<b>计算公式</b>各险种：Σ 保费</span></span></h2>
+        <canvas id="hbar" height="230"></canvas>
+      </div>
+      <div class="card">
+        <h2><span class="bar"></span>保司保费占比<span class="mini">Top 5</span> <span class="qi">?<span class="qtip"><b>数据来源</b>按台账「保险公司」列分组，对「保费」求和取前 5<b>统计范围</b>签单日期 2026-07-01 ~ 07-18<b>计算公式</b>占比 = 该保司保费 ÷ 总保费</span></span></h2>
+        <canvas id="donut" height="230"></canvas>
+      </div>
+    </div>
+
+    <!-- 业务员排行 -->
+    <div class="card">
+      <h2><span class="bar"></span>业务员业绩排行<span class="mini">展示列可在「看板配置」中调整 · 目标列来自「目标管理-员工目标」</span></h2>
+      <div class="tbl-wrap">
+        <table class="rank">
+          <thead><tr>
+            <th>排名</th><th>业务员</th><th>保费</th><th>佣金</th><th>提成</th><th>保单量</th><th>月度目标</th><th>完成率</th><th>车险目标完成率</th>
+          </tr></thead>
+          <tbody>
+            <tr><td><span class="rk r1">1</span></td><td>王丽</td><td>¥368,200</td><td>¥55,230</td><td>¥27,615</td><td>86</td><td>¥300,000</td>
+              <td><span class="cellbar"><span class="cb"><i class="ok" style="width:100%"></i></span><em class="ok">123%</em></span></td>
+              <td><span class="cellbar"><span class="cb"><i class="ok" style="width:100%"></i></span><em class="ok">110%</em></span></td></tr>
+            <tr><td><span class="rk r2">2</span></td><td>陈国强</td><td>¥295,600</td><td>¥41,380</td><td>¥20,690</td><td>64</td><td>¥300,000</td>
+              <td><span class="cellbar"><span class="cb"><i style="width:98%"></i></span><em>98%</em></span></td>
+              <td><span class="cellbar"><span class="cb"><i style="width:84%"></i></span><em>84%</em></span></td></tr>
+            <tr><td><span class="rk r3">3</span></td><td>李梅</td><td>¥248,900</td><td>¥38,540</td><td>¥19,270</td><td>71</td><td>¥250,000（单独设置）</td>
+              <td><span class="cellbar"><span class="cb"><i style="width:99%"></i></span><em>99%</em></span></td>
+              <td><span class="cellbar"><span class="cb"><i style="width:72%"></i></span><em>72%</em></span></td></tr>
+            <tr><td><span class="rk">4</span></td><td>赵鹏</td><td>¥196,300</td><td>¥27,480</td><td>¥13,740</td><td>52</td><td>¥300,000</td>
+              <td><span class="cellbar"><span class="cb"><i style="width:65%"></i></span><em>65%</em></span></td>
+              <td><span class="cellbar"><span class="cb"><i style="width:58%"></i></span><em>58%</em></span></td></tr>
+            <tr><td><span class="rk">5</span></td><td>孙晓燕</td><td>¥177,430</td><td>¥24,890</td><td>¥12,445</td><td>53</td><td class="muted">未设置</td>
+              <td class="muted">—</td><td class="muted">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 视图二：看板配置 ═══════════ -->
+  <div class="view" id="v1">
+    <div class="src-note">
+      <span>当前配置来源：<b>系统默认模板</b>（由平台预设）。保存修改后将生成本企业专属配置，可随时恢复默认。</span>
+      <div class="spacer"></div>
+      <button class="btn ghost">恢复默认模板</button>
+      <button class="btn orange">保存配置</button>
+    </div>
+
+    <div class="card">
+      <h2><span class="bar"></span>指标卡配置<span class="mini">名称 + 统计方式 + 统计字段 + 筛选条件（可叠加多个）</span></h2>
+      <div class="cfg-row">
+        <input type="text" value="总保费">
+        <select><option>求和</option><option>计数</option><option>平均</option></select>
+        <select><option>保费</option><option>佣金</option><option>员工提成</option><option>不含税保费</option></select>
+        <span class="lb" style="font-size:12px;color:#9ca3af">筛选：</span><span class="addlink">+ 添加条件</span>
+        <span class="del">删除</span>
+      </div>
+      <div class="cfg-row">
+        <input type="text" value="车险保费">
+        <select><option>求和</option></select>
+        <select><option>保费</option></select>
+        <span class="fchip">险种 包含 “车险” <span class="x">✕</span></span>
+        <span class="addlink">+ 添加条件</span>
+        <span class="del">删除</span>
+      </div>
+      <div class="cfg-row">
+        <input type="text" value="员工提成">
+        <select><option>求和</option></select>
+        <select><option>员工提成（公式字段）</option></select>
+        <span class="addlink">+ 添加条件</span>
+        <span class="del">删除</span>
+      </div>
+      <div class="cfg-row">
+        <input type="text" value="保单量">
+        <select><option>计数</option></select>
+        <select disabled><option>—</option></select>
+        <span class="addlink">+ 添加条件</span>
+        <span class="del">删除</span>
+      </div>
+      <div class="cfg-row" style="border-bottom:none"><span class="addlink" onclick="openM('mCard')">＋ 新增指标卡</span></div>
+      <div class="hint">统计字段下拉来自台账现有列（含费率公式产出的计算字段，如「员工提成」）；筛选条件支持 包含 / 不包含 / 等于 / 不等于。</div>
+    </div>
+
+    <div class="card">
+      <h2><span class="bar"></span>图表配置</h2>
+      <div class="cfg-row">
+        <div class="switch on"><i></i></div><b style="font-size:13px">趋势图</b>
+        <span class="lb">指标：</span><span class="fchip">保费（求和）<span class="x">✕</span></span><span class="fchip">佣金（求和）<span class="x">✕</span></span>
+        <span class="lb">粒度：</span><select><option>按月</option><option>按周</option><option>按日</option></select>
+      </div>
+      <div class="cfg-row">
+        <div class="switch on"><i></i></div><b style="font-size:13px">占比图</b>
+        <span class="lb">分组维度：</span><select><option>保险公司</option><option>险种</option><option>业务员</option></select>
+        <span class="lb">指标：</span><select><option>保费（求和）</option><option>保单量（计数）</option></select>
+        <span class="lb">Top：</span><select><option>5</option><option>8</option><option>10</option></select>
+      </div>
+      <div class="cfg-row">
+        <div class="switch on"><i></i></div><b style="font-size:13px">分布图</b>
+        <span class="lb">分组维度：</span><select><option>险种</option><option>保险公司</option></select>
+        <span class="lb">指标：</span><select><option>保费（求和）</option></select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="bar"></span>业务员排行配置</h2>
+      <div class="cfg-row">
+        <span class="lb">分组维度：</span><select><option>业务员</option><option>转介绍人</option></select>
+        <span class="lb">排序依据：</span><select><option>保费</option><option>佣金</option><option>保单量</option></select>
+      </div>
+      <div class="cfg-row" style="border-bottom:none">
+        <span class="lb">展示列：</span>
+        <label style="font-size:13px"><input type="checkbox" checked> 保费</label>
+        <label style="font-size:13px"><input type="checkbox" checked> 佣金</label>
+        <label style="font-size:13px"><input type="checkbox" checked> 提成</label>
+        <label style="font-size:13px"><input type="checkbox" checked> 保单量</label>
+        <label style="font-size:13px"><input type="checkbox" checked> 月度保费目标·完成率</label>
+        <label style="font-size:13px"><input type="checkbox" checked> 车险保费目标·完成率</label>
+        <label style="font-size:13px"><input type="checkbox"> 件均保费</label>
+      </div>
+    </div>
+
+    <div class="hint">
+      <b>超管视角补充</b>：超级管理员在企业管理页可 ① 编辑「系统默认模板」（对所有未自定义的企业生效）；② 按企业开关看板功能；③ 切换任意企业查看其看板。
+    </div>
+  </div>
+
+  <!-- ═══════════ 视图三：目标管理 ═══════════ -->
+  <div class="view" id="v2">
+    <div class="card">
+      <h2 style="display:flex;align-items:center"><span class="bar"></span>企业 / 条件目标<span class="mini">周期为「当月/当季/今年」时自动滚动，无需每期重设</span><span class="spacer"></span><button class="btn orange" onclick="openM('mTarget')">＋ 新增目标</button></h2>
+      <div class="tbl-wrap">
+        <table class="cfg">
+          <thead><tr><th>目标名称</th><th>统计</th><th>筛选条件</th><th>周期</th><th>目标值</th><th>状态</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>月度总保费目标</td><td>保费 · 求和</td><td class="muted">无（全部保单）</td><td><span class="ptag m">当月</span></td><td>¥1,650,000</td><td>启用</td><td><span class="del">删除</span></td></tr>
+            <tr><td>平安产险保费</td><td>保费 · 求和</td><td><span class="fchip">保司 等于 平安产险</span></td><td><span class="ptag q">当季度</span></td><td>¥1,300,000</td><td>启用</td><td><span class="del">删除</span></td></tr>
+            <tr><td>雇主险保费</td><td>保费 · 求和</td><td><span class="fchip">险种 包含 雇主</span></td><td><span class="ptag y">今年</span></td><td>¥1,500,000</td><td>启用</td><td><span class="del">删除</span></td></tr>
+            <tr><td>开门红冲刺</td><td>保费 · 求和</td><td class="muted">无</td><td><span class="ptag c">07-01 ~ 09-30</span></td><td>¥5,000,000</td><td>启用</td><td><span class="del">删除</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="bar"></span>员工业绩目标<span class="mini">按「目标项」组织，每个目标项可带筛选条件，可同时存在多个目标项</span></h2>
+
+      <!-- 目标项切换 -->
+      <div class="cfg-row" style="border-bottom:none">
+        <span class="lb">目标项：</span>
+        <div class="seg">
+          <span class="on">月度保费目标</span>
+          <span>车险保费目标</span>
+        </div>
+        <span class="addlink" onclick="openM('mEmp')">＋ 新增员工目标项</span>
+      </div>
+
+      <!-- 当前目标项的口径与条件 -->
+      <div class="cfg-row" style="background:#faf9f7;border-radius:10px;padding:12px;border-bottom:none">
+        <span class="lb">名称：</span><input type="text" value="月度保费目标" style="width:130px">
+        <span class="lb">统计：</span><select><option>保费·求和</option><option>佣金·求和</option><option>保单量·计数</option></select>
+        <span class="lb">条件：</span><span class="addlink">+ 筛选条件</span>
+        <span class="lb">周期：</span><select><option>当月</option><option>当季度</option><option>今年</option><option>自定义区间</option></select>
+        <span class="del">删除此目标项</span>
+      </div>
+      <div class="hint" style="margin-top:6px;margin-bottom:10px">
+        示例：切换到「车险保费目标」时，条件区显示 <span class="fchip">险种 包含 “车险” <span class="x">✕</span></span> —— 员工目标同样支持按保司/险种等条件统计。
+      </div>
+
+      <!-- 当前目标项内：全员统一 + 单独设置 -->
+      <div class="cfg-row" style="border-bottom:none">
+        <span class="lb">设置方式：</span>
+        <div class="seg"><span class="on">全员统一</span><span>各自设置</span></div>
+        <span class="lb" style="margin-left:12px">统一目标值：</span>
+        <input type="number" value="300000" style="width:120px;border:1px solid #e5e7eb;border-radius:8px;padding:7px 10px;font-size:13px">
+        <button class="btn orange">应用到全部业务员</button>
+      </div>
+      <div class="tbl-wrap" style="margin-top:8px">
+        <table class="cfg">
+          <thead><tr><th>业务员</th><th>月度保费目标</th><th>来源</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>王丽</td><td>¥300,000</td><td class="muted">跟随统一值</td><td><span class="addlink">单独设置</span></td></tr>
+            <tr><td>陈国强</td><td>¥300,000</td><td class="muted">跟随统一值</td><td><span class="addlink">单独设置</span></td></tr>
+            <tr><td>李梅</td><td><input value="250000"></td><td><span class="ptag m">单独设置</span></td><td><span class="del">恢复统一</span></td></tr>
+            <tr><td>赵鹏</td><td>¥300,000</td><td class="muted">跟随统一值</td><td><span class="addlink">单独设置</span></td></tr>
+            <tr><td>孙晓燕</td><td class="muted">未设置（新人）</td><td class="muted">—</td><td><span class="addlink">单独设置</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="hint">
+        业务员名单自动来源于台账「业务员」字段去重值；同一目标项内，单独设置优先于统一值；排行表中展示哪些目标项的「目标 / 完成率」列，在「看板配置 → 业务员排行配置」中勾选。
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 视图四：技术方案 ═══════════ -->
+  <div class="view" id="v3">
+
+    <div class="card">
+      <h2><span class="bar"></span>总体设计</h2>
+      <div class="flowbox">
+        <span class="step">前端请求<br><code>/dashboard/data</code></span><span class="arr">→</span>
+        <span class="step">解析配置<br>enterprise → global 兜底</span><span class="arr">→</span>
+        <span class="step">查询台账记录<br>时间范围 + 本企业 + 已完成</span><span class="arr">→</span>
+        <span class="step">应用字段配置<br>费率公式 / 手动值（复用现有引擎）</span><span class="arr">→</span>
+        <span class="step">内存聚合<br>cards / charts / ranking / targets</span><span class="arr">→</span>
+        <span class="step">返回结果<br>含 explain 说明文案</span>
+      </div>
+      <div class="hint" style="margin-top:14px">
+        · 选择<b>后端内存聚合</b>而非 SQL 聚合：台账字段存于 <code>display_fields</code> JSON 列，且提成等公式字段在应用层计算，SQL 无法下推；单企业数据量（数千条/年）内存聚合为毫秒级<br>
+        · 权限：仅 <code>enterprise</code>（本企业）与 <code>super_admin</code>（可带 enterprise_id 切换企业）；<code>employee</code> 返回 403，前端不显示入口<br>
+        · 前端：不新建页面，在 <code>insurance.html</code> 顶部页面级 Tab 新增「销售看板」，内部二级 Tab：看板 / 看板配置 / 目标管理
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="bar"></span>数据库表（首次启动自动建表）</h2>
+      <table class="doc" style="margin-bottom:14px">
+        <thead><tr><th style="width:180px">表</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td><code>dashboard_config</code></td><td>看板配置。<code>scope=global</code> 为超管维护的系统默认模板；<code>scope=enterprise</code> 为企业自定义（微调后生成，可删除恢复默认）。唯一键 <code>(scope, scope_id)</code></td></tr>
+          <tr><td><code>dashboard_targets</code></td><td>业绩目标。企业整体 / 条件目标 / 员工目标共用一张表，按 <code>target_type</code> 区分。唯一键 <code>(enterprise_id, target_type, name, employee_name)</code></td></tr>
+        </tbody>
+      </table>
+<pre class="code"><span class="c">-- 看板配置</span>
+<span class="k">CREATE TABLE</span> dashboard_config (
+    id INT AUTO_INCREMENT <span class="k">PRIMARY KEY</span>,
+    scope VARCHAR(16) <span class="k">NOT NULL</span>,          <span class="c">-- global=系统默认模板 / enterprise=企业自定义</span>
+    scope_id INT DEFAULT NULL,           <span class="c">-- enterprise 时为企业ID</span>
+    config_json LONGTEXT,                <span class="c">-- 看板配置JSON（cards/charts/ranking，结构见下）</span>
+    enabled TINYINT DEFAULT 1,           <span class="c">-- 超管可按企业开关看板</span>
+    updated_by INT DEFAULT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP <span class="k">ON UPDATE</span> CURRENT_TIMESTAMP,
+    <span class="k">UNIQUE KEY</span> uk_scope (scope, scope_id)
+);
+
+<span class="c">-- 业绩目标（企业/条件/员工目标共用）</span>
+<span class="k">CREATE TABLE</span> dashboard_targets (
+    id INT AUTO_INCREMENT <span class="k">PRIMARY KEY</span>,
+    enterprise_id INT <span class="k">NOT NULL</span>,
+    target_type VARCHAR(16) <span class="k">NOT NULL</span>,    <span class="c">-- enterprise=企业整体 / condition=条件目标 / employee=员工目标</span>
+    name VARCHAR(64) <span class="k">NOT NULL</span>,           <span class="c">-- 目标名称；员工目标中同名记录=同一目标项</span>
+    metric_agg VARCHAR(8) DEFAULT <span class="s">'sum'</span>, <span class="c">-- sum/count</span>
+    metric_field VARCHAR(64) DEFAULT <span class="s">'保费'</span>,
+    filters_json TEXT,                   <span class="c">-- 筛选条件（条件目标/员工目标均可带）</span>
+    employee_name VARCHAR(64) DEFAULT NULL, <span class="c">-- 员工目标：NULL=全员统一值，有值=按人覆盖</span>
+    period_type VARCHAR(16) <span class="k">NOT NULL</span>,    <span class="c">-- month/quarter/year=滚动周期 / custom=固定区间</span>
+    period_start DATE DEFAULT NULL, period_end DATE DEFAULT NULL,
+    target_value DECIMAL(14,2) <span class="k">NOT NULL</span>,
+    enabled TINYINT DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP <span class="k">ON UPDATE</span> CURRENT_TIMESTAMP,
+    <span class="k">KEY</span> idx_ent (enterprise_id, target_type),
+    <span class="k">UNIQUE KEY</span> uk_target (enterprise_id, target_type, name, employee_name)
+);</pre>
+    </div>
+
+    <div class="card">
+      <h2><span class="bar"></span>config_json 结构（看板配置）</h2>
+<pre class="code">{
+  <span class="s">"time_field"</span>: <span class="s">"签单日期"</span>,                    <span class="c">// 时间筛选依据，无值时回退创建时间</span>
+  <span class="s">"cards"</span>: [                                    <span class="c">// 指标卡：聚合+字段+筛选条件</span>
+    {<span class="s">"id"</span>:<span class="s">"c1"</span>, <span class="s">"title"</span>:<span class="s">"总保费"</span>,   <span class="s">"agg"</span>:<span class="s">"sum"</span>,   <span class="s">"field"</span>:<span class="s">"保费"</span>},
+    {<span class="s">"id"</span>:<span class="s">"c3"</span>, <span class="s">"title"</span>:<span class="s">"员工提成"</span>, <span class="s">"agg"</span>:<span class="s">"sum"</span>,   <span class="s">"field"</span>:<span class="s">"员工提成"</span>},  <span class="c">// 公式字段直接取值</span>
+    {<span class="s">"id"</span>:<span class="s">"c4"</span>, <span class="s">"title"</span>:<span class="s">"保单量"</span>,   <span class="s">"agg"</span>:<span class="s">"count"</span>},
+    {<span class="s">"id"</span>:<span class="s">"c5"</span>, <span class="s">"title"</span>:<span class="s">"车险保费"</span>, <span class="s">"agg"</span>:<span class="s">"sum"</span>,   <span class="s">"field"</span>:<span class="s">"保费"</span>,
+     <span class="s">"filters"</span>: [{<span class="s">"field"</span>:<span class="s">"险种"</span>, <span class="s">"op"</span>:<span class="s">"contains"</span>, <span class="s">"value"</span>:<span class="s">"车险"</span>}]}   <span class="c">// op: contains/not_contains/eq/ne</span>
+  ],
+  <span class="s">"charts"</span>: [
+    {<span class="s">"type"</span>:<span class="s">"trend"</span>, <span class="s">"title"</span>:<span class="s">"保费与佣金趋势"</span>, <span class="s">"granularity"</span>:<span class="s">"month"</span>,   <span class="c">// month/week/day</span>
+     <span class="s">"metrics"</span>: [{<span class="s">"label"</span>:<span class="s">"保费"</span>,<span class="s">"agg"</span>:<span class="s">"sum"</span>,<span class="s">"field"</span>:<span class="s">"保费"</span>}, {<span class="s">"label"</span>:<span class="s">"佣金"</span>,<span class="s">"agg"</span>:<span class="s">"sum"</span>,<span class="s">"field"</span>:<span class="s">"佣金"</span>}]},
+    {<span class="s">"type"</span>:<span class="s">"donut"</span>, <span class="s">"title"</span>:<span class="s">"保司保费占比"</span>, <span class="s">"dimension"</span>:<span class="s">"保险公司"</span>,
+     <span class="s">"metric"</span>: {<span class="s">"agg"</span>:<span class="s">"sum"</span>,<span class="s">"field"</span>:<span class="s">"保费"</span>}, <span class="s">"top"</span>: 5},
+    {<span class="s">"type"</span>:<span class="s">"bar"</span>,   <span class="s">"title"</span>:<span class="s">"险种保费分布"</span>, <span class="s">"dimension"</span>:<span class="s">"险种"</span>,
+     <span class="s">"metric"</span>: {<span class="s">"agg"</span>:<span class="s">"sum"</span>,<span class="s">"field"</span>:<span class="s">"保费"</span>}}
+  ],
+  <span class="s">"ranking"</span>: {
+    <span class="s">"title"</span>:<span class="s">"业务员业绩排行"</span>, <span class="s">"dimension"</span>:<span class="s">"业务员"</span>, <span class="s">"sort_by"</span>:<span class="s">"保费"</span>,
+    <span class="s">"columns"</span>: [
+      {<span class="s">"title"</span>:<span class="s">"保费"</span>,<span class="s">"agg"</span>:<span class="s">"sum"</span>,<span class="s">"field"</span>:<span class="s">"保费"</span>}, {<span class="s">"title"</span>:<span class="s">"佣金"</span>,<span class="s">"agg"</span>:<span class="s">"sum"</span>,<span class="s">"field"</span>:<span class="s">"佣金"</span>},
+      {<span class="s">"title"</span>:<span class="s">"提成"</span>,<span class="s">"agg"</span>:<span class="s">"sum"</span>,<span class="s">"field"</span>:<span class="s">"员工提成"</span>}, {<span class="s">"title"</span>:<span class="s">"保单量"</span>,<span class="s">"agg"</span>:<span class="s">"count"</span>}
+    ],
+    <span class="s">"target_columns"</span>: [<span class="s">"月度保费目标"</span>, <span class="s">"车险保费目标"</span>]   <span class="c">// 排行表展示哪些员工目标项的完成率</span>
+  }
+}</pre>
+    </div>
+
+    <div class="card">
+      <h2><span class="bar"></span>API 设计（挂 insurance Blueprint，复用现有 JWT 鉴权）</h2>
+      <table class="doc">
+        <thead><tr><th style="width:300px">接口</th><th style="width:90px">方法</th><th style="width:170px">权限</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>/api/insurance/dashboard/data</code></td><td>GET</td><td>enterprise / super_admin</td><td>返回聚合结果。参数 <code>date_start</code> <code>date_end</code>；超管可带 <code>enterprise_id</code>。每个指标/目标/排行列附 <code>explain</code>（统计字段、聚合、条件、范围、公式来源），供前端「?」悬停展示</td></tr>
+          <tr><td><code>/api/insurance/dashboard/config</code></td><td>GET / PUT</td><td>enterprise（本企业）<br>super_admin（任意企业+global）</td><td>读取/保存看板配置。GET 返回 <code>{config, source: "enterprise"|"global"}</code>；企业 PUT 写 enterprise scope；<code>reset=1</code> 删除企业自定义恢复默认模板；超管可维护 global 模板与按企业 <code>enabled</code> 开关</td></tr>
+          <tr><td><code>/api/insurance/dashboard/targets</code></td><td>GET / POST / PUT / DELETE</td><td>enterprise / super_admin</td><td>目标增删改查。员工目标「全员统一」写 <code>employee_name=NULL</code> 记录，「单独设置」按人写记录（同目标项内个人值优先）</td></tr>
+          <tr><td><code>/api/insurance/dashboard/fields</code></td><td>GET</td><td>同上</td><td>可选统计字段（数字类）与维度字段列表，来源于现有字段配置（含公式字段）</td></tr>
+          <tr><td><code>/api/insurance/dashboard/salesmen</code></td><td>GET</td><td>同上</td><td>本企业台账「业务员」字段去重名单（员工目标设置下拉用）</td></tr>
+        </tbody>
+      </table>
+      <div class="hint" style="margin-top:12px">
+        <b>聚合与完成率规则</b><br>
+        · 统计范围：本企业 <code>status='done'</code> 且未删除的记录；时间按配置的 <code>time_field</code>（默认签单日期）过滤，金额文本复用现有数字清洗逻辑<br>
+        · 滚动周期：month/quarter/year 目标始终按「当前自然月/季/年」计算实际值，自动跨期重新起算；custom 为固定区间一次性目标<br>
+        · 完成率 = 周期内按目标条件聚合的实际值 ÷ 目标值；员工目标按「业务员」字段匹配到人
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="bar"></span>代码变更与部署</h2>
+      <table class="doc">
+        <thead><tr><th style="width:260px">文件</th><th>变更</th></tr></thead>
+        <tbody>
+          <tr><td><code>insurance/dashboard_db.py</code>（新增）</td><td>建表、配置读写（enterprise → global 解析）、目标 CRUD、聚合计算与 explain 文案生成</td></tr>
+          <tr><td><code>insurance/api.py</code></td><td>新增上述 5 组接口，复用现有鉴权装饰器与企业隔离逻辑</td></tr>
+          <tr><td><code>web/templates/insurance.html</code></td><td>顶部页面级 Tab 新增「销售看板」（employee 不显示）；新增二级 Tab 看板/看板配置/目标管理；新增/编辑操作用弹窗（内置操作说明）；数据「?」悬停展示 explain</td></tr>
+        </tbody>
+      </table>
+      <div class="hint" style="margin-top:12px">
+        <b>部署</b>：后端传 <code>/home/wxbot/insurance/</code>（gunicorn --reload 自动生效）；前端 insurance.html 去 raw 标记后传 <code>/home/wxbot/web/static/insurance.html</code>（线上为 nginx 静态文件）。首次请求自动建两张表，无数据迁移；未配置企业自动使用系统默认模板。
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 弹窗：新增指标卡 ═══════════ -->
+<div class="mask" id="mCard" onclick="if(event.target===this)closeM('mCard')">
+  <div class="modal">
+    <div class="mh"><h3>新增指标卡</h3><span class="mx" onclick="closeM('mCard')">✕</span></div>
+    <div class="mb">
+      <div class="mguide">
+        <b>💡 操作说明</b>
+        · 指标卡显示在看板顶部，用于展示一个汇总数字；<br>
+        · <b style="display:inline">统计字段</b>来自台账现有列（含费率公式产出的计算字段，如「员工提成」）；统计方式选「计数」时无需选字段；<br>
+        · <b style="display:inline">筛选条件</b>可叠加多个，只统计满足条件的保单。示例：字段选「保费」+ 条件「险种 包含 车险」= 车险保费合计；<br>
+        · 不加条件则统计时间范围内的全部保单。
+      </div>
+      <div class="frow"><span class="fl">名称</span><input type="text" placeholder="如：车险保费" style="width:200px"></div>
+      <div class="frow"><span class="fl">统计方式</span>
+        <select><option>求和</option><option>计数</option><option>平均</option></select>
+        <span class="fl" style="width:auto">字段</span>
+        <select><option>保费</option><option>佣金</option><option>员工提成</option><option>不含税保费</option></select>
+      </div>
+      <div class="frow"><span class="fl">筛选条件</span>
+        <select><option>险种</option><option>保险公司</option><option>业务员</option></select>
+        <select><option>包含</option><option>不包含</option><option>等于</option><option>不等于</option></select>
+        <input type="text" placeholder="值，如：车险" style="width:110px">
+        <span class="addlink">＋ 再加一条</span>
+      </div>
+    </div>
+    <div class="mf"><button class="btn ghost" onclick="closeM('mCard')">取消</button><button class="btn orange" onclick="closeM('mCard')">保存</button></div>
+  </div>
+</div>
+
+<!-- ═══════════ 弹窗：新增企业/条件目标 ═══════════ -->
+<div class="mask" id="mTarget" onclick="if(event.target===this)closeM('mTarget')">
+  <div class="modal">
+    <div class="mh"><h3>新增目标</h3><span class="mx" onclick="closeM('mTarget')">✕</span></div>
+    <div class="mb">
+      <div class="mguide">
+        <b>💡 操作说明</b>
+        · 目标会显示在看板「目标完成」区，自动计算完成率 =周期内实际值 ÷ 目标值；<br>
+        · <b style="display:inline">筛选条件</b>可叠加多个（如 保司=平安产险 且 险种包含车险）；不加条件即统计全部保单；<br>
+        · 周期选「当月 / 当季度 / 今年」为<b style="display:inline">滚动周期</b>：每到新的自然月/季/年自动重新起算，无需每期重设；<br>
+        · 周期选「自定义区间」为一次性目标（如开门红活动），到期后停止计算；<br>
+        · 目标值单位：元（保单量目标为「单」）。
+      </div>
+      <div class="frow"><span class="fl">目标名称</span><input type="text" placeholder="如：平安产险季度保费目标" style="width:230px"></div>
+      <div class="frow"><span class="fl">统计口径</span>
+        <select><option>保费 · 求和</option><option>佣金 · 求和</option><option>保单量 · 计数</option></select>
+      </div>
+      <div class="frow"><span class="fl">筛选条件</span>
+        <select><option>保险公司</option><option>险种</option><option>业务员</option></select>
+        <select><option>等于</option><option>包含</option><option>不包含</option><option>不等于</option></select>
+        <input type="text" placeholder="值，如：平安产险" style="width:120px">
+        <span class="addlink">＋ 再加一条</span>
+      </div>
+      <div class="frow"><span class="fl">周期</span>
+        <select id="mtPeriod" onchange="document.getElementById('mtCustom').style.display = this.value==='自定义区间' ? 'flex' : 'none'">
+          <option>当月</option><option>当季度</option><option>今年</option><option>自定义区间</option>
+        </select>
+      </div>
+      <div class="frow" id="mtCustom" style="display:none"><span class="fl">起止日期</span>
+        <input type="date" value="2026-07-01"><span style="color:#9ca3af">~</span><input type="date" value="2026-09-30">
+      </div>
+      <div class="frow"><span class="fl">目标值</span><input type="number" placeholder="如：1300000" style="width:150px"><span style="font-size:12px;color:#9ca3af">元</span></div>
+    </div>
+    <div class="mf"><button class="btn ghost" onclick="closeM('mTarget')">取消</button><button class="btn orange" onclick="closeM('mTarget')">保存</button></div>
+  </div>
+</div>
+
+<!-- ═══════════ 弹窗：新增员工目标项 ═══════════ -->
+<div class="mask" id="mEmp" onclick="if(event.target===this)closeM('mEmp')">
+  <div class="modal">
+    <div class="mh"><h3>新增员工目标项</h3><span class="mx" onclick="closeM('mEmp')">✕</span></div>
+    <div class="mb">
+      <div class="mguide">
+        <b>💡 操作说明</b>
+        · 员工目标项 = 一类考核口径（统计字段 + 筛选条件 + 周期），如「车险保费目标」；<br>
+        · 创建后可先填<b style="display:inline">全员统一值</b>一键应用到所有业务员，再对个别业务员<b style="display:inline">单独设置</b>（单独值优先于统一值）；<br>
+        · 业务员名单自动取自台账「业务员」字段，无需手动维护；<br>
+        · 每个目标项可在「看板配置 → 业务员排行配置」中勾选，作为排行表的「目标 / 完成率」列展示。
+      </div>
+      <div class="frow"><span class="fl">目标项名称</span><input type="text" placeholder="如：车险保费目标" style="width:200px"></div>
+      <div class="frow"><span class="fl">统计口径</span>
+        <select><option>保费 · 求和</option><option>佣金 · 求和</option><option>保单量 · 计数</option></select>
+      </div>
+      <div class="frow"><span class="fl">筛选条件</span>
+        <select><option>险种</option><option>保险公司</option></select>
+        <select><option>包含</option><option>等于</option><option>不包含</option></select>
+        <input type="text" placeholder="值，如：车险" style="width:110px">
+        <span class="addlink">＋ 再加一条</span>
+      </div>
+      <div class="frow"><span class="fl">周期</span>
+        <select><option>当月</option><option>当季度</option><option>今年</option><option>自定义区间</option></select>
+      </div>
+      <div class="frow"><span class="fl">全员统一值</span><input type="number" placeholder="如：100000" style="width:150px"><span style="font-size:12px;color:#9ca3af">元 · 保存后可再按人单独调整</span></div>
+    </div>
+    <div class="mf"><button class="btn ghost" onclick="closeM('mEmp')">取消</button><button class="btn orange" onclick="closeM('mEmp')">保存</button></div>
+  </div>
+</div>
+
+<script>
+// ===== 弹窗开关 =====
+function openM(id) { document.getElementById(id).classList.add('on'); }
+function closeM(id) { document.getElementById(id).classList.remove('on'); }
+
+// ===== 视图切换 =====
+function sw(i, btn) {
+  document.querySelectorAll('.view').forEach((v, k) => v.classList.toggle('on', k === i));
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+}
+
+// ===== 高清 canvas 工具 =====
+function setup(id) {
+  const c = document.getElementById(id), dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = parseInt(c.getAttribute('height'));
+  c.style.height = h + 'px'; c.width = w * dpr; c.height = h * dpr;
+  const x = c.getContext('2d'); x.scale(dpr, dpr);
+  return { x, w, h };
+}
+
+// ===== 趋势图（保费/佣金 双线） =====
+(function () {
+  const { x, w, h } = setup('trend');
+  const months = ['2月', '3月', '4月', '5月', '6月', '7月'];
+  const prem = [98, 112, 105, 128, 141, 128.6];   // 万元
+  const comm = [14.2, 16.8, 15.1, 18.9, 20.6, 18.75];
+  const L = 42, R = 12, T = 14, B = 28, pw = w - L - R, ph = h - T - B, max = 160;
+  x.strokeStyle = '#f0efec'; x.fillStyle = '#9ca3af'; x.font = '11px sans-serif'; x.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const y = T + ph - ph * i / 4;
+    x.beginPath(); x.moveTo(L, y); x.lineTo(w - R, y); x.stroke();
+    x.fillText((max * i / 4) + '万', L - 6, y + 4);
+  }
+  x.textAlign = 'center';
+  months.forEach((m, i) => x.fillText(m, L + pw * (i + 0.5) / 6, h - 10));
+  function line(data, color, fill) {
+    x.beginPath();
+    data.forEach((v, i) => { const px = L + pw * (i + 0.5) / 6, py = T + ph - ph * v / max; i ? x.lineTo(px, py) : x.moveTo(px, py); });
+    x.strokeStyle = color; x.lineWidth = 2.5; x.lineJoin = 'round'; x.stroke();
+    if (fill) { x.lineTo(L + pw * 5.5 / 6, T + ph); x.lineTo(L + pw * 0.5 / 6, T + ph); x.closePath(); x.fillStyle = fill; x.fill(); }
+    data.forEach((v, i) => { const px = L + pw * (i + 0.5) / 6, py = T + ph - ph * v / max;
+      x.beginPath(); x.arc(px, py, 3.5, 0, 7); x.fillStyle = '#fff'; x.fill(); x.strokeStyle = color; x.lineWidth = 2; x.stroke();
+      // 数据标签：显示在点上方
+      x.fillStyle = color; x.font = 'bold 11px sans-serif'; x.textAlign = 'center';
+      x.fillText(v + '万', px, py - 9); });
+  }
+  line(prem, '#ea580c', 'rgba(234,88,12,0.07)');
+  line(comm, '#2563eb');
+  x.font = '12px sans-serif'; x.textAlign = 'left';
+  x.fillStyle = '#ea580c'; x.fillRect(L + 4, 2, 14, 3); x.fillStyle = '#6b7280'; x.fillText('保费', L + 22, 8);
+  x.fillStyle = '#2563eb'; x.fillRect(L + 64, 2, 14, 3); x.fillStyle = '#6b7280'; x.fillText('佣金', L + 82, 8);
+})();
+
+// ===== 险种分布（横向条形） =====
+(function () {
+  const { x, w, h } = setup('hbar');
+  const data = [['车险', 86.2], ['雇主责任险', 21.5], ['团体意外险', 9.8], ['财产险', 6.4], ['其他', 4.7]];
+  const L = 86, R = 60, rowH = h / data.length, max = 90;
+  data.forEach(([name, v], i) => {
+    const y = rowH * i + rowH / 2;
+    x.fillStyle = '#6b7280'; x.font = '12px sans-serif'; x.textAlign = 'right'; x.fillText(name, L - 10, y + 4);
+    x.fillStyle = '#fff1e6'; rr(x, L, y - 8, w - L - R, 16, 8); x.fill();
+    const g = x.createLinearGradient(L, 0, L + (w - L - R) * v / max, 0);
+    g.addColorStop(0, '#fb923c'); g.addColorStop(1, '#ea580c');
+    x.fillStyle = g; rr(x, L, y - 8, Math.max(16, (w - L - R) * v / max), 16, 8); x.fill();
+    x.fillStyle = '#1c1410'; x.textAlign = 'left'; x.font = 'bold 12px sans-serif';
+    x.fillText(v + '万', L + Math.max(16, (w - L - R) * v / max) + 8, y + 4);
+  });
+  function rr(x, a, b, ww, hh, r) { x.beginPath(); x.roundRect(a, b, ww, hh, r); }
+})();
+
+// ===== 保司占比（环形） =====
+(function () {
+  const { x, w, h } = setup('donut');
+  const data = [['平安产险', 38, '#ea580c'], ['人保财险', 24, '#fb923c'], ['太平洋产险', 16, '#fdba74'], ['国寿财险', 12, '#2563eb'], ['其他', 10, '#d1d5db']];
+  const cx = w * 0.32, cy = h / 2, r1 = 78, r2 = 48;
+  let a = -Math.PI / 2;
+  data.forEach(([n, v, c]) => {
+    const a2 = a + Math.PI * 2 * v / 100;
+    x.beginPath(); x.arc(cx, cy, r1, a, a2); x.arc(cx, cy, r2, a2, a, true); x.closePath();
+    x.fillStyle = c; x.fill(); a = a2;
+  });
+  x.fillStyle = '#1c1410'; x.font = 'bold 18px sans-serif'; x.textAlign = 'center';
+  x.fillText('¥128.6万', cx, cy + 2);
+  x.font = '11px sans-serif'; x.fillStyle = '#9ca3af'; x.fillText('本月保费', cx, cy + 20);
+  let ly = cy - data.length * 13 + 8;
+  data.forEach(([n, v, c]) => {
+    x.fillStyle = c; x.fillRect(w * 0.60, ly - 8, 12, 12);
+    x.fillStyle = '#6b7280'; x.font = '12px sans-serif'; x.textAlign = 'left';
+    x.fillText(n + '  ' + v + '%', w * 0.60 + 18, ly + 2);
+    ly += 26;
+  });
+})();
+</script>
+</body>
+</html>

@@ -7121,3 +7121,198 @@ def get_ai_check_stats_api():
     for row in data.get("list", []) + [data.get("total", {})]:
         row["est_cost"] = round(estimate_cost(row.get("prompt_tokens", 0), row.get("completion_tokens", 0)), 2)
     return jsonify({"code": 0, "data": data})
+
+
+# ============================================================
+# 销售看板（本期仅内部超级管理员可用；后续放开企业管理员时
+# 调整 _sales_dash_guard 的权限判断即可）
+# ============================================================
+
+def _sales_dash_guard():
+    """
+    销售看板系列接口统一权限校验 + 企业解析。
+    返回 (enterprise_id, err_response)：校验失败时 enterprise_id 为 None。
+    本期仅 super_admin 可访问，必须显式指定 enterprise_id。
+    """
+    if g.current_user.get("role") != ROLE_SUPER_ADMIN:
+        return None, (jsonify({"code": 403, "msg": "无权限"}), 403)
+    eid = request.args.get("enterprise_id") or (request.get_json(silent=True) or {}).get("enterprise_id")
+    try:
+        eid = int(eid)
+    except (TypeError, ValueError):
+        return None, (jsonify({"code": 400, "msg": "缺少 enterprise_id 参数"}), 400)
+    return eid, None
+
+
+def _sales_dash_user_config(enterprise_id: int) -> dict:
+    """
+    解析看板聚合应使用的字段配置（简称/费率公式/固定值）：
+    按被查看企业自己的管理员账号解析（与导出/列表的同类修复一致），
+    否则公式字段（如员工提成）会错用超管账号的配置。
+    """
+    from auth.db import get_enterprise_admin_user
+    user_config = {}
+    try:
+        ent_admin = get_enterprise_admin_user(_db, enterprise_id)
+        if ent_admin:
+            user_config = get_effective_config(
+                _db, ent_admin["id"], ent_admin["role"], ent_admin["parent_id"]) or {}
+            fixed_vals = get_user_fixed_values(_db, ent_admin["id"])
+            if fixed_vals:
+                user_config = dict(user_config)
+                user_config["fixed_values"] = fixed_vals
+    except Exception:
+        logger.warning("销售看板解析企业字段配置失败 ent=%s", enterprise_id, exc_info=True)
+    return user_config
+
+
+@insurance_bp.route("/api/insurance/sales-dashboard/data", methods=["GET"])
+def sales_dashboard_data():
+    """看板聚合数据：指标卡/图表/目标完成/业务员排行，每项附 explain 说明文案"""
+    eid, err = _sales_dash_guard()
+    if err:
+        return err
+    from datetime import date as _date, timedelta as _td
+    date_start = (request.args.get("date_start") or "").strip()
+    date_end = (request.args.get("date_end") or "").strip()
+    # 默认时间范围：本月 1 日 ~ 今天
+    today = _date.today()
+    if not date_start:
+        date_start = today.replace(day=1).strftime("%Y-%m-%d")
+    if not date_end:
+        date_end = today.strftime("%Y-%m-%d")
+    try:
+        from insurance import dashboard_db
+        from insurance.field_config_db import apply_user_config_to_fields as _apply_fn
+        user_config = _sales_dash_user_config(eid)
+        data = dashboard_db.get_dashboard_data(
+            _db, eid, date_start, date_end,
+            user_config=user_config, apply_config_fn=_apply_fn)
+        return jsonify({"code": 0, "data": data})
+    except Exception as e:
+        logger.error("销售看板聚合失败 ent=%s: %s", eid, e, exc_info=True)
+        return jsonify({"code": 500, "msg": "看板数据加载失败"}), 500
+
+
+@insurance_bp.route("/api/insurance/sales-dashboard/config", methods=["GET", "PUT"])
+def sales_dashboard_config():
+    """看板配置读取/保存。GET 返回 {config, source, enabled}；
+    PUT body：{config} 保存企业配置；{scope:"global", config} 保存系统默认模板；
+    {reset:1} 删除企业自定义恢复默认；{enabled:0/1} 按企业开关看板"""
+    eid, err = _sales_dash_guard()
+    if err:
+        return err
+    from insurance import dashboard_db
+    if request.method == "GET":
+        return jsonify({"code": 0, "data": dashboard_db.get_dashboard_config(_db, eid)})
+    body = request.get_json(force=True) or {}
+    try:
+        if body.get("reset"):
+            dashboard_db.reset_dashboard_config(_db, eid)
+            return jsonify({"code": 0, "msg": "已恢复默认模板"})
+        if "enabled" in body and "config" not in body:
+            dashboard_db.set_dashboard_enabled(
+                _db, eid, bool(body["enabled"]), g.current_user["user_id"])
+            return jsonify({"code": 0, "msg": "已更新看板开关"})
+        config = body.get("config")
+        if not isinstance(config, dict) or not config:
+            return jsonify({"code": 400, "msg": "config 不能为空"}), 400
+        scope = "global" if body.get("scope") == "global" else "enterprise"
+        dashboard_db.save_dashboard_config(
+            _db, scope, eid, config, g.current_user["user_id"])
+        return jsonify({"code": 0, "msg": "配置已保存"})
+    except Exception as e:
+        logger.error("销售看板配置保存失败 ent=%s: %s", eid, e, exc_info=True)
+        return jsonify({"code": 500, "msg": "配置保存失败"}), 500
+
+
+@insurance_bp.route("/api/insurance/sales-dashboard/targets", methods=["GET", "POST", "DELETE"])
+def sales_dashboard_targets():
+    """目标管理。GET 列表；POST body：{target} 单条 upsert，或
+    {employee_batch: {name, metric_agg, metric_field, filters, period_type, ..., unified_value, persons: {员工:值}}}
+    员工目标项批量保存；DELETE 参数：id 或 name+target_type"""
+    eid, err = _sales_dash_guard()
+    if err:
+        return err
+    from insurance import dashboard_db
+    if request.method == "GET":
+        return jsonify({"code": 0, "data": dashboard_db.list_targets(_db, eid)})
+    if request.method == "DELETE":
+        tid = request.args.get("id", type=int)
+        name = request.args.get("name", "")
+        ttype = request.args.get("target_type", "")
+        try:
+            n = dashboard_db.delete_target(_db, eid, target_id=tid,
+                                           name=name or None, target_type=ttype or None)
+            return jsonify({"code": 0, "msg": f"已删除 {n} 条"})
+        except ValueError as ve:
+            return jsonify({"code": 400, "msg": str(ve)}), 400
+    body = request.get_json(force=True) or {}
+    try:
+        batch = body.get("employee_batch")
+        if batch:
+            # 员工目标项批量保存：统一值 + 按人单独值（单独值优先在聚合层处理）
+            base = {
+                "target_type": "employee",
+                "name": batch.get("name"),
+                "metric_agg": batch.get("metric_agg") or "sum",
+                "metric_field": batch.get("metric_field") or "保费",
+                "filters": batch.get("filters") or [],
+                "period_type": batch.get("period_type") or "month",
+                "period_start": batch.get("period_start"),
+                "period_end": batch.get("period_end"),
+                "enabled": batch.get("enabled", True),
+            }
+            if batch.get("unified_value") is not None:
+                dashboard_db.save_target(_db, eid, {
+                    **base, "employee_name": "", "target_value": batch["unified_value"]})
+            for person, val in (batch.get("persons") or {}).items():
+                if val is None:
+                    # 传 null 表示删除该人的单独设置，恢复跟随统一值
+                    dashboard_db.delete_target_person(_db, eid, base["name"], person)
+                else:
+                    dashboard_db.save_target(_db, eid, {
+                        **base, "employee_name": person, "target_value": val})
+            return jsonify({"code": 0, "msg": "员工目标已保存"})
+        target = body.get("target")
+        if not isinstance(target, dict):
+            return jsonify({"code": 400, "msg": "target 不能为空"}), 400
+        dashboard_db.save_target(_db, eid, target)
+        return jsonify({"code": 0, "msg": "目标已保存"})
+    except ValueError as ve:
+        return jsonify({"code": 400, "msg": str(ve)}), 400
+    except Exception as e:
+        logger.error("销售看板目标保存失败 ent=%s: %s", eid, e, exc_info=True)
+        return jsonify({"code": 500, "msg": "目标保存失败"}), 500
+
+
+@insurance_bp.route("/api/insurance/sales-dashboard/fields", methods=["GET"])
+def sales_dashboard_fields():
+    """可选统计字段列表：台账导出列 + 该企业费率公式产出的计算字段"""
+    eid, err = _sales_dash_guard()
+    if err:
+        return err
+    from insurance.field_mapping import OUTPUT_COLUMNS
+    user_config = _sales_dash_user_config(eid)
+    formula_fields = [item.get("key") for item in (user_config.get("fee_formula") or [])
+                      if item.get("key")]
+    all_fields = list(OUTPUT_COLUMNS)
+    for f in formula_fields:
+        if f not in all_fields:
+            all_fields.append(f)
+    return jsonify({"code": 0, "data": {
+        "fields": all_fields,
+        "formula_fields": formula_fields,
+        # 建议的分组维度（前端下拉优先展示）
+        "dimensions": ["保险公司", "险种", "业务员", "跟单人", "转介绍人"],
+    }})
+
+
+@insurance_bp.route("/api/insurance/sales-dashboard/salesmen", methods=["GET"])
+def sales_dashboard_salesmen():
+    """企业台账「业务员」去重名单（员工目标设置下拉用）"""
+    eid, err = _sales_dash_guard()
+    if err:
+        return err
+    from insurance import dashboard_db
+    return jsonify({"code": 0, "data": dashboard_db.get_salesmen(_db, eid)})

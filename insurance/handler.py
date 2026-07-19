@@ -606,6 +606,12 @@ class InsuranceHandler:
                 })
                 # 真识别失败：向监控群发送提示并 @ 发送人
                 self._notify_fail_to_group(roomid, room_name, sender, sender_name, filename)
+                # 识别失败的记录也可能命中AI质检范围（状态条件含「识别失败」）
+                try:
+                    from insurance.ai_checker import maybe_enqueue_ai_check
+                    maybe_enqueue_ai_check(self.db, record_id)
+                except Exception as e:
+                    logger.warning("AI质检入队异常(失败记录), record_id=%d: %s", record_id, e)
                 return
 
             policies = ocr_result.get("policies", [])
@@ -771,6 +777,13 @@ class InsuranceHandler:
                     except Exception as e:
                         logger.error("自动同步钉钉失败, record_id=%d: %s", cur_record_id, e)
                         notify_error("钉钉同步", "_sync_to_dingtalk_v2", str(e), f"record_id={cur_record_id}")
+
+                # 10. AI自动质检（按企业配置，异步入队，绝不影响主流程）
+                try:
+                    from insurance.ai_checker import maybe_enqueue_ai_check
+                    maybe_enqueue_ai_check(self.db, cur_record_id)
+                except Exception as e:
+                    logger.warning("AI质检入队异常, record_id=%d: %s", cur_record_id, e)
 
         except Exception as e:
             logger.error("保单处理失败, record_id=%d filename=%s: %s", record_id, filename, e, exc_info=True)
