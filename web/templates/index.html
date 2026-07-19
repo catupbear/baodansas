@@ -505,6 +505,139 @@
 
         .msg-content a:hover { text-decoration: underline; }
 
+        /* 发送消息（监控页通过机器人发出，微信式右对齐绿色气泡） */
+        .sent-item {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            margin-bottom: 2px;
+        }
+
+        .sent-bubble {
+            max-width: 65%;
+            background: #95ec69;
+            color: #111;
+            font-size: 14px;
+            line-height: 1.6;
+            padding: 8px 12px;
+            border-radius: 8px;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        .sent-meta {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .sent-time {
+            font-size: 11px;
+            color: #bbb;
+        }
+
+        .sent-badge {
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 3px;
+            background: #e8f5e9;
+            color: #2e7d32;
+            font-weight: 500;
+        }
+
+        .sent-spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid #ccc;
+            border-top-color: #07c160;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        .sent-fail {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .sent-fail-icon {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #e53935;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: default;
+        }
+
+        .sent-retry-btn {
+            background: none;
+            border: 1px solid #e53935;
+            border-radius: 12px;
+            padding: 2px 10px;
+            font-size: 11px;
+            color: #e53935;
+            cursor: pointer;
+        }
+
+        .sent-retry-btn:hover { background: #fdecea; }
+        .sent-retry-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* 底部输入栏 */
+        .chat-input-bar {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+            padding: 10px 16px;
+            border-top: 1px solid #e8e8e8;
+            background: #fff;
+        }
+
+        .chat-input-bar textarea {
+            flex: 1;
+            resize: none;
+            border: 1px solid #d9d9d9;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 14px;
+            line-height: 1.5;
+            font-family: inherit;
+            max-height: 120px;
+            outline: none;
+        }
+
+        .chat-input-bar textarea:focus { border-color: #1a73e8; }
+
+        .chat-send-btn {
+            background: #07c160;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 9px 22px;
+            font-size: 14px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .chat-send-btn:hover { background: #06ad56; }
+        .chat-send-btn:disabled { background: #a8dcc0; cursor: not-allowed; }
+
+        .chat-input-disabled {
+            padding: 10px 16px;
+            border-top: 1px solid #e8e8e8;
+            background: #fafafa;
+            font-size: 12px;
+            color: #999;
+            text-align: center;
+        }
+
         /* 图片缩略图 */
         .msg-image {
             max-width: 300px;
@@ -925,6 +1058,15 @@
             </div>
             <div class="members-panel" id="membersPanel"></div>
             <div class="chat-messages" id="chatMessages"></div>
+            <!-- 群聊发送消息输入栏（通过 FlowBot 机器人发送，仅群聊显示） -->
+            <div class="chat-input-bar" id="chatInputBar" style="display:none">
+                <textarea id="chatInput" rows="1" placeholder="发送群消息（Enter 发送，Shift+Enter 换行）"
+                          oninput="autoGrowInput(this)" onkeydown="handleInputKeydown(event)"></textarea>
+                <button class="chat-send-btn" id="chatSendBtn" onclick="sendChatMessage()">发送</button>
+            </div>
+            <div class="chat-input-disabled" id="chatInputDisabled" style="display:none">
+                未配置 FlowBot 机器人，无法发送消息（请在保单识别设置中配置告警机器人）
+            </div>
         </div>
     </div>
 </div>
@@ -1239,6 +1381,11 @@ function selectConv(convId, roomId, displayName) {
     membersPanel.classList.remove("show");
     membersPanel.innerHTML = "";
 
+    // 发送输入栏：仅群聊且机器人已配置时显示
+    sentRecords = [];
+    stopSendPolling();
+    updateInputBarVisibility();
+
     // 加载最新消息（最后一页）
     loadChatMessages(true);
 }
@@ -1383,6 +1530,8 @@ async function loadChatMessages(initial) {
             chatMessages = (data.messages || []).reverse();
             // 解析昵称后更新 meta
             document.getElementById("chatMeta").textContent = `共 ${chatTotal} 条消息`;
+            // 群聊：同步加载监控页发送记录（合并进时间线）
+            if (currentRoomId) await loadSentRecords();
         } else {
             chatPage = data.page;
             // 加载更早的消息，prepend
@@ -1414,9 +1563,27 @@ function renderChat(scrollToBottom) {
         html += '<div class="load-more"><button class="load-more-btn" onclick="loadChatMessages(false)">加载更早的消息</button></div>';
     }
 
+    // 合并监控页发送记录进时间线（存档已拉到同文本消息时隐藏该记录，避免重复显示）
+    const timeline = chatMessages.map((m, i) => ({ kind: "msg", ts: m.msgtime, data: m, idx: i }))
+        .concat(sentRecords.filter(r => !isSendDuplicated(r)).map(r => ({ kind: "sent", ts: r.ts, data: r })))
+        .sort((a, b) => a.ts - b.ts);
+
     let prevTs = 0;
-    chatMessages.forEach((msg, idx) => {
-        const ts = msg.msgtime;
+    timeline.forEach(item => {
+        const ts = item.ts;
+
+        // 机器人发送的消息：右侧绿色气泡
+        if (item.kind === "sent") {
+            if (needTimeDivider(prevTs, ts)) {
+                html += `<div class="time-divider"><span>${formatFullTime(ts)}</span></div>`;
+            }
+            prevTs = ts;
+            html += renderSentItem(item.data);
+            return;
+        }
+
+        const msg = item.data;
+        const idx = item.idx;
 
         // 时间分隔线
         if (needTimeDivider(prevTs, ts)) {
@@ -1791,6 +1958,248 @@ async function refreshChat() {
     } catch(e) {}
 }
 
+// ===== 群聊发送消息（FlowBot 机器人通道）=====
+let sendEnabled = false;   // 机器人是否已配置（决定输入栏显隐）
+let sentRecords = [];      // 当前群的发送记录
+let sendPollTimer = null;  // 待确认消息的状态轮询定时器
+let sendUidSeq = 1;        // 本地记录标识（重发按钮定位用）
+
+const SEND_TIMEOUT_MS = 60000;  // 超时未收到回调按失败处理（可手动重发）
+const SEND_MSG_MAX_LEN = 2000;
+
+async function loadSendConfig() {
+    try {
+        const res = await authFetch("/api/monitor/send/config");
+        const data = await res.json();
+        sendEnabled = !!data.enabled;
+    } catch(e) { sendEnabled = false; }
+    updateInputBarVisibility();
+}
+
+function updateInputBarVisibility() {
+    const bar = document.getElementById("chatInputBar");
+    const disabledTip = document.getElementById("chatInputDisabled");
+    if (!currentRoomId) {
+        // 私聊/未选会话：FlowBot 按群名发送，不支持私聊
+        bar.style.display = "none";
+        disabledTip.style.display = "none";
+    } else if (sendEnabled) {
+        bar.style.display = "flex";
+        disabledTip.style.display = "none";
+    } else {
+        bar.style.display = "none";
+        disabledTip.style.display = "";
+    }
+}
+
+// 加载当前群最近的发送记录（合并进聊天时间线）
+async function loadSentRecords() {
+    if (!currentRoomId) return;
+    try {
+        const res = await authFetch(`/api/monitor/sends?roomid=${encodeURIComponent(currentRoomId)}`);
+        const data = await res.json();
+        // 保留还未拿到 log_id 的本地临时记录（提交中/提交失败）
+        const localOnly = sentRecords.filter(r => !r.id);
+        sentRecords = (data.sends || []).map(r => ({
+            uid: sendUidSeq++,
+            id: r.id,
+            message: r.message || "",
+            status: r.status,
+            error_msg: r.error_msg || "",
+            ts: (r.ts || 0) * 1000,
+            sentAt: (r.ts || 0) * 1000,
+            timedOut: false,
+        })).concat(localOnly);
+        if (sentRecords.some(r => r.status === 0)) startSendPolling();
+    } catch(e) {}
+}
+
+// 存档是否已拉到同文本消息（±10分钟内同内容 → 隐藏发送记录避免重复显示）
+function isSendDuplicated(rec) {
+    if (rec.status !== 1) return false;
+    const text = (rec.message || "").trim();
+    return chatMessages.some(m => m.msgtype === "text"
+        && (m.summary || "").trim() === text
+        && Math.abs(m.msgtime - rec.ts) < 10 * 60 * 1000);
+}
+
+// 渲染一条发送消息（右侧绿色气泡 + 状态：转圈/失败重发）
+function renderSentItem(rec) {
+    let statusHtml = "";
+    if (rec.status === 0 && !rec.timedOut) {
+        statusHtml = '<span class="sent-spinner"></span>';
+    } else if (rec.status === 2 || rec.timedOut) {
+        const reason = rec.status === 2 ? (rec.error_msg || "发送失败") : "发送超时，可重发";
+        statusHtml = `<span class="sent-fail">
+            <button class="sent-retry-btn" onclick="retrySend(${rec.uid}, this)">重发</button>
+            <span class="sent-fail-icon" title="${escapeHtml(reason)}">!</span>
+        </span>`;
+    }
+    return `<div class="sent-item">
+        <div class="sent-meta">
+            <span class="sent-badge">机器人</span>
+            <span class="sent-time">${formatTime(rec.ts)}</span>
+            ${statusHtml}
+        </div>
+        <div class="sent-bubble">${escapeHtml(rec.message)}</div>
+    </div>`;
+}
+
+// 状态更新后重渲染，保持滚动位置不动
+function rerenderChatPreserveScroll() {
+    const container = document.getElementById("chatMessages");
+    const prevTop = container.scrollTop;
+    renderChat(false);
+    container.scrollTop = prevTop;
+}
+
+// 点击发送：乐观上屏（转圈）→ 提交接口 → 轮询等回调结果
+async function sendChatMessage() {
+    const input = document.getElementById("chatInput");
+    const text = input.value.trim();
+    if (!text || !currentRoomId) return;
+    if (text.length > SEND_MSG_MAX_LEN) {
+        alert(`消息过长（最多 ${SEND_MSG_MAX_LEN} 字）`);
+        return;
+    }
+    input.value = "";
+    autoGrowInput(input);
+
+    const rec = {
+        uid: sendUidSeq++,
+        id: null,
+        message: text,
+        status: 0,
+        error_msg: "",
+        ts: Date.now(),
+        sentAt: Date.now(),
+        timedOut: false,
+        roomid: currentRoomId,
+        groupName: currentConvName,
+    };
+    sentRecords.push(rec);
+    renderChat(true);  // 乐观上屏并滚动到底部
+    await submitSend(rec);
+}
+
+// 提交发送请求（新发送与本地记录重发共用）
+async function submitSend(rec) {
+    rec.status = 0;
+    rec.timedOut = false;
+    rec.error_msg = "";
+    rec.sentAt = Date.now();
+    try {
+        const res = await authFetch("/api/monitor/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ roomid: rec.roomid, group_name: rec.groupName, message: rec.message }),
+        });
+        const data = await res.json();
+        if (data.code === 0) {
+            rec.id = data.log_id;
+            startSendPolling();
+        } else {
+            rec.status = 2;
+            rec.error_msg = data.msg || "发送失败";
+        }
+    } catch(e) {
+        rec.status = 2;
+        rec.error_msg = "网络异常，请重试";
+    }
+    rerenderChatPreserveScroll();
+}
+
+// 手动重发失败的消息
+async function retrySend(uid, btn) {
+    const rec = sentRecords.find(r => r.uid === uid);
+    if (!rec) return;
+    if (btn) btn.disabled = true;
+
+    if (!rec.id) {
+        // 提交接口就失败的本地记录：重新提交
+        await submitSend(rec);
+        return;
+    }
+    rec.status = 0;
+    rec.timedOut = false;
+    rerenderChatPreserveScroll();
+    try {
+        const res = await authFetch("/api/monitor/send/retry", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ log_id: rec.id }),
+        });
+        const data = await res.json();
+        if (data.code === 0) {
+            rec.sentAt = Date.now();
+            startSendPolling();
+        } else {
+            rec.status = 2;
+            rec.error_msg = data.msg || "重发失败";
+        }
+    } catch(e) {
+        rec.status = 2;
+        rec.error_msg = "网络异常，请重试";
+    }
+    rerenderChatPreserveScroll();
+}
+
+// ===== 发送状态轮询 =====
+function startSendPolling() {
+    if (sendPollTimer) return;
+    sendPollTimer = setInterval(pollSendStatus, 2000);
+}
+
+function stopSendPolling() {
+    if (sendPollTimer) { clearInterval(sendPollTimer); sendPollTimer = null; }
+}
+
+async function pollSendStatus() {
+    let changed = false;
+    const now = Date.now();
+
+    // 超过60秒没等到回调 → 按失败态显示（可手动重发）
+    sentRecords.forEach(r => {
+        if (r.status === 0 && !r.timedOut && (now - (r.sentAt || r.ts)) > SEND_TIMEOUT_MS) {
+            r.timedOut = true;
+            changed = true;
+        }
+    });
+
+    const pendingIds = sentRecords.filter(r => r.status === 0 && !r.timedOut && r.id).map(r => r.id);
+    if (pendingIds.length) {
+        try {
+            const res = await authFetch(`/api/monitor/sends?ids=${pendingIds.join(",")}`);
+            const data = await res.json();
+            (data.sends || []).forEach(s => {
+                const rec = sentRecords.find(r => r.id === s.id);
+                if (rec && rec.status !== s.status) {
+                    rec.status = s.status;
+                    rec.error_msg = s.error_msg || "";
+                    if (s.status !== 0) rec.timedOut = false;
+                    changed = true;
+                }
+            });
+        } catch(e) {}
+    }
+
+    if (changed) rerenderChatPreserveScroll();
+    if (!sentRecords.some(r => r.status === 0 && !r.timedOut)) stopSendPolling();
+}
+
+// ===== 输入框辅助 =====
+function autoGrowInput(el) {
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+}
+
+function handleInputKeydown(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendChatMessage();
+    }
+}
+
 // ===== 工具函数 =====
 function escapeHtml(str) {
     if (!str) return "";
@@ -1822,7 +2231,10 @@ function switchEnterprise() {
     currentCorpid = document.getElementById("corpSelect").value;
     // 清空当前会话状态
     currentConv = null;
+    currentRoomId = "";
     chatMessages = [];
+    sentRecords = [];
+    stopSendPolling();
     document.getElementById("chatContainer").style.display = "none";
     document.getElementById("chatPlaceholder").style.display = "flex";
     // 重新加载
@@ -1951,6 +2363,7 @@ async function submitQuoteRescan() {
     loadStats();
     loadConversations();
     setupAutoRefresh();
+    loadSendConfig();
 })();
 </script>
 </body>

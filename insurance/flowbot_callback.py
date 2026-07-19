@@ -269,11 +269,22 @@ def _handle_task_result(task_id: str, status: str, message: str, robot_id: str):
 
             # 失败：查重发额度与原始 payload
             cursor.execute(
-                "SELECT id, robot_id, group_name, message, payload, retry_count "
+                "SELECT id, robot_id, source, group_name, message, payload, retry_count "
                 "FROM flowbot_push_log WHERE task_id = %s LIMIT 1", (task_id,))
             row = cursor.fetchone()
             if not row:
                 logger.warning("FlowBot推送失败但无落库记录 taskId=%s msg=%s", task_id, message)
+                return
+
+            # 监控页手动发送的消息：失败只标记状态（页面显示❗+重发按钮），
+            # 不自动重发、不钉钉告警，重发由用户手动触发
+            if row.get("source") == "monitor":
+                cursor.execute(
+                    "UPDATE flowbot_push_log SET status = 2, error_msg = %s WHERE id = %s",
+                    ((message or "发送失败")[:500], row["id"]))
+                conn.commit()
+                logger.info("FlowBot监控页消息发送失败（等待用户手动重发） taskId=%s 群=%s: %s",
+                            task_id, row.get("group_name", ""), message)
                 return
 
             if row["retry_count"] < _MAX_RETRY and row.get("payload"):
