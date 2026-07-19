@@ -108,6 +108,24 @@ _OCR_TO_COLUMN = {
 # 反向映射：列名 → OCR 字段名
 _COLUMN_TO_OCR = {v: k for k, v in _OCR_TO_COLUMN.items()}
 
+# 车牌省份简称 繁体 → 简体 映射（客户繁体输入法输入"粵B0U9U0"、保司PDF为繁体等场景）
+_PLATE_TRAD_TO_SIMP = str.maketrans("粵蘇魯贛瓊貴雲遼寧陝晉滬閩", "粤苏鲁赣琼贵云辽宁陕晋沪闽")
+
+# pf.plate_no 的 SQL 侧归一化表达式（去半/全角连字符、半/全角空格、间隔点，转大写），
+# 与 normalize_plate_keyword 的 Python 侧归一化对应，兼容"粤B-0U9U0"/"粤B 0U9U0"/小写等存储写法
+_PF_PLATE_NORM_SQL = (
+    "UPPER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE("
+    "pf.plate_no,'-',''),'－',''),' ',''),'　',''),'·',''),'.',''))"
+)
+
+
+def normalize_plate_keyword(plate: str) -> str:
+    """车牌归一化：繁体省份字转简体、去连字符/空格/间隔点、转大写"""
+    if not plate:
+        return ""
+    plate = str(plate).translate(_PLATE_TRAD_TO_SIMP)
+    return _re.sub(r"[-－\s　·.]", "", plate).upper()
+
 
 def init_insurance_tables(db):
     """
@@ -797,6 +815,9 @@ def _parsed_fields_to_row(parsed_fields: dict) -> dict:
         val = parsed_fields.get(ocr_key, "")
         if val:
             row[col_name] = str(val)[:500]  # 截断防溢出
+    # 车牌繁体省份字转简体入库（部分保司PDF为繁体），格式保持原样，避免简体搜不到
+    if row.get("plate_no"):
+        row["plate_no"] = row["plate_no"].translate(_PLATE_TRAD_TO_SIMP)
     # 自动生成 ISO 格式日期列（用于索引查询，避免 STR_TO_DATE）
     for cn_col, iso_col in [
         ("sign_date", "sign_date_iso"),
@@ -1364,8 +1385,8 @@ def find_records_by_plate(db, plate: str, exclude_id: int = None, roomid: str = 
     """
     if not plate:
         return []
-    # 与 SQL 侧同样的归一化：去半/全角连字符、半/全角空格、间隔点，转大写
-    plate = _re.sub(r"[-－\s　·.]", "", plate).upper()
+    # 与 SQL 侧同样的归一化：繁转简、去半/全角连字符、半/全角空格、间隔点，转大写
+    plate = normalize_plate_keyword(plate)
     if not plate:
         return []
     conn = db.pool.connection()
@@ -1954,8 +1975,15 @@ def query_insurance_records(
             conditions.append("pf.policy_no LIKE %s")
             params.append(f"%{search_policy_no}%")
         if search_plate_no:
-            conditions.append("pf.plate_no LIKE %s")
-            params.append(f"%{search_plate_no}%")
+            # 车牌搜索两侧归一化：关键词繁转简/去分隔符/大写，库侧去连字符/空格/大写，
+            # 兼容客户输入"粵B0U9U0"（繁体）、"粤B-0U9U0"（带杠）等写法
+            _plate_kw = normalize_plate_keyword(search_plate_no)
+            if _plate_kw:
+                conditions.append(f"{_PF_PLATE_NORM_SQL} LIKE %s")
+                params.append(f"%{_plate_kw}%")
+            else:
+                conditions.append("pf.plate_no LIKE %s")
+                params.append(f"%{search_plate_no}%")
         if search_applicant:
             conditions.append("pf.applicant LIKE %s")
             params.append(f"%{search_applicant}%")
