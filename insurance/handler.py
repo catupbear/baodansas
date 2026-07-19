@@ -704,7 +704,7 @@ class InsuranceHandler:
                 apply_tz008_plate_fallback(self.db, parsed_fields, config_enterprise_id)
 
                 # 6c. 待匹配池：此前群里发过补充信息但当时车牌无记录 → 自动回填
-                # （在字段映射/钉钉同步之前，首次同步就带上补充字段）
+                # （只写系统台账记录 parsed_fields，不涉及钉钉多维表同步——该功能已停用）
                 try:
                     from insurance.fill_pending import match_and_apply
                     match_and_apply(self.db, cur_record_id, roomid, parsed_fields)
@@ -747,44 +747,46 @@ class InsuranceHandler:
                     cur_record_id, filename, policy_idx + 1, len(policies),
                 )
 
-                # 9. 非保单类型不同步钉钉，只记录日志
-                if doc_category and doc_category != "保单":
-                    logger.info(
-                        "文档类型为「%s」（非保单），跳过钉钉同步, record_id=%d filename=%s",
-                        doc_category, cur_record_id, filename,
-                    )
-                else:
-                    # 自动同步钉钉（按监控配置决定，复用之前匹配的监控列表）
-                    try:
-                        for monitor in matched_monitors:
-                            if not (monitor.get("dingtalk_base_id") and monitor.get("dingtalk_sheet_id")):
-                                continue
-                            monitor_mapping = monitor.get("field_mapping") or {}
-                            if monitor_mapping:
-                                from insurance.field_mapping import DEFAULT_MAPPING
-                                export_to_ocr = {v: k for k, v in DEFAULT_MAPPING.items() if v}
-                                sync_fields = {}
-                                for export_col, target_col in monitor_mapping.items():
-                                    if not target_col:
-                                        continue
-                                    ocr_field = export_to_ocr.get(export_col, export_col)
-                                    if ocr_field in parsed_fields:
-                                        sync_fields[target_col] = parsed_fields[ocr_field]
-                                    elif export_col in parsed_fields:
-                                        sync_fields[target_col] = parsed_fields[export_col]
-                            else:
-                                sync_fields = mapped_fields
-
-                            self._sync_to_dingtalk_v2(
-                                cur_record_id, sync_fields,
-                                sender_name=sender_name,
-                                cos_url=cos_url,
-                                doc_category=doc_category,
-                                monitor=monitor,
-                            )
-                    except Exception as e:
-                        logger.error("自动同步钉钉失败, record_id=%d: %s", cur_record_id, e)
-                        notify_error("钉钉同步", "_sync_to_dingtalk_v2", str(e), f"record_id={cur_record_id}")
+                # 9. 钉钉多维表自动同步——功能已停用（2026-07-19 确认下线，
+                # 线上监控配置均未绑定钉钉文档）。同步代码注释保留，如需恢复
+                # 取消注释即可（_sync_to_dingtalk_v2 等函数未删，手动重同步API仍在）
+                # if doc_category and doc_category != "保单":
+                #     logger.info(
+                #         "文档类型为「%s」（非保单），跳过钉钉同步, record_id=%d filename=%s",
+                #         doc_category, cur_record_id, filename,
+                #     )
+                # else:
+                #     # 自动同步钉钉（按监控配置决定，复用之前匹配的监控列表）
+                #     try:
+                #         for monitor in matched_monitors:
+                #             if not (monitor.get("dingtalk_base_id") and monitor.get("dingtalk_sheet_id")):
+                #                 continue
+                #             monitor_mapping = monitor.get("field_mapping") or {}
+                #             if monitor_mapping:
+                #                 from insurance.field_mapping import DEFAULT_MAPPING
+                #                 export_to_ocr = {v: k for k, v in DEFAULT_MAPPING.items() if v}
+                #                 sync_fields = {}
+                #                 for export_col, target_col in monitor_mapping.items():
+                #                     if not target_col:
+                #                         continue
+                #                     ocr_field = export_to_ocr.get(export_col, export_col)
+                #                     if ocr_field in parsed_fields:
+                #                         sync_fields[target_col] = parsed_fields[ocr_field]
+                #                     elif export_col in parsed_fields:
+                #                         sync_fields[target_col] = parsed_fields[export_col]
+                #             else:
+                #                 sync_fields = mapped_fields
+                #
+                #             self._sync_to_dingtalk_v2(
+                #                 cur_record_id, sync_fields,
+                #                 sender_name=sender_name,
+                #                 cos_url=cos_url,
+                #                 doc_category=doc_category,
+                #                 monitor=monitor,
+                #             )
+                #     except Exception as e:
+                #         logger.error("自动同步钉钉失败, record_id=%d: %s", cur_record_id, e)
+                #         notify_error("钉钉同步", "_sync_to_dingtalk_v2", str(e), f"record_id={cur_record_id}")
 
                 # 10. AI自动质检（按企业配置，异步入队，绝不影响主流程）
                 try:
@@ -1225,8 +1227,8 @@ class InsuranceHandler:
                         "%s互补(反向): %s, 回填record_id=%s, 补充=%s",
                         match_desc, match_value, rec["id"], ", ".join(back_filled),
                     )
-                    # 如果历史记录已同步过钉钉，重新同步更新的字段
-                    self._resync_record_to_dingtalk(rec["id"], mapped, hist_fields)
+                    # 钉钉多维表同步已停用（2026-07-19），历史记录重同步一并注释
+                    # self._resync_record_to_dingtalk(rec["id"], mapped, hist_fields)
                 except Exception as e:
                     logger.warning("%s反向互补失败: record_id=%s, %s", match_desc, rec["id"], e)
 
@@ -1323,7 +1325,8 @@ class InsuranceHandler:
                         "按人名互补(反向): 回填record_id=%s, 补充=%s",
                         rec["id"], ", ".join(back_filled),
                     )
-                    self._resync_record_to_dingtalk(rec["id"], mapped, hist_fields)
+                    # 钉钉多维表同步已停用（2026-07-19），历史记录重同步一并注释
+                    # self._resync_record_to_dingtalk(rec["id"], mapped, hist_fields)
                 except Exception as e:
                     logger.warning("按人名反向互补失败: record_id=%s, %s", rec["id"], e)
 
@@ -1447,7 +1450,7 @@ class InsuranceHandler:
                 except (_json.JSONDecodeError, TypeError):
                     pf = {}
 
-            # 待匹配池：同 PDF 秒传复制路径同样自动回填群内补充信息
+            # 待匹配池：同 PDF 秒传复制路径同样自动回填群内补充信息（只写台账记录）
             try:
                 from insurance.fill_pending import match_and_apply
                 match_and_apply(self.db, cur_id, cur_roomid, pf)
