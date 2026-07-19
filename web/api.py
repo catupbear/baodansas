@@ -620,15 +620,24 @@ def monitor_send_message():
     """
     data = request.get_json(force=True, silent=True) or {}
     roomid = (data.get("roomid") or "").strip()
-    group_name = (data.get("group_name") or "").strip()
     message = (data.get("message") or "").strip()
 
-    if not roomid or not group_name:
-        return jsonify({"code": 400, "msg": "缺少 roomid 或 group_name"}), 400
+    if not roomid:
+        return jsonify({"code": 400, "msg": "缺少 roomid"}), 400
     if not message:
         return jsonify({"code": 400, "msg": "消息内容不能为空"}), 400
     if len(message) > _SEND_MSG_MAX_LEN:
         return jsonify({"code": 400, "msg": f"消息过长（最多 {_SEND_MSG_MAX_LEN} 字）"}), 400
+
+    # 群名以统一群信息表 wecom_groups 为权威（FlowBot 按群名定位群，
+    # 前端显示名可能是手动改过的备注，不能直接用于发送）
+    from storage.group_db import get_group_name_map
+    group_name = get_group_name_map(_db, [roomid]).get(roomid, "")
+    if not group_name:
+        # 未同步到权威群名时退回前端传入的显示名
+        group_name = (data.get("group_name") or "").strip()
+    if not group_name:
+        return jsonify({"code": 400, "msg": "无法获取群名称（群信息未同步），暂不能发送"}), 400
 
     robot_id = _get_monitor_robot_id()
     if not robot_id:
@@ -692,7 +701,7 @@ def monitor_retry_send():
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute(
-            "SELECT id, robot_id, payload, status FROM flowbot_push_log "
+            "SELECT id, robot_id, roomid, payload, status FROM flowbot_push_log "
             "WHERE id = %s AND source = 'monitor' LIMIT 1", (log_id,))
         row = cursor.fetchone()
         if not row:
@@ -704,6 +713,17 @@ def monitor_retry_send():
 
         from insurance.flowbot_notify import post_task
         task_list = json.loads(row["payload"])
+
+        # 重发前按 roomid 刷新权威群名（首发失败可能就是群名变了）
+        if row.get("roomid"):
+            from storage.group_db import get_group_name_map
+            latest_name = get_group_name_map(_db, [row["roomid"]]).get(row["roomid"], "")
+            if latest_name and task_list and task_list[0].get("searchText") != latest_name:
+                task_list[0]["searchText"] = latest_name
+                cursor.execute(
+                    "UPDATE flowbot_push_log SET group_name = %s, payload = %s WHERE id = %s",
+                    (latest_name, json.dumps(task_list, ensure_ascii=False), log_id))
+
         result = post_task(task_list, row["robot_id"])
         if result.get("code") != 200:
             error = result.get("message") or "FlowBot 接口返回异常"
