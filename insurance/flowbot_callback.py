@@ -10,7 +10,7 @@ FlowBot 机器人回调接收端（参考 wuhuApi 实现，文档 https://flowbo
     receipt  指令已接收（v2.5.5+）
     callBack 指令执行回调（真实送达结果：data.taskId / data.status=success|fail / data.message）
     online   机器人上线
-    offline  机器人离线（钉钉告警）
+    offline  机器人离线（先调 getRobotInfo 核实：真离线才报离线，在线则按发送失败告警）
 
 约束：必须 3 秒内返回 {"code": 200}，耗时处理（失败重发）放后台线程。
 
@@ -66,14 +66,12 @@ def flowbot_callback():
             logger.info("FlowBot回调: 指令已接收 taskId=%s 队列剩余=%s",
                         cb.get("taskId", ""), cb.get("taskCount", ""))
         elif mode == "offline":
-            logger.warning("FlowBot回调: 机器人离线 robot=%s", robot_id)
-            try:
-                from core.notify import notify_error
-                notify_error("FlowBot机器人", "offline",
-                             "机器人已离线，群通知将无法送达，请尽快检查手机/登录状态",
-                             f"robotId={robot_id}")
-            except Exception:
-                pass
+            # 飞流有时消息发送失败也会推 offline 回调，不能直接断言已离线；
+            # 放后台线程调 getRobotInfo 核实真实在线状态后再告警（回调须3秒内应答）
+            logger.warning("FlowBot回调: 收到离线通知 robot=%s（待核实）", robot_id)
+            threading.Thread(
+                target=_handle_offline, args=(robot_id,), daemon=True,
+            ).start()
         elif mode == "online":
             logger.info("FlowBot回调: 机器人上线 robot=%s", robot_id)
         elif mode == "init":
@@ -89,6 +87,76 @@ def flowbot_callback():
         logger.warning("FlowBot回调处理异常: %s", e, exc_info=True)
 
     return jsonify({"code": 200, "message": "回调接收成功"})
+
+
+def _query_pending_pushes(robot_id: str, limit: int = 5):
+    """查最近1小时内仍在推送中(status=0)的通知，用于告警时说明受影响的群和内容。"""
+    if not _db:
+        return []
+    try:
+        import pymysql.cursors
+        conn = _db.pool.connection()
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor.execute(
+                "SELECT group_name, message FROM flowbot_push_log "
+                "WHERE robot_id = %s AND status = 0 "
+                "AND created_at >= NOW() - INTERVAL 1 HOUR "
+                "ORDER BY id DESC LIMIT %s", (robot_id, limit))
+            return cursor.fetchall() or []
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning("查询FlowBot待送达通知失败: %s", e)
+        return []
+
+
+def _handle_offline(robot_id: str):
+    """
+    离线回调后台处理：先调 getRobotInfo 核实真实在线状态，再决定告警口径。
+
+      - 核实在线   → 只是消息发送失败，按「发送失败」告警，列出失败的群和内容
+      - 核实已离线 → 离线告警，附最后登录时间和受影响的待送达通知
+      - 无法核实   → 按离线回调原样告警，注明未能核实
+    """
+    try:
+        from insurance.flowbot_notify import get_robot_info
+        from core.notify import notify_error
+
+        info = get_robot_info(robot_id)
+        is_online = info.get("isOnline") if info is not None else None
+
+        pending = _query_pending_pushes(robot_id)
+        pending_desc = "；".join(
+            f"群【{p.get('group_name') or '未知'}】{str(p.get('message') or '')[:60]}"
+            for p in pending) or "无"
+
+        if is_online == 1:
+            logger.warning("FlowBot离线回调核实为在线（疑似发送失败） robot=%s 待送达%d条",
+                           robot_id, len(pending))
+            notify_error(
+                "FlowBot群通知", "send_fail",
+                "收到离线回调，但核实机器人当前在线，实际为消息发送失败（非离线）",
+                f"robotId={robot_id} | 待送达通知{len(pending)}条: {pending_desc}")
+        elif is_online == 0:
+            last_login = (info or {}).get("lastLogin_at") or "未知"
+            logger.warning("FlowBot机器人已离线（已核实） robot=%s 最后登录=%s",
+                           robot_id, last_login)
+            notify_error(
+                "FlowBot机器人", "offline",
+                "机器人已离线（getRobotInfo 已核实），群通知将无法送达，"
+                "请尽快检查手机/登录状态",
+                f"robotId={robot_id} | 最后登录: {last_login} | "
+                f"待送达通知{len(pending)}条: {pending_desc}")
+        else:
+            logger.warning("FlowBot离线回调无法核实在线状态 robot=%s", robot_id)
+            notify_error(
+                "FlowBot机器人", "offline",
+                "收到机器人离线回调（getRobotInfo 核实失败，实际状态未知），"
+                "群通知可能无法送达",
+                f"robotId={robot_id} | 待送达通知{len(pending)}条: {pending_desc}")
+    except Exception as e:
+        logger.warning("FlowBot离线回调处理异常 robot=%s: %s", robot_id, e, exc_info=True)
 
 
 def _handle_task_result(task_id: str, status: str, message: str, robot_id: str):

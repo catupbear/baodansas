@@ -20,6 +20,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 FLOWBOT_API = "https://flowbot.feiliu.run/api/sendTask"
+FLOWBOT_ROBOT_INFO_API = "https://flowbot.feiliu.run/api/getRobotInfo"
 
 # FlowBot 消息类型码
 _TYPE_TEXT = 50009  # 文字（支持 atList @人）
@@ -49,6 +50,28 @@ def post_task(task_list: list, robot_id: str) -> dict:
         return resp.json()
     except Exception as e:
         return {"code": -1, "message": str(e)}
+
+
+def get_robot_info(robot_id: str):
+    """
+    查询机器人信息（文档：/api/getRobotInfo）。
+
+    返回 data 字典（含 isOnline: 0离线/1在线、lastLogin_at 等）；
+    接口异常或非 200 时返回 None（调用方按"无法核实"处理）。
+    """
+    try:
+        resp = requests.post(
+            FLOWBOT_ROBOT_INFO_API,
+            params={"robotId": robot_id},
+            timeout=10,
+        )
+        data = resp.json()
+        if data.get("code") == 200:
+            return data.get("data") or {}
+        logger.warning("FlowBot getRobotInfo 返回非200: %s", data)
+    except Exception as e:
+        logger.warning("FlowBot getRobotInfo 请求异常: %s", e)
+    return None
 
 
 def _save_push_log(task_id: str, robot_id: str, group_name: str,
