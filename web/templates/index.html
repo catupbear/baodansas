@@ -1651,7 +1651,7 @@ function renderMsgContent(msg, idx) {
             // 所有文件（含PDF）统一小卡片展示，点击再去新窗口预览，不做内嵌预览
             const fileName = parsed.filename || "文件";
             const fileSize = parsed.filesize ? formatFileSize(parsed.filesize) : "";
-            return `<div class="msg-file-card" onclick="window.open('${mediaUrl}','_blank')" title="点击预览">
+            return `<div class="msg-file-card" onclick="openFilePreview('${mediaUrl}', '${encodeURIComponent(fileName)}')" title="点击预览">
                 <div class="msg-file-icon">&#128196;</div>
                 <div class="msg-file-info">
                     <div class="msg-file-name" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</div>
@@ -1692,6 +1692,27 @@ function renderMsgContent(msg, idx) {
         default:
             return escapeHtml(msg.summary || "-");
     }
+}
+
+// 新窗口预览文件：PDF 用包壳页内嵌 iframe 打开。
+// 直接导航到 PDF 地址时 Chrome 查看器有懒渲染问题（不滚动就黑屏/只画缩略小块），
+// iframe 内嵌加载则正常渲染，故 PDF 一律走包壳页；其他文件类型直接打开（浏览器会下载）。
+function openFilePreview(url, nameEnc) {
+    const name = decodeURIComponent(nameEnc || "");
+    if (!name.toLowerCase().endsWith(".pdf")) {
+        window.open(url, "_blank");
+        return;
+    }
+    const w = window.open("", "_blank");
+    if (!w) {  // 弹窗被拦截时退回直接打开
+        window.open(url, "_blank");
+        return;
+    }
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>${escapeHtml(name)}</title>
+<style>html,body{margin:0;height:100%;background:#3c3c3c}iframe{border:0;width:100%;height:100%;display:block}</style>
+</head><body><iframe src="${escapeHtml(url)}"></iframe></body></html>`);
+    w.document.close();
 }
 
 function formatFileSize(bytes) {
