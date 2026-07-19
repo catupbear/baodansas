@@ -246,6 +246,22 @@ def notify_error_report(description: str, detail: str = "", webhook: str = "", s
     ).start()
 
 
+def notify_ai_check(title: str, content: str, webhook: str = "", secret: str = ""):
+    """
+    AI质检相关钉钉通知（差异提醒/成本提醒，异步不阻塞）。
+
+    webhook 由系统设置「AI 模型」页配置；留空时回退复用系统告警机器人(_notifier)。
+    去重规则沿用 DingTalkNotifier.send（同 title 15 分钟内不重复）。
+    """
+    if webhook:
+        notifier = DingTalkNotifier(webhook, secret)
+    elif _notifier:
+        notifier = _notifier
+    else:
+        return
+    threading.Thread(target=notifier.send, args=(title, content), daemon=True).start()
+
+
 # 群文本消息转发通知器（独立 webhook，与系统错误告警机器人分开）
 _text_msg_notifier = None
 

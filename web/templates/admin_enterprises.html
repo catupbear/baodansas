@@ -125,6 +125,20 @@
         .op-btn.red { background: #fef2f2; color: #dc2626; }
         .op-btn.gray { background: #f3f4f6; color: #6b7280; }
         .op-btn.on { box-shadow: inset 0 0 0 1.5px currentColor; font-weight: 700; }
+        /* AI质检小号滑动开关 */
+        .ai-switch { position: relative; display: inline-block; width: 32px; height: 17px; flex-shrink: 0; cursor: pointer; }
+        .ai-switch .slider { position: absolute; inset: 0; background: #d1d5db; border-radius: 999px; transition: background 0.2s; }
+        .ai-switch .slider::before { content: ''; position: absolute; width: 13px; height: 13px; left: 2px; top: 2px; background: #fff; border-radius: 50%; transition: transform 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        .ai-switch.on .slider { background: #059669; }
+        .ai-switch.on.fix .slider { background: #dc2626; }
+        .ai-switch.on .slider::before { transform: translateX(15px); }
+        /* 质检范围条件：状态多选/保司标签 */
+        .scope-status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .scope-status-item { display: flex; align-items: center; gap: 7px; font-size: 13px; color: #374151; cursor: pointer; padding: 6px 8px; border: 1px solid #eee7e0; border-radius: 8px; }
+        .scope-status-item.checked { background: #fff7ed; border-color: #fed7aa; color: #c2410c; font-weight: 600; }
+        .scope-company-tag { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; background: #f5f3ff; color: #7c3aed; border-radius: 999px; font-size: 12px; font-weight: 600; }
+        .scope-company-tag button { background: none; border: none; color: #a78bda; cursor: pointer; font-size: 13px; line-height: 1; padding: 0; }
+        .scope-company-tag button:hover { color: #7c3aed; }
         /* 移动端企业卡片视图（窄屏替代横滑表格） */
         .ent-cards { display: none; }
         @media (max-width: 820px) {
@@ -230,6 +244,7 @@
                                 <th style="min-width:110px;text-align:center;">本月识别量</th>
                                 <th style="min-width:105px;text-align:center;">人员管理</th>
                                 <th style="min-width:105px;text-align:center;">监控设置</th>
+                                <th style="min-width:170px;">AI质检</th>
                                                                 <th style="min-width:50px;">状态</th>
                                 <th style="min-width:90px;">创建时间</th>
                                 <th style="min-width:150px;">操作</th>
@@ -323,6 +338,32 @@
                                     </div>
                                 </td>
 
+                                <!-- AI质检（仅超管；本页整体已限超管访问） -->
+                                <td style="vertical-align:middle;">
+                                    <div style="display:flex;flex-direction:column;gap:5px;min-width:160px;">
+                                        <!-- 开关行：AI质检 / AI直接覆盖 -->
+                                        <div style="display:flex;align-items:center;gap:12px;">
+                                            <span style="display:inline-flex;align-items:center;gap:5px;" title="开启后该企业识别记录将自动送AI质检">
+                                                <span class="ai-switch" :class="{on: aiOf(ent).config.enabled}" @click="toggleAiEnabled(ent)"><span class="slider"></span></span>
+                                                <span style="font-size:11px;color:#6b7280;">质检</span>
+                                            </span>
+                                            <span style="display:inline-flex;align-items:center;gap:5px;" title="开启后AI发现差异直接覆盖系统数据（可还原）">
+                                                <span class="ai-switch fix" :class="{on: aiOf(ent).config.auto_fix}" @click="toggleAiAutoFix(ent)"><span class="slider"></span></span>
+                                                <span style="font-size:11px;color:#6b7280;">直接覆盖</span>
+                                            </span>
+                                        </div>
+                                        <!-- 质检范围徽标 + 配置 -->
+                                        <div style="display:flex;align-items:center;gap:6px;">
+                                            <span class="badge" :class="aiOf(ent).config.scope.mode==='all' ? 'badge-blue' : 'badge-purple'" style="font-size:10px;padding:2px 8px;white-space:nowrap;">
+                                                {{ aiOf(ent).config.scope.mode==='all' ? '全部' : '自定义·'+scopeCondCount(aiOf(ent).config.scope)+'条件' }}
+                                            </span>
+                                            <button @click="openScopeModal(ent)" class="op-btn gray" style="padding:2px 9px;font-size:11px;">配置</button>
+                                        </div>
+                                        <!-- 今日质检数 -->
+                                        <div style="font-size:11px;color:#9ca3af;white-space:nowrap;">今日质检 {{ aiOf(ent).today_checked || 0 }} 单</div>
+                                    </div>
+                                </td>
+
                                 <!-- 状态 -->
                                 <td>
                                     <span class="badge" :class="ent.enabled ? 'badge-green' : 'badge-gray'">
@@ -365,6 +406,29 @@
                                 <div class="ec-item"><div class="k">本月识别</div><div class="vv">{{ ent.plan_type ? (ent.monthly_pdf_usage || 0) + ' 次' : '暂未开通套餐' }}</div></div>
                                 <div class="ec-item"><div class="k">状态</div><div class="vv"><span :style="{color: ent.enabled?'#059669':'#dc2626'}">{{ ent.enabled?'启用':'禁用' }}</span></div></div>
                                 <div class="ec-item"><div class="k">人员 / 群</div><div class="vv">{{ ent.member_count||0 }} 人 · {{ ent.monitor_count||0 }} 群</div></div>
+                            </div>
+                            <!-- AI质检区块（移动端卡片） -->
+                            <div style="border-top:1px solid #f3f0ec;padding-top:13px;margin-bottom:2px;">
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;">
+                                    <span style="font-size:12px;color:#9ca3af;font-weight:600;">AI质检</span>
+                                    <span style="font-size:11px;color:#9ca3af;">今日 {{ aiOf(ent).today_checked || 0 }} 单</span>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:16px;margin-bottom:10px;">
+                                    <span style="display:inline-flex;align-items:center;gap:6px;">
+                                        <span class="ai-switch" :class="{on: aiOf(ent).config.enabled}" @click="toggleAiEnabled(ent)"><span class="slider"></span></span>
+                                        <span style="font-size:12px;color:#6b7280;">质检</span>
+                                    </span>
+                                    <span style="display:inline-flex;align-items:center;gap:6px;">
+                                        <span class="ai-switch fix" :class="{on: aiOf(ent).config.auto_fix}" @click="toggleAiAutoFix(ent)"><span class="slider"></span></span>
+                                        <span style="font-size:12px;color:#6b7280;">直接覆盖</span>
+                                    </span>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <span class="badge" :class="aiOf(ent).config.scope.mode==='all' ? 'badge-blue' : 'badge-purple'" style="font-size:11px;">
+                                        {{ aiOf(ent).config.scope.mode==='all' ? '全部' : '自定义·'+scopeCondCount(aiOf(ent).config.scope)+'条件' }}
+                                    </span>
+                                    <button @click="openScopeModal(ent)" class="op-btn gray" style="font-size:11px;">配置范围</button>
+                                </div>
                             </div>
                             <div class="ec-ops">
                                 <button @click="gotoMembers(ent)" class="op-btn orange">人员管理</button>
@@ -577,6 +641,76 @@
                     <div class="flex justify-end gap-3 mt-2">
                         <button @click="showReportModal=false" class="btn btn-outline">关闭</button>
                         <button @click="doExportReport" class="btn btn-primary" style="padding:8px 20px;">生成报告链接</button>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- AI质检范围配置弹窗 -->
+        <transition name="fade">
+            <div v-if="showScopeModal" class="modal-mask" @click.self="showScopeModal=false">
+                <div class="modal-content" style="width:min(460px, calc(100vw - 32px));">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-1">AI质检范围</h3>
+                    <p style="font-size:13px;color:#9ca3af;margin-bottom:18px;">{{ scopeEnt ? scopeEnt.name : '' }}</p>
+
+                    <!-- 全部 / 自定义 单选 -->
+                    <div style="display:flex;gap:8px;margin-bottom:16px;">
+                        <button type="button" @click="scopeForm.mode='all'"
+                            :style="scopeForm.mode==='all' ? 'flex:1;padding:9px;font-size:13px;background:#ea580c;color:#fff;border:1px solid #ea580c;border-radius:8px;cursor:pointer;' : 'flex:1;padding:9px;font-size:13px;background:#fff;color:#555;border:1px solid #e7e0d8;border-radius:8px;cursor:pointer;'">
+                            全部（每单都质检）
+                        </button>
+                        <button type="button" @click="scopeForm.mode='custom'"
+                            :style="scopeForm.mode==='custom' ? 'flex:1;padding:9px;font-size:13px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:8px;cursor:pointer;' : 'flex:1;padding:9px;font-size:13px;background:#fff;color:#555;border:1px solid #e7e0d8;border-radius:8px;cursor:pointer;'">
+                            自定义条件
+                        </button>
+                    </div>
+
+                    <!-- 自定义条件区块（命中任一即质检） -->
+                    <div v-if="scopeForm.mode==='custom'">
+                        <p style="font-size:12px;color:#9ca3af;margin-bottom:14px;line-height:1.5;">满足以下任意一个条件的记录即触发AI质检。</p>
+
+                        <!-- ① 按状态多选 -->
+                        <div style="margin-bottom:18px;">
+                            <div style="font-size:13px;color:#374151;font-weight:600;margin-bottom:8px;">① 按状态</div>
+                            <div class="scope-status-grid">
+                                <label v-for="st in STATUS_OPTIONS" :key="st"
+                                    class="scope-status-item" :class="{checked: scopeForm.statuses.includes(st)}">
+                                    <input type="checkbox" :checked="scopeForm.statuses.includes(st)" @change="toggleScopeStatus(st)" style="accent-color:#c2410c;">
+                                    {{ st }}
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- ② 按保司多选（标签输入） -->
+                        <div style="margin-bottom:18px;">
+                            <div style="font-size:13px;color:#374151;font-weight:600;margin-bottom:8px;">② 按保司简称</div>
+                            <div style="display:flex;gap:8px;margin-bottom:8px;">
+                                <input v-model="scopeCompanyInput" @keyup.enter="addScopeCompany" class="form-input" style="flex:1;" placeholder="输入保司简称，回车添加（可逗号分隔）">
+                                <button type="button" @click="addScopeCompany" class="btn btn-outline" style="white-space:nowrap;">添加</button>
+                            </div>
+                            <div v-if="scopeForm.companies.length" style="display:flex;flex-wrap:wrap;gap:7px;">
+                                <span v-for="c in scopeForm.companies" :key="c" class="scope-company-tag">
+                                    {{ c }}<button type="button" @click="removeScopeCompany(c)">✕</button>
+                                </span>
+                            </div>
+                            <div v-else style="font-size:12px;color:#c8c2bb;">未添加保司，此条件不生效</div>
+                        </div>
+
+                        <!-- ③ 按保司成熟度 -->
+                        <div style="margin-bottom:8px;">
+                            <div style="font-size:13px;color:#374151;font-weight:600;margin-bottom:8px;">③ 按保司成熟度</div>
+                            <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;flex-wrap:wrap;">
+                                <input type="checkbox" v-model="scopeHistoryEnabled" style="accent-color:#c2410c;">
+                                保司历史总识别数少于
+                                <input type="number" v-model.number="scopeHistoryValue" min="1" :disabled="!scopeHistoryEnabled" class="form-input" style="width:80px;height:34px;">
+                                单的自动质检
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-3 mt-6">
+                        <button @click="showScopeModal=false" class="btn btn-outline">取消</button>
+                        <button @click="saveScopeConfig" :disabled="scopeSaving" class="btn btn-primary">{{ scopeSaving ? '保存中…' : '保存' }}</button>
                     </div>
                 </div>
             </div>
@@ -814,6 +948,155 @@ createApp({
                 } else { showToast(json.msg || '设置失败', 'error'); }
             } catch(e) { showToast('网络错误', 'error'); }
             finally { referrerSaving.value = false; }
+        }
+
+        // ===== AI质检（仅超管） =====
+        // 附加数据：按 enterprise_id 存 {today_checked, config}，与企业列表分开加载后合并显示
+        const aiCheckMap = ref({});
+        const STATUS_OPTIONS = ['非保单', '需人工补充', '识别异常', '识别失败', '正常完成'];
+
+        function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
+
+        // 归一化配置，保证 scope 结构完整（后端字段缺失时兜底）
+        function normalizeAiConfig(cfg) {
+            cfg = cfg || {};
+            const s = cfg.scope || {};
+            return {
+                enabled: !!cfg.enabled,
+                auto_fix: !!cfg.auto_fix,
+                scope: {
+                    mode: s.mode || 'all',
+                    statuses: Array.isArray(s.statuses) ? s.statuses : [],
+                    companies: Array.isArray(s.companies) ? s.companies : [],
+                    company_history_lt: Number(s.company_history_lt || 0),
+                },
+                compare_fields: Array.isArray(cfg.compare_fields) ? cfg.compare_fields : [],
+            };
+        }
+        // 未配置企业的默认展示项（只读，不直接改动）
+        const DEFAULT_AI_ENTRY = { today_checked: 0, config: normalizeAiConfig(null) };
+        function aiOf(ent) { return aiCheckMap.value[ent.id] || DEFAULT_AI_ENTRY; }
+        function aiConfigOf(ent) {
+            const e = aiCheckMap.value[ent.id];
+            return e && e.config ? e.config : normalizeAiConfig(null);
+        }
+        // 徽标显示的自定义条件条数
+        function scopeCondCount(scope) {
+            if (!scope) return 0;
+            let n = 0;
+            n += (scope.statuses && scope.statuses.length) || 0;
+            n += (scope.companies && scope.companies.length) || 0;
+            n += Number(scope.company_history_lt) > 0 ? 1 : 0;
+            return n;
+        }
+
+        async function loadAiCheck() {
+            // AI配置加载失败不影响页面原有功能
+            try {
+                const resp = await authFetch('/api/insurance/ai-check/enterprises');
+                const data = await resp.json();
+                if (data.code === 0 && data.data && Array.isArray(data.data.list)) {
+                    const map = {};
+                    data.data.list.forEach(item => {
+                        map[item.enterprise_id] = {
+                            today_checked: item.today_checked || 0,
+                            config: normalizeAiConfig(item.config),
+                        };
+                    });
+                    aiCheckMap.value = map;
+                }
+            } catch (e) { /* 静默：不阻断企业列表 */ }
+        }
+
+        // 保存单个企业的完整 config，成功后回写本地 map
+        async function saveAiConfig(ent, config) {
+            const resp = await authFetch('/api/insurance/ai-check/enterprises', {
+                method: 'PUT',
+                body: JSON.stringify({ enterprise_id: ent.id, config }),
+            });
+            const data = await resp.json();
+            if (data.code !== 0) throw new Error(data.msg || '保存失败');
+            const prev = aiCheckMap.value[ent.id] || { today_checked: 0 };
+            aiCheckMap.value = { ...aiCheckMap.value, [ent.id]: { ...prev, config } };
+        }
+
+        async function toggleAiEnabled(ent) {
+            const cfg = deepClone(aiConfigOf(ent));
+            cfg.enabled = !cfg.enabled;
+            try {
+                await saveAiConfig(ent, cfg);
+                showToast('AI质检已' + (cfg.enabled ? '开启' : '关闭'));
+            } catch (e) { showToast(e.message || '操作失败', 'error'); }
+        }
+
+        async function toggleAiAutoFix(ent) {
+            const cur = aiConfigOf(ent);
+            const turningOn = !cur.auto_fix;
+            if (turningOn && !confirm('开启后AI发现差异将直接覆盖系统数据（可还原），确定？')) return;
+            const cfg = deepClone(cur);
+            cfg.auto_fix = turningOn;
+            try {
+                await saveAiConfig(ent, cfg);
+                showToast('AI直接覆盖已' + (turningOn ? '开启' : '关闭'));
+            } catch (e) { showToast(e.message || '操作失败', 'error'); }
+        }
+
+        // 质检范围配置弹窗
+        const showScopeModal = ref(false);
+        const scopeEnt = ref(null);
+        const scopeForm = reactive({ mode: 'all', statuses: [], companies: [], company_history_lt: 0 });
+        const scopeHistoryEnabled = ref(false);
+        const scopeHistoryValue = ref(50);
+        const scopeCompanyInput = ref('');
+        const scopeSaving = ref(false);
+
+        function openScopeModal(ent) {
+            scopeEnt.value = ent;
+            const s = aiConfigOf(ent).scope || {};
+            scopeForm.mode = s.mode || 'all';
+            scopeForm.statuses = Array.isArray(s.statuses) ? [...s.statuses] : [];
+            scopeForm.companies = Array.isArray(s.companies) ? [...s.companies] : [];
+            const hl = Number(s.company_history_lt || 0);
+            scopeHistoryEnabled.value = hl > 0;
+            scopeHistoryValue.value = hl > 0 ? hl : 50;
+            scopeCompanyInput.value = '';
+            showScopeModal.value = true;
+        }
+        function toggleScopeStatus(st) {
+            const i = scopeForm.statuses.indexOf(st);
+            if (i >= 0) scopeForm.statuses.splice(i, 1); else scopeForm.statuses.push(st);
+        }
+        function addScopeCompany() {
+            const raw = scopeCompanyInput.value.trim();
+            if (!raw) return;
+            // 支持一次输入多个（逗号/空格分隔）
+            raw.split(/[，,\s]+/).forEach(name => {
+                const n = name.trim();
+                if (n && !scopeForm.companies.includes(n)) scopeForm.companies.push(n);
+            });
+            scopeCompanyInput.value = '';
+        }
+        function removeScopeCompany(name) {
+            const i = scopeForm.companies.indexOf(name);
+            if (i >= 0) scopeForm.companies.splice(i, 1);
+        }
+        async function saveScopeConfig() {
+            const ent = scopeEnt.value;
+            if (!ent) return;
+            scopeSaving.value = true;
+            try {
+                const cfg = deepClone(aiConfigOf(ent));
+                cfg.scope = {
+                    mode: scopeForm.mode,
+                    statuses: scopeForm.mode === 'custom' ? [...scopeForm.statuses] : [],
+                    companies: scopeForm.mode === 'custom' ? [...scopeForm.companies] : [],
+                    company_history_lt: (scopeForm.mode === 'custom' && scopeHistoryEnabled.value) ? (Number(scopeHistoryValue.value) || 0) : 0,
+                };
+                await saveAiConfig(ent, cfg);
+                showToast('质检范围已保存');
+                showScopeModal.value = false;
+            } catch (e) { showToast(e.message || '保存失败', 'error'); }
+            finally { scopeSaving.value = false; }
         }
 
         const toast = ref(null);
@@ -1071,6 +1354,7 @@ createApp({
                 if (_presetSearch) entSearch.value = _presetSearch;
                 if (_params.get('create') === '1') openCreateModal();
                 fetchEnterprises();
+                loadAiCheck();
             }
         });
 
@@ -1089,6 +1373,10 @@ createApp({
             openSetReferrer, searchReferrerUsers, selectReferrer, saveReferrer,
             mobileMenuOpen,
             showSurveyModal, surveyEnt, surveyUrl, surveySubmitted, surveyRows, copied, openSurveyModal, copySurveyLink,
+            // AI质检
+            aiOf, scopeCondCount, toggleAiEnabled, toggleAiAutoFix,
+            showScopeModal, scopeEnt, scopeForm, scopeHistoryEnabled, scopeHistoryValue, scopeCompanyInput, scopeSaving,
+            STATUS_OPTIONS, openScopeModal, toggleScopeStatus, addScopeCompany, removeScopeCompany, saveScopeConfig,
         };
     }
 }).mount('#app');
