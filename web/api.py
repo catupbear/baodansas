@@ -583,3 +583,144 @@ def rescan_quote_history():
     except Exception as e:
         logger.exception("报价补扫失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+# ============================================================
+# 监控页群聊发送消息（FlowBot 通道）
+# ============================================================
+
+# 单条消息最大长度
+_SEND_MSG_MAX_LEN = 2000
+
+
+def _get_monitor_robot_id() -> str:
+    """读取监控页发送用的 FlowBot 机器人ID（复用台账告警机器人配置）。"""
+    try:
+        from insurance.db import get_insurance_config
+        cfg = get_insurance_config(_db, "flowbot_fail_notify", {}) or {}
+        return (cfg.get("robot_id") or "").strip()
+    except Exception as e:
+        logger.warning("读取FlowBot机器人配置失败: %s", e)
+        return ""
+
+
+@api_bp.route("/monitor/send/config")
+@login_required
+def monitor_send_config():
+    """发送功能可用性检查（机器人未配置时前端禁用输入栏）。"""
+    return jsonify({"enabled": bool(_get_monitor_robot_id())})
+
+
+@api_bp.route("/monitor/send", methods=["POST"])
+@login_required
+def monitor_send_message():
+    """
+    监控页向群聊发送文字消息（通过 FlowBot，机器人须已在目标群内）。
+    单次提交不重试；真实送达结果由 FlowBot 回调更新，前端轮询状态。
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    roomid = (data.get("roomid") or "").strip()
+    group_name = (data.get("group_name") or "").strip()
+    message = (data.get("message") or "").strip()
+
+    if not roomid or not group_name:
+        return jsonify({"code": 400, "msg": "缺少 roomid 或 group_name"}), 400
+    if not message:
+        return jsonify({"code": 400, "msg": "消息内容不能为空"}), 400
+    if len(message) > _SEND_MSG_MAX_LEN:
+        return jsonify({"code": 400, "msg": f"消息过长（最多 {_SEND_MSG_MAX_LEN} 字）"}), 400
+
+    robot_id = _get_monitor_robot_id()
+    if not robot_id:
+        return jsonify({"code": 400, "msg": "未配置 FlowBot 机器人，请先在保单识别设置中配置"}), 400
+
+    from insurance.flowbot_notify import send_monitor_message
+    result = send_monitor_message(group_name, message, robot_id, roomid)
+    if not result.get("ok"):
+        return jsonify({"code": 500, "msg": result.get("error", "发送失败")}), 500
+    return jsonify({"code": 0, "log_id": result.get("log_id"), "task_id": result.get("task_id")})
+
+
+@api_bp.route("/monitor/sends")
+@login_required
+def monitor_list_sends():
+    """
+    查询监控页发送记录。
+    参数二选一：roomid（该群最近7天记录，合并进聊天时间线）/ ids（按id批量查状态，轮询用）
+    status: 0=推送中 1=成功 2=失败
+    """
+    roomid = (request.args.get("roomid") or "").strip()
+    ids_param = (request.args.get("ids") or "").strip()
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        if ids_param:
+            ids = [int(i) for i in ids_param.split(",") if i.strip().isdigit()][:50]
+            if not ids:
+                return jsonify({"sends": []})
+            placeholders = ",".join(["%s"] * len(ids))
+            cursor.execute(
+                f"SELECT id, message, status, error_msg, UNIX_TIMESTAMP(created_at) AS ts "
+                f"FROM flowbot_push_log WHERE source = 'monitor' AND id IN ({placeholders})",
+                ids)
+        elif roomid:
+            cursor.execute(
+                "SELECT id, message, status, error_msg, UNIX_TIMESTAMP(created_at) AS ts "
+                "FROM flowbot_push_log "
+                "WHERE source = 'monitor' AND roomid = %s "
+                "AND created_at >= NOW() - INTERVAL 7 DAY "
+                "ORDER BY id ASC LIMIT 200",
+                (roomid,))
+        else:
+            return jsonify({"code": 400, "msg": "缺少 roomid 或 ids 参数"}), 400
+        return jsonify({"sends": cursor.fetchall() or []})
+    finally:
+        conn.close()
+
+
+@api_bp.route("/monitor/send/retry", methods=["POST"])
+@login_required
+def monitor_retry_send():
+    """手动重发失败的消息：用原 payload 重新提交，状态回到推送中。"""
+    data = request.get_json(force=True, silent=True) or {}
+    log_id = data.get("log_id")
+    if not isinstance(log_id, int):
+        return jsonify({"code": 400, "msg": "缺少 log_id"}), 400
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT id, robot_id, payload, status FROM flowbot_push_log "
+            "WHERE id = %s AND source = 'monitor' LIMIT 1", (log_id,))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"code": 404, "msg": "发送记录不存在"}), 404
+        if row["status"] == 1:
+            return jsonify({"code": 400, "msg": "该消息已发送成功，无需重发"}), 400
+        if not row.get("payload"):
+            return jsonify({"code": 400, "msg": "原始消息内容缺失，无法重发"}), 400
+
+        from insurance.flowbot_notify import post_task
+        task_list = json.loads(row["payload"])
+        result = post_task(task_list, row["robot_id"])
+        if result.get("code") != 200:
+            error = result.get("message") or "FlowBot 接口返回异常"
+            cursor.execute(
+                "UPDATE flowbot_push_log SET status = 2, error_msg = %s WHERE id = %s",
+                (f"重发失败: {error}"[:500], log_id))
+            conn.commit()
+            return jsonify({"code": 500, "msg": error}), 500
+
+        task_ids = [t.get("taskId", "") for t in (result.get("taskList") or [])]
+        new_task_id = next(filter(None, task_ids), "")
+        cursor.execute(
+            "UPDATE flowbot_push_log SET task_id = %s, status = 0, error_msg = '', "
+            "retry_count = retry_count + 1 WHERE id = %s",
+            (new_task_id, log_id))
+        conn.commit()
+        logger.info("监控页消息手动重发 logId=%s newTaskId=%s", log_id, new_task_id or "-")
+        return jsonify({"code": 0, "log_id": log_id, "task_id": new_task_id})
+    finally:
+        conn.close()

@@ -75,26 +75,35 @@ def get_robot_info(robot_id: str):
 
 
 def _save_push_log(task_id: str, robot_id: str, group_name: str,
-                   message: str, task_list: list):
-    """发送成功后落库推送日志（供回调更新结果/失败重发）。失败只记日志。"""
+                   message: str, task_list: list,
+                   source: str = "notify", roomid: str = ""):
+    """
+    发送成功后落库推送日志（供回调更新结果/失败重发）。失败只记日志。
+
+    Returns:
+        新插入记录的自增 id（落库失败或未注入 db 时返回 None）
+    """
     if not _db:
-        return
+        return None
     try:
         import pymysql.cursors
         conn = _db.pool.connection()
         try:
             cursor = conn.cursor(pymysql.cursors.DictCursor)
             cursor.execute(
-                "INSERT INTO flowbot_push_log (task_id, robot_id, group_name, message, payload) "
-                "VALUES (%s, %s, %s, %s, %s)",
-                (task_id, robot_id, group_name, message,
+                "INSERT INTO flowbot_push_log "
+                "(task_id, robot_id, source, roomid, group_name, message, payload) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (task_id, robot_id, source, roomid, group_name, message,
                  json.dumps(task_list, ensure_ascii=False)),
             )
             conn.commit()
+            return cursor.lastrowid
         finally:
             conn.close()
     except Exception as e:
         logger.warning("FlowBot 推送日志落库失败（不影响发送）: %s", e)
+        return None
 
 
 def send_flowbot_group_message(group_name: str, wechat_name, message: str, robot_id: str) -> bool:
@@ -141,3 +150,32 @@ def send_flowbot_group_message(group_name: str, wechat_name, message: str, robot
         if attempt < max_attempts:
             time.sleep(attempt)  # 1s, 2s 递增退避
     return False
+
+
+def send_monitor_message(group_name: str, message: str, robot_id: str, roomid: str) -> dict:
+    """
+    监控页手动发送群消息：单次调用不重试（失败由用户在页面手动重发），
+    落库 source='monitor'（回调失败时不走自动重发，只标记状态）。
+
+    Returns:
+        {"ok": True, "task_id": xx, "log_id": xx}
+        或 {"ok": False, "error": <原因>}
+    """
+    task_list = [{
+        "type": _TYPE_TEXT,
+        "atList": [],
+        "searchText": group_name,
+        "message": message,
+    }]
+    result = post_task(task_list, robot_id)
+    if result.get("code") != 200:
+        error = result.get("message") or f"FlowBot 接口返回异常(code={result.get('code')})"
+        logger.warning("监控页群消息发送失败 群=%s: %s", group_name, error)
+        return {"ok": False, "error": error}
+
+    task_ids = [t.get("taskId", "") for t in (result.get("taskList") or [])]
+    task_id = next(filter(None, task_ids), "")
+    log_id = _save_push_log(task_id, robot_id, group_name, message, task_list,
+                            source="monitor", roomid=roomid)
+    logger.info("监控页群消息已提交 群=%s taskId=%s logId=%s", group_name, task_id or "-", log_id)
+    return {"ok": True, "task_id": task_id, "log_id": log_id}
