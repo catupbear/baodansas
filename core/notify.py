@@ -123,6 +123,32 @@ def notify_error(module: str, method: str, error: str, detail: str = ""):
     ).start()
 
 
+def notify_recovery(module: str, message: str, detail: str = ""):
+    """
+    发送恢复通知（复用系统告警机器人，✅ 口径，异步不阻塞）。
+
+    与 notify_error 配对使用：异常告警后故障解除时，推送恢复消息闭环。
+    去重规则沿用 DingTalkNotifier.send（同 title 15 分钟内不重复）。
+    """
+    if not _notifier:
+        return
+
+    title = f"✅ {module} 已恢复"
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    lines = [
+        f"### ✅ {module} 已恢复",
+        f"- **时间**: {ts}",
+        f"- **说明**: {message[:500]}",
+    ]
+    if detail:
+        lines.append(f"- **详情**: {detail[:500]}")
+    content = "\n".join(lines)
+
+    threading.Thread(
+        target=_notifier.send, args=(title, content), daemon=True
+    ).start()
+
+
 def notify_unmonitored_group(room_desc: str, sender_desc: str, content_desc: str):
     """
     未开通AI机器人识别的群收到补充信息/保单文件、且群内提醒发不出去

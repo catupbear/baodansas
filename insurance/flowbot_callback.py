@@ -9,8 +9,8 @@ FlowBot 机器人回调接收端（参考 wuhuApi 实现，文档 https://flowbo
     logs     收到聊天记录（量大，只记 debug 日志）
     receipt  指令已接收（v2.5.5+）
     callBack 指令执行回调（真实送达结果：data.taskId / data.status=success|fail / data.message）
-    online   机器人上线
-    offline  机器人离线（先调 getRobotInfo 核实：真离线才报离线，在线则按发送失败告警）
+    online   机器人上线（清掉线状态；此前发过离线告警则补「已恢复」通知）
+    offline  机器人离线（掉线满5分钟且 getRobotInfo 核实仍离线才告警，避免抖动误报）
 
 约束：必须 3 秒内返回 {"code": 200}，耗时处理（失败重发）放后台线程。
 
@@ -21,6 +21,7 @@ callBack 失败处理：按 taskId 查 flowbot_push_log，重发次数 < 3 时�
 import json
 import logging
 import threading
+import time
 
 from flask import Blueprint, jsonify, request
 
@@ -66,14 +67,18 @@ def flowbot_callback():
             logger.info("FlowBot回调: 指令已接收 taskId=%s 队列剩余=%s",
                         cb.get("taskId", ""), cb.get("taskCount", ""))
         elif mode == "offline":
-            # 飞流有时消息发送失败也会推 offline 回调，不能直接断言已离线；
-            # 放后台线程调 getRobotInfo 核实真实在线状态后再告警（回调须3秒内应答）
-            logger.warning("FlowBot回调: 收到离线通知 robot=%s（待核实）", robot_id)
+            # 飞流有时秒级抖动/发送失败也会推 offline 回调，不能直接断言已离线；
+            # 放后台线程等待满阈值后调 getRobotInfo 核实再告警（回调须3秒内应答）
+            logger.warning("FlowBot回调: 收到离线通知 robot=%s（%d秒后核实）",
+                           robot_id, _OFFLINE_ALERT_DELAY)
             threading.Thread(
                 target=_handle_offline, args=(robot_id,), daemon=True,
             ).start()
         elif mode == "online":
             logger.info("FlowBot回调: 机器人上线 robot=%s", robot_id)
+            threading.Thread(
+                target=_handle_online, args=(robot_id,), daemon=True,
+            ).start()
         elif mode == "init":
             logger.info("FlowBot回调: 回调地址初始化成功 robot=%s", robot_id)
         elif mode == "logs":
@@ -111,52 +116,138 @@ def _query_pending_pushes(robot_id: str, limit: int = 5):
         return []
 
 
+# 掉线持续超过该秒数才发离线告警（短暂抖动只记日志，避免来回通知）
+_OFFLINE_ALERT_DELAY = 300
+
+
+def _offline_state_key(robot_id: str) -> str:
+    return f"flowbot_offline_state_{robot_id}"
+
+
+def _get_offline_state(robot_id: str):
+    """读掉线状态（存 insurance_config，跨 gunicorn worker 共享）。无状态返回 None。"""
+    if not _db:
+        return None
+    try:
+        from insurance.db import get_insurance_config
+        state = get_insurance_config(_db, _offline_state_key(robot_id))
+        return state if isinstance(state, dict) else None
+    except Exception as e:
+        logger.warning("读取FlowBot掉线状态失败 robot=%s: %s", robot_id, e)
+        return None
+
+
+def _set_offline_state(robot_id: str, state):
+    """写掉线状态；传 None 表示清除（机器人已恢复在线）。"""
+    if not _db:
+        return
+    try:
+        from insurance.db import set_insurance_config
+        set_insurance_config(_db, _offline_state_key(robot_id), state)
+    except Exception as e:
+        logger.warning("写入FlowBot掉线状态失败 robot=%s: %s", robot_id, e)
+
+
 def _handle_offline(robot_id: str):
     """
-    离线回调后台处理：先调 getRobotInfo 核实真实在线状态，再决定告警口径。
+    离线回调后台处理：记录掉线时间，等满 _OFFLINE_ALERT_DELAY 后核实再告警。
 
-      - 核实在线   → 只是消息发送失败，按「发送失败」告警，列出失败的群和内容
-      - 核实已离线 → 离线告警，附最后登录时间和受影响的待送达通知
-      - 无法核实   → 按离线回调原样告警，注明未能核实
+      - 等待期间收到 online 回调（状态被清除）→ 短暂掉线，只记日志不告警
+      - 等满后 getRobotInfo 核实仍离线（或核实失败）→ 离线告警（附最后登录
+        时间 + 待送达通知清单），并标记 alerted 供恢复时发「已恢复」通知
+      - 等满后核实为在线（online 回调丢失）→ 清状态；有滞留通知才按发送失败告警
     """
     try:
+        now = time.time()
+        state = _get_offline_state(robot_id)
+        if state:
+            # 重复 offline 回调：沿用最早掉线时间，剩余等待时间相应缩短
+            offline_at = float(state.get("offline_at") or now)
+        else:
+            offline_at = now
+            _set_offline_state(robot_id, {"offline_at": now, "alerted": False})
+
+        time.sleep(max(0, _OFFLINE_ALERT_DELAY - (now - offline_at)))
+
+        state = _get_offline_state(robot_id)
+        if not state:
+            logger.info("FlowBot掉线%d秒内已恢复在线，不告警 robot=%s",
+                        _OFFLINE_ALERT_DELAY, robot_id)
+            return
+        if state.get("alerted"):
+            return  # 已由其他线程/worker 告警过
+
         from insurance.flowbot_notify import get_robot_info
         from core.notify import notify_error
 
         info = get_robot_info(robot_id)
         is_online = info.get("isOnline") if info is not None else None
-
         pending = _query_pending_pushes(robot_id)
         pending_desc = "；".join(
             f"群【{p.get('group_name') or '未知'}】{str(p.get('message') or '')[:60]}"
             for p in pending) or "无"
 
         if is_online == 1:
-            logger.warning("FlowBot离线回调核实为在线（疑似发送失败） robot=%s 待送达%d条",
-                           robot_id, len(pending))
-            notify_error(
-                "FlowBot群通知", "send_fail",
-                "收到离线回调，但核实机器人当前在线，实际为消息发送失败（非离线）",
-                f"robotId={robot_id} | 待送达通知{len(pending)}条: {pending_desc}")
-        elif is_online == 0:
-            last_login = (info or {}).get("lastLogin_at") or "未知"
-            logger.warning("FlowBot机器人已离线（已核实） robot=%s 最后登录=%s",
-                           robot_id, last_login)
-            notify_error(
-                "FlowBot机器人", "offline",
-                "机器人已离线（getRobotInfo 已核实），群通知将无法送达，"
-                "请尽快检查手机/登录状态",
-                f"robotId={robot_id} | 最后登录: {last_login} | "
-                f"待送达通知{len(pending)}条: {pending_desc}")
-        else:
-            logger.warning("FlowBot离线回调无法核实在线状态 robot=%s", robot_id)
-            notify_error(
-                "FlowBot机器人", "offline",
-                "收到机器人离线回调（getRobotInfo 核实失败，实际状态未知），"
-                "群通知可能无法送达",
-                f"robotId={robot_id} | 待送达通知{len(pending)}条: {pending_desc}")
+            # 实际在线但没收到 online 回调：清状态；有滞留通知说明发送失败
+            _set_offline_state(robot_id, None)
+            if pending:
+                logger.warning("FlowBot核实在线但有滞留通知（疑似发送失败） robot=%s %d条",
+                               robot_id, len(pending))
+                notify_error(
+                    "FlowBot群通知", "send_fail",
+                    "机器人在线，但有群通知超过5分钟未确认送达，疑似发送失败",
+                    f"robotId={robot_id} | 待送达通知{len(pending)}条: {pending_desc}")
+            else:
+                logger.info("FlowBot离线回调核实为在线且无滞留通知，不告警 robot=%s",
+                            robot_id)
+            return
+
+        # 仍离线（is_online==0）或核实失败（None）→ 离线告警
+        _set_offline_state(robot_id, {"offline_at": offline_at, "alerted": True})
+        minutes = int((time.time() - offline_at) / 60)
+        verify_desc = ("getRobotInfo 已核实" if is_online == 0
+                       else "getRobotInfo 核实失败，按离线回调处理")
+        last_login = (info or {}).get("lastLogin_at") or "未知"
+        logger.warning("FlowBot机器人离线超过%d分钟（%s） robot=%s",
+                       minutes, verify_desc, robot_id)
+        notify_error(
+            "FlowBot机器人", "offline",
+            f"机器人已离线超过{minutes}分钟（{verify_desc}），群通知将无法送达，"
+            "请尽快检查手机/登录状态",
+            f"robotId={robot_id} | 最后登录: {last_login} | "
+            f"待送达通知{len(pending)}条: {pending_desc}")
     except Exception as e:
         logger.warning("FlowBot离线回调处理异常 robot=%s: %s", robot_id, e, exc_info=True)
+
+
+def _handle_online(robot_id: str):
+    """
+    上线回调后台处理：清除掉线状态；若此前已发过离线告警，补发「已恢复」通知闭环。
+    短暂掉线（未达告警阈值）只记日志。
+    """
+    try:
+        state = _get_offline_state(robot_id)
+        if not state:
+            return
+        _set_offline_state(robot_id, None)
+
+        offline_at = float(state.get("offline_at") or 0)
+        duration = int(time.time() - offline_at) if offline_at else 0
+        dur_desc = (f"{duration // 60}分{duration % 60}秒"
+                    if duration >= 60 else f"{duration}秒")
+
+        if state.get("alerted"):
+            logger.info("FlowBot机器人恢复在线（本次离线%s） robot=%s", dur_desc, robot_id)
+            from core.notify import notify_recovery
+            notify_recovery(
+                "FlowBot机器人",
+                f"机器人已恢复在线，本次离线约{dur_desc}，群通知恢复正常发送",
+                f"robotId={robot_id}")
+        else:
+            logger.info("FlowBot机器人短暂掉线%s后恢复（未达告警阈值，不通知） robot=%s",
+                        dur_desc, robot_id)
+    except Exception as e:
+        logger.warning("FlowBot上线回调处理异常 robot=%s: %s", robot_id, e, exc_info=True)
 
 
 def _handle_task_result(task_id: str, status: str, message: str, robot_id: str):
