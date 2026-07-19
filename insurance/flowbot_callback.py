@@ -34,11 +34,50 @@ _db = None
 # 回调失败后的最大重发次数
 _MAX_RETRY = 3
 
+# 群名强制刷新用的 ContactsManager 列表（主企业+额外企业，main.py 启动时注册）
+_contacts_list = []
+
 
 def init_flowbot_callback(db):
     """注入数据库引用（main.py 启动时调用）。"""
     global _db
     _db = db
+
+
+def register_flowbot_contacts(contacts):
+    """注册通讯录管理器（监控页消息发送失败时用于强制刷新群名兜底）。"""
+    if contacts is not None:
+        _contacts_list.append(contacts)
+
+
+def _refresh_group_name(roomid: str) -> str:
+    """
+    绕过缓存直连企微 API 重新获取群名（多企业逐个尝试），
+    成功后回写 wecom_groups 权威表保持最新。取不到返回空串。
+    """
+    for contacts in _contacts_list:
+        try:
+            name = contacts._fetch_room_info(roomid)
+        except Exception as e:
+            logger.warning("刷新群名异常 roomid=%s: %s", roomid, e)
+            continue
+        if not name:
+            continue
+        try:
+            conn = _db.pool.connection()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE wecom_groups SET name = %s, name_updated_at = NOW() "
+                    "WHERE roomid = %s AND name != %s",
+                    (name, roomid, name))
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            pass  # 回写权威表失败不影响本次重发
+        return name
+    return ""
 
 
 @flowbot_bp.route("/flowbot/callback", methods=["POST"])
@@ -269,16 +308,45 @@ def _handle_task_result(task_id: str, status: str, message: str, robot_id: str):
 
             # 失败：查重发额度与原始 payload
             cursor.execute(
-                "SELECT id, robot_id, source, group_name, message, payload, retry_count "
+                "SELECT id, robot_id, source, roomid, group_name, message, payload, retry_count "
                 "FROM flowbot_push_log WHERE task_id = %s LIMIT 1", (task_id,))
             row = cursor.fetchone()
             if not row:
                 logger.warning("FlowBot推送失败但无落库记录 taskId=%s msg=%s", task_id, message)
                 return
 
-            # 监控页手动发送的消息：失败只标记状态（页面显示❗+重发按钮），
-            # 不自动重发、不钉钉告警，重发由用户手动触发
+            # 监控页手动发送的消息：首次失败先自动兜底一次（强制刷新最新群名后重发，
+            # 应对群改名导致的定位失败）；兜底后仍失败只标记状态（页面显示❗+重发按钮），
+            # 不再自动重发、不钉钉告警，后续重发由用户手动触发
             if row.get("source") == "monitor":
+                if row["retry_count"] < 1 and row.get("payload") and row.get("roomid"):
+                    task_list = json.loads(row["payload"])
+                    fresh_name = _refresh_group_name(row["roomid"])
+                    if fresh_name and task_list and task_list[0].get("searchText") != fresh_name:
+                        logger.info("FlowBot监控页消息兜底：群名已刷新 %s → %s (roomid=%s)",
+                                    task_list[0].get("searchText", ""), fresh_name, row["roomid"])
+                        task_list[0]["searchText"] = fresh_name
+
+                    from insurance.flowbot_notify import post_task
+                    result = post_task(task_list, row["robot_id"] or robot_id)
+                    new_task_id = ""
+                    if result.get("code") == 200:
+                        ids = [t.get("taskId", "") for t in (result.get("taskList") or [])]
+                        new_task_id = next(filter(None, ids), "")
+                    if new_task_id:
+                        cursor.execute(
+                            "UPDATE flowbot_push_log SET task_id = %s, retry_count = 1, "
+                            "status = 0, group_name = %s, payload = %s, error_msg = %s "
+                            "WHERE id = %s",
+                            (new_task_id, fresh_name or row.get("group_name", ""),
+                             json.dumps(task_list, ensure_ascii=False),
+                             f"首发失败已自动兜底重发: {message or ''}"[:500], row["id"]))
+                        conn.commit()
+                        logger.info("FlowBot监控页消息兜底重发 old=%s new=%s 群=%s",
+                                    task_id, new_task_id, fresh_name or row.get("group_name", ""))
+                        return
+                    # 兜底重发请求本身失败 → 落最终失败等手动重发
+
                 cursor.execute(
                     "UPDATE flowbot_push_log SET status = 2, error_msg = %s WHERE id = %s",
                     ((message or "发送失败")[:500], row["id"]))
