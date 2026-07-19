@@ -179,6 +179,34 @@ def notify_unmonitored_group(room_desc: str, sender_desc: str, content_desc: str
     ).start()
 
 
+def notify_fill_pending_miss(room_desc: str, sender_desc: str, plate: str):
+    """
+    群内补充信息延迟提醒（待匹配池超时仍未匹配到保单）时，钉钉同步通知技术客服。
+
+    与 FlowBot 群内「未录入」提醒同时发出，复用系统错误告警的钉钉机器人。
+    """
+    if not _notifier:
+        return
+
+    title = f"⚠️ 补充信息未录入 {plate}"
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    lines = [
+        "### ⚠️ 群内补充信息未录入（超时未匹配）",
+        f"- **时间**: {ts}",
+        f"- **群**: {room_desc or '未知'}",
+        f"- **发送人**: {sender_desc or '未知'}",
+        f"- **车牌**: {plate or '未知'}",
+        "",
+        "> 该车牌的补充信息已等待超时仍未匹配到保单识别记录（已在群内提醒客户）。"
+        "请核实保单是否已发群、车牌是否有误；后续保单识别成功会自动补录。",
+    ]
+    content = "\n".join(lines)
+
+    threading.Thread(
+        target=_notifier.send, args=(title, content), daemon=True
+    ).start()
+
+
 def notify_new_company(company: str, detail: str = "", webhook: str = "", secret: str = ""):
     """
     发现规则外的新保司时通知（钉钉，新保司专用群）。

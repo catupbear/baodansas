@@ -703,6 +703,14 @@ class InsuranceHandler:
                 from insurance.db import apply_tz008_plate_fallback
                 apply_tz008_plate_fallback(self.db, parsed_fields, config_enterprise_id)
 
+                # 6c. 待匹配池：此前群里发过补充信息但当时车牌无记录 → 自动回填
+                # （在字段映射/钉钉同步之前，首次同步就带上补充字段）
+                try:
+                    from insurance.fill_pending import match_and_apply
+                    match_and_apply(self.db, cur_record_id, roomid, parsed_fields)
+                except Exception as e:
+                    logger.warning("待匹配池回填异常, record_id=%d: %s", cur_record_id, e)
+
                 # 7. 字段映射
                 company_short = parsed_fields.get("保险公司简称", "")
                 mapped_fields = apply_mapping(parsed_fields, company_short)
@@ -1396,6 +1404,13 @@ class InsuranceHandler:
 
         total_policies = len(source_records)
 
+        # 当前这次发送所在的群（待匹配池按 roomid+车牌 回填群内补充信息）
+        cur_roomid = ""
+        try:
+            cur_roomid = (get_insurance_record(self.db, record_id) or {}).get("roomid", "")
+        except Exception:
+            pass
+
         for idx, src in enumerate(source_records):
             # 第一条复用已创建的 record_id，后续新建
             if idx == 0:
@@ -1431,6 +1446,13 @@ class InsuranceHandler:
                     pf = _json.loads(pf) if pf else {}
                 except (_json.JSONDecodeError, TypeError):
                     pf = {}
+
+            # 待匹配池：同 PDF 秒传复制路径同样自动回填群内补充信息
+            try:
+                from insurance.fill_pending import match_and_apply
+                match_and_apply(self.db, cur_id, cur_roomid, pf)
+            except Exception as e:
+                logger.warning("待匹配池回填异常(copy), record_id=%d: %s", cur_id, e)
 
             cs = pf.get("保险公司简称", "")
             mf = apply_mapping(pf, cs)

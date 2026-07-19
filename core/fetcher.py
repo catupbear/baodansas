@@ -524,9 +524,11 @@ class MessageFetcher:
             if info:
                 logger.info("群内回填: seq=%d room=%s 命中%d条 %s", seq, roomid, cnt, info)
                 if cnt == 0:
-                    # 命中0条：补充信息未录入，群内通知 @发送人 和 @技术客服
-                    self._notify_policy_fill_miss(
-                        seq, roomid, parsed.get("from", ""), info.get("plate", ""))
+                    # 命中0条：保单可能还在识别队列里，先入待匹配池；
+                    # 延迟N分钟（默认10）仍未匹配才由扫描线程发「未录入」提醒，
+                    # 识别成功时自动匹配回填（insurance/fill_pending.py）
+                    self._enqueue_policy_fill_pending(
+                        seq, roomid, parsed.get("from", ""), text, info, enterprise_id)
                 else:
                     # 录入成功但企业从未配置过群内补充模板（走的默认写死规则）：
                     # 提醒 @技术客服 尽快为该企业配置专属模板
@@ -536,18 +538,6 @@ class MessageFetcher:
                             seq, roomid, info.get("plate", ""))
         except Exception as e:
             logger.error("群内回填异常 seq=%d: %s", seq, e, exc_info=True)
-
-    # 群内补充命中0条时的默认通知文案（{plate} 动态替换为解析到的车牌）
-    _POLICY_FILL_MISS_TEMPLATE = (
-        "⚠️ 补充信息未录入\n"
-        "车牌：{plate}\n"
-        "系统暂未找到该车牌的保单识别记录，本次补充的信息（业务经理、业务专员、保险公司经办人等）未能生效。\n"
-        "请检查：\n"
-        "1️⃣ 该车牌的保单是否已发到本群并识别成功\n"
-        "2️⃣ 车牌号是否输入有误\n"
-        "确认保单已识别后，请重新发送一次补充信息即可。\n"
-        "若车牌无误但仍提示未录入，请联系客服处理（已@客服跟进）。"
-    )
 
     def _resolve_sender_at_name(self, sender: str) -> str:
         """解析发送人名称用于群内@（用本 fetcher 所属企业的通讯录凭证）。
@@ -564,32 +554,18 @@ class MessageFetcher:
             return ""
         return "" if name == sender else name
 
-    def _notify_policy_fill_miss(self, seq: int, roomid: str, sender: str, plate: str):
-        """群内补充文本按车牌命中0条识别记录时，FlowBot 群通知 @发送人 + @技术客服。
+    def _enqueue_policy_fill_pending(self, seq: int, roomid: str, sender: str,
+                                     text: str, info: dict, enterprise_id):
+        """群内补充文本按车牌命中0条识别记录时，写入待匹配池（insurance/fill_pending.py）。
 
-        配置键 quote_fill_miss_notify（insurance_config 表）：
-          enabled           开关（默认关闭）
-          robot_id          FlowBot 机器人 ID，缺省复用 flowbot_fail_notify 的机器人
-          tech_support_name 客服微信名，缺省"客户客服（午虎保单台账系统）"
-          template          自定义文案，{plate} 占位符替换车牌
-        旁路通知：任何异常只记日志，绝不影响消息处理主流程。
+        入池时用本 fetcher 所属企业的通讯录凭证解析好群名/发送人名并存库，
+        后续延迟提醒/补录成功通知由全局扫描线程发送，不再依赖 fetcher 上下文。
+        旁路化：任何异常只记日志，绝不影响消息处理主流程。
         """
         handler = getattr(self, "insurance_handler", None)
         if not handler:
             return
         try:
-            from insurance.db import get_insurance_config
-            cfg = get_insurance_config(handler.db, "quote_fill_miss_notify", {}) or {}
-            if not cfg.get("enabled"):
-                return
-            robot_id = cfg.get("robot_id")
-            if not robot_id:
-                fail_cfg = get_insurance_config(handler.db, "flowbot_fail_notify", {}) or {}
-                robot_id = fail_cfg.get("robot_id")
-            if not robot_id:
-                logger.info("补充未录入通知跳过：未配置 robot_id seq=%d room=%s", seq, roomid)
-                return
-
             sender_name = self._resolve_sender_at_name(sender)
             room_name = ""
             if getattr(self, "contacts", None):
@@ -600,20 +576,14 @@ class MessageFetcher:
                         room_name = ""  # 解析失败时会回退返回roomid，视为无群名
                 except Exception:
                     pass
-            if not room_name:
-                logger.info("补充未录入通知跳过：无群名 seq=%d room=%s", seq, roomid)
-                return
 
-            tech_name = cfg.get("tech_support_name") or "客户客服（午虎保单台账系统）"
-            template = cfg.get("template") or self._POLICY_FILL_MISS_TEMPLATE
-            msg = template.replace("{plate}", plate or "未知")
-            # 去重：发送人本身就是技术客服账号时只@一次
-            at_list = list(dict.fromkeys(n for n in (sender_name, tech_name) if n))
-
-            from insurance.flowbot_notify import send_flowbot_group_message
-            send_flowbot_group_message(room_name, at_list, msg, robot_id)
+            from insurance.fill_pending import enqueue_pending
+            fill = {k: v for k, v in (info or {}).items() if k != "plate"}
+            enqueue_pending(handler.db, roomid, room_name, sender, sender_name,
+                            info.get("plate", ""), fill, raw_text=text,
+                            enterprise_id=enterprise_id)
         except Exception as e:
-            logger.warning("补充未录入通知发送失败（不影响主流程）seq=%d: %s", seq, e)
+            logger.warning("补充信息入待匹配池失败（不影响主流程）seq=%d: %s", seq, e)
 
     # 企业未配置群内补充模板时的默认提醒文案（{plate} 动态替换车牌）
     _POLICY_FILL_NO_TEMPLATE_TEMPLATE = (
