@@ -14,31 +14,37 @@ description: 保单识别抽样质检。从昨天入库的保单按保司随机�
 
 ## 执行步骤
 
-### 1. 抽样（服务器上跑）
-把 `scripts/sample.py` scp 到服务器 `/tmp/` 并执行（`cd /home/wxbot && python3 /tmp/sample.py`）。它会：取昨天入库(DATE(created_at)=昨天)、status='done'、未删除、有 cos_url 的记录，按 `company_short` 分组、每组随机抽最多 5 份，写出 `/tmp/qc_sample.json`（每条含 id, company_short, filename, cos_url, policy_count, policy_index, sys_fields=display_fields）。再把 json scp 回本地 `/tmp/qc_sample.json`。
+直接调用项目中已有的标准化抽查脚本 `spot-check-skill/scripts/spot_check.py`，它会自动完成抽样、下载 PDF、用 pdfplumber 提取文本、与系统值比对，并生成标准 HTML 报告。
 
-### 2. 下载 PDF（本地跑）
-运行 `scripts/download.py`，读 `/tmp/qc_sample.json`，编码 cos_url 逐个下载到 `/tmp/qc_pdfs/<id>.pdf`，打印成功/失败。
+```bash
+# 默认：抽查今天和昨天的记录，每保司 10 台车
+python3 spot-check-skill/scripts/spot_check.py
 
-### 3. 逐份识别与比对
-对每份 PDF：
-- 用 **Read** 工具读取 `/tmp/qc_pdfs/<id>.pdf`（只看保单主体页，通常第 1 页；条款/标志页忽略；若 policy_count>1，识别 policy_index 对应的那一份）。
-- **以 PDF 上的真实内容为准**，独立识别这些核心字段：
-  `保险公司简称、保单号、险种类型、投保人、被保险人、被保险人身份证号码、车牌号、机动车种类、使用性质、发动机号、车架号VIN、厂牌型号、核定载客、排量、初次登记日期、保费合计、不含税保费、增值税额、保险起期、保险止期、收费确认时间`
-- 与该记录的 `sys_fields` 逐项比对。比较前先归一化：去空格、统一全半角；日期只比数字（2026-06-25 ≡ 2026年6月25日）；金额只比数值（1100 ≡ 1100.00）；车牌去连字符。分类：
-  - 系统空、PDF 有值 → **漏识别**
-  - 两者都有但不同 → **识别错误**
-  - 系统有值、PDF 确实没有 → **多余/错填**
-  - 一致 → 跳过
+# 指定日期范围（如近一个月）
+python3 spot-check-skill/scripts/spot_check.py --start 2026-06-01 --end 2026-06-30
 
-### 4. 汇总报告（Markdown）
-1. **抽样概况**：总份数、覆盖保司数、各保司抽样份数
-2. **不一致明细**：表格 `保司 | 文件 | 字段 | PDF真实值 | 系统值 | 类型`
-3. **按字段统计**：每个字段出错次数（定位最易错的字段/规则）
-4. **按保司统计**：每个保司的字段准确率
-5. **结论**：哪些 parser 规则/OCR 环节最该修，给出可落地的修复建议
+# 指定每家保司抽查数量
+python3 spot-check-skill/scripts/spot_check.py --start 2026-06-01 --end 2026-06-30 --sample 5
+```
+
+用户说"近一个月"时，`--start` 设为 30 天前，`--end` 设为昨天。
+用户说"昨天"或不指定范围时，使用默认参数即可。
+
+脚本会：
+1. 登录服务器 API 查询指定日期范围内 status=done 的识别记录
+2. 按保司分组、按车辆随机抽样（每台车包含所有险种）
+3. 下载每条记录的 PDF，用 pdfplumber 提取文本
+4. 逐字段比对（保单号、车牌、投保人、被保人、保费、起止期、签单日期等）
+5. 生成标准 HTML 报告到 `spot-check-skill/` 目录，包含：
+   - 概要统计卡片（总记录数、保司数、抽查数、通过率）
+   - 按保司可展开的对比明细（通过率 badge、字段逐项标记 ✓/△/✗）
+   - 差异记录高亮、OCR 原文展示、PDF 预览链接
+
+**⚠ 重要：不要手动写 markdown 或自定义 HTML 报告，必须用此脚本生成标准格式。**
+
+脚本执行完后，用 `open` 命令打开生成的 HTML 文件。
 
 ## 注意
 - **只读不写**，绝不修改数据库或记录。
-- 抽样有随机性，每次结果不同；要复现可在报告里附上本次抽到的 id 列表。
-- 识别要老实：PDF 上没有的字段就标"无"，不要脑补。
+- 抽样有随机性，每次结果不同。
+- 脚本超时约 10 分钟（timeout=600000），365 条记录约需 5-8 分钟。
