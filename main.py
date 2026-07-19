@@ -175,6 +175,10 @@ def create_app(config: dict) -> Flask:
     init_flowbot_callback(db)
     app.register_blueprint(flowbot_bp)
 
+    # 初始化销售看板模块（建表：dashboard_config / dashboard_targets）
+    from insurance.dashboard_db import init_dashboard_tables
+    init_dashboard_tables(db)
+
     # 初始化续保任务模块
     init_renewal_tables(db)
     init_renewal_api(db, cos_storage=cos_storage)
