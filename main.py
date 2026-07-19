@@ -170,9 +170,12 @@ def create_app(config: dict) -> Flask:
 
     # FlowBot 群通知：推送日志落库 + 送达结果回调（/flowbot/callback）
     from insurance.flowbot_notify import init_flowbot_db
-    from insurance.flowbot_callback import flowbot_bp, init_flowbot_callback
+    from insurance.flowbot_callback import (flowbot_bp, init_flowbot_callback,
+                                            register_flowbot_contacts)
     init_flowbot_db(db)
     init_flowbot_callback(db)
+    # 注册主企业通讯录（监控页发送失败时强制刷新群名兜底用）
+    register_flowbot_contacts(contacts)
     app.register_blueprint(flowbot_bp)
 
     # 初始化续保任务模块
@@ -431,6 +434,8 @@ def create_app(config: dict) -> Flask:
             register_extra_sdk(ef["fetcher"].corpid, ef["sdk"])
             register_extra_contacts(ef["fetcher"].corpid, ef["contacts"])
             register_corpid_cursor(ef["fetcher"].corpid, ef["fetcher"].cursor_id)
+            # 额外企业通讯录同样注册到 FlowBot 回调（群名刷新兜底逐企业尝试）
+            register_flowbot_contacts(ef["contacts"])
 
         # 注册企业列表（前端切换用）
         enterprise_list = [
