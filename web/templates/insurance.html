@@ -508,10 +508,17 @@
         .record-filter-card { display: block; }
         .record-filter-card:not(.m-open) .rf-main { display: none; }
         .record-filter-card:not(.m-open) .rf-date { margin-top: 0; padding-top: 0; border-top: none; }
-        .m-record-toolbar { display: flex; align-items: center; gap: 8px; }
+        .m-record-toolbar {
+            display: flex; align-items: center; gap: 8px;
+            /* 固定在顶部标题栏下方，滑动列表时始终可搜索/筛选；top 用JS测出的标题栏
+               实际高度（超管红色徽标可能换行，高度不固定，不能写死像素数） */
+            position: sticky; top: var(--nav-header-h, 56px); z-index: 40;
+            background: #faf5f0; padding-top: 8px; padding-bottom: 8px;
+        }
         .m-record-cards { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
         /* 卡片流跟随整页滚动（解除表格卡高度封顶，覆盖 641-767px 区间） */
         .table-card { max-height: none !important; }
+        .nav-header { position: sticky; top: 0; z-index: 50; }
     }
     /* 移动端顶部：快捷搜索 + 筛选开关 */
     .m-search-box { flex: 1; display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; border-radius: 99px; padding: 8px 14px; min-width: 0; }
@@ -12015,6 +12022,20 @@ const _app = createApp({
             document.addEventListener('visibilitychange', () => {
                 if (!document.hidden && _canAutoRefreshRecords()) loadRecords(false, true);
             });
+
+            // 手机端顶部标题栏固定后，下面的搜索/筛选栏要贴着它固定——标题栏实际高度会因为
+            // 超管红色徽标换行等情况变化，写死像素数会漏出缝隙或被遮住，改成实时测量高度
+            // 写入 CSS 变量 --nav-header-h，标题栏内容变化时（如登录状态切换）重新测量
+            const _syncNavHeaderHeight = () => {
+                const el = document.querySelector('.nav-header');
+                if (el) document.documentElement.style.setProperty('--nav-header-h', el.offsetHeight + 'px');
+            };
+            _syncNavHeaderHeight();
+            window.addEventListener('resize', _syncNavHeaderHeight);
+            if (window.ResizeObserver) {
+                const _navHeaderEl = document.querySelector('.nav-header');
+                if (_navHeaderEl) new ResizeObserver(_syncNavHeaderHeight).observe(_navHeaderEl);
+            }
         });
 
         // ============================================================
