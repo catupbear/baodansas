@@ -11481,16 +11481,23 @@ const _app = createApp({
 
             // 记录列表定时自动刷新(30秒)：仅在"识别记录"页、页面可见、无弹窗/预览打开、非加载中、
             // 非按车牌合并模式时静默刷新，保留当前筛选/页码/勾选；页面切到后台标签自动暂停
-            setInterval(() => {
-                if (document.hidden) return;
-                if (pageTab.value !== 'records') return;
-                if (isLoadingRecords.value || pageMergeByPlate.value) return;
+            const _canAutoRefreshRecords = () => {
+                if (document.hidden) return false;
+                if (pageTab.value !== 'records') return false;
+                if (isLoadingRecords.value || pageMergeByPlate.value) return false;
                 if (previewVisible.value || recordDetailVisible.value || mappingModalVisible.value
-                        || contactEditVisible.value || pricingVisible.value || profileVisible.value) return;
+                        || contactEditVisible.value || pricingVisible.value || profileVisible.value) return false;
                 // 移动端卡片流已触底加载多页时跳过（静默刷新只请求当前页，会把追加的数据刷掉）
-                if (window.innerWidth < 768 && recordPagination.page > 1) return;
-                loadRecords(false, true);
-            }, 30000);
+                if (window.innerWidth < 768 && recordPagination.page > 1) return false;
+                return true;
+            };
+            setInterval(() => { if (_canAutoRefreshRecords()) loadRecords(false, true); }, 30000);
+            // 切回本标签页时立即静默刷新一次，不用等到下一个30秒轮询——常见场景：在"系统设置"页
+            // 改完比例规则/计算公式等配置后切回"识别记录"标签页，之前得等最多30秒或手动刷新才能
+            // 看到最新数据，容易被当成"改了不生效"（2026-07-21反馈）
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden && _canAutoRefreshRecords()) loadRecords(false, true);
+            });
         });
 
         // ============================================================
