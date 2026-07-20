@@ -5498,13 +5498,15 @@ def batch_download_file(task_id):
     if not zip_data or zip_data.getbuffer().nbytes <= 22:
         return jsonify({"code": 400, "msg": "所有文件下载失败，无可下载内容"}), 400
 
-    zip_data.seek(0)
-
-    # 取出后清理任务数据（只允许下载一次，释放内存）
-    _download_tasks.pop(task_id, None)
-
+    # 不在此处立即清理任务数据、也不直接把存的 BytesIO 交给 send_file：浏览器里 a.click()
+    # 触发下载是异步发起的（轮询状态变成done后才调用），部分浏览器/安全策略下这个click
+    # 不算"真正的用户手势"，会静默不弹保存框——前端为此加了"重新下载"手动兜底按钮，
+    # 需要支持同一个任务被重复请求。改成只靠 _cleanup_expired_tasks 的10分钟过期清理，
+    # 允许在过期前反复重新下载；每次都用存的字节内容包一个新 BytesIO，避免 send_file
+    # 用完关掉底层流后，第二次请求 seek 到已关闭的流上报错。
+    zip_bytes = zip_data.getvalue()
     return send_file(
-        zip_data,
+        io.BytesIO(zip_bytes),
         mimetype="application/zip",
         as_attachment=True,
         download_name="保单文件批量下载.zip",

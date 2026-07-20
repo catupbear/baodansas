@@ -4381,7 +4381,7 @@
                 </template>
                 <template v-else-if="downloadTask.status === 'done'">
                     <span v-if="!downloadTask.fileSaved" style="color:#16a34a;">打包完成，正在下载 ZIP...</span>
-                    <span v-else style="color:#16a34a;">下载完成</span>
+                    <span v-else style="color:#16a34a;">下载完成（浏览器没弹出保存框？点右下角"重新下载"）</span>
                 </template>
                 <template v-else-if="downloadTask.status === 'error'">
                     <span style="color:#dc2626;">下载失败: {{ downloadTask.error }}</span>
@@ -4411,6 +4411,18 @@
                         onmouseover="this.style.background='#ffedd5'" onmouseout="this.style.background='#fff7ed'">
                     <svg style="width:12px;height:12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                     重试
+                </button>
+            </div>
+            <!-- 手动重新下载：ZIP自动下载靠浏览器异步触发的a.click()，部分浏览器/安全策略下会
+                 静默失败（不算真正的用户点击手势），进度显示"完成"但文件其实没落盘。加个手动
+                 按钮兜底，这次点击是真实的用户手势，浏览器一定会正常弹出保存 -->
+            <div v-if="downloadTask.status === 'done' && downloadTask.fileSaved"
+                 style="margin-top:8px;display:flex;justify-content:flex-end;">
+                <button @click="_triggerDownloadFile(downloadTask.taskId)"
+                        style="padding:4px 12px;font-size:12px;border-radius:6px;background:#f0fdf4;border:1px solid #86efac;color:#16a34a;cursor:pointer;display:flex;align-items:center;gap:4px;"
+                        onmouseover="this.style.background='#dcfce7'" onmouseout="this.style.background='#f0fdf4'">
+                    <svg style="width:12px;height:12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    重新下载
                 </button>
             </div>
         </div>
