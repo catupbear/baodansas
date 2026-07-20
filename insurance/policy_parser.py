@@ -3743,6 +3743,21 @@ def _extract_premium(text: str, fields: dict, company_short: str):
                     fields["保费合计"] = m.group(2)
                     break
 
+    # 永安交强险等格式兜底："保险费合计"标签行本身是空模板（值在OCR错位后的别处），
+    # 实际金额跟车船税一样以"大写金额+紧跟小写数字"形式散落在文中（如"玖佰伍拾元整
+    # 950.00"），且往往不止一处（后面还有车船税"叁佰陆拾元整 360.00"）。取文中第一处
+    # 大写与紧跟小写数字互相一致的金额——保险费合计在原文档版面上必然先于车船税出现，
+    # 靠这个顺序区分，不依赖标签邻近（标签邻近在这类文档里已经失效）
+    if "保费合计" not in fields:
+        for m in re.finditer(
+            r"([壹贰叁肆伍陆柒捌玖零拾佰仟万亿]+元(?:整|[壹贰叁肆伍陆柒捌玖零角分]+)?)\s*(\d{1,6}\.\d{2})",
+            text
+        ):
+            cn_val = _parse_chinese_amount(m.group(1))
+            if cn_val and abs(float(cn_val) - float(m.group(2))) < 0.01:
+                fields["保费合计"] = m.group(2)
+                break
+
     # 人保等兜底：险种明细表末尾的大写金额（如"800.00 陆仟叁佰玖拾玖元伍角肆分"）
     # 在"特别约定"或"车险"之前查找最后一个大写金额
     if "保费合计" not in fields and company_short == "人民财产":
