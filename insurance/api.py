@@ -4906,7 +4906,16 @@ def export_excel():
                         #    非车险保费三个拆分列，某险种没有这份保单时该格是空的，一直卡在旧值）
                         if col in formula_referenced_cols:
                             num = _pure_number(cur)
-                            if num is None and (cur is None or cur == ""):
+                            is_empty = num is None and (cur is None or cur == "")
+                            if is_empty and col in percent_fields:
+                                # 百分比费率列（如应付费率/交强比例）留空时不写0，直接留空单元格——
+                                # 真正的空单元格(不是空字符串"")参与公式乘除时 Excel 本就当0处理，
+                                # 不会触发#VALUE!，没必要为了兜底把"没配置费率"显示成看着像是
+                                # 算出来的"0.0%"，容易让人误以为费率真是0
+                                cell.value = None
+                                cell.number_format = "0.0%"
+                                continue
+                            if is_empty:
                                 num = 0
                             if num is not None:
                                 cell.value = num
