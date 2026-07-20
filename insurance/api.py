@@ -4903,7 +4903,10 @@ def export_excel():
                                 num = 0
                             if num is not None:
                                 cell.value = num
-                                cell.number_format = "0.00"
+                                # 百分比字段（如商业比例/驾意比例）留空时同样按上面兜底成0，但
+                                # 格式要用百分比而不是金额的"0.00"，否则空着的比例格子显示成
+                                # 金额格式的"0.00"，跟同列有数据的百分比行（"23.0%"）格式不一致
+                                cell.number_format = "0.0%" if col in percent_fields else "0.00"
                                 continue
                     # 4) 通用兜底（对所有导出用户生效，不依赖企业配置）：
                     #    金额类字段（字段名命中关键词）→ 真正数字类型；日期/时间字段 → 真正日期类型。
