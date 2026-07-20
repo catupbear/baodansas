@@ -4867,8 +4867,10 @@ def export_excel():
                 （这两类是基础导出体验，对所有用户生效，不依赖企业是否配置了计算公式等）。
                 src_fields 为该行的字段字典（用于按公司/险种匹配公式）。"""
                 formula_map = {}
+                percent_fields = set()
                 if has_config:
                     formula_map = {tf: f for tf, f, is_comp in match_fee_formulas(user_config, src_fields) if is_comp}
+                    percent_fields = user_config.get("percent_fields") or set()
                 for cidx, col in enumerate(field_names, start=1):
                     cell = ws.cell(row=row_idx, column=cidx)
                     cur = cell.value
@@ -4910,6 +4912,14 @@ def export_excel():
                         if dtv is not None:
                             cell.value = dtv
                             cell.number_format = "yyyy-mm-dd hh:mm" if (dtv.hour or dtv.minute or dtv.second) else "yyyy-mm-dd"
+                            continue
+                    # 5) 百分比字段（企业在"页面列配置"里勾了 is_percent 的自定义列，如交强/商业/
+                    #    驾意比例、个人交强/商业/驾意应得）：本行没有值时上面2步不会触碰这个单元格，
+                    #    留成默认"常规"格式；整列里没数据的行格式跟有数据的行不一致，用户手动补录
+                    #    时容易忘了先设成百分比格式导致填了个"23"却显示"2300%"。这里不管有没有
+                    #    值，只要是百分比字段就统一把格式设成百分比，跟有数据的行保持一致
+                    if col in percent_fields and cell.number_format in (None, "General"):
+                        cell.number_format = "0.0%"
 
             # 前端标记数据是否已经过 apply_user_config 处理（识别记录导出时为 True）
             # 避免重复应用险种简称等别名导致值被二次转换
