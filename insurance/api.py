@@ -4891,9 +4891,16 @@ def export_excel():
                             cell.value = dec
                             cell.number_format = "0.0%"
                             continue
-                        # 3) 公式引用到的金额列 → 转数字
+                        # 3) 公式引用到的金额列 → 转数字（空值写成数字0，不能留成空字符串——
+                        #    Excel/WPS 里文本类型的单元格(哪怕是空字符串"")参与乘除会直接报
+                        #    #VALUE!，公式外层套的 IFERROR 会捕获这个错误，永远回退去用导出那一刻
+                        #    算好的静态兜底值，导致这一行只要还有别的引用列是空的，不管怎么改其他
+                        #    格子的数字，结算金额永远不变——2026-07-21实测：交强险保费/商业险保费/
+                        #    非车险保费三个拆分列，某险种没有这份保单时该格是空的，一直卡在旧值）
                         if col in formula_referenced_cols:
                             num = _pure_number(cur)
+                            if num is None and (cur is None or cur == ""):
+                                num = 0
                             if num is not None:
                                 cell.value = num
                                 cell.number_format = "0.00"
