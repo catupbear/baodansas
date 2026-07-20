@@ -516,7 +516,7 @@
     .mrc-kv .v.empty { color: #d1d5db; font-weight: 400; }
     .mrc-kv .v.link { color: #ea580c; }
     .mrc-kv.full { grid-column: 1 / -1; }
-    .mrc-edit-icon { width: 10px; height: 10px; margin-left: 3px; color: #fb923c; opacity: .65; flex-shrink: 0; vertical-align: -1px; }
+    .mrc-edit-icon { width: 13px; height: 13px; margin-left: 4px; color: #f97316; opacity: 1; flex-shrink: 0; vertical-align: -2px; }
     .mrc-toggle { width: 100%; margin-top: 8px; padding: 6px; border: none; cursor: pointer; background: #fafafa; border-radius: 8px; color: #9ca3af; font-size: 11.5px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 4px; }
     .mrc-toggle:active { background: #f3f4f6; }
     .mrc-sec-title { font-size: 11px; font-weight: 700; color: #9ca3af; letter-spacing: .5px; display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; }
@@ -3310,13 +3310,41 @@
                             </div>
                         </template>
                     </div>
-                    <!-- 合并明细：同车牌的原始记录（可单条预览/重新识别/报错） -->
+                    <!-- 合并明细：同车牌的原始记录（可单条预览/重新识别/报错/展开字段编辑） -->
                     <div v-if="record._merged && record._expanded" class="mrc-children">
                         <div v-for="child in record._children" :key="'mc' + child.id" class="mrc-child">
                             <div class="mrc-child-info">
                                 <span class="mrc-chip mrc-chip-jq">{{ (child.display_fields || {})['险种'] || '险种?' }}</span>
                                 <span>保单号 {{ (child.display_fields || {})['保单号'] || '—' }}</span>
                                 <span>保费 {{ (child.display_fields || {})['保费'] || '—' }}</span>
+                            </div>
+                            <!-- 单条子记录字段展开：真实记录id，可直接点字段编辑 -->
+                            <button class="mrc-toggle" style="margin-top:6px;" @click="child._mExpanded = !child._mExpanded">
+                                {{ child._mExpanded ? '收起字段' : '展开字段编辑' }}
+                                <span style="font-size:10px;">{{ child._mExpanded ? '▲' : '▼' }}</span>
+                            </button>
+                            <div v-if="child._mExpanded">
+                                <template v-for="group in mAllFieldGroups" :key="'cmg' + group.title">
+                                    <div class="mrc-sec-title">{{ group.title }}</div>
+                                    <div class="mrc-sec-grid">
+                                        <div v-for="col in group.cols" :key="'cmd' + col.key" class="mrc-kv" :class="{ full: mIsLong(col.key) }">
+                                            <span class="k">{{ col.display_name }}</span>
+                                            <span v-if="listEditing.recordId === child.id && listEditing.col === col.key" class="mrc-edit-row" style="flex:1;">
+                                                <input v-model="listEditing.value" v-auto-picker="isDateField(col.key)"
+                                                       :type="isDateField(col.key) ? 'date' : 'text'"
+                                                       @keyup.enter="saveListEdit(child)" @keyup.escape="cancelListEdit()">
+                                                <button class="mrc-btn mrc-btn-primary" style="padding:4px 8px;font-size:11px;" :disabled="listEditing.saving" @click="saveListEdit(child)">{{ listEditing.saving ? '..' : '✓' }}</button>
+                                                <button class="mrc-btn" style="padding:4px 8px;font-size:11px;background:#fff;border:1px solid #d1d5db;color:#6b7280;" @click="cancelListEdit()">✕</button>
+                                            </span>
+                                            <template v-else>
+                                                <span class="v" :class="mValClass(child, col)" @click="mFieldClick(child, col)">
+                                                    {{ mFieldDisplay(child, col) }}
+                                                    <svg v-if="mFieldEditable(child, col)" class="mrc-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                                </span>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
                             </div>
                             <div class="mrc-child-acts">
                                 <button v-if="child.cos_url" class="mrc-btn mrc-btn-view" @click="previewRecord(child)">预览</button>
@@ -11355,6 +11383,20 @@ const _app = createApp({
             if (others.length) groups.push({ title: '📋 其他', cols: others });
             return groups;
         });
+        // 合并卡「展开N条」里单条子记录的完整字段分组：不像主卡那样分摘要区/详情区，
+        // 子记录默认全折叠，展开时要一次性给全部可见列（不排除 mSummaryCols 覆盖的字段）
+        const mAllFieldGroups = computed(() => {
+            const rest = visibleListColumns.value.filter(c => !M_HEADER_KEYS.includes(c.key));
+            const groups = [];
+            for (const g of M_FIELD_GROUPS) {
+                const cols = rest.filter(c => g.keys.includes(c.key));
+                if (cols.length) groups.push({ title: g.title, cols });
+            }
+            const groupedKeys = new Set(M_FIELD_GROUPS.flatMap(g => g.keys));
+            const others = rest.filter(c => !groupedKeys.has(c.key));
+            if (others.length) groups.push({ title: '📋 其他', cols: others });
+            return groups;
+        });
         // 字段显示值（特殊字段走记录属性，其余取 display_fields）
         function mFieldDisplay(record, col) {
             const key = col.key;
@@ -12068,7 +12110,7 @@ const _app = createApp({
             // 识别记录移动端卡片视图
             mobileFilterOpen, mSheetRecord, mLoadingMore,
             mField, mHasPlate, mCardTitle, mPolicyChipClass, mIsLong,
-            mSummaryCols, mDetailGroups, mFieldDisplay, mValClass, mFieldClick, mFieldEditable,
+            mSummaryCols, mDetailGroups, mAllFieldGroups, mFieldDisplay, mValClass, mFieldClick, mFieldEditable,
             openMSheet, closeMSheet, mLoadMore,
             // 购买套餐弹窗
             pricingVisible, billingType, showPricingQr, pricingData,
