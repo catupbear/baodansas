@@ -3249,7 +3249,8 @@
                     <div v-if="record.abnormal_override_reason" class="mrc-hint mrc-hint-ok">✓ 已标记正常：{{ record.abnormal_override_reason }}</div>
                     <!-- 核心摘要（跟随列配置自动挑选，默认可见） -->
                     <div v-if="mSummaryCols.length" class="mrc-summary">
-                        <div v-for="col in mSummaryCols" :key="'ms' + col.key" class="mrc-kv">
+                        <div v-for="col in mSummaryCols" :key="'ms' + col.key" class="mrc-kv"
+                             :class="{ full: listEditing.recordId === record.id && listEditing.col === col.key }">
                             <span class="k">{{ col.display_name }}</span>
                             <span v-if="listEditing.recordId === record.id && listEditing.col === col.key" class="mrc-edit-row" style="flex:1;">
                                 <input v-model="listEditing.value" v-auto-picker="isDateField(col.key)"
@@ -3274,7 +3275,8 @@
                         <template v-for="group in mDetailGroups" :key="'mg' + group.title">
                             <div class="mrc-sec-title">{{ group.title }}</div>
                             <div class="mrc-sec-grid">
-                                <div v-for="col in group.cols" :key="'md' + col.key" class="mrc-kv" :class="{ full: mIsLong(col.key) }">
+                                <div v-for="col in group.cols" :key="'md' + col.key" class="mrc-kv"
+                                     :class="{ full: mIsLong(col.key) || (listEditing.recordId === record.id && listEditing.col === col.key) }">
                                     <span class="k">{{ col.display_name }}</span>
                                     <span v-if="listEditing.recordId === record.id && listEditing.col === col.key" class="mrc-edit-row" style="flex:1;">
                                         <input v-model="listEditing.value" v-auto-picker="isDateField(col.key)"
