@@ -5232,8 +5232,21 @@ def export_excel():
                 except Exception:
                     pass
                 # 注意 apply_user_config_to_fields 返回新 dict、不改入参，必须把返回值写回。
-                merged_rows = [apply_user_config_to_fields(user_config, _mrow, formula_only=True)
-                               for _mrow in merged_rows]
+                # 交强/商业/驾意比例等险种专属字段上面已经按险种从对应子记录正确路由过（MERGE_TYPE_
+                # SPECIFIC_FIELDS），这里必须保护起来不被重新计算——因为 skip_config=True 时上游
+                # 跳过了批量预取关联单（_prepare_ratio_related_ctx），此时若重新走比例规则会因为
+                # 缺少关联单上下文而误判"不满足条件"，把已经路由对的值又改回默认值，覆盖掉正确结果。
+                _orig_manual = user_config.get("_manual_fields")
+                _new_rows = []
+                for _mrow in merged_rows:
+                    _protect = {f for f in MERGE_TYPE_SPECIFIC_FIELDS if _mrow.get(f)}
+                    user_config["_manual_fields"] = (set(_orig_manual) if _orig_manual else set()) | _protect
+                    _new_rows.append(apply_user_config_to_fields(user_config, _mrow, formula_only=True))
+                merged_rows = _new_rows
+                if _orig_manual is None:
+                    user_config.pop("_manual_fields", None)
+                else:
+                    user_config["_manual_fields"] = _orig_manual
 
                 # 页面"按车牌合并"显示：直接返回合并行 JSON（与导出完全同一套合并逻辑），不生成 Excel
                 if body.get("return_json"):
