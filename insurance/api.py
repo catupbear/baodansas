@@ -46,7 +46,7 @@ from .field_config_db import (
     get_remark_selector_config, save_remark_selector_config,
     get_merge_by_plate, save_merge_by_plate,
     get_plate_format_pingan, save_plate_format_pingan,
-    MERGE_SHARED_FIELDS, MERGE_SPLIT_FIELDS, MERGE_PREFIXES, MERGE_EXTRA_COLUMNS,
+    MERGE_SHARED_FIELDS, MERGE_SPLIT_FIELDS, MERGE_PREFIXES, MERGE_EXTRA_COLUMNS, MERGE_TYPE_SPECIFIC_FIELDS,
     DEFAULT_COLUMNS,
 )
 from .monitor_config_db import (
@@ -5150,8 +5150,22 @@ def export_excel():
                             merged["车船税"] = val
                             break
 
+                    # 险种专属字段（交强比例/商业比例/驾意比例、个人XX应得）：只从对应险种的
+                    # 子记录取值，不能像下面"其他自定义字段"那样随便拿组里第一条有值的
+                    for f, type_codes in MERGE_TYPE_SPECIFIC_FIELDS.items():
+                        for record in group:
+                            policy_type = record.get("险种", "") or record.get("险种类型", "")
+                            type_code, _ = get_policy_type_code(policy_type)
+                            if type_code not in type_codes:
+                                continue
+                            val = record.get(f, "")
+                            if val:
+                                merged[f] = val
+                                break
+
                     # 保留其他自定义字段（非共享非差异的字段互相补充）
-                    all_known = set(MERGE_SHARED_FIELDS) | set(MERGE_SPLIT_FIELDS) | {"车船税", "险种", "险种类型", "_src_id", "_order"}
+                    all_known = (set(MERGE_SHARED_FIELDS) | set(MERGE_SPLIT_FIELDS) | set(MERGE_TYPE_SPECIFIC_FIELDS)
+                                 | {"车船税", "险种", "险种类型", "_src_id", "_order"})
                     for record in group:
                         for k, v in record.items():
                             if k not in all_known and k not in merged and v:
