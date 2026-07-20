@@ -355,6 +355,19 @@
             /* 备注 Tab 的双列网格 */
             .remark-grid { grid-template-columns: 1fr !important; }
         }
+
+        /* 模糊搜索下拉组件（search-select） */
+        .ss-wrap { position: relative; width: 100%; }
+        .ss-input { width: 100%; padding: 8px 28px 8px 12px; border: 1px solid var(--border-light); border-radius: 4px; font: inherit; font-size: 13px; outline: none; }
+        .ss-input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(194, 65, 12, .12); }
+        .ss-arrow { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 11px; pointer-events: none; }
+        .ss-panel { position: absolute; left: 0; right: 0; top: calc(100% + 4px); background: #fff; border: 1px solid var(--border-light); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.12); max-height: 220px; overflow-y: auto; z-index: 30; }
+        .ss-item { padding: 7px 12px; font-size: 13px; cursor: pointer; color: var(--text-primary, #1a2333); }
+        .ss-item:hover, .ss-item.on { background: #fff7ed; color: var(--primary); }
+        .ss-item b { color: var(--primary); font-weight: 700; }
+        .ss-empty { padding: 8px 12px; font-size: 12px; color: #94a3b8; }
+        .ss-create { color: var(--primary); font-weight: 600; border-top: 1px dashed var(--border-light); }
+        .ss-create-sub { margin-left: 6px; font-size: 11px; font-weight: 400; color: #94a3b8; }
     </style>
 </head>
 <body>
@@ -699,13 +712,13 @@
                     </div>
                 </div>
                 <div style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">
-                    按条件给「比例字段」取值（如 应付费率），公式照常引用该字段（如 应付费用 = 保费 × 应付费率）。比例字段需先在「导出列配置」中添加为自定义列。
+                    按条件算出比例后写入指定字段（如 应付费率），公式照常引用该字段（如 应付费用 = 保费 × 应付费率）。比例写入字段需先在「导出列配置」中添加为自定义列。
                 </div>
                 <div class="rule-table-wrap" style="overflow-x:auto;">
                 <table class="rule-table" style="min-width:640px;">
                     <thead>
                         <tr>
-                            <th style="width:110px;">比例字段</th>
+                            <th style="width:110px;">比例写入字段</th>
                             <th style="width:100px;">保司</th>
                             <th style="width:90px;">险种</th>
                             <th>条件 → 比例</th>
@@ -1236,30 +1249,18 @@
             <div style="padding:24px; max-height:65vh; overflow-y:auto;">
                 <div class="formula-grid" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:16px;">
                     <div>
-                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">比例字段</label>
-                        <input v-model="ratioForm.field" list="ratioFieldOptions" placeholder="如：应付费率" style="width:100%; padding:8px 12px; border:1px solid var(--border-light); border-radius:4px;">
-                        <datalist id="ratioFieldOptions">
-                            <option v-for="f in formulaFields" :value="f"></option>
-                        </datalist>
+                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">比例写入字段</label>
+                        <search-select v-model="ratioForm.field" :options="formulaFields" placeholder="如：应付费率"
+                                       empty-hint="暂无自定义字段，输入新字段名可直接新建"
+                                       create-label="添加为导出列自定义字段" @create="createRatioField"></search-select>
                     </div>
                     <div>
                         <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">保司</label>
-                        <input v-model="ratioForm.company" list="ratioCompanyOptions" placeholder="简称或全部" style="width:100%; padding:8px 12px; border:1px solid var(--border-light); border-radius:4px;">
-                        <datalist id="ratioCompanyOptions">
-                            <option value="全部"></option>
-                            <option v-for="c in companyShortList" :value="c"></option>
-                        </datalist>
+                        <search-select v-model="ratioForm.company" :options="ratioCompanyOptions" placeholder="简称或全部"></search-select>
                     </div>
                     <div>
                         <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">险种</label>
-                        <input v-model="ratioForm.policyType" list="ratioPolicyOptions" placeholder="简称或全部" style="width:100%; padding:8px 12px; border:1px solid var(--border-light); border-radius:4px;">
-                        <datalist id="ratioPolicyOptions">
-                            <option value="全部"></option>
-                            <option value="交强险"></option>
-                            <option value="商业险"></option>
-                            <option value="驾乘险"></option>
-                            <option v-for="p in policyTypeShortList" :value="p"></option>
-                        </datalist>
+                        <search-select v-model="ratioForm.policyType" :options="ratioPolicyOptions" placeholder="简称或全部"></search-select>
                     </div>
                 </div>
 
@@ -1284,6 +1285,11 @@
 
                 <!-- 条件分支 -->
                 <template v-else>
+                    <div style="font-size:12px; color:var(--text-muted); background:#f8fafc; border:1px solid var(--border-light); border-radius:6px; padding:8px 12px; margin-bottom:12px; line-height:1.8;">
+                        分支自上而下匹配，第一个满足全部条件的分支比例生效，都不满足时用默认比例。两种条件：<br>
+                        <b style="color:var(--text-secondary);">字段条件</b>：看<b>本条保单</b>自己的字段值，如「保费 大于 5000」「使用性质 等于 营运」「承保险种 包含 摩托」。<br>
+                        <b style="color:var(--text-secondary);">关联单条件</b>：看<b>是否存在另一张关联保单</b>——按车牌号/车架号/投保人匹配、限定险种、出单日期前后 N 天内。如「按车牌号 存在 驾乘险 前后 7 天」即"同车 7 天内带驾乘险出单"。
+                    </div>
                     <div v-for="(br, bi) in ratioForm.branches" :key="bi"
                          style="border:1.5px dashed #94a3b8; border-radius:8px; padding:12px 14px; margin-bottom:12px; background:#fafcff;">
                         <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
@@ -1297,8 +1303,8 @@
                              style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:6px 0; padding:6px 10px; background:#fff; border:1px solid var(--border-light); border-radius:6px; font-size:13px;">
                             <span v-if="ci>0" style="background:#e0e7ff; color:#4338ca; border-radius:4px; padding:0 6px; font-size:11px; font-weight:700;">且</span>
                             <select v-model="c.type" style="padding:4px 6px;">
-                                <option value="field">字段条件</option>
-                                <option value="related">关联单条件</option>
+                                <option value="field" title="看本条保单自己的字段值，如：保费 大于 5000">字段条件</option>
+                                <option value="related" title="看是否存在另一张关联保单，如：同车牌 7 天内存在驾乘险">关联单条件</option>
                             </select>
                             <template v-if="c.type==='related'">
                                 <span style="color:var(--text-muted); font-size:12px;">按</span>
@@ -1325,8 +1331,8 @@
                             <button class="btn btn-sm" style="color:var(--danger); background:transparent; border:none;" @click="br.conditions.splice(ci,1)">✕</button>
                         </div>
                         <div style="display:flex; gap:8px; margin:8px 0;">
-                            <button class="btn btn-sm btn-outline" @click="addRatioCond(br, 'field')">＋字段条件</button>
-                            <button class="btn btn-sm btn-outline" @click="addRatioCond(br, 'related')">＋关联单条件</button>
+                            <button class="btn btn-sm btn-outline" title="看本条保单自己的字段值，如：保费 大于 5000" @click="addRatioCond(br, 'field')">＋字段条件</button>
+                            <button class="btn btn-sm btn-outline" title="看是否存在另一张关联保单，如：同车牌 7 天内存在驾乘险" @click="addRatioCond(br, 'related')">＋关联单条件</button>
                         </div>
                         <div style="display:flex; align-items:center; gap:8px;">
                             <span style="font-size:13px; color:var(--text-secondary);">则比例 =</span>
@@ -1445,7 +1451,83 @@ if (!checkAuth()) throw new Error('redirect');
 
 const { createApp, ref, reactive, computed, watch, nextTick, onMounted } = Vue;
 
+// 模糊搜索下拉组件：可输入任意值，输入时按包含匹配过滤选项，支持键盘上下选择
+// 传入 create-label 后启用「新建」引导：输入不在选项中的值时出现新建行，点击触发 create 事件由父级处理
+const SearchSelect = {
+    props: {
+        modelValue: { type: String, default: '' },
+        options: { type: Array, default: () => [] },
+        placeholder: { type: String, default: '' },
+        emptyHint: { type: String, default: '无匹配选项，可直接输入' },
+        createLabel: { type: String, default: '' },
+    },
+    emits: ['update:modelValue', 'create'],
+    data() { return { open: false, keyword: null, hi: -1 }; },
+    computed: {
+        filtered() {
+            const kw = (this.keyword ?? '').trim().toLowerCase();
+            const opts = (this.options || []).map(o => String(o)).filter(Boolean);
+            if (!kw) return opts;
+            return opts.filter(o => o.toLowerCase().includes(kw));
+        },
+        // 启用了新建引导、输入了内容且与现有选项不完全相同时，展示「新建」行
+        showCreate() {
+            const kw = (this.keyword ?? '').trim();
+            return !!this.createLabel && !!kw && !(this.options || []).some(o => String(o) === kw);
+        },
+    },
+    methods: {
+        openList() { this.open = true; this.keyword = null; this.hi = -1; },
+        onInput(e) {
+            const v = e.target.value;
+            this.keyword = v; this.open = true; this.hi = -1;
+            this.$emit('update:modelValue', v);
+        },
+        pick(o) { this.$emit('update:modelValue', o); this.open = false; this.keyword = null; },
+        doCreate() {
+            const kw = (this.keyword ?? '').trim();
+            if (!kw) return;
+            this.$emit('create', kw);
+            this.open = false; this.keyword = null;
+        },
+        onKey(e) {
+            if (!this.open && ['ArrowDown', 'ArrowUp'].includes(e.key)) { this.open = true; return; }
+            if (e.key === 'ArrowDown') { e.preventDefault(); this.hi = Math.min(this.hi + 1, this.filtered.length - 1); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); this.hi = Math.max(this.hi - 1, 0); }
+            else if (e.key === 'Enter') {
+                if (this.open && this.hi >= 0 && this.filtered[this.hi]) { e.preventDefault(); this.pick(this.filtered[this.hi]); }
+                else if (this.open && this.showCreate && !this.filtered.length) { e.preventDefault(); this.doCreate(); }
+                else { this.open = false; }
+            }
+            else if (e.key === 'Escape') { this.open = false; }
+        },
+        hl(o) {
+            const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const kw = (this.keyword ?? '').trim();
+            if (!kw) return esc(o);
+            const i = o.toLowerCase().indexOf(kw.toLowerCase());
+            if (i < 0) return esc(o);
+            return esc(o.slice(0, i)) + '<b>' + esc(o.slice(i, i + kw.length)) + '</b>' + esc(o.slice(i + kw.length));
+        },
+    },
+    template: `
+        <div class="ss-wrap">
+            <input class="ss-input" :value="keyword ?? modelValue" :placeholder="placeholder"
+                   @focus="openList" @input="onInput" @keydown="onKey" @blur="open=false">
+            <span class="ss-arrow">▾</span>
+            <div class="ss-panel" v-if="open">
+                <div v-for="(o, i) in filtered" :key="o" class="ss-item" :class="{ on: i === hi }"
+                     @mousedown.prevent="pick(o)" v-html="hl(o)"></div>
+                <div v-if="!filtered.length && !showCreate" class="ss-empty">{{ emptyHint }}</div>
+                <div v-if="showCreate" class="ss-item ss-create" @mousedown.prevent="doCreate">
+                    ＋ 新建「{{ (keyword ?? '').trim() }}」<span class="ss-create-sub">{{ createLabel }}</span>
+                </div>
+            </div>
+        </div>`,
+};
+
 createApp({
+    components: { 'search-select': SearchSelect },
     setup() {
         // === Toast 提示 ===
         const toast = ref({ show: false, message: '', type: 'success' });
@@ -1983,9 +2065,10 @@ createApp({
         // 添加/删除自定义字段
         const newColName = reactive({ list: '', export: '' });
 
-        const addCustomCol = (target) => {
-            const name = (target === 'list' ? newColName.list : newColName.export || '').trim();
-            if (!name) return;
+        // 按名称新增自定义字段（列表列 + 导出列双向同步），返回实际使用的唯一 key
+        const addCustomColByName = (name, target) => {
+            name = (name || '').trim();
+            if (!name) return null;
             const items = target === 'list' ? listColItems.value : exportColItems.value;
             // 允许重复字段名：Excel 列头(display_name)可以重复，但内部 key 必须唯一
             //（v-for 的 :key、双向同步、删除都按 key 匹配，重复 key 会导致渲染/同步错乱）。
@@ -1996,13 +2079,15 @@ createApp({
             const newCol = { key, visible: true, order: items.length, display_name: name, custom: true, is_percent: false };
             items.push(newCol);
             // 双向同步：用同一个唯一 key 添加到另一侧
-            if (target === 'list') {
-                newColName.list = '';
-                exportColItems.value.push({ ...newCol, order: exportColItems.value.length });
-            } else {
-                newColName.export = '';
-                listColItems.value.push({ ...newCol, order: listColItems.value.length });
-            }
+            const otherItems = target === 'list' ? exportColItems.value : listColItems.value;
+            otherItems.push({ ...newCol, order: otherItems.length });
+            return key;
+        };
+
+        const addCustomCol = (target) => {
+            const name = target === 'list' ? newColName.list : newColName.export;
+            if (!addCustomColByName(name, target)) return;
+            if (target === 'list') newColName.list = ''; else newColName.export = '';
         };
 
         const removeCustomCol = (items, idx) => {
@@ -2235,6 +2320,9 @@ createApp({
         // 公司/险种下拉从简称映射列表动态获取
         const companyShortList = computed(() => [...new Set(companyAliasList.value.filter(i => i.enabled && i.value).map(i => i.value))]);
         const policyTypeShortList = computed(() => [...new Set(policyAliasList.value.filter(i => i.enabled && i.value).map(i => i.value))]);
+        // 比例规则弹窗的保司/险种下拉选项（含「全部」与常用险种）
+        const ratioCompanyOptions = computed(() => ['全部', ...companyShortList.value]);
+        const ratioPolicyOptions = computed(() => [...new Set(['全部', '交强险', '商业险', '驾乘险', ...policyTypeShortList.value])]);
 
         // 公式中可引用的字段：保费、车船税 + 所有自定义字段
         const allFields = computed(() => {
@@ -2385,6 +2473,14 @@ createApp({
         const ratioForm = ref({ field: '', company: '', policyType: '', mode: 'branch', fixedPct: 20, branches: [], defaultPct: 20 });
         const ratioFormError = ref('');
 
+        // 比例写入字段下拉里的「新建」引导：把输入的名称新建为自定义列（列表列+导出列）并直接选中
+        const createRatioField = (name) => {
+            const key = addCustomColByName(name, 'export');
+            if (!key) return;
+            ratioForm.value.field = key;
+            showToast(`已新建自定义字段「${key}」并选中，随模板保存后生效`);
+        };
+
         const newRatioCond = (type) => type === 'related'
             ? { type: 'related', match_by: '车牌号', op: 'exists', policy_type: '驾乘险', days: 7 }
             : { type: 'field', field: '保费', op: '大于', value: '' };
@@ -2420,7 +2516,7 @@ createApp({
         const saveRatioRule = () => {
             const f = ratioForm.value;
             ratioFormError.value = '';
-            if (!f.field || !f.field.trim()) { ratioFormError.value = '请填写比例字段名（如：应付费率）'; return; }
+            if (!f.field || !f.field.trim()) { ratioFormError.value = '请填写比例写入字段（如：应付费率）'; return; }
             if (!f.company || !f.company.trim()) { ratioFormError.value = '请填写保司（或"全部"）'; return; }
             if (!f.policyType || !f.policyType.trim()) { ratioFormError.value = '请填写险种（或"全部"）'; return; }
             if (f.mode === 'fixed') {
@@ -3370,14 +3466,14 @@ createApp({
             formulaFields, currentFormulaField, currentRules, allRules,
             formulaFilter, flatRules, filteredFlatRules, editFlatRule, deleteFlatRule,
             showFormulaModal, editingRuleIdx, formulaInput, formulaForm,
-            companyShortList, policyTypeShortList, availableFields, allFields, operators,
+            companyShortList, policyTypeShortList, ratioCompanyOptions, ratioPolicyOptions, availableFields, allFields, operators,
             formulaError, previewExpression, previewResult,
             insertField, insertOp, openFormulaModal, saveFormula, deleteRule,
             // 比例规则
             ratioRules, ratioSearch, ratioCompanyFilter, ratioCompanies, filteredRatioRules,
             ratioCondText, fmtPct, ratioFieldOps,
             showRatioModal, editingRatioIdx, ratioForm, ratioFormError,
-            openRatioModal, editRatioRule, deleteRatioRule, saveRatioRule,
+            openRatioModal, editRatioRule, deleteRatioRule, saveRatioRule, createRatioField,
             addRatioCond, addRatioBranch, moveRatioBranch,
             showRatioImport, ratioImportText, ratioImportPreview, ratioImportErrors,
             openRatioImport, parseRatioImport, applyRatioImport,
