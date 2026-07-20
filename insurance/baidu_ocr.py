@@ -7,12 +7,37 @@ API文档: https://cloud.baidu.com/doc/OCR/s/1k3h7y3db
 """
 
 import base64
+import io
 import logging
 import time
 import requests
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_page_base64(pdf_bytes: bytes, page_num: int) -> str:
+    """从PDF中提取指定页，返回单页PDF的base64编码；提取失败返回空字符串。"""
+    try:
+        from PyPDF2 import PdfReader, PdfWriter
+    except ImportError:
+        try:
+            from pypdf import PdfReader, PdfWriter
+        except ImportError:
+            logger.warning("需要 PyPDF2 或 pypdf 库来拆页，请安装: pip install pypdf")
+            return ""
+    try:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        if page_num > len(reader.pages):
+            return ""
+        writer = PdfWriter()
+        writer.add_page(reader.pages[page_num - 1])
+        buf = io.BytesIO()
+        writer.write(buf)
+        return base64.b64encode(buf.getvalue()).decode("utf-8")
+    except Exception as e:
+        logger.warning("PDF拆页失败(page=%d): %s", page_num, e)
+        return ""
 
 
 def _is_clause_page(text: str) -> bool:
@@ -153,7 +178,18 @@ class BaiduOCR:
             包含识别文本的结果字典
         """
         pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
-        return self.recognize_pdf(pdf_base64, page_num)
+        result = self.recognize_pdf(pdf_base64, page_num)
+        if result.get("success"):
+            return result
+        # 整份多页PDF直接发送，百度OCR API对整份文件体积有限制（"input oversize"错误码
+        # 216205），大文件/多页PDF很容易超限——重试一次改成只发目标页单页PDF，体积小很多
+        # （2026-07-20实测：平安车主尊享保障保单7.6MB共4页，整份发送首页时超限，改单页后可用）
+        page_b64 = _extract_page_base64(pdf_bytes, page_num)
+        if page_b64:
+            retry_result = self.recognize_pdf(page_b64, 1)
+            if retry_result.get("success"):
+                return retry_result
+        return result
 
     def recognize_pdf_multi_pages(self, pdf_bytes: bytes, max_pages: int = 6,
                                     early_stop_check=None) -> Dict[str, Any]:

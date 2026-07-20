@@ -240,8 +240,24 @@ class VolcOCR:
         page_num: 页码（从1开始），非第一页时内部拆页。
         """
         if page_num == 1:
-            raw = self._call_ocr(pdf_base64)
-            return self._parse_result(raw)
+            try:
+                raw = self._call_ocr(pdf_base64)
+                return self._parse_result(raw)
+            except Exception as e:
+                # 整份多页PDF直接发送在部分大文件/复杂首页(如带装饰性大图的页面)上会被API
+                # 直接拒绝(如400 Bad Request)，重试一次改成只发首页单页PDF（跟其余页面处理
+                # 方式一致），体积更小更不容易撞到上传限制（2026-07-20实测：平安车主尊享保障
+                # 保单首页图文混排复杂，整份发送400，改成单页发送后能正常识别）
+                logger.warning("火山引擎OCR首页整份发送失败(%s)，改拆单页重试", e)
+                try:
+                    pdf_bytes = base64.b64decode(pdf_base64)
+                    page_b64 = self._extract_page_base64(pdf_bytes, 1)
+                    if page_b64:
+                        raw2 = self._call_ocr(page_b64)
+                        return self._parse_result(raw2)
+                except Exception as e2:
+                    logger.warning("首页拆单页重试仍失败: %s", e2)
+                raise
 
         # 非第一页：拆出指定页重新编码
         try:
@@ -283,6 +299,29 @@ class VolcOCR:
         pages_to_scan = min(max_pages, total_pages)
 
         all_texts = []
+
+        def _try_fallback(page: int) -> None:
+            """单页火山OCR失败（限流耗尽/非限流HTTP错误/其他异常）时统一尝试兜底引擎，
+            成功则把该页文字补进 all_texts。之前只有429限流重试耗尽这一条路径会兜底，
+            其余失败路径（如非429的HTTP错误、连接异常）直接跳页，该页文字彻底丢失——
+            首页恰恰是保险期间/保费等核心字段所在页，丢了就导致这些字段全空
+            （2026-07-20实测：平安车主尊享保障首页OCR返回400 Bad Request，未走429重试
+            分支、也没有兜底，起保/终保日期和保费全部缺失）。"""
+            if not page_fallback:
+                logger.warning("第%d页无兜底引擎可用，跳过", page)
+                return
+            try:
+                fb_result = page_fallback(pdf_bytes, page)
+                if fb_result and fb_result.get("success"):
+                    fb_text = fb_result.get("text", "")
+                    logger.info("兜底引擎第%d页识别成功，文字数=%d", page, len(fb_text))
+                    if not (page > 2 and _is_clause_page(fb_text)):
+                        all_texts.append(f"[PAGE:{page}]\n{fb_text}")
+                else:
+                    logger.warning("兜底引擎第%d页识别也失败: %s", page, (fb_result or {}).get("error", ""))
+            except Exception as fb_e:
+                logger.warning("兜底引擎第%d页识别异常: %s", page, fb_e)
+
         for page in range(1, pages_to_scan + 1):
             try:
                 if page == 1:
@@ -315,6 +354,7 @@ class VolcOCR:
                             break
                 else:
                     logger.warning("火山引擎OCR第%d页识别失败: %s", page, result.get("error", ""))
+                    _try_fallback(page)
             except requests.exceptions.HTTPError as e:
                 if e.response is not None and e.response.status_code == 429:
                     # 限流：等待后重试，最多重试 3 次
@@ -344,25 +384,17 @@ class VolcOCR:
                             logger.warning("火山引擎OCR第%d页第%d次重试异常: %s", page, retry, retry_e)
                     else:
                         # 重试耗尽，尝试用兜底引擎识别该页
-                        if page_fallback:
-                            logger.info("火山引擎OCR第%d页限流重试3次仍失败，降级兜底引擎", page)
-                            try:
-                                fb_result = page_fallback(pdf_bytes, page)
-                                if fb_result and fb_result.get("success"):
-                                    fb_text = fb_result.get("text", "")
-                                    logger.info("兜底引擎第%d页识别成功，文字数=%d", page, len(fb_text))
-                                    if not (page > 2 and _is_clause_page(fb_text)):
-                                        all_texts.append(f"[PAGE:{page}]\n{fb_text}")
-                            except Exception as fb_e:
-                                logger.warning("兜底引擎第%d页识别异常: %s", page, fb_e)
-                        else:
-                            logger.warning("火山引擎OCR第%d页限流重试3次仍失败，跳过", page)
+                        logger.info("火山引擎OCR第%d页限流重试3次仍失败，降级兜底引擎", page)
+                        _try_fallback(page)
                     continue
+                # 非429的HTTP错误（如400 Bad Request）：同样兜底，不能直接丢页
                 logger.warning("火山引擎OCR第%d页异常: %s", page, e)
+                _try_fallback(page)
                 continue
             except Exception as e:
                 logger.warning("火山引擎OCR第%d页异常: %s", page, e)
-                # 跳过失败页继续扫描后续页（多保单PDF不能因单页失败丢失整个保单）
+                # 兜底后仍跳过失败页继续扫描后续页（多保单PDF不能因单页失败丢失整个保单）
+                _try_fallback(page)
                 continue
 
         if not all_texts:
