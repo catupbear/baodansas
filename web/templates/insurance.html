@@ -516,6 +516,7 @@
     .mrc-kv .v.empty { color: #d1d5db; font-weight: 400; }
     .mrc-kv .v.link { color: #ea580c; }
     .mrc-kv.full { grid-column: 1 / -1; }
+    .mrc-edit-icon { width: 10px; height: 10px; margin-left: 3px; color: #fb923c; opacity: .65; flex-shrink: 0; vertical-align: -1px; }
     .mrc-toggle { width: 100%; margin-top: 8px; padding: 6px; border: none; cursor: pointer; background: #fafafa; border-radius: 8px; color: #9ca3af; font-size: 11.5px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 4px; }
     .mrc-toggle:active { background: #f3f4f6; }
     .mrc-sec-title { font-size: 11px; font-weight: 700; color: #9ca3af; letter-spacing: .5px; display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; }
@@ -3259,6 +3260,7 @@
                             </span>
                             <span v-else class="v" :class="mValClass(record, col)" @click="mFieldClick(record, col)">
                                 {{ mFieldDisplay(record, col) }}
+                                <svg v-if="mFieldEditable(record, col)" class="mrc-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                             </span>
                         </div>
                     </div>
@@ -3284,6 +3286,7 @@
                                     <template v-else>
                                         <span class="v" :class="mValClass(record, col)" @click="mFieldClick(record, col)">
                                             {{ mFieldDisplay(record, col) }}
+                                            <svg v-if="mFieldEditable(record, col)" class="mrc-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                         </span>
                                         <button v-if="remarkSelector.enabled && col.key === remarkSelector.config.target_key"
                                                 @click.stop="openRemarkSelector(record)"
@@ -11378,6 +11381,14 @@ const _app = createApp({
             if (record._merged) return;  // 合并伪记录不可编辑
             startListEdit(record, key);
         }
+        // 移动端卡片字段是否可行内编辑（决定是否显示编辑小图标提示）——
+        // 文件名/群名/发送人点击是另一套跳转逻辑，合并伪记录不可编辑，其余走 startListEdit
+        function mFieldEditable(record, col) {
+            const key = col.key;
+            if (key === '文件名' || key === '群名' || key === '发送人') return false;
+            if (record._merged) return false;
+            return true;
+        }
         function openMSheet(record) { mSheetRecord.value = record; }
         function closeMSheet() { mSheetRecord.value = null; }
         // 触底加载下一页（追加模式；按车牌合并视图下不启用）
@@ -12057,7 +12068,7 @@ const _app = createApp({
             // 识别记录移动端卡片视图
             mobileFilterOpen, mSheetRecord, mLoadingMore,
             mField, mHasPlate, mCardTitle, mPolicyChipClass, mIsLong,
-            mSummaryCols, mDetailGroups, mFieldDisplay, mValClass, mFieldClick,
+            mSummaryCols, mDetailGroups, mFieldDisplay, mValClass, mFieldClick, mFieldEditable,
             openMSheet, closeMSheet, mLoadMore,
             // 购买套餐弹窗
             pricingVisible, billingType, showPricingQr, pricingData,
