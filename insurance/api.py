@@ -6945,8 +6945,11 @@ def ai_extract_apply(record_id):
         "ai_corrections": ai_corrections,
         "ai_fields": ai_field_list,
         "manual_fields": manual_fields,
+        # 应用AI值即已修正，记录状态置为 corrected，移出待确认
+        "ai_check_status": "corrected",
+        "ai_checked_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     })
-    update_ai_check_log(_db, log_id, {"result": "applied", "applied_fields": applied})
+    update_ai_check_log(_db, log_id, {"result": "corrected", "applied_fields": applied})
     return jsonify({"code": 0, "msg": f"已应用 {len(applied)} 个字段", "data": {"applied": applied}})
 
 
@@ -7240,8 +7243,9 @@ def get_record_ai_check_detail(record_id):
     # 历史对比：取最近一条含完整AI提取结果的流水，AI值用历史快照、列表值取实时，
     # 按全字段（FIELD_ORDER + AI额外字段）重新比对，供预览弹窗「AI质检」面板直接查看
     comparison = None
+    # 取最近一条含完整AI提取结果的流水（不限 result，兼容 flagged/pass/corrected 及历史 extracted/applied）
     last_extract_log = next(
-        (l for l in logs if l.get("extracted_json") and l.get("result") in ("extracted", "applied")),
+        (l for l in logs if l.get("extracted_json")),
         None,
     )
     if last_extract_log:

@@ -10621,12 +10621,12 @@ const _app = createApp({
             end_date_end: '',       // 终保日期止
             // 排序
             sort_by: 'created_at',  // 排序字段（默认按创建时间，页面加载后被「页面列配置」的默认排序覆盖）
-            sort_order: 'asc',      // 排序方向（默认升序）
+            sort_order: 'desc',     // 排序方向（默认降序，新记录在前）
         });
         // 列配置里的默认排序（loadDefaultSorts 拉取后覆盖）：
         // listDefaultSort=列表初始排序；exportDefaultSort=导出Excel排序
-        const listDefaultSort = reactive({ sort_by: 'created_at', sort_order: 'asc' });
-        const exportDefaultSort = reactive({ sort_by: 'created_at', sort_order: 'asc' });
+        const listDefaultSort = reactive({ sort_by: 'created_at', sort_order: 'desc' });
+        const exportDefaultSort = reactive({ sort_by: 'created_at', sort_order: 'desc' });
         // 用户是否手动切换过排序：手动选过后导出跟随页面所选排序，否则用导出列配置的默认排序
         const sortTouched = ref(false);
         async function loadDefaultSorts() {
@@ -10640,7 +10640,7 @@ const _app = createApp({
                     recordFilter.sort_order = d.list.sort_order || 'asc';
                 }
                 if (d.export && d.export.sort_by) Object.assign(exportDefaultSort, d.export);
-            } catch (e) { /* 拉取失败保持内置默认（创建时间升序） */ }
+            } catch (e) { /* 拉取失败保持内置默认（创建时间降序） */ }
         }
         // 创建/识别日期为 TIMESTAMP 类型，自定义区间可精确到具体时间；保单日期为 DATE 类型仅到天
         const dateTypeSupportsTime = computed(() =>
