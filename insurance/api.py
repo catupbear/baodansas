@@ -5032,8 +5032,10 @@ def export_excel():
                 #    避免"未上牌新车"的商业险+驾乘险因空车牌各自单独成行、显示成多组重复。
                 plate_groups = {}
                 standalone_rows = []
-                for inv in invoices:
+                for _ord, inv in enumerate(invoices):
                     fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
+                    # 记录传入顺序（前端已按用户所选排序，如签单日期升序），合并后按此排序
+                    fields["_order"] = _ord
                     if has_config and not skip_config:
                         try:
                             user_config["_related_self_id"] = inv.get("id") if isinstance(inv, dict) else None
@@ -5085,13 +5087,15 @@ def export_excel():
                             break
 
                     # 保留其他自定义字段（非共享非差异的字段互相补充）
-                    all_known = set(MERGE_SHARED_FIELDS) | set(MERGE_SPLIT_FIELDS) | {"车船税", "险种", "险种类型", "_src_id"}
+                    all_known = set(MERGE_SHARED_FIELDS) | set(MERGE_SPLIT_FIELDS) | {"车船税", "险种", "险种类型", "_src_id", "_order"}
                     for record in group:
                         for k, v in record.items():
                             if k not in all_known and k not in merged and v:
                                 merged[k] = v
                     # 该合并行汇总了哪些原始记录（前端按此精确匹配，不再靠字段值反推分组键）
                     merged["_src_ids"] = [r.get("_src_id") for r in group if r.get("_src_id") is not None]
+                    # 合并行取组内首条记录的传入顺序（组按首次出现的位置排序）
+                    merged["_order"] = group[0].get("_order", 0)
 
                     merged_rows.append(merged)
 
@@ -5113,12 +5117,13 @@ def export_excel():
                     val = fields.get("车船税", "")
                     if val:
                         row["车船税"] = val
-                    all_known = set(MERGE_SHARED_FIELDS) | set(MERGE_SPLIT_FIELDS) | {"车船税", "险种", "险种类型", "_src_id"}
+                    all_known = set(MERGE_SHARED_FIELDS) | set(MERGE_SPLIT_FIELDS) | {"车船税", "险种", "险种类型", "_src_id", "_order"}
                     for k, v in fields.items():
                         if k not in all_known and k not in row and v:
                             row[k] = v
                     _sid = fields.get("_src_id")
                     row["_src_ids"] = [_sid] if _sid is not None else []
+                    row["_order"] = fields.get("_order", 0)
                     merged_rows.append(row)
 
                 # 注入交强到期时间（同车牌交强险终保日期，按配置格式格式化）
@@ -5128,8 +5133,11 @@ def export_excel():
                     _inject_start_combo(row)
                     _inject_end_combo(row)
 
-                # 3. 排序（按车牌；新车无牌按车架号兜底排序）
-                merged_rows.sort(key=lambda r: r.get("车牌", "") or r.get("车架号", ""))
+                # 3. 排序：跟随传入顺序（前端已按用户所选排序，如签单日期升序），
+                #    不再强制按车牌排序，保证导出/页面合并视图与列表排序一致
+                merged_rows.sort(key=lambda r: r.get("_order", 0))
+                for _r in merged_rows:
+                    _r.pop("_order", None)
 
                 # 合并行重新计算公式：合并行才同时有 商业险保费/交强险保费/非车险保费 拆分列，
                 # 各险种金额、保险公司合计等汇总公式只有在合并行上才能算对。
