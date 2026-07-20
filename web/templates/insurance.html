@@ -9981,6 +9981,9 @@ const _app = createApp({
                     if (recordEnterpriseFilter.value) params.set('enterprise_id', recordEnterpriseFilter.value);
                     _appendDateParams(params);
                     if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');
+                    // 导出顺序跟随页面所选排序（如按签单日期升序），由服务端排好序返回
+                    if (recordFilter.sort_by) params.set('sort_by', recordFilter.sort_by);
+                    if (recordFilter.sort_order) params.set('sort_order', recordFilter.sort_order);
                     _appendAdvancedParams(params);
 
                     const listResp = await authFetch(`/api/insurance/records?${params.toString()}`);
@@ -9993,7 +9996,8 @@ const _app = createApp({
                     allRecords = allRecords.filter(r => !r.doc_category || r.doc_category === '保单');
                 }
 
-                // 不合并模式：同一辆车的多份保单按险种排序（商业险→交强险→非车险），车与车按上传时间(id)倒序
+                // 不合并模式：同一辆车的多份保单按险种排序（商业险→交强险→非车险），
+                // 车与车之间保持用户所选排序（如签单日期升序）的先后顺序，不再强制按上传时间倒序
                 if (!exportMergeByPlate.value) {
                     const _w = (r) => {
                         const t = ((r.display_fields || {})['险种'] || '') + '';
@@ -10002,11 +10006,11 @@ const _app = createApp({
                         return 3;
                     };
                     const _plate = (r) => ((r.display_fields || {})['车牌'] || r.file_md5 || ('#' + r.id));
-                    const _grpId = {};
-                    allRecords.forEach(r => { const k = _plate(r); if (!(k in _grpId) || r.id > _grpId[k]) _grpId[k] = r.id; });
+                    const _grpIdx = {};
+                    allRecords.forEach((r, i) => { const k = _plate(r); if (!(k in _grpIdx)) _grpIdx[k] = i; });
                     allRecords = [...allRecords].sort((a, b) => {
-                        const ga = _grpId[_plate(a)], gb = _grpId[_plate(b)];
-                        if (gb !== ga) return gb - ga;   // 车与车：代表id大(最新)在前
+                        const ga = _grpIdx[_plate(a)], gb = _grpIdx[_plate(b)];
+                        if (ga !== gb) return ga - gb;   // 车与车：按已排序结果中首次出现的先后
                         return _w(a) - _w(b);            // 车内：险种顺序
                     });
                 }
@@ -10104,8 +10108,8 @@ const _app = createApp({
             end_date_start: '',     // 终保日期起
             end_date_end: '',       // 终保日期止
             // 排序
-            sort_by: 'created_at',  // 排序字段
-            sort_order: 'desc',     // 排序方向
+            sort_by: 'sign_date',   // 排序字段（默认按签单日期）
+            sort_order: 'asc',      // 排序方向（默认升序）
         });
         // 创建/识别日期为 TIMESTAMP 类型，自定义区间可精确到具体时间；保单日期为 DATE 类型仅到天
         const dateTypeSupportsTime = computed(() =>
@@ -10223,8 +10227,8 @@ const _app = createApp({
         function clearAllFilters() {
             Object.keys(recordFilter).forEach(k => {
                 if (k === 'dedup') { recordFilter[k] = true; }
-                else if (k === 'sort_by') { recordFilter[k] = 'created_at'; }
-                else if (k === 'sort_order') { recordFilter[k] = 'desc'; }
+                else if (k === 'sort_by') { recordFilter[k] = 'sign_date'; }
+                else if (k === 'sort_order') { recordFilter[k] = 'asc'; }
                 else { recordFilter[k] = ''; }
             });
             recordCompanyFilter.value = '';
