@@ -93,6 +93,12 @@ def _cache_set(key, value, ttl=_CFG_TTL):
     return value
 
 
+def _invalidate_cfg_cache():
+    """字段配置/列配置/固定值等发生写操作后清空整个 TTL 缓存，
+    避免保存后仍在缓存有效期内的请求（含合并计算等只读接口）读到旧配置。"""
+    _cfg_cache.clear()
+
+
 def _norm_plate(plate) -> str:
     """车牌归一化（仅用于匹配，不改变显示值）：去掉连字符和空格。
     数据库存储的车牌无连字符，但前端对平安等保单会格式化为「粤B-CM3220」，
@@ -6063,6 +6069,7 @@ def save_and_apply_field_config():
                     save_column_config(_db, col_type, scope, scope_id, cur_cols["columns"],
                                        template_name=template_name)
 
+        _invalidate_cfg_cache()
         return jsonify({"code": 0, "msg": "已保存并应用"})
     except Exception as e:
         logger.exception("保存配置失败")
@@ -6079,6 +6086,7 @@ def apply_field_config_template():
         source = body.get("source", "own")
 
         set_active_template(_db, g.current_user["user_id"], source, template_name)
+        _invalidate_cfg_cache()
         return jsonify({"code": 0, "msg": "已切换模板"})
     except Exception as e:
         logger.exception("切换模板失败")
@@ -6146,6 +6154,7 @@ def save_column_config_api():
         template_name = body.get("template_name")
         save_column_config(_db, config_type, scope, scope_id, columns,
                            template_name=template_name)
+        _invalidate_cfg_cache()
         return jsonify({"code": 0, "msg": "列配置已保存"})
     except Exception as e:
         logger.exception("保存列配置失败")
@@ -6203,6 +6212,7 @@ def delete_column_config_api():
         if reset_to == "system":
             save_column_config(_db, config_type, scope, scope_id, list(DEFAULT_COLUMNS))
 
+        _invalidate_cfg_cache()
         return jsonify({"code": 0, "msg": "已恢复默认"})
     except Exception as e:
         logger.exception("重置列配置失败")
@@ -6360,6 +6370,7 @@ def save_fixed_values_api():
         body = request.get_json(force=True) or {}
         values = body.get("values", {})
         save_user_fixed_values(_db, user["user_id"], values)
+        _invalidate_cfg_cache()
         return jsonify({"code": 0, "msg": "固定值已保存"})
     except Exception as e:
         logger.exception("保存固定值失败")
