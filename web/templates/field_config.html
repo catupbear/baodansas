@@ -1745,9 +1745,9 @@ createApp({
         const exportColConfig = ref({ source: 'default', columns: [] });
         const listColItems = ref([]);
         const exportColItems = ref([]);
-        // 默认排序配置（页面列=列表初始排序；导出列=导出Excel排序），默认创建时间升序
-        const listSortConfig = reactive({ sort_by: 'created_at', sort_order: 'asc' });
-        const exportSortConfig = reactive({ sort_by: 'created_at', sort_order: 'asc' });
+        // 默认排序配置（页面列=列表初始排序；导出列=导出Excel排序），默认创建时间降序（新的在前）
+        const listSortConfig = reactive({ sort_by: 'created_at', sort_order: 'desc' });
+        const exportSortConfig = reactive({ sort_by: 'created_at', sort_order: 'desc' });
         // 排序字段候选（与识别记录页排序下拉一致）
         const sortFieldOptions = [
             { value: 'created_at', label: '创建日期' },
@@ -1924,7 +1924,7 @@ createApp({
                     columns.forEach(c => { if (c.frozen === undefined) c.frozen = false; });
                     columns.sort((a, b) => (a.order || 0) - (b.order || 0));
                     const ds = (config.default_sort && config.default_sort.sort_by)
-                        ? config.default_sort : { sort_by: 'created_at', sort_order: 'asc' };
+                        ? config.default_sort : { sort_by: 'created_at', sort_order: 'desc' };
                     if (configType === 'list_columns') {
                         listColConfig.value = config;
                         listColItems.value = columns;
