@@ -371,9 +371,11 @@
         .records-table td.action-col-sticky.action-col-narrow {
             width: 110px; min-width: 110px; max-width: 110px;
         }
-        /* 合并行展开明细里的操作按钮组：始终固定在横向滚动区域左侧，不随明细内容滚走 */
+        /* 合并行展开明细里的操作按钮组：始终固定在横向滚动区域左侧，不随明细内容滚走
+           （明细行不在勾选/操作列的网格里，left 必须从0开始，否则会被强行推到比自身
+           自然位置更靠右，跟紧随其后的险种标签重叠） */
         .records-table .mrc-detail-actions-sticky {
-            position: sticky; left: 40px; z-index: 1;
+            position: sticky; left: 0; z-index: 1;
             background: #fafafa; padding-right: 8px;
         }
 
