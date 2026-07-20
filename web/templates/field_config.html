@@ -3210,6 +3210,9 @@ createApp({
         watch([companyAliasList, policyAliasList, policyTypeQuickAlias], triggerAutoSave, { deep: true });
         watch([() => dateFields.value.map(f => f.format).join(','), dateNoPad], triggerAutoSave);
         watch(allRules, triggerAutoSave, { deep: true });
+        // 比例规则：之前漏掉没监听，添加/编辑/删除规则只改了本地 ratioRules，从来没触发过
+        // 自动保存，刷新页面就丢了（2026-07-21实测：加了规则、点确定，刷新后变回0条规则）
+        watch(ratioRules, triggerAutoSave, { deep: true });
 
         // 切换模板
         const selectTemplate = async (source, name) => {
