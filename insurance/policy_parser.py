@@ -3514,6 +3514,11 @@ def _extract_premium(text: str, fields: dict, company_short: str):
     if company_short == "大家财险":
         patterns.insert(0, r"含税保费([\d,]+\.?\d*)(?:元)?")
 
+    # 国任货运险格式（跨行）："总保费合计\n（大写）人民币：壹仟贰佰元整 （小写）CNY：1,200.00"
+    # 通用"小写"模式不支持 CNY 后跟冒号，需锚定"总保费合计"优先匹配，避免落入兜底误取单车保费小计
+    if company_short == "国任":
+        patterns.insert(0, r"总保费合计[\s\S]{0,60}?[（(]小写[）)][：:\s]*(?:CNY|RMB)?[：:\s]*([\d,]+\.\d{2})")
+
     # 申能格式："保险费总计： （大写） 叁佰元 小写 300.00元"（优先取总计，而非不含税保费）
     if company_short == "申能":
         patterns.insert(0, r"保险费总计.*?小写\s*([\d,]+\.?\d{0,2})\s*元")
@@ -3622,7 +3627,8 @@ def _extract_premium(text: str, fields: dict, company_short: str):
         for i, line in enumerate(lines):
             if re.search(r'保险?费合计', line) and i > 0:
                 prev = lines[i - 1].strip()
-                m = re.search(r'(\d{1,10}\.\d{2})', prev)
+                # 支持千分位逗号，避免从"1,100.00"中截出"100.00"
+                m = re.search(r'(\d{1,3}(?:,\d{3})*\.\d{2}|\d{1,10}\.\d{2})', prev)
                 if m:
                     val = m.group(1).replace(",", "")
                     if float(val) > 0:
