@@ -777,6 +777,20 @@
                         <button class="btn btn-primary btn-sm" @click="saveColumnConfig('list_columns')" :disabled="activeSource === 'enterprise'">保存</button>
                     </div>
                 </div>
+                <!-- 默认排序 -->
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px; padding:10px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
+                    <span style="font-size:13px; font-weight:500; white-space:nowrap;">默认排序</span>
+                    <select v-model="listSortConfig.sort_by" :disabled="activeSource === 'enterprise'"
+                            style="padding:5px 9px; border:1px solid var(--border); border-radius:6px; font-size:12px; background:#fff;">
+                        <option v-for="opt in sortFieldOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                    <select v-model="listSortConfig.sort_order" :disabled="activeSource === 'enterprise'"
+                            style="padding:5px 9px; border:1px solid var(--border); border-radius:6px; font-size:12px; background:#fff;">
+                        <option value="asc">升序</option>
+                        <option value="desc">降序</option>
+                    </select>
+                    <span style="font-size:11px; color:var(--text-muted);">打开识别记录页时列表默认按此排序，用户仍可在页面上临时切换</span>
+                </div>
                 <!-- 列头预览 -->
                 <div style="margin-bottom:16px; border:1px solid var(--border-light); border-radius:8px; overflow:hidden;">
                     <div style="padding:6px 12px; background:var(--surface-secondary); font-size:11px; color:var(--text-muted); border-bottom:1px solid var(--border-light);">列头预览（{{ listColItems.filter(c => c.visible).length }} 列，{{ listColItems.filter(c => c.visible && c.frozen).length }} 列冻结）</div>
@@ -884,6 +898,20 @@
                         平安车牌格式化
                     </label>
                     <span style="font-size:11px; color:var(--text-muted);">开启后，平安保单车牌自动添加连字符（如 粤BB446T → 粤B-B446T）</span>
+                </div>
+                <!-- 默认排序 -->
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px; padding:10px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
+                    <span style="font-size:13px; font-weight:500; white-space:nowrap;">默认导出排序</span>
+                    <select v-model="exportSortConfig.sort_by" :disabled="activeSource === 'enterprise'"
+                            style="padding:5px 9px; border:1px solid var(--border); border-radius:6px; font-size:12px; background:#fff;">
+                        <option v-for="opt in sortFieldOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                    <select v-model="exportSortConfig.sort_order" :disabled="activeSource === 'enterprise'"
+                            style="padding:5px 9px; border:1px solid var(--border); border-radius:6px; font-size:12px; background:#fff;">
+                        <option value="asc">升序</option>
+                        <option value="desc">降序</option>
+                    </select>
+                    <span style="font-size:11px; color:var(--text-muted);">导出 Excel 默认按此排序；用户在识别记录页手动选过排序时，导出跟随页面所选排序</span>
                 </div>
                 <!-- 穿梭框：左侧=可选字段池，右侧=已导出字段（排序/配置） -->
                 <div style="display:flex; gap:14px; align-items:stretch;">
@@ -1717,6 +1745,20 @@ createApp({
         const exportColConfig = ref({ source: 'default', columns: [] });
         const listColItems = ref([]);
         const exportColItems = ref([]);
+        // 默认排序配置（页面列=列表初始排序；导出列=导出Excel排序），默认创建时间升序
+        const listSortConfig = reactive({ sort_by: 'created_at', sort_order: 'asc' });
+        const exportSortConfig = reactive({ sort_by: 'created_at', sort_order: 'asc' });
+        // 排序字段候选（与识别记录页排序下拉一致）
+        const sortFieldOptions = [
+            { value: 'created_at', label: '创建日期' },
+            { value: 'updated_at', label: '识别日期' },
+            { value: 'plate_no', label: '车牌' },
+            { value: 'sign_date', label: '签单日期' },
+            { value: 'start_date', label: '起保日期' },
+            { value: 'end_date', label: '终保日期' },
+            { value: 'company_short', label: '保司' },
+            { value: 'policy_no', label: '保单号' },
+        ];
 
         // 字段数据来源说明（鼠标悬停在「?」上查看，面向普通用户）
         const fieldHelp = ref({
@@ -1881,12 +1923,16 @@ createApp({
                     // 确保每列都有 frozen 属性（兼容旧配置）
                     columns.forEach(c => { if (c.frozen === undefined) c.frozen = false; });
                     columns.sort((a, b) => (a.order || 0) - (b.order || 0));
+                    const ds = (config.default_sort && config.default_sort.sort_by)
+                        ? config.default_sort : { sort_by: 'created_at', sort_order: 'asc' };
                     if (configType === 'list_columns') {
                         listColConfig.value = config;
                         listColItems.value = columns;
+                        Object.assign(listSortConfig, ds);
                     } else {
                         exportColConfig.value = config;
                         exportColItems.value = columns;
+                        Object.assign(exportSortConfig, ds);
                     }
                 }
             } catch (e) {
@@ -1925,7 +1971,9 @@ createApp({
             const items = configType === 'list_columns' ? listColItems.value : exportColItems.value;
             const columns = items.map((col, idx) => ({ ...col, order: idx }));
             try {
-                const colBody = { config_type: configType, columns, template_name: activeTemplateName.value };
+                const sortCfg = configType === 'list_columns' ? listSortConfig : exportSortConfig;
+                const colBody = { config_type: configType, columns, template_name: activeTemplateName.value,
+                                  default_sort: { sort_by: sortCfg.sort_by, sort_order: sortCfg.sort_order } };
                 if (adminTarget.value) {
                     colBody.target_scope = adminTarget.value.scope;
                     if (adminTarget.value.scope_id != null) colBody.target_scope_id = adminTarget.value.scope_id;
@@ -1942,7 +1990,9 @@ createApp({
                     const otherType = configType === 'list_columns' ? 'export_columns' : 'list_columns';
                     const otherItems = otherType === 'list_columns' ? listColItems.value : exportColItems.value;
                     const otherColumns = otherItems.map((col, idx) => ({ ...col, order: idx }));
-                    const otherBody = { config_type: otherType, columns: otherColumns, template_name: activeTemplateName.value };
+                    const otherSortCfg = otherType === 'list_columns' ? listSortConfig : exportSortConfig;
+                    const otherBody = { config_type: otherType, columns: otherColumns, template_name: activeTemplateName.value,
+                                        default_sort: { sort_by: otherSortCfg.sort_by, sort_order: otherSortCfg.sort_order } };
                     if (adminTarget.value) {
                         otherBody.target_scope = adminTarget.value.scope;
                         if (adminTarget.value.scope_id != null) otherBody.target_scope_id = adminTarget.value.scope_id;
@@ -3319,9 +3369,11 @@ createApp({
                     for (const colType of ['list_columns', 'export_columns']) {
                         const items = colType === 'list_columns' ? listColItems.value : exportColItems.value;
                         const columns = items.map((col, idx) => ({ ...col, order: idx }));
+                        const sortCfg = colType === 'list_columns' ? listSortConfig : exportSortConfig;
                         await authFetch('/api/insurance/column-config', {
                             method: 'POST',
-                            body: JSON.stringify({ config_type: colType, columns, template_name: trimmed }),
+                            body: JSON.stringify({ config_type: colType, columns, template_name: trimmed,
+                                                   default_sort: { sort_by: sortCfg.sort_by, sort_order: sortCfg.sort_order } }),
                         });
                     }
                 }
@@ -3481,6 +3533,7 @@ createApp({
             showRatioImport, ratioImportText, ratioImportPreview, ratioImportErrors,
             openRatioImport, parseRatioImport, applyRatioImport,
             listColConfig, exportColConfig, listColItems, exportColItems, fieldHelp,
+            listSortConfig, exportSortConfig, sortFieldOptions,
             exportSearch, availableExportCols, selectedExportCols, filteredAvailableExport,
             templateSearch, filteredEnterprises, filteredUsers, isEntExpanded, isUserExpanded, toggleEnt, toggleUser, entInUse, userInUse,
             addToExport, removeFromExport, addAllToExport, removeAllFromExport,

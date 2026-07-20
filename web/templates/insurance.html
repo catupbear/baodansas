@@ -492,8 +492,10 @@
     @media (max-width: 767px) {
         .records-desktop-wrapper { display: none !important; }
         .records-desktop-pagination { display: none !important; }
-        .record-filter-card { display: none; }
-        .record-filter-card.m-open { display: block; }
+        /* 手机端：时间筛选+排序行（.rf-date）固定显示；上半部分筛选条件（.rf-main）仍由「筛选」按钮控制展开 */
+        .record-filter-card { display: block; }
+        .record-filter-card:not(.m-open) .rf-main { display: none; }
+        .record-filter-card:not(.m-open) .rf-date { margin-top: 0; padding-top: 0; border-top: none; }
         .m-record-toolbar { display: flex; align-items: center; gap: 8px; }
         .m-record-cards { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
         /* 卡片流跟随整页滚动（解除表格卡高度封顶，覆盖 641-767px 区间） */
@@ -2587,7 +2589,7 @@
         </div>
         <!-- 筛选栏（移动端默认收起，点「筛选」展开） -->
         <div class="card p-4 record-filter-card" :class="{ 'm-open': mobileFilterOpen }">
-            <div class="flex flex-wrap items-center gap-3">
+            <div class="flex flex-wrap items-center gap-3 rf-main">
                 <!-- 来源下拉框 -->
                 <div class="flex items-center gap-1.5">
                     <span class="text-xs text-gray-500 font-medium whitespace-nowrap">来源:</span>
@@ -2701,8 +2703,8 @@
                         class="text-xs text-gray-400 hover:text-orange-500 cursor-pointer ml-auto whitespace-nowrap"
                         title="清空所有筛选条件">&times; 清空筛选</button>
             </div>
-            <!-- 日期筛选 -->
-            <div class="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+            <!-- 日期筛选（手机端固定显示，不随「筛选」按钮收起） -->
+            <div class="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-100 rf-date">
                 <select v-model="recordFilter.date_type" @change="loadRecords()"
                         class="text-xs border border-gray-200 rounded-lg px-1.5 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 text-gray-600 font-medium cursor-pointer"
                         style="min-width:80px;">
@@ -2738,7 +2740,7 @@
                 <!-- 排序 -->
                 <div class="flex items-center gap-1.5 ml-2 pl-2" style="border-left:1px solid #e5e7eb;">
                     <span class="text-xs text-gray-500 font-medium whitespace-nowrap">排序:</span>
-                    <select v-model="recordFilter.sort_by" @change="loadRecords()"
+                    <select v-model="recordFilter.sort_by" @change="sortTouched = true; loadRecords()"
                             class="text-xs border border-gray-200 rounded-lg px-1.5 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 text-gray-600 cursor-pointer"
                             style="min-width:80px;">
                         <option value="created_at">创建日期</option>
@@ -2750,7 +2752,7 @@
                         <option value="company_short">保司</option>
                         <option value="policy_no">保单号</option>
                     </select>
-                    <button @click="recordFilter.sort_order = recordFilter.sort_order === 'asc' ? 'desc' : 'asc'; loadRecords()"
+                    <button @click="sortTouched = true; recordFilter.sort_order = recordFilter.sort_order === 'asc' ? 'desc' : 'asc'; loadRecords()"
                             class="text-xs px-2 py-1 rounded-lg border border-gray-200 bg-white hover:border-orange-300 cursor-pointer transition-colors flex items-center gap-0.5"
                             :title="recordFilter.sort_order === 'asc' ? '升序（点击切换为降序）' : '降序（点击切换为升序）'">
                         <span v-if="recordFilter.sort_order === 'asc'" style="font-size:14px;line-height:1;">↑</span>
@@ -2910,6 +2912,12 @@
                         </svg>
                         <span class="btn-label">{{ batchProcessing ? '处理中...' : '批量重新识别' }}{{ !batchProcessing && selectedRecordIds.length ? ` (${selectedRecordIds.length})` : '' }}</span>
                     </button>
+                    <!-- 批量AI质检（仅超管，需勾选带原件的记录）：逐条送AI，结果落库，完成后在列表点AI质检查看 -->
+                    <button v-if="isSuperAdmin && selectedRecordIds.length" @click="batchAiCheckSync" :disabled="aiCheckBatchProcessing"
+                            class="btn" style="padding:6px 14px;font-size:13px;background:#f5f3ff;border:1px solid #ddd6fe;color:#6d28d9;" title="批量AI质检">
+                        <span>✨</span>
+                        <span class="btn-label">{{ aiCheckBatchProcessing ? '质检中...' : `批量AI质检 (${selectedRecordIds.length})` }}</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -3007,12 +3015,11 @@
                                             class="btn btn-primary" style="padding:3px 8px;font-size:11px;">
                                         {{ record._reocring ? '识别中...' : '重新识别' }}
                                     </button>
-                                    <!-- AI质检（仅超管，有原件才显示） -->
+                                    <!-- AI质检（仅超管，有原件才显示）：打开预览弹窗并进入AI质检面板；已质检过的显示「AI质检结果」 -->
                                     <button v-if="isSuperAdmin && record.cos_url"
-                                            @click="runAiCheck(record, false)"
-                                            :disabled="record._aiChecking"
+                                            @click="openRecordAiCheck(record)"
                                             class="btn" style="padding:3px 8px;font-size:11px;background:#f5f3ff;border:1px solid #ddd6fe;color:#6d28d9;">
-                                        {{ record._aiChecking ? '识别中…' : 'AI质检' }}
+                                        {{ aiCheckedDone(record) ? 'AI质检结果' : 'AI质检' }}
                                     </button>
                                     <!-- 重新上传保单（失败且无COS URL） -->
                                     <label v-if="record.status === 'failed' && !record.cos_url"
@@ -3771,6 +3778,36 @@
         </div>
     </div>
 
+    <!-- ========== 批量AI质检进度浮窗 ========== -->
+    <div v-if="aiCheckBatchProcessing" class="fixed z-50"
+         :style="{ bottom: (batchProcessing ? '200px' : (downloadTask.visible ? '180px' : '24px')), right: '24px' }"
+         style="width:320px;background:white;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.15);border:1px solid #e5e7eb;overflow:hidden;">
+        <div style="padding:10px 14px 8px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #f3f4f6;">
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-size:14px;">✨</span>
+                <span style="font-size:13px;font-weight:600;color:#6d28d9;">批量AI质检</span>
+            </div>
+        </div>
+        <div style="padding:10px 14px 12px;">
+            <div style="font-size:12px;color:#6b7280;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                {{ aiCheckBatchProgress.currentFile || '准备中...' }}
+            </div>
+            <div class="progress-bar" style="margin-bottom:6px;">
+                <div class="progress-bar-fill"
+                     :style="{ width: (aiCheckBatchProgress.total ? aiCheckBatchProgress.current / aiCheckBatchProgress.total * 100 : 0) + '%',
+                               background: aiCheckBatchProgress.currentFile === '完成' ? '#22c55e' : '#8b5cf6' }"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:#9ca3af;">
+                <span>{{ aiCheckBatchProgress.current }} / {{ aiCheckBatchProgress.total }}</span>
+                <span>
+                    <span style="color:#dc2626;">差异 {{ aiCheckBatchProgress.diff }}</span>
+                    <span style="color:#16a34a;margin-left:6px;">一致 {{ aiCheckBatchProgress.pass }}</span>
+                    <span v-if="aiCheckBatchProgress.failed" style="color:#ef4444;margin-left:6px;">失败 {{ aiCheckBatchProgress.failed }}</span>
+                </span>
+            </div>
+        </div>
+    </div>
+
     <!-- ========== 批量重新识别失败明细弹窗 ========== -->
     <div v-if="batchFailModal.visible" class="fixed inset-0 flex items-center justify-center" style="z-index:1000;background:rgba(0,0,0,0.4);" @click.self="batchFailModal.visible = false">
         <div style="background:#fff;border-radius:12px;width:560px;max-width:90vw;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
@@ -3973,12 +4010,12 @@
                                     </td>
                                     <td style="padding:7px 12px;">
                                         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                                            <button style="padding:3px 10px;font-size:12px;border-radius:6px;background:white;border:1px solid #d1d5db;color:#374151;cursor:pointer;white-space:nowrap;" @click="testAiModel(m)" :disabled="aiTestState[m.id]?.testing">
-                                                {{ aiTestState[m.id]?.testing ? '测试中…' : '测试连通' }}
+                                            <button style="padding:3px 10px;font-size:12px;border-radius:6px;background:white;border:1px solid #d1d5db;color:#374151;cursor:pointer;white-space:nowrap;" @click="testAiModel(m)" :disabled="aiTestState[aiTestKey(m)]?.testing">
+                                                {{ aiTestState[aiTestKey(m)]?.testing ? '测试中…' : '测试连通' }}
                                             </button>
-                                            <span v-if="aiTestState[m.id] && !aiTestState[m.id].testing && aiTestState[m.id].done"
-                                                  :style="{ fontSize:'12px', color: aiTestState[m.id].ok ? '#16a34a' : '#dc2626' }">
-                                                {{ aiTestState[m.id].ok ? '✓ ' + (aiTestState[m.id].duration_ms/1000).toFixed(1) + 's' : '✗ ' + (aiTestState[m.id].error || '失败') }}
+                                            <span v-if="aiTestState[aiTestKey(m)] && !aiTestState[aiTestKey(m)].testing && aiTestState[aiTestKey(m)].done"
+                                                  :style="{ fontSize:'12px', color: aiTestState[aiTestKey(m)].ok ? '#16a34a' : '#dc2626' }">
+                                                {{ aiTestState[aiTestKey(m)].ok ? '✓ ' + (aiTestState[aiTestKey(m)].duration_ms/1000).toFixed(1) + 's' : '✗ ' + (aiTestState[aiTestKey(m)].error || '失败') }}
                                             </span>
                                             <button style="padding:3px 10px;font-size:12px;border-radius:6px;background:white;border:1px solid #d1d5db;color:#374151;cursor:pointer;white-space:nowrap;" @click="openAiModelModal(idx)">编辑</button>
                                             <button v-if="m.id && m.id !== aiConfig.active_model_id" style="padding:3px 10px;font-size:12px;border-radius:6px;background:white;border:1px solid #fed7aa;color:#ea580c;cursor:pointer;white-space:nowrap;" @click="setActiveAiModel(m)">切换为当前</button>
@@ -4720,7 +4757,7 @@
                                 :class="['px-3 py-1.5 text-sm rounded-lg transition-colors cursor-pointer', exportSelectedTemplateName === tpl ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200']">
                             {{ tpl }}
                         </button>
-                        <button @click="exportCustomMode = true; exportSelectedTemplateName = ''; exportSelectedOtherTemplate = ''"
+                        <button @click="exportCustomMode = true; exportSelectedTemplateName = ''; exportSelectedOtherTemplate = ''; exportTemplateSort = null"
                                 :class="['px-3 py-1.5 text-sm rounded-lg transition-colors cursor-pointer', exportCustomMode ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200']">
                             自定义
                         </button>
@@ -4947,7 +4984,7 @@
                         </span>
                     </div>
                     <div class="flex items-center gap-2 preview-actions">
-                        <button @click="previewShowFields = !previewShowFields; if(previewShowFields) { previewShowRaw = false; previewShowRules = false; previewShowCompare = false; }"
+                        <button @click="previewShowFields = !previewShowFields; if(previewShowFields) { previewShowRaw = false; previewShowRules = false; previewShowCompare = false; previewShowAiCheck = false; }"
                                 class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;"
                                 :class="previewShowFields ? 'btn-success' : 'btn-outline'">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4956,7 +4993,7 @@
                             {{ previewShowFields ? '隐藏列表' : '查看列表信息' }}
                         </button>
                         <button v-if="previewHasRawText"
-                                @click="previewShowRaw = !previewShowRaw; if(previewShowRaw) { previewShowFields = false; previewShowRules = false; previewShowCompare = false; if(previewAutoRecord && !previewRawText) loadAutoRecordRawText(); }"
+                                @click="previewShowRaw = !previewShowRaw; if(previewShowRaw) { previewShowFields = false; previewShowRules = false; previewShowCompare = false; previewShowAiCheck = false; if(previewAutoRecord && !previewRawText) loadAutoRecordRawText(); }"
                                 class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;"
                                 :class="previewShowRaw ? 'btn-primary' : 'btn-outline'">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4975,17 +5012,17 @@
                             </svg>
                             {{ previewShowCompare ? '隐藏对比' : '识别对比' }}
                         </button>
-                        <!-- AI质检（仅超管，预览弹窗内，复用同一套逻辑） -->
+                        <!-- AI质检（仅超管，预览弹窗内右侧分栏面板：左看原件右看质检结果） -->
                         <button v-if="isSuperAdmin && previewAutoRecord && previewAutoRecord.cos_url"
-                                @click="runAiCheck(previewAutoRecord, true)"
-                                :disabled="aiCheckLoadingPreview || previewAutoRecord._aiChecking"
-                                class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;background:#f5f3ff;border:1px solid #ddd6fe;color:#6d28d9;">
-                            <svg v-if="aiCheckLoadingPreview || previewAutoRecord._aiChecking" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                @click="togglePreviewAiCheck"
+                                class="btn cursor-pointer" style="padding:5px 12px;font-size:12px;"
+                                :style="previewShowAiCheck ? 'background:#6d28d9;border:1px solid #6d28d9;color:white;' : 'background:#f5f3ff;border:1px solid #ddd6fe;color:#6d28d9;'">
+                            <svg v-if="previewAiCheck.state === 'running'" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                             </svg>
                             <span v-else>✨</span>
-                            {{ (aiCheckLoadingPreview || previewAutoRecord._aiChecking) ? '识别中…' : 'AI质检' }}
+                            {{ previewAiCheck.state === 'running' ? '质检中…' : (previewShowAiCheck ? '隐藏质检' : (aiCheckedDone(previewAutoRecord) ? 'AI质检结果' : 'AI质检')) }}
                         </button>
                         <!-- 查看规则按钮已隐藏 -->
                         <!-- 标记正常（预览弹窗内，仅异常记录显示） -->
@@ -5105,6 +5142,13 @@
                                         {{ item.value || '—' }}
                                     </span>
                                 </template>
+                                <!-- 数据来源（仅超管）：手动/AI/PDF/OCR -->
+                                <span v-if="isSuperAdmin && item.value && fieldSource(item.key)"
+                                      class="ml-1 flex-shrink-0"
+                                      :style="'font-size:10px;padding:1px 5px;border-radius:9999px;white-space:nowrap;' + fieldSource(item.key).style"
+                                      :title="'数据来源：' + fieldSource(item.key).text">
+                                    {{ fieldSource(item.key).text }}
+                                </span>
                             </div>
                             </div>
                             </div>
@@ -5256,6 +5300,153 @@
                                 </p>
                             </div>
                         </div>
+                    </div>
+                    <!-- 右侧：AI质检面板（仅超管） -->
+                    <div v-if="previewShowAiCheck" class="border-l flex flex-col preview-side" style="width: 480px; min-width: 380px;">
+                        <div class="px-3 py-2 border-b flex items-center gap-2 flex-shrink-0" style="background:#f5f3ff;">
+                            <span style="font-size:14px;">✨</span>
+                            <span class="text-xs font-semibold" style="color:#6d28d9;">AI质检</span>
+                            <span v-if="previewAiCheck.state === 'done'" class="text-xs" style="color:#9ca3af;">
+                                {{ previewAiCheck.fromHistory ? '历史结果' : '本次结果' }}
+                                <template v-if="previewAiCheck.model"> · {{ previewAiCheck.model }}</template>
+                                <template v-if="previewAiCheck.fromHistory && previewAiCheck.checkedAt"> · {{ previewAiCheck.checkedAt }}</template>
+                                <template v-else-if="previewAiCheck.durationMs"> · 耗时{{ (previewAiCheck.durationMs/1000).toFixed(1) }}s</template>
+                            </span>
+                        </div>
+
+                        <!-- 加载历史中 -->
+                        <div v-if="previewAiCheck.state === 'loading'" class="flex-1 flex flex-col items-center justify-center text-gray-400">
+                            <svg class="w-8 h-8 animate-spin mb-2" style="color:#a78bfa;" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                            <span class="text-sm">读取质检记录…</span>
+                        </div>
+
+                        <!-- 质检进行中：进度提示 -->
+                        <div v-else-if="previewAiCheck.state === 'running'" class="flex-1 flex flex-col items-center justify-center px-6 text-center">
+                            <svg class="w-10 h-10 animate-spin mb-3" style="color:#7c3aed;" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                            <div class="text-sm font-medium text-gray-700 mb-1" style="word-break:break-all;">{{ previewFileName }}</div>
+                            <div class="text-sm" style="color:#7c3aed;">{{ previewAiCheck.stage }}</div>
+                            <div class="text-xs text-gray-400 mt-1">已用时 {{ previewAiCheck.elapsedSec }}s</div>
+                            <div class="text-xs text-gray-300 mt-3">AI识别较慢，请稍候…</div>
+                        </div>
+
+                        <!-- 无历史：待质检 -->
+                        <div v-else-if="previewAiCheck.state === 'empty'" class="flex-1 flex flex-col items-center justify-center px-6 text-center">
+                            <div class="text-sm text-gray-500 mb-1">该保单尚未AI质检</div>
+                            <div class="text-xs text-gray-400 mb-4">用大模型重新识别原件，逐字段与列表值比对</div>
+                            <button @click="runPreviewAiCheck()" class="btn cursor-pointer" style="padding:7px 18px;font-size:13px;background:#6d28d9;border:1px solid #6d28d9;color:white;">
+                                ✨ 开始AI质检
+                            </button>
+                        </div>
+
+                        <!-- 质检失败 -->
+                        <div v-else-if="previewAiCheck.state === 'error'" class="flex-1 flex flex-col items-center justify-center px-6 text-center">
+                            <div class="text-sm text-red-500 mb-3" style="word-break:break-all;">{{ previewAiCheck.error || 'AI质检失败' }}</div>
+                            <button @click="runPreviewAiCheck()" class="btn btn-outline cursor-pointer" style="padding:6px 16px;font-size:12px;">重新质检</button>
+                        </div>
+
+                        <!-- 有结果：对比表 -->
+                        <template v-else-if="previewAiCheck.state === 'done'">
+                            <div class="flex-1 overflow-auto p-3 pt-2">
+                                <div class="text-xs text-gray-400 mb-2 leading-relaxed">
+                                    <span style="color:#dc2626;">AI提取值</span>为大模型重新识别结果；勾选后可「应用」覆盖列表值。
+                                    <span v-if="previewAiCheck.fromHistory">当前列表值为实时值，AI值为上次质检快照。</span>
+                                </div>
+                                <table class="w-full" style="border-collapse:collapse;font-size:12px;">
+                                    <thead>
+                                        <tr class="text-xs text-gray-500" style="background:#f9fafb;position:sticky;top:0;">
+                                            <th class="px-2 py-1.5 text-center" style="width:30px;">
+                                                <input type="checkbox"
+                                                       :checked="previewAiCheck.diffs.length > 0 && previewAiCheck.diffs.every(i => i.checked)"
+                                                       @change="previewAiCheckToggleAll($event.target.checked)" style="cursor:pointer;">
+                                            </th>
+                                            <th class="px-2 py-1.5 text-left" style="width:78px;">字段</th>
+                                            <th class="px-2 py-1.5 text-left">列表值</th>
+                                            <th class="px-2 py-1.5 text-left">AI提取值</th>
+                                            <th class="px-2 py-1.5 text-center" style="width:44px;">状态</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="item in previewAiCheck.diffs" :key="'pd-' + item.field"
+                                            style="border-top:1px solid #f3f4f6;cursor:pointer;"
+                                            :style="item.checked ? 'background:#faf5ff;' : ''"
+                                            @click="item.checked = !item.checked">
+                                            <td class="px-2 py-1.5 text-center"><input type="checkbox" v-model="item.checked" @click.stop style="cursor:pointer;"></td>
+                                            <td class="px-2 py-1.5 font-medium text-gray-700" style="white-space:nowrap;">
+                                                <span v-if="item.manual" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#f97316;margin-right:3px;vertical-align:middle;" title="人工修改过"></span>
+                                                {{ item.field }}
+                                            </td>
+                                            <td class="px-2 py-1.5 text-gray-700" style="word-break:break-all;">{{ item.current || '—' }}</td>
+                                            <td class="px-2 py-1.5 font-medium" style="color:#dc2626;word-break:break-all;">{{ item.ai || '—' }}</td>
+                                            <td class="px-2 py-1.5 text-center">
+                                                <span v-if="item.type === 'supplement'" style="padding:1px 5px;border-radius:9999px;font-size:10px;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;white-space:nowrap;">补充</span>
+                                                <span v-else style="padding:1px 5px;border-radius:9999px;font-size:10px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;white-space:nowrap;">差异</span>
+                                            </td>
+                                        </tr>
+                                        <tr v-if="!previewAiCheck.diffs.length">
+                                            <td colspan="5" class="px-2 py-3 text-center" style="color:#16a34a;">AI提取结果与列表值一致，无差异 🎉</td>
+                                        </tr>
+                                        <tr v-if="previewAiCheck.same.length">
+                                            <td colspan="5" class="px-2 py-1.5">
+                                                <button @click="previewAiCheck.showSame = !previewAiCheck.showSame" style="font-size:11px;color:#6b7280;background:none;border:none;cursor:pointer;">
+                                                    {{ previewAiCheck.showSame ? '收起一致字段' : ('显示一致字段(' + previewAiCheck.same.length + ')') }}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <template v-if="previewAiCheck.showSame">
+                                            <tr v-for="item in previewAiCheck.same" :key="'ps-' + item.field" style="border-top:1px solid #f9fafb;background:#fafafa;color:#9ca3af;">
+                                                <td class="px-2 py-1.5 text-center">—</td>
+                                                <td class="px-2 py-1.5" style="white-space:nowrap;">{{ item.field }}</td>
+                                                <td class="px-2 py-1.5" style="word-break:break-all;">{{ item.current || '—' }}</td>
+                                                <td class="px-2 py-1.5" style="word-break:break-all;">{{ item.ai || '—' }}</td>
+                                                <td class="px-2 py-1.5 text-center"><span style="padding:1px 5px;border-radius:9999px;font-size:10px;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;white-space:nowrap;">一致</span></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                                <!-- 应用历史（ai_corrections）：谁在何时把哪个字段从什么改成什么，方便排查 -->
+                                <div v-if="Object.keys(previewAiCheck.corrections).length" class="mt-3 pt-2 border-t">
+                                    <button @click="previewAiCheck.showHistory = !previewAiCheck.showHistory" style="font-size:11px;color:#6b7280;background:none;border:none;cursor:pointer;">
+                                        {{ previewAiCheck.showHistory ? '收起应用历史' : ('应用历史(' + Object.keys(previewAiCheck.corrections).length + ')') }}
+                                    </button>
+                                    <div v-if="previewAiCheck.showHistory" class="mt-1" style="display:flex;flex-direction:column;gap:4px;">
+                                        <div v-for="(c, field) in previewAiCheck.corrections" :key="'corr-'+field" class="text-xs" style="background:#f9fafb;border-radius:6px;padding:5px 8px;">
+                                            <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+                                                <span class="font-medium text-gray-700">{{ field }}</span>
+                                                <span class="text-gray-400" style="text-decoration:line-through;">{{ c.old || '空' }}</span>
+                                                <span style="color:#7c3aed;">→</span>
+                                                <span style="color:#16a34a;">{{ c.new || '空' }}</span>
+                                            </div>
+                                            <div class="text-gray-400" style="font-size:10px;margin-top:1px;">
+                                                {{ c.time }}<template v-if="c.operator"> · {{ c.operator }}</template><template v-if="c.source"> · {{ c.source === 'manual' ? '手动应用' : (c.source === 'auto' ? '自动修正' : c.source) }}</template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- 底部：内联应用结果提示（预览为全屏弹窗，全局toast被遮挡）+ 操作按钮 -->
+                            <div class="border-t flex-shrink-0">
+                                <div v-if="previewAiCheck.applyMsg" class="px-3 pt-2 text-xs" :style="previewAiCheck.applyOk ? 'color:#16a34a;' : 'color:#dc2626;'">
+                                    {{ previewAiCheck.applyOk ? '✓ ' : '✗ ' }}{{ previewAiCheck.applyMsg }}
+                                </div>
+                                <div class="px-3 py-2.5 flex items-center gap-2">
+                                    <button @click="runPreviewAiCheck()" class="btn btn-outline cursor-pointer" style="padding:6px 12px;font-size:12px;color:#7c3aed;border-color:#ddd6fe;">
+                                        🔄 重新质检
+                                    </button>
+                                    <button @click="applyPreviewAiCheck"
+                                            :disabled="previewAiCheck.busy || !previewAiCheckSelectedCount"
+                                            class="cursor-pointer"
+                                            :style="'margin-left:auto;padding:6px 16px;font-size:12px;border-radius:8px;border:none;font-weight:500;' + ((previewAiCheck.busy || !previewAiCheckSelectedCount) ? 'background:#ddd6fe;color:white;cursor:not-allowed;' : 'background:#6d28d9;color:white;cursor:pointer;')">
+                                        {{ previewAiCheck.busy ? '应用中…' : ('应用勾选的AI值（' + previewAiCheckSelectedCount + '）') }}
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
                     </div>
                 </div>
             </div>
@@ -6193,6 +6384,32 @@ const _app = createApp({
         const extractionRules = ref({});
         const previewReocring = ref(false);
 
+        // 预览弹窗内「AI质检」面板（仅超管）：右侧分栏展示，左看原件右看质检结果
+        // 历史质检过的直接看结果（AI值用历史快照、列表值实时）；没质检过的点按钮进行质检；支持重新质检
+        const previewShowAiCheck = ref(false);
+        const previewAiCheck = reactive({
+            recordId: null,
+            state: 'idle',     // idle=未加载 / loading=拉历史中 / running=质检中 / done=有结果 / empty=无历史待质检 / error
+            error: '',
+            logId: null,
+            model: '',
+            durationMs: 0,
+            checkedAt: '',
+            fromHistory: false,   // 结果来自历史快照
+            diffs: [],            // [{field,current,ai,type,manual,checked}]
+            same: [],
+            showSame: false,
+            busy: false,          // 应用中
+            elapsedSec: 0,        // 质检进行中的计时
+            stage: '',            // 进行中的阶段文案
+            applyMsg: '',         // 应用结果内联提示（预览为全屏弹窗，全局toast被遮挡）
+            applyOk: false,
+            corrections: {},      // 应用历史 {字段:{old,new,time,operator}}，排查用
+            showHistory: false,   // 是否展开应用历史
+        });
+        let _previewAiCheckTimer = null;
+        const previewAiCheckSelectedCount = computed(() => previewAiCheck.diffs.filter(i => i.checked).length);
+
         // 识别对比（仅超级管理员）：对原文重新解析的纯识别结果，与列表当前值对比
         const previewShowCompare = ref(false);
         const previewCompareFields = ref(null);   // 纯识别字段（OCR 字段名 → 值）
@@ -6327,6 +6544,7 @@ const _app = createApp({
                 previewShowFields.value = false;
                 previewShowRaw.value = false;
                 previewShowRules.value = false;
+                previewShowAiCheck.value = false;
                 if (previewAutoRecord.value && !previewCompareFields.value && !previewCompareLoading.value) {
                     loadPreviewCompare();
                 }
@@ -7423,7 +7641,9 @@ const _app = createApp({
             previewShowRaw.value = false;
             previewShowFields.value = true;  // 自动展开列表信息
             previewShowRules.value = false;
+            previewShowAiCheck.value = false;
             resetPreviewCompare();
+            resetPreviewAiCheck();
             previewSiblings.value = [];
             siblingDropdownOpen.value = false;
             const ext = (record.filename || '').split('.').pop().toLowerCase();
@@ -7471,6 +7691,10 @@ const _app = createApp({
                     if (typeof detail.manual_fields === 'string') {
                         try { detail.manual_fields = JSON.parse(detail.manual_fields); } catch { detail.manual_fields = []; }
                     }
+                    // ai_fields 解析为数组，供「数据来源」判定 AI质检识别
+                    if (typeof detail.ai_fields === 'string') {
+                        try { detail.ai_fields = JSON.parse(detail.ai_fields); } catch { detail.ai_fields = []; }
+                    }
                     previewAutoRecord.value = detail;
                     // 同一 PDF 的其他保单记录（排除与当前相同 policy_index 的）
                     if (json.siblings && json.siblings.length > 0) {
@@ -7496,6 +7720,10 @@ const _app = createApp({
                     if (typeof detail.manual_fields === 'string') {
                         try { detail.manual_fields = JSON.parse(detail.manual_fields); } catch { detail.manual_fields = []; }
                     }
+                    // ai_fields 解析为数组，供「数据来源」判定 AI质检识别
+                    if (typeof detail.ai_fields === 'string') {
+                        try { detail.ai_fields = JSON.parse(detail.ai_fields); } catch { detail.ai_fields = []; }
+                    }
                     previewAutoRecord.value = detail;
                     previewRawText.value = '';
                     previewOcrRawText.value = '';
@@ -7505,6 +7733,9 @@ const _app = createApp({
                     previewCompareMeta.value = {};
                     previewCompareError.value = '';
                     if (previewShowCompare.value) loadPreviewCompare(true);
+                    // 切换保单后重置AI质检面板（面板开着则按新记录重新拉历史）
+                    resetPreviewAiCheck();
+                    if (previewShowAiCheck.value) loadPreviewAiCheckHistory(detail);
                     // 跳转到对应起始页（同一 PDF，iframe 通过 hash 跳页，canvas 模式滚动到对应页）
                     const startPage = getStartPage(detail.page_range);
                     Vue.nextTick(() => {
@@ -7647,6 +7878,31 @@ const _app = createApp({
             const mf = previewAutoRecord.value.manual_fields;
             if (!mf || !Array.isArray(mf)) return false;
             return mf.includes(label);
+        }
+
+        // 字段数据来源（仅超管，「列表信息」面板展示）：
+        // 优先级 AI质检识别 > 手动修改 > 记录识别引擎(PDF提取/OCR提取)。
+        // 说明：应用AI值会同时写入 ai_fields 与 manual_fields，故 AI 优先；
+        // PDF vs OCR 是按整条记录引擎区分（解析器跑PDF文本或OCR文本），非逐字段。
+        // key 为导出列名，manual_fields/ai_fields 可能存导出列名或OCR字段名，两边都匹配。
+        const _recordMetaFieldKeys = ['文件名', '文档类型', '状态', '创建时间', '识别时间', '群名', '发送人'];
+        function fieldSource(key) {
+            const rec = previewAutoRecord.value;
+            if (!rec || _recordMetaFieldKeys.includes(key)) return null;
+            const names = new Set([key]);
+            const mapping = mappingConfig.value.default_mapping || {};
+            for (const [ocrField, outCol] of Object.entries(mapping)) {
+                if (outCol === key) names.add(ocrField);
+            }
+            const hit = (arr) => Array.isArray(arr) && arr.some(f => names.has(f));
+            if (hit(rec.ai_fields)) return { text: 'AI质检识别', style: 'background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;' };
+            if (hit(rec.manual_fields)) return { text: '手动修改', style: 'background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;' };
+            // 引擎含 ocr（ocr / pdfplumber+ocr）或百度/火山 → OCR提取；pdfplumber/空 → PDF提取
+            const eng = (rec.ocr_engine || '').toLowerCase();
+            if (eng.includes('ocr') || eng === 'baidu' || eng === 'volc') {
+                return { text: 'OCR提取', style: 'background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;' };
+            }
+            return { text: 'PDF提取', style: 'background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;' };
         }
 
         // ========== 列表内联编辑 ==========
@@ -8361,6 +8617,7 @@ const _app = createApp({
         const exportAvailableFields = ref([]);
         const exportMergeByPlate = ref(false);   // 按车牌合并开关
         const exportCustomMode = ref(false);     // 导出模式：false=默认模板, true=自定义
+        const exportTemplateSort = ref(null);    // 选中命名导出模板时该模板的默认排序（无则 null，用当前模板的 exportDefaultSort）
         const exportTemplateList = ref([]);      // 可选的命名导出模板列表(标准版/完整版/自定义模板等)
         const exportSelectedTemplateName = ref(''); // 当前选中的命名模板(空=用默认/当前生效模板)
         const exportOtherEnterpriseTemplates = ref([]); // 超管专用：其它企业的可选模板(按企业分组)
@@ -8420,6 +8677,9 @@ const _app = createApp({
                     const cols = (colsEntry && Array.isArray(colsEntry.value)) ? colsEntry.value : [];
                     const visibleCols = cols.filter(c => c.visible).sort((a, b) => (a.order || 0) - (b.order || 0));
                     exportSelectedFields.value = visibleCols.map(c => c.key);
+                    // 该模板配置了默认导出排序则一并采用（用户手动选过页面排序时仍以所选为准）
+                    const sortEntry = (data.data.export_columns || []).find(x => x.key === 'default_sort');
+                    exportTemplateSort.value = (sortEntry && sortEntry.value && sortEntry.value.sort_by) ? sortEntry.value : null;
                 }
             } catch (e) {
                 showMessage('模板加载失败: ' + e.message, false);
@@ -8439,6 +8699,7 @@ const _app = createApp({
             exportCustomMode.value = false;
             exportSelectedTemplateName.value = '';
             exportSelectedOtherTemplate.value = '';
+            exportTemplateSort.value = null;
         }
 
         // 计算手动上传导出的数据条数
@@ -8880,6 +9141,9 @@ const _app = createApp({
         const batchProgress = reactive({ total: 0, current: 0, success: 0, failed: 0, currentFile: '' });
         // 批量失败明细弹窗
         const batchFailModal = reactive({ visible: false, errors: [] });
+        // 批量AI质检进度（逐条串行，结果落库，完成后在列表点AI质检查看，不自动弹窗）
+        const aiCheckBatchProcessing = ref(false);
+        const aiCheckBatchProgress = reactive({ total: 0, current: 0, diff: 0, pass: 0, failed: 0, currentFile: '' });
         // 手动修改字段未覆盖提醒弹窗
         // items 单条模式带识别值差异明细（可勾选覆盖），fields 单条模式仅字段名，count 批量模式显示记录数
         const manualKeptModal = reactive({ visible: false, fields: [], count: 0, items: [], busy: false });
@@ -8965,6 +9229,12 @@ const _app = createApp({
             const n = Number(v || 0);
             return isNaN(n) ? '0.00' : n.toFixed(2);
         }
+        // 该记录是否已产出AI质检结果（据此把按钮从「AI质检」改名为「AI质检结果」）
+        // 主判据：列表返回的 has_ai_check（有含完整提取的质检流水）；兜底看 ai_check_status（自动质检状态）
+        function aiCheckedDone(record) {
+            if (!record) return false;
+            return !!record.has_ai_check || ['pass', 'corrected', 'flagged', 'resolved'].includes(record.ai_check_status);
+        }
 
         // 触发单条 AI质检（操作列/预览弹窗共用，fromPreview 控制预览按钮 loading）
         async function runAiCheck(record, fromPreview) {
@@ -9036,6 +9306,158 @@ const _app = createApp({
                 showMessage(`应用失败: ${e.message}`, false);
             } finally {
                 aiCheckModal.busy = false;
+            }
+        }
+
+        // ============ 预览弹窗内「AI质检」面板 ============
+        // 把差异/一致原始数据装进面板（默认勾选差异，手动字段不勾）
+        function _fillPreviewAiCheck(d, fromHistory) {
+            previewAiCheck.diffs = (d.diffs || []).map(x => ({
+                field: x.field, current: x.current, ai: x.ai,
+                type: x.type || 'diff', manual: !!x.manual, checked: !x.manual,
+            }));
+            previewAiCheck.same = (d.same || []).map(x => ({ field: x.field, current: x.current, ai: x.ai }));
+            previewAiCheck.logId = d.log_id || null;
+            previewAiCheck.model = d.model || '';
+            previewAiCheck.durationMs = d.duration_ms || 0;
+            previewAiCheck.checkedAt = d.checked_at || '';
+            previewAiCheck.fromHistory = !!fromHistory;
+            previewAiCheck.showSame = false;
+            previewAiCheck.state = 'done';
+        }
+        // 重置面板状态（打开预览/切换保单时调用）
+        function resetPreviewAiCheck() {
+            if (_previewAiCheckTimer) { clearInterval(_previewAiCheckTimer); _previewAiCheckTimer = null; }
+            Object.assign(previewAiCheck, {
+                recordId: null, state: 'idle', error: '', logId: null, model: '', durationMs: 0,
+                checkedAt: '', fromHistory: false, diffs: [], same: [], showSame: false,
+                busy: false, elapsedSec: 0, stage: '',
+                applyMsg: '', applyOk: false, corrections: {}, showHistory: false,
+            });
+        }
+        // 列表行「AI质检」：打开预览弹窗并直接进入AI质检面板（有历史看结果，无则待质检）
+        async function openRecordAiCheck(record) {
+            await previewRecord(record);
+            previewShowFields.value = false;
+            previewShowRaw.value = false;
+            previewShowRules.value = false;
+            previewShowCompare.value = false;
+            previewShowAiCheck.value = true;
+            if (previewAiCheck.state === 'idle' && previewAutoRecord.value) {
+                loadPreviewAiCheckHistory(previewAutoRecord.value);
+            }
+        }
+        // 点头部「AI质检」按钮：切换右侧面板；首次展开时拉历史结果
+        function togglePreviewAiCheck() {
+            previewShowAiCheck.value = !previewShowAiCheck.value;
+            if (previewShowAiCheck.value) {
+                previewShowFields.value = false; previewShowRaw.value = false;
+                previewShowRules.value = false; previewShowCompare.value = false;
+                if (previewAiCheck.state === 'idle' && previewAutoRecord.value) {
+                    loadPreviewAiCheckHistory(previewAutoRecord.value);
+                }
+            }
+        }
+        // 拉取该记录最近一次质检结果（AI值历史快照 + 列表值实时重算）
+        async function loadPreviewAiCheckHistory(record) {
+            if (!record || !record.id) return;
+            previewAiCheck.recordId = record.id;
+            previewAiCheck.state = 'loading';
+            previewAiCheck.error = '';
+            try {
+                const resp = await authFetch(`/api/insurance/records/${record.id}/ai-check`);
+                const data = await resp.json();
+                // 拉历史期间用户可能已切换保单，丢弃过期响应
+                if (previewAiCheck.recordId !== record.id) return;
+                // 应用历史（ai_corrections）无论有无对比都展示，便于排查
+                previewAiCheck.corrections = (data.data && data.data.ai_corrections) || {};
+                if (data.code === 0 && data.data && data.data.comparison) {
+                    _fillPreviewAiCheck(data.data.comparison, true);
+                } else {
+                    previewAiCheck.state = 'empty';  // 无历史，待手动质检
+                }
+            } catch (e) {
+                if (previewAiCheck.recordId !== record.id) return;
+                previewAiCheck.state = 'empty';
+            }
+        }
+        // 进行 / 重新质检：同步调 AI 提取，期间显示进度
+        async function runPreviewAiCheck(record) {
+            record = record || previewAutoRecord.value;
+            if (!record || !record.cos_url) { showMessage('该记录无原件，无法AI质检', false); return; }
+            if (previewAiCheck.state === 'running') return;
+            previewAiCheck.recordId = record.id;
+            previewAiCheck.state = 'running';
+            previewAiCheck.error = '';
+            previewAiCheck.applyMsg = '';
+            previewAiCheck.elapsedSec = 0;
+            // 进度计时 + 阶段文案（后端为单次阻塞调用，无真实进度，用阶段动画提示）
+            const stages = ['读取保单原件…', 'AI识别中…', '比对字段…'];
+            previewAiCheck.stage = stages[0];
+            if (_previewAiCheckTimer) clearInterval(_previewAiCheckTimer);
+            _previewAiCheckTimer = setInterval(() => {
+                previewAiCheck.elapsedSec += 1;
+                const i = previewAiCheck.elapsedSec < 2 ? 0 : (previewAiCheck.elapsedSec < 6 ? 1 : 2);
+                previewAiCheck.stage = stages[i];
+            }, 1000);
+            record._aiChecking = true;
+            try {
+                const resp = await authFetch(`/api/insurance/ai-extract/${record.id}`, { method: 'POST' });
+                const ct = resp.headers.get('content-type') || '';
+                if (!ct.includes('application/json')) {
+                    throw new Error(`服务器繁忙或超时（${resp.status}），请稍后重试`);
+                }
+                const data = await resp.json();
+                if (previewAiCheck.recordId !== record.id) return;  // 已切换保单
+                if (data.code === 0 && data.data) {
+                    _fillPreviewAiCheck(data.data, false);
+                    refreshAiPending();
+                } else {
+                    previewAiCheck.state = 'error';
+                    previewAiCheck.error = data.msg || 'AI质检失败';
+                }
+            } catch (e) {
+                if (previewAiCheck.recordId !== record.id) return;
+                previewAiCheck.state = 'error';
+                previewAiCheck.error = e.message;
+            } finally {
+                if (_previewAiCheckTimer) { clearInterval(_previewAiCheckTimer); _previewAiCheckTimer = null; }
+                record._aiChecking = false;
+            }
+        }
+        function previewAiCheckToggleAll(checked) {
+            previewAiCheck.diffs.forEach(i => { i.checked = checked; });
+        }
+        // 应用勾选的 AI 值（复用 apply 接口）。预览为全屏弹窗，全局 toast 会被遮挡，
+        // 故用面板内联提示；应用后重拉历史刷新对比与应用记录。
+        async function applyPreviewAiCheck() {
+            const fields = previewAiCheck.diffs.filter(i => i.checked).map(i => i.field);
+            if (!fields.length || previewAiCheck.busy || !previewAiCheck.logId) return;
+            const rid = previewAiCheck.recordId;
+            previewAiCheck.busy = true;
+            previewAiCheck.applyMsg = '';
+            try {
+                const resp = await authFetch(`/api/insurance/ai-extract/${rid}/apply`, {
+                    method: 'POST',
+                    body: JSON.stringify({ log_id: previewAiCheck.logId, fields }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    previewAiCheck.applyOk = true;
+                    previewAiCheck.applyMsg = data.msg || `已应用 ${fields.length} 个AI值`;
+                    refreshAiPending();
+                    loadRecords(false);   // 刷新列表值（不影响勾选）
+                    // 应用后列表值已变，重拉历史对比与应用记录刷新面板
+                    await loadPreviewAiCheckHistory({ id: rid });
+                } else {
+                    previewAiCheck.applyOk = false;
+                    previewAiCheck.applyMsg = data.msg || '应用失败';
+                }
+            } catch (e) {
+                previewAiCheck.applyOk = false;
+                previewAiCheck.applyMsg = `应用失败: ${e.message}`;
+            } finally {
+                previewAiCheck.busy = false;
             }
         }
 
@@ -9457,9 +9879,14 @@ const _app = createApp({
             const ok = await saveAiConfig(true);
             if (ok) showMessage(`已切换为「${m.name}」`, true);
         }
+        // 列表行测试连通状态的 key：已保存模型用 id，未保存新模型（id 为空）用行索引兜底。
+        // 模板显示与 testAiModel 存储必须共用此函数，否则 key 对不上会导致「测试中/结果」不显示。
+        function aiTestKey(m) {
+            return m.id || ('__row_' + aiConfig.models.indexOf(m));
+        }
         // 列表内测试连通（已保存模型用 model_id，未保存新模型用完整配置）
         async function testAiModel(m) {
-            const key = m.id || ('__row_' + aiConfig.models.indexOf(m));
+            const key = aiTestKey(m);
             aiTestState[key] = { testing: true, done: false };
             try {
                 let body;
@@ -9673,6 +10100,50 @@ const _app = createApp({
             } catch (e) {
                 showMessage('批量重新识别失败: ' + e.message, false);
                 batchProcessing.value = false;
+            }
+        }
+
+        // 批量AI质检：对勾选记录逐条串行送AI提取，结果落库（ai_check_log + 状态徽标）。
+        // 不自动弹对比框，完成后用户在列表点「AI质检」按钮查看各条结果（走历史）。
+        async function batchAiCheckSync() {
+            if (aiCheckBatchProcessing.value) return;
+            let ids = _expandMergedSelection(selectedRecordIds.value);
+            // 仅保留有原件的记录（无 cos_url 无法质检）
+            const idSet = new Set(ids);
+            ids = records.value.filter(r => idSet.has(r.id) && r.cos_url).map(r => r.id);
+            if (!ids.length) { showMessage('请先勾选带原件的记录', false); return; }
+            if (!confirm(`确定对 ${ids.length} 条记录批量AI质检？将逐条调用大模型识别，耗时较长。`)) return;
+
+            aiCheckBatchProcessing.value = true;
+            Object.assign(aiCheckBatchProgress, { total: ids.length, current: 0, diff: 0, pass: 0, failed: 0, currentFile: '' });
+            try {
+                for (const rid of ids) {
+                    const rec = records.value.find(r => r.id === rid);
+                    aiCheckBatchProgress.currentFile = rec ? (rec.filename || `#${rid}`) : `#${rid}`;
+                    try {
+                        const resp = await authFetch(`/api/insurance/ai-extract/${rid}`, { method: 'POST' });
+                        const ct = resp.headers.get('content-type') || '';
+                        const data = ct.includes('application/json') ? await resp.json() : null;
+                        if (data && data.code === 0 && data.data) {
+                            if ((data.data.diffs || []).length > 0) aiCheckBatchProgress.diff++;
+                            else aiCheckBatchProgress.pass++;
+                        } else {
+                            aiCheckBatchProgress.failed++;
+                        }
+                    } catch (e) {
+                        aiCheckBatchProgress.failed++;
+                    }
+                    aiCheckBatchProgress.current++;
+                }
+                aiCheckBatchProgress.currentFile = '完成';
+                selectedRecordIds.value = [];
+                await loadRecords(false);
+                refreshAiPending();
+                showMessage(`批量AI质检完成：${aiCheckBatchProgress.diff} 条有差异、${aiCheckBatchProgress.pass} 条一致、${aiCheckBatchProgress.failed} 条失败`, true);
+                setTimeout(() => { aiCheckBatchProcessing.value = false; }, 2000);
+            } catch (e) {
+                showMessage('批量AI质检失败: ' + e.message, false);
+                aiCheckBatchProcessing.value = false;
             }
         }
 
@@ -10018,9 +10489,13 @@ const _app = createApp({
                     if (recordEnterpriseFilter.value) params.set('enterprise_id', recordEnterpriseFilter.value);
                     _appendDateParams(params);
                     if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');
-                    // 导出顺序跟随页面所选排序（如按签单日期升序），由服务端排好序返回
-                    if (recordFilter.sort_by) params.set('sort_by', recordFilter.sort_by);
-                    if (recordFilter.sort_order) params.set('sort_order', recordFilter.sort_order);
+                    // 导出排序：用户手动选过排序则跟随页面所选；否则优先用所选命名导出模板的
+                    // 默认排序，未配置时用当前模板「导出列配置」里的默认排序
+                    const _exportSort = sortTouched.value
+                        ? { sort_by: recordFilter.sort_by, sort_order: recordFilter.sort_order }
+                        : (exportTemplateSort.value || exportDefaultSort);
+                    if (_exportSort.sort_by) params.set('sort_by', _exportSort.sort_by);
+                    if (_exportSort.sort_order) params.set('sort_order', _exportSort.sort_order);
                     _appendAdvancedParams(params);
 
                     const listResp = await authFetch(`/api/insurance/records?${params.toString()}`);
@@ -10145,9 +10620,28 @@ const _app = createApp({
             end_date_start: '',     // 终保日期起
             end_date_end: '',       // 终保日期止
             // 排序
-            sort_by: 'sign_date',   // 排序字段（默认按签单日期）
+            sort_by: 'created_at',  // 排序字段（默认按创建时间，页面加载后被「页面列配置」的默认排序覆盖）
             sort_order: 'asc',      // 排序方向（默认升序）
         });
+        // 列配置里的默认排序（loadDefaultSorts 拉取后覆盖）：
+        // listDefaultSort=列表初始排序；exportDefaultSort=导出Excel排序
+        const listDefaultSort = reactive({ sort_by: 'created_at', sort_order: 'asc' });
+        const exportDefaultSort = reactive({ sort_by: 'created_at', sort_order: 'asc' });
+        // 用户是否手动切换过排序：手动选过后导出跟随页面所选排序，否则用导出列配置的默认排序
+        const sortTouched = ref(false);
+        async function loadDefaultSorts() {
+            try {
+                const resp = await authFetch('/api/insurance/default-sort');
+                const json = await resp.json();
+                const d = (json && json.data) || {};
+                if (d.list && d.list.sort_by) {
+                    Object.assign(listDefaultSort, d.list);
+                    recordFilter.sort_by = d.list.sort_by;
+                    recordFilter.sort_order = d.list.sort_order || 'asc';
+                }
+                if (d.export && d.export.sort_by) Object.assign(exportDefaultSort, d.export);
+            } catch (e) { /* 拉取失败保持内置默认（创建时间升序） */ }
+        }
         // 创建/识别日期为 TIMESTAMP 类型，自定义区间可精确到具体时间；保单日期为 DATE 类型仅到天
         const dateTypeSupportsTime = computed(() =>
             ['created_at', 'updated_at'].includes(recordFilter.date_type));
@@ -10264,10 +10758,11 @@ const _app = createApp({
         function clearAllFilters() {
             Object.keys(recordFilter).forEach(k => {
                 if (k === 'dedup') { recordFilter[k] = true; }
-                else if (k === 'sort_by') { recordFilter[k] = 'sign_date'; }
-                else if (k === 'sort_order') { recordFilter[k] = 'asc'; }
+                else if (k === 'sort_by') { recordFilter[k] = listDefaultSort.sort_by; }
+                else if (k === 'sort_order') { recordFilter[k] = listDefaultSort.sort_order; }
                 else { recordFilter[k] = ''; }
             });
+            sortTouched.value = false;
             recordCompanyFilter.value = '';
             recordPolicyTypeFilter.value = '';
             recordEnterpriseFilter.value = '';
@@ -11464,6 +11959,8 @@ const _app = createApp({
             if (new URLSearchParams(window.location.search).get('tab') === 'renewal') {
                 openRenewalTab();
             }
+            // 先拉取列配置里的默认排序（决定列表初始排序），再触发首次加载
+            await loadDefaultSorts();
             // 默认筛选今天（同步，无 IO）+ 同步触发统计数（与 loadRecords 并行）
             setDateShortcut('today');
                        // 并行加载所有初始化数据（任一失败不影响其他）
@@ -12020,6 +12517,7 @@ const _app = createApp({
             previewType, previewFileName, previewHasRawText, previewShowRaw, previewShowFields, previewShowRules,
             previewRawText, previewOcrRawText, previewRawTextTab, activeRawText, formattedRawText, previewFieldsList, rawTextCopied, copyRawText,
             previewShowCompare, previewCompareList, previewCompareDiffCount, previewCompareMeta, previewCompareLoading, previewCompareError, togglePreviewCompare, loadPreviewCompare,
+            previewShowAiCheck, previewAiCheck, previewAiCheckSelectedCount, togglePreviewAiCheck, openRecordAiCheck, loadPreviewAiCheckHistory, runPreviewAiCheck, previewAiCheckToggleAll, applyPreviewAiCheck,
             extractionRules, loadExtractionRules,
             rawTextVisible, rawTextContent, rawTextFileName,
             successResults, abnormalResults, nonPolicyResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal, getPolicyHint, getRecordHint, getFailHint,
@@ -12036,7 +12534,7 @@ const _app = createApp({
             addCompanyMapping, deleteCompanyMapping, resetMapping,
             addColumn, removeColumn, startRenameCol, finishRenameCol, onNewColFieldChange,
             // 导出列选择
-            exportModalVisible, exportSelectedFields, exportAvailableFields, exportMergeByPlate, exportPendingType, exportCustomMode,
+            exportModalVisible, exportSelectedFields, exportAvailableFields, exportMergeByPlate, exportPendingType, exportCustomMode, exportTemplateSort,
             exportTemplateList, exportSelectedTemplateName, loadExportTemplateList, selectExportTemplate, selectExportDefault,
             exportOtherEnterpriseTemplates, exportSelectedOtherTemplate, selectExportOtherTemplate,
             isAllExportFieldsSelected, toggleAllExportFields, confirmExport,
@@ -12052,8 +12550,9 @@ const _app = createApp({
             // 识别记录
             records, filteredRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
             isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask, collapseDownloadTask, expandDownloadTask, retryDownloadTask, batchFailModal, manualKeptModal, manualKeptToggleAll, applyManualOverwrite, batchFailRetry, batchFailUpload,
+            aiCheckBatchProcessing, aiCheckBatchProgress, batchAiCheckSync,
             // AI质检（仅超管）
-            aiCheckModal, aiCheckLoadingPreview, aiCheckSelectedCount, aiCheckBadge, fmtCost,
+            aiCheckModal, aiCheckLoadingPreview, aiCheckSelectedCount, aiCheckBadge, fmtCost, aiCheckedDone,
             runAiCheck, aiCheckToggleAll, applyAiCheck,
             aiCheckDetailModal, openAiCheckDetail, revertAiCheckDetail,
             aiStats, aiIssues, aiIssuesTotalPages, loadAiStats, loadAiIssues, refreshAiPending,
@@ -12066,9 +12565,9 @@ const _app = createApp({
             aiModelSettings, aiConfig, aiProviderPresets, aiTestState, aiModelModal, aiModelForm,
             aiFieldListToken, aiModelsSorted, aiProviderLabel, openAiModelSettings, loadAiConfig, saveAiConfig,
             openAiModelModal, onAiProviderChange, saveAiModelForm, deleteAiModel, moveAiModel,
-            setActiveAiModel, testAiModel, testEditingAiModel,
+            setActiveAiModel, testAiModel, testEditingAiModel, aiTestKey,
             roomList, monitorRooms, filteredMonitorRooms, groupedMonitorRoomOptions, onEnterpriseChange, monitorUsers,
-            recordFilter, dateTypeSupportsTime, openNativePicker, statusLabel, onSourceTypeChange, clearAllFilters, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
+            recordFilter, sortTouched, dateTypeSupportsTime, openNativePicker, statusLabel, onSourceTypeChange, clearAllFilters, debounceLoadRecords, dateShortcuts, setDateShortcut, showAdvancedSearch,
             recordEnterpriseFilter, recordEnterpriseList,
             recordPagination, visiblePages, recordStats,
             recordActiveTab, recordTabs, filterNonPolicy, exportFilterNonPolicy, recordCompanyFilter, recordPolicyTypeFilter, recordDocTypeFilter,
@@ -12089,7 +12588,7 @@ const _app = createApp({
             renewalBatchAssignVisible, renewalBatchAssignee, openBatchAssign, submitBatchAssign, triggerRenewalScan, exportRenewalList,
             renewalQrVisible, renewalQrUrl, renewalConfigVisible, renewalWindowDaysInput, openRenewalQr, openRenewalConfig, saveRenewalConfig, uploadRenewalQrcode, previewRenewalTaskFile,
             deleteRecordVisible, deleteRecordTarget, deleteRecordSaving, openDeleteRecord, confirmDeleteRecord,
-            editingField, editingValue, fieldSaving, startEditField, cancelEditField, saveEditField, isManualField, isDateField,
+            editingField, editingValue, fieldSaving, startEditField, cancelEditField, saveEditField, isManualField, fieldSource, isDateField,
             listEditing, startListEdit, cancelListEdit, saveListEdit,
             remarkSelector, remarkPicker, remarkMissing, openRemarkSelector, queryRemarkOptions, pickRemark,
             recordDetailVisible, currentRecord, openRecordDetail,

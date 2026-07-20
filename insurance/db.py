@@ -1216,6 +1216,17 @@ def update_insurance_record(db, record_id: int, updates: dict):
                 _manual_fields1 = []
         else:
             _manual_fields1 = _manual_raw1 or []
+        # 若本次同时更新了 manual_fields，需并入一起判断，否则同批次新增的手动字段
+        # （如应用AI值时把字段加入 manual_fields）会因 DB 旧值不含它而被误剔除。
+        if "manual_fields" in updates:
+            _incoming_mf1 = updates["manual_fields"]
+            if isinstance(_incoming_mf1, str):
+                try:
+                    _incoming_mf1 = json.loads(_incoming_mf1)
+                except (TypeError, json.JSONDecodeError):
+                    _incoming_mf1 = []
+            if isinstance(_incoming_mf1, list):
+                _manual_fields1 = list(set(_manual_fields1) | set(_incoming_mf1))
 
         _disabled_pf1 = DISABLED_AUTO_PARSED_FIELDS_BY_ENTERPRISE.get(_eid1)
         _disabled_out1 = DISABLED_AUTO_OUTPUT_FIELDS_BY_ENTERPRISE.get(_eid1)
@@ -2123,6 +2134,8 @@ def query_insurance_records(
                 "r2.abnormal_override_reason, r2.user_id, r2.file_md5, r2.error_message, "
                 "r2.enterprise_id, r2.first_recognized_at, "
                 "r2.ai_check_status, r2.ai_checked_at, "
+                # 是否已产出AI质检结果（有含完整提取的流水即算），前端据此把按钮改名「AI质检结果」
+                "EXISTS(SELECT 1 FROM ai_check_log acl WHERE acl.record_id = r2.id AND acl.extracted_json IS NOT NULL) AS has_ai_check, "
                 "pf3.owner AS _pf_owner"
             )
             cursor.execute(

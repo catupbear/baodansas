@@ -119,6 +119,15 @@ def init_ai_tables(db):
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI质检调用流水'
         """)
 
+        # ai_check_log 新增列（幂等 ADD COLUMN，兼容历史已建表）
+        for col_name, col_def in [
+            ("extracted_json", "LONGTEXT COMMENT '本次AI提取的完整字段JSON(全字段历史对比用)'"),
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE ai_check_log ADD COLUMN {col_name} {col_def}")
+            except Exception:
+                pass  # 字段已存在，忽略
+
         conn.commit()
         logger.info("AI质检数据库表初始化完成")
     finally:
