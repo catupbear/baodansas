@@ -1381,6 +1381,12 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
                 # 必须是分支机构名（含分/支公司、营业部、业务部），且非地址（不含路号大厦等）
                 if (val and re.search(r'分公司|支公司|营业部|业务\S*部|营销服务部', val)
                         and not re.search(r'[路街号]|大厦|大楼|广场|栋|楼', val)):
+                    # 只保留到最后一个分支机构后缀为止，后面常跟着"XX团队/XX小组"等
+                    # 内部业务单元名，不是公司名称的一部分（如"...罗湖支公司普通中介咨询服务团队"，
+                    # "...互动运营中心收展宝安团队"）
+                    m_suffix = re.search(r'^.*(?:分公司|支公司|营业部|业务\S*部|营销服务部|中心)', val)
+                    if m_suffix:
+                        val = m_suffix.group(0)
                     fields["保司公司名称"] = val if base in val else base + val
                     break
 
@@ -1699,6 +1705,16 @@ def _extract_policy_no(text: str, fields: dict, company_short: str, policy_type:
             if re.match(r'^[A-Z0-9]{15,30}$', stripped):
                 fields["保单号"] = stripped
                 break
+
+    # 中国人寿"驾乘安心"等组合单格式：无独立"保险单号："行，号码嵌在说明段落里
+    # "各险种保险单号分别为：xxx、yyy，组合后保单号为：ZH..."，标签后是"为"不是"："/空白，
+    # 且冒号常换行后紧跟，上面的通用模式都匹配不到。放最后兜底——文档若本身就有独立的
+    # "保险单号：xxx"行（如该组合产品下某张分单），必须优先用那个真实单号，不能被这段
+    # 说明性文字里的"组合后保单号"覆盖，所以只在前面全部规则都没取到值时才用
+    if "保单号" not in fields:
+        m = re.search(r"组合(?:后)?保单号为?[：:]?\s*\n?\s*[:：]?\s*([A-Za-z0-9]{10,32})", text)
+        if m:
+            fields["保单号"] = m.group(1)
 
     # 阳光农业等：保单号中间有一处OCR多余空格（如"44075100B EAQ2026100161"被上面的
     # 通用规则截成"44075100B"），紧跟的空格后若还是字母数字续段，判定是同一个号被截断，拼回
