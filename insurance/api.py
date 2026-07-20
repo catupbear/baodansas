@@ -4503,6 +4503,30 @@ def _pure_number(s):
     return None
 
 
+# 导出Excel时，字段名命中这些关键词才尝试转成真正的数字单元格（而不是见数字就转）——
+# 避免保单号/车架号/身份证号码/手机号码这类"看着是数字实则是标识符"的字段被误转成数字，
+# 精度丢失或变成科学计数法（Excel数字最多保留15位有效数字，19位保单号转数字会直接错）
+_AMOUNT_COL_HINTS = ("保费", "税额", "佣金", "利润", "应得", "返佣", "剩余", "结算金额", "车船税", "补点")
+
+
+def _try_parse_excel_date(s):
+    """字符串日期 → datetime，用于导出为 Excel 真正的日期类型（而不是文本）。
+    "交强与交商起保时间"等组合日期（如"2026-05-13交06/12"）不是标准日期格式，解析失败返回 None，
+    调用方保留原文本，不强行转换。"""
+    if not isinstance(s, str) or not s.strip():
+        return None
+    t = s.strip()
+    from datetime import datetime as _dt
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d",
+                "%Y/%m/%d %H:%M:%S", "%Y/%m/%d %H:%M", "%Y/%m/%d",
+                "%Y年%m月%d日", "%Y.%m.%d"):
+        try:
+            return _dt.strptime(t, fmt)
+        except ValueError:
+            continue
+    return None
+
+
 _REPORT_SIGN_SALT = "wxbot-report-2026-a7f3k9x2q5"
 
 def _report_sign(eid, ds, de):
@@ -4836,36 +4860,56 @@ def export_excel():
                         formula_referenced_cols.add(_c)
 
             def _postprocess_row(row_idx, src_fields):
-                """把刚写入的一行做三类单元格修正：公式列→活公式；费率列→小数+百分比格式；
-                公式引用的金额列→数字。src_fields 为该行的字段字典（用于按公司/险种匹配公式）。"""
-                if not has_config:
-                    return
-                # 该行匹配到的「计算公式」：目标字段 → 公式表达式
-                formula_map = {tf: f for tf, f, is_comp in match_fee_formulas(user_config, src_fields) if is_comp}
+                """把刚写入的一行做单元格类型/格式修正，而不是所有列都留成纯文本：
+                公式列→活公式；费率列→小数+百分比格式；公式引用的金额列→数字
+                （以上三类依赖企业自定义配置，仅 has_config 时生效）；
+                日期类字段→真正的Excel日期类型；金额类字段→真正的Excel数字类型
+                （这两类是基础导出体验，对所有用户生效，不依赖企业是否配置了计算公式等）。
+                src_fields 为该行的字段字典（用于按公司/险种匹配公式）。"""
+                formula_map = {}
+                if has_config:
+                    formula_map = {tf: f for tf, f, is_comp in match_fee_formulas(user_config, src_fields) if is_comp}
                 for cidx, col in enumerate(field_names, start=1):
                     cell = ws.cell(row=row_idx, column=cidx)
                     cur = cell.value
-                    # 1) 公式目标列 → Excel 活公式（失败则回退静态值）
-                    if col in formula_map:
-                        excel_f = _formula_to_excel(formula_map[col], col_letter_map, row_idx)
-                        if excel_f:
-                            # 用静态计算值做 IFERROR 兜底：公式引用到空单元格（如未填的"补点"）时，
-                            # Excel 会 #VALUE! 并级联污染"保险公司合计/公司毛利"，兜底后回退到算好的值
-                            _sv = _pure_number(src_fields.get(col, ""))
-                            cell.value = "=IFERROR(" + excel_f[1:] + "," + (str(_sv) if _sv is not None else "0") + ")"
-                            cell.number_format = "0.00"
+                    if has_config:
+                        # 1) 公式目标列 → Excel 活公式（失败则回退静态值）
+                        if col in formula_map:
+                            excel_f = _formula_to_excel(formula_map[col], col_letter_map, row_idx)
+                            if excel_f:
+                                # 用静态计算值做 IFERROR 兜底：公式引用到空单元格（如未填的"补点"）时，
+                                # Excel 会 #VALUE! 并级联污染"保险公司合计/公司毛利"，兜底后回退到算好的值
+                                _sv = _pure_number(src_fields.get(col, ""))
+                                cell.value = "=IFERROR(" + excel_f[1:] + "," + (str(_sv) if _sv is not None else "0") + ")"
+                                cell.number_format = "0.00"
+                                continue
+                        # 2) 费率列（值形如 "20%"）→ 转小数 + 百分比格式，使其能参与公式
+                        dec = _percent_text_to_decimal(cur)
+                        if dec is not None:
+                            cell.value = dec
+                            cell.number_format = "0.0%"
                             continue
-                    # 2) 费率列（值形如 "20%"）→ 转小数 + 百分比格式，使其能参与公式
-                    dec = _percent_text_to_decimal(cur)
-                    if dec is not None:
-                        cell.value = dec
-                        cell.number_format = "0.0%"
-                        continue
-                    # 3) 公式引用到的金额列 → 转数字
-                    if col in formula_referenced_cols:
+                        # 3) 公式引用到的金额列 → 转数字
+                        if col in formula_referenced_cols:
+                            num = _pure_number(cur)
+                            if num is not None:
+                                cell.value = num
+                                cell.number_format = "0.00"
+                                continue
+                    # 4) 通用兜底（对所有导出用户生效，不依赖企业配置）：
+                    #    金额类字段（字段名命中关键词）→ 真正数字类型；日期/时间字段 → 真正日期类型。
+                    #    保单号/车架号/身份证号码等"数字形状的标识符"不在关键词命中范围，不会被转换。
+                    if isinstance(cur, str) and any(h in col for h in _AMOUNT_COL_HINTS):
                         num = _pure_number(cur)
                         if num is not None:
                             cell.value = num
+                            cell.number_format = "0.00"
+                            continue
+                    if isinstance(cur, str) and ("日期" in col or "时间" in col):
+                        dtv = _try_parse_excel_date(cur)
+                        if dtv is not None:
+                            cell.value = dtv
+                            cell.number_format = "yyyy-mm-dd hh:mm" if (dtv.hour or dtv.minute or dtv.second) else "yyyy-mm-dd"
 
             # 前端标记数据是否已经过 apply_user_config 处理（识别记录导出时为 True）
             # 避免重复应用险种简称等别名导致值被二次转换
