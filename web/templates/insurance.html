@@ -204,6 +204,21 @@
         .page-tab-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
         .page-tab-btn.active { background: rgba(255,255,255,0.25); color: #fff; border-color: rgba(255,255,255,0.4); }
 
+        /* 顶部导航"更多"下拉（收纳 AI质检/导出记录） */
+        .nav-more-wrap { position: relative; display: inline-flex; }
+        .nav-more-dropdown {
+            position: absolute; top: calc(100% + 6px); left: 0; min-width: 160px;
+            background: #fff; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+            border: 1px solid #e5e7eb; overflow: hidden; z-index: 60; padding: 6px;
+        }
+        .nav-more-item {
+            display: flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box;
+            padding: 8px 10px; font-size: 13px; font-weight: 500; color: #374151;
+            border-radius: 6px; cursor: pointer; text-decoration: none; border: none;
+            background: none; text-align: left; position: relative;
+        }
+        .nav-more-item:hover { background: #fff7ed; color: #ea580c; }
+
         /* ==== 销售看板（sd- 前缀） ==== */
         .sd-tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
         .sd-tabs button { border: 1px solid #e5e7eb; background: #fff; border-radius: 20px; padding: 7px 18px; font-size: 13px; font-weight: 600; color: #6b7280; cursor: pointer; }
@@ -598,15 +613,26 @@
                     <button v-if="isSuperAdmin" @click="pageTab = 'sales'; loadSalesDash()" :class="pageTab === 'sales' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;">
                         销售看板<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">NEW</span>
                     </button>
-                    <!-- AI质检（仅超管），Tab 名旁显示待处理数量红色徽标 -->
-                    <button v-if="isSuperAdmin" @click="openAiCheckTab()" :class="pageTab === 'aicheck' ? 'active' : ''" class="page-tab-btn" style="position:relative;white-space:nowrap;">
-                        ✨ AI质检
-                        <span v-if="aiIssues.pending > 0" style="position:absolute;top:-8px;right:-8px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.35);">{{ aiIssues.pending > 99 ? '99+' : aiIssues.pending }}</span>
-                    </button>
                     <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="openRenewalTab()" :class="pageTab === 'renewal' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;position:relative;">
                         续保管理系统<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
                         <span v-if="renewalBadgeCount > 0" style="position:absolute;top:-8px;right:-8px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.35);border:2px solid #c2410c;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
                     </button>
+                    <!-- 更多：收纳 AI质检 / 导出记录，避免顶部导航栏按钮太多挤成一整排 -->
+                    <div v-if="isSuperAdmin" class="nav-more-wrap">
+                        <button @click.stop="moreMenuOpen = !moreMenuOpen" class="page-tab-btn" style="position:relative;white-space:nowrap;">
+                            更多 ▾
+                            <span v-if="aiIssues.pending > 0" style="position:absolute;top:-8px;right:-8px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.35);">{{ aiIssues.pending > 99 ? '99+' : aiIssues.pending }}</span>
+                        </button>
+                        <div v-if="moreMenuOpen" class="nav-more-dropdown" @click.stop>
+                            <button @click="openAiCheckTab(); moreMenuOpen = false" class="nav-more-item">
+                                ✨ AI质检
+                                <span v-if="aiIssues.pending > 0" style="margin-left:auto;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#dc2626;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">{{ aiIssues.pending > 99 ? '99+' : aiIssues.pending }}</span>
+                            </button>
+                            <a href="/admin/export-records" class="nav-more-item">
+                                📤 导出记录
+                            </a>
+                        </div>
+                    </div>
                 </div>
                 <!-- 未激活：工作台入口（点击提示联系管理员激活） -->
                 <div v-else class="hidden sm:flex items-center gap-1 ml-4">
@@ -658,15 +684,6 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
                     </svg>
                     客户管理
-                </a>
-                <!-- 导出记录审计（内部功能，仅超管可见） -->
-                <a v-if="currentUser && currentUser.role === 'super_admin'" href="/admin/export-records"
-                   class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;text-decoration:none;"
-                   title="导出记录">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                    </svg>
-                    导出记录
                 </a>
                 <!-- 个人中心 -->
                 <button @click="profileVisible = true; loadQuota()" class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 10px;font-size:12px;" title="个人中心">
@@ -5841,6 +5858,9 @@ const _app = createApp({
 
         // ========== 移动端菜单 ==========
         const mobileMenuOpen = ref(false);
+        const moreMenuOpen = ref(false);
+        // 点击下拉外部区域自动关闭（按钮/下拉内容自身用 @click.stop 阻止冒泡到这里）
+        document.addEventListener('click', () => { moreMenuOpen.value = false; });
 
         // ========== 购买套餐弹窗 ==========
         const pricingVisible = ref(false);
@@ -12078,7 +12098,7 @@ const _app = createApp({
             errorReportMsg, errorReportOk, openErrorReport, submitErrorReport,
             // 通知面板
             // 移动端菜单
-            mobileMenuOpen,
+            mobileMenuOpen, moreMenuOpen,
             // 识别记录移动端卡片视图
             mobileFilterOpen, mSheetRecord, mLoadingMore,
             mField, mHasPlate, mCardTitle, mPolicyChipClass, mIsLong,
