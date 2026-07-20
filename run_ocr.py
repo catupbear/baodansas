@@ -70,6 +70,9 @@ def main():
     # 初始化保单识别
     init_insurance_tables(db)
     init_monitor_config_table(db)
+    # 导出行为审计（与 main.py 对齐）：建表 + 注入 COS 用于副本异步上传
+    from insurance.export_audit import init_export_audit
+    init_export_audit(db, cos_storage)
     handler = InsuranceHandler(
         db=db, cos_storage=cos_storage, contacts=None, app_config=config,
     )
@@ -104,6 +107,11 @@ def main():
     @app.route("/admin/users")
     def admin_users_page():
         return render_template("admin_users.html")
+
+    # 导出记录审计（内部功能，超管专属，前端校验权限 + 数据接口 @admin_required）
+    @app.route("/admin/export-records")
+    def admin_export_records_page():
+        return render_template("export_records.html")
 
     port = 8878
     logging.info("保单识别服务启动: http://localhost:%d", port)
