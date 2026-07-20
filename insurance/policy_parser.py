@@ -1769,7 +1769,11 @@ def _extract_insured(text: str, text_merged: str, fields: dict, company_short: s
 
     # ===== 平安个意险表格格式 =====
     # "序号 被保险人姓名 证件类型 ..."  → 下一行 "1 黄开支 身份证 ..."
-    if company_short == "平安":
+    # 众安：众安+平安联合承保的商业险用的也是平安这套跨行版式（"姓 名: xxx 证件类型: ...
+    # \n被保\n险人 出生日期: ...\n信息"），但联合承保时 _identify_company 优先识别成"众安"，
+    # 命中不了这条 company_short=="平安" 的判断，一路兜底到"被保险人为车辆随车人员"的驾乘险
+    # 专用兜底规则，把车牌+这串描述文字错当成了被保险人姓名（2026-07-21实测）
+    if company_short in ("平安", "众安"):
         _extract_insured_pingan(text, text_merged, fields)
         if "被保险人" in fields:
             return
