@@ -10318,6 +10318,11 @@ const _app = createApp({
         // 把当前全量原始记录按车牌合并成"伪记录"（display_fields=合并行），
         // 复用导出接口的合并算法（return_json），保证页面与导出 Excel 完全一致。
         async function _applyMerge() {
+            // 记住刷新前已展开的合并行(按车牌/车架号/保单号分组键)，刷新后恢复展开状态，
+            // 避免静默自动刷新时把用户正在看的展开内容强制收起
+            const _prevExpanded = new Set(
+                (records.value || []).filter(r => r._merged && r._expanded).map(r => r._plate)
+            );
             const raw = records.value;
             const invoices = raw.map(r => ({ fields: r.display_fields || {}, id: r.id, file_name: r.filename }));
             let mrows = [];
@@ -10362,7 +10367,7 @@ const _app = createApp({
                 return {
                     id: '__merge_' + (p || i),
                     display_fields: row,
-                    _merged: true, _plate: p, _children: children, _expanded: false,
+                    _merged: true, _plate: p, _children: children, _expanded: _prevExpanded.has(p),
                     filename: children.length + ' 条', status: 'done', doc_category: '保单',
                     // 合并行是前端拼出来的"伪记录"，原始字段(所属企业等)不会自动带过来，
                     // 要显式从子记录里取——不然超管列表页合并显示时"所属企业"列永远是空的
@@ -11479,12 +11484,13 @@ const _app = createApp({
             // AI质检待处理数量（仅超管，用于顶部 Tab 红色徽标）
             refreshAiPending();
 
-            // 记录列表定时自动刷新(30秒)：仅在"识别记录"页、页面可见、无弹窗/预览打开、非加载中、
-            // 非按车牌合并模式时静默刷新，保留当前筛选/页码/勾选；页面切到后台标签自动暂停
+            // 记录列表定时自动刷新(30秒)：仅在"识别记录"页、页面可见、无弹窗/预览打开、非加载中时
+            // 静默刷新，保留当前筛选/页码/勾选；页面切到后台标签自动暂停。按车牌合并模式下也刷新
+            // （_applyMerge 会保留已展开行的展开状态，不会打断正在看的内容）
             const _canAutoRefreshRecords = () => {
                 if (document.hidden) return false;
                 if (pageTab.value !== 'records') return false;
-                if (isLoadingRecords.value || pageMergeByPlate.value) return false;
+                if (isLoadingRecords.value) return false;
                 if (previewVisible.value || recordDetailVisible.value || mappingModalVisible.value
                         || contactEditVisible.value || pricingVisible.value || profileVisible.value) return false;
                 // 移动端卡片流已触底加载多页时跳过（静默刷新只请求当前页，会把追加的数据刷掉）
