@@ -3310,58 +3310,13 @@
                             </div>
                         </template>
                     </div>
-                    <!-- 合并明细：同车牌的原始记录（跟单条记录卡片一样，摘要区直接可编辑+可展开全部字段） -->
+                    <!-- 合并明细：同车牌的原始记录（可单条预览/重新识别/报错；字段编辑走上面合并行本身） -->
                     <div v-if="record._merged && record._expanded" class="mrc-children">
                         <div v-for="child in record._children" :key="'mc' + child.id" class="mrc-child">
                             <div class="mrc-child-info">
                                 <span class="mrc-chip mrc-chip-jq">{{ (child.display_fields || {})['险种'] || '险种?' }}</span>
                                 <span>保单号 {{ (child.display_fields || {})['保单号'] || '—' }}</span>
                                 <span>保费 {{ (child.display_fields || {})['保费'] || '—' }}</span>
-                            </div>
-                            <!-- 摘要区：跟单条记录卡片一样，直接展示+可点字段编辑，不用额外展开一步 -->
-                            <div v-if="mSummaryCols.length" class="mrc-summary" style="margin-top:6px;">
-                                <div v-for="col in mSummaryCols" :key="'cs' + col.key" class="mrc-kv">
-                                    <span class="k">{{ col.display_name }}</span>
-                                    <span v-if="listEditing.recordId === child.id && listEditing.col === col.key" class="mrc-edit-row" style="flex:1;">
-                                        <input v-model="listEditing.value" v-auto-picker="isDateField(col.key)"
-                                               :type="isDateField(col.key) ? 'date' : 'text'"
-                                               @keyup.enter="saveListEdit(child)" @keyup.escape="cancelListEdit()">
-                                        <button class="mrc-btn mrc-btn-primary" style="padding:4px 8px;font-size:11px;" :disabled="listEditing.saving" @click="saveListEdit(child)">{{ listEditing.saving ? '..' : '✓' }}</button>
-                                        <button class="mrc-btn" style="padding:4px 8px;font-size:11px;background:#fff;border:1px solid #d1d5db;color:#6b7280;" @click="cancelListEdit()">✕</button>
-                                    </span>
-                                    <span v-else class="v" :class="mValClass(child, col)" @click="mFieldClick(child, col)">
-                                        {{ mFieldDisplay(child, col) }}
-                                        <svg v-if="mFieldEditable(child, col)" class="mrc-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                    </span>
-                                </div>
-                            </div>
-                            <!-- 展开/收起全部字段：跟单条记录卡片一样 -->
-                            <button v-if="mDetailGroups.length" class="mrc-toggle" @click="child._mExpanded = !child._mExpanded">
-                                {{ child._mExpanded ? '收起' : '展开全部字段' }}
-                                <span style="font-size:10px;">{{ child._mExpanded ? '▲' : '▼' }}</span>
-                            </button>
-                            <div v-if="child._mExpanded">
-                                <template v-for="group in mDetailGroups" :key="'cmg' + group.title">
-                                    <div class="mrc-sec-title">{{ group.title }}</div>
-                                    <div class="mrc-sec-grid">
-                                        <div v-for="col in group.cols" :key="'cmd' + col.key" class="mrc-kv" :class="{ full: mIsLong(col.key) }">
-                                            <span class="k">{{ col.display_name }}</span>
-                                            <span v-if="listEditing.recordId === child.id && listEditing.col === col.key" class="mrc-edit-row" style="flex:1;">
-                                                <input v-model="listEditing.value" v-auto-picker="isDateField(col.key)"
-                                                       :type="isDateField(col.key) ? 'date' : 'text'"
-                                                       @keyup.enter="saveListEdit(child)" @keyup.escape="cancelListEdit()">
-                                                <button class="mrc-btn mrc-btn-primary" style="padding:4px 8px;font-size:11px;" :disabled="listEditing.saving" @click="saveListEdit(child)">{{ listEditing.saving ? '..' : '✓' }}</button>
-                                                <button class="mrc-btn" style="padding:4px 8px;font-size:11px;background:#fff;border:1px solid #d1d5db;color:#6b7280;" @click="cancelListEdit()">✕</button>
-                                            </span>
-                                            <template v-else>
-                                                <span class="v" :class="mValClass(child, col)" @click="mFieldClick(child, col)">
-                                                    {{ mFieldDisplay(child, col) }}
-                                                    <svg v-if="mFieldEditable(child, col)" class="mrc-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                                </span>
-                                            </template>
-                                        </div>
-                                    </div>
-                                </template>
                             </div>
                             <div class="mrc-child-acts">
                                 <button v-if="child.cos_url" class="mrc-btn mrc-btn-view" @click="previewRecord(child)">预览</button>
@@ -11423,15 +11378,15 @@ const _app = createApp({
             if (key === '文件名') { if (record.cos_url) previewRecord(record); return; }
             if (key === '群名') { if (record.roomid) openContactEdit(record.roomid, record.room_name, 'room'); return; }
             if (key === '发送人') { if (record.sender) openContactEdit(record.sender, record.sender_name, 'user'); return; }
-            if (record._merged) return;  // 合并伪记录不可编辑
+            // 合并伪记录：跟桌面端一样直接编辑合并后的值，saveListEdit 内部会用
+            // _saveMergedEdit 按险种拆分/共有字段广播写回真实子记录，再重新计算合并行
             startListEdit(record, key);
         }
         // 移动端卡片字段是否可行内编辑（决定是否显示编辑小图标提示）——
-        // 文件名/群名/发送人点击是另一套跳转逻辑，合并伪记录不可编辑，其余走 startListEdit
+        // 文件名/群名/发送人点击是另一套跳转逻辑，其余（含合并伪记录）都走 startListEdit
         function mFieldEditable(record, col) {
             const key = col.key;
             if (key === '文件名' || key === '群名' || key === '发送人') return false;
-            if (record._merged) return false;
             return true;
         }
         function openMSheet(record) { mSheetRecord.value = record; }
