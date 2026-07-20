@@ -1030,6 +1030,115 @@ def save_column_config(db, config_type: str, scope: str, scope_id, columns: list
         conn.close()
 
 
+# ------------------------------------------------------------------ #
+# 默认排序（list_columns=识别记录列表初始排序 / export_columns=导出Excel排序）
+# ------------------------------------------------------------------ #
+
+# 未配置时的默认排序：创建时间升序
+DEFAULT_SORT_CONFIG = {"sort_by": "created_at", "sort_order": "asc"}
+
+
+def _normalize_sort_config(val) -> dict:
+    """校验并规范化排序配置，非法值回退默认。"""
+    if isinstance(val, dict) and val.get("sort_by"):
+        return {
+            "sort_by": str(val["sort_by"]),
+            "sort_order": "desc" if val.get("sort_order") == "desc" else "asc",
+        }
+    return dict(DEFAULT_SORT_CONFIG)
+
+
+def get_default_sort(db, config_type: str, user_id: int, role: str, parent_id=None) -> dict:
+    """
+    获取列配置的默认排序（config_key='default_sort'）。
+    查找优先级与 get_column_config 一致：按当前启用模板决定 scope，
+    活跃模板找不到再查默认模板，全部未配置返回 DEFAULT_SORT_CONFIG。
+    """
+    if config_type not in ("list_columns", "export_columns"):
+        return dict(DEFAULT_SORT_CONFIG)
+
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        active = get_active_template(db, user_id)
+        active_tpl = active.get("template_name", DEFAULT_TEMPLATE_NAME)
+        active_source = active.get("source", "own")
+
+        # 搜索顺序与 get_column_config 保持一致
+        search_order = []
+        if active_source == "system":
+            search_order.append(("global", None))
+        elif active_source == "enterprise" and parent_id is not None:
+            search_order.append(("enterprise", parent_id))
+        else:
+            if role == "employee" and parent_id is not None:
+                search_order.append(("user", user_id))
+                search_order.append(("enterprise", parent_id))
+            elif role == "enterprise":
+                search_order.append(("enterprise", parent_id or user_id))
+            elif role == "super_admin":
+                search_order.append(("global", None))
+
+        for scope, scope_id in search_order:
+            sid_cond, sid_params = _scope_id_condition(scope_id)
+            for tpl in ([active_tpl, DEFAULT_TEMPLATE_NAME] if active_tpl != DEFAULT_TEMPLATE_NAME else [DEFAULT_TEMPLATE_NAME]):
+                cursor.execute(
+                    f"SELECT config_value FROM user_field_config "
+                    f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'default_sort' "
+                    f"AND template_name = %s LIMIT 1",
+                    [scope] + sid_params + [config_type, tpl]
+                )
+                row = cursor.fetchone()
+                if row:
+                    try:
+                        return _normalize_sort_config(json.loads(row["config_value"]))
+                    except (TypeError, json.JSONDecodeError):
+                        pass
+        return dict(DEFAULT_SORT_CONFIG)
+    finally:
+        conn.close()
+
+
+def save_default_sort(db, config_type: str, scope: str, scope_id, sort_config: dict,
+                      template_name: str = None):
+    """
+    保存列配置的默认排序（config_key='default_sort'），与 save_column_config 同作用域同模板。
+    """
+    tpl_name = template_name or DEFAULT_TEMPLATE_NAME
+    visible_val = 0 if template_name else 1
+    value = json.dumps(_normalize_sort_config(sort_config), ensure_ascii=False)
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        sid_cond, sid_params = _scope_id_condition(scope_id)
+
+        cursor.execute(
+            f"DELETE FROM user_field_config "
+            f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'default_sort' "
+            f"AND template_name = %s",
+            [scope] + sid_params + [config_type, tpl_name]
+        )
+        if scope_id is None:
+            cursor.execute(
+                "INSERT INTO user_field_config "
+                "(scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
+                "VALUES (%s, NULL, %s, %s, 'default_sort', %s, %s)",
+                [scope, tpl_name, config_type, value, visible_val]
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO user_field_config "
+                "(scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
+                "VALUES (%s, %s, %s, %s, 'default_sort', %s, %s)",
+                [scope, scope_id, tpl_name, config_type, value, visible_val]
+            )
+        conn.commit()
+        logger.debug("默认排序已保存: scope=%s config_type=%s value=%s", scope, config_type, value)
+    finally:
+        conn.close()
+
+
 # 标准版模板：与"宝能前海"企业线上实际启用的字段范围一致(2026-07-14整理进客户文档时确认)
 _STANDARD_TEMPLATE_COLUMNS = [
     {"key": "承保公司", "visible": True, "order": 0, "display_name": "承保公司"},
@@ -1092,14 +1201,15 @@ def init_enterprise_default_template(db, enterprise_id: int):
 
 
 def delete_column_config(db, config_type: str, scope: str, scope_id):
-    """删除当前模板的列配置（不影响备份模板），回退到上一级默认。"""
+    """删除当前模板的列配置（含默认排序，不影响备份模板），回退到上一级默认。"""
     conn = db.pool.connection()
     try:
         cursor = conn.cursor()
         sid_cond, sid_params = _scope_id_condition(scope_id)
         cursor.execute(
             f"DELETE FROM user_field_config "
-            f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'columns' "
+            f"WHERE scope = %s AND {sid_cond} AND config_type = %s "
+            f"AND config_key IN ('columns', 'default_sort') "
             f"AND template_name = %s",
             [scope] + sid_params + [config_type, DEFAULT_TEMPLATE_NAME]
         )

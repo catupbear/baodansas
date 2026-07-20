@@ -42,6 +42,7 @@ from .field_config_db import (
     get_active_template, set_active_template,
     get_effective_config, apply_user_config_to_fields, match_fee_formulas, _format_date,
     get_column_config, save_column_config, delete_column_config,
+    get_default_sort, save_default_sort,
     get_user_fixed_values, save_user_fixed_values,
     get_remark_selector_config, save_remark_selector_config,
     get_merge_by_plate, save_merge_by_plate,
@@ -6020,19 +6021,22 @@ def get_column_config_api():
         if user["role"] == ROLE_SUPER_ADMIN and target_scope:
             sid = int(target_scope_id) if target_scope_id else None
             if target_scope == "enterprise":
-                result = get_column_config(_db, config_type, sid, "enterprise", sid)
+                _cfg_ident = (sid, "enterprise", sid)
             elif target_scope == "user":
                 from auth.db import get_user_by_id
                 target_user = get_user_by_id(_db, sid)
-                result = get_column_config(_db, config_type, sid, "employee", target_user.get("parent_id") if target_user else None)
+                _cfg_ident = (sid, "employee", target_user.get("parent_id") if target_user else None)
             else:
-                result = get_column_config(_db, config_type, 0, "super_admin", None)
+                _cfg_ident = (0, "super_admin", None)
         elif source == "system":
-            result = get_column_config(_db, config_type, 0, "super_admin", None)
+            _cfg_ident = (0, "super_admin", None)
         elif source == "enterprise" and user.get("parent_id"):
-            result = get_column_config(_db, config_type, user["parent_id"], "enterprise", user["parent_id"])
+            _cfg_ident = (user["parent_id"], "enterprise", user["parent_id"])
         else:
-            result = get_column_config(_db, config_type, user["user_id"], user["role"], user.get("parent_id"))
+            _cfg_ident = (user["user_id"], user["role"], user.get("parent_id"))
+        result = get_column_config(_db, config_type, *_cfg_ident)
+        # 默认排序配置（与列配置同模板同作用域解析）
+        result["default_sort"] = get_default_sort(_db, config_type, *_cfg_ident)
         return jsonify({"code": 0, "data": result})
     except Exception as e:
         logger.exception("获取列配置失败")
@@ -6066,6 +6070,11 @@ def save_column_config_api():
         template_name = body.get("template_name")
         save_column_config(_db, config_type, scope, scope_id, columns,
                            template_name=template_name)
+        # 默认排序（可选，随列配置一起保存）
+        default_sort = body.get("default_sort")
+        if isinstance(default_sort, dict) and default_sort.get("sort_by"):
+            save_default_sort(_db, config_type, scope, scope_id, default_sort,
+                              template_name=template_name)
         return jsonify({"code": 0, "msg": "列配置已保存"})
     except Exception as e:
         logger.exception("保存列配置失败")
@@ -6126,6 +6135,25 @@ def delete_column_config_api():
         return jsonify({"code": 0, "msg": "已恢复默认"})
     except Exception as e:
         logger.exception("重置列配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/default-sort", methods=["GET"])
+@login_required
+def get_default_sort_api():
+    """
+    获取当前用户的默认排序配置（识别记录页初始化用，轻量查询）。
+    list = 页面列配置（列表初始排序），export = 导出列配置（导出Excel排序）。
+    """
+    try:
+        user = g.current_user
+        uid, role, pid = user["user_id"], user["role"], user.get("parent_id")
+        return jsonify({"code": 0, "data": {
+            "list": get_default_sort(_db, "list_columns", uid, role, pid),
+            "export": get_default_sort(_db, "export_columns", uid, role, pid),
+        }})
+    except Exception as e:
+        logger.exception("获取默认排序配置失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
@@ -6675,15 +6703,24 @@ def ai_extract_record(record_id):
             if f not in diff_names and (cur or ai):
                 same_fields.append({"field": f, "current": cur, "ai": ai})
 
+        # 手动质检结果与自动质检统一口径：有差异=待确认(flagged)，无差异=通过(pass)。
+        # 便于进入「质检问题列表」并计入企业质检统计（stats 按 result 聚合）。
+        new_status = "flagged" if diffs else "pass"
         log.update({
             "model": extract["model"],
-            "result": "extracted",
+            "result": new_status,
             "diff_json": diffs,
+            "extracted_json": extract["fields"],  # 完整AI提取结果，供历史全字段对比
             "prompt_tokens": extract["prompt_tokens"],
             "completion_tokens": extract["completion_tokens"],
             "duration_ms": extract["duration_ms"],
         })
         log_id = insert_ai_check_log(_db, log)
+        # 回写记录质检状态/时间，使手动质检记录出现在问题列表与待确认统计中
+        update_insurance_record(_db, record_id, {
+            "ai_check_status": new_status,
+            "ai_checked_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        })
 
         return jsonify({"code": 0, "data": {
             "log_id": log_id,
@@ -6744,6 +6781,12 @@ def ai_extract_apply(record_id):
     except (TypeError, json.JSONDecodeError):
         diffs = []
     diff_map = {d["field"]: d for d in diffs if isinstance(d, dict)}
+    # 完整AI提取结果：历史结果的对比是按当前列表值实时重算的，勾选的字段可能不在
+    # 质检当时的 diff_json 里，故 AI 值优先从完整提取结果取，回退 diff_json，避免应用不生效。
+    try:
+        ai_fields_full = json.loads(log.get("extracted_json") or "{}")
+    except (TypeError, json.JSONDecodeError):
+        ai_fields_full = {}
 
     try:
         parsed_fields = json.loads(record.get("parsed_fields") or "{}")
@@ -6766,24 +6809,32 @@ def ai_extract_apply(record_id):
     now_str = time.strftime("%Y-%m-%d %H:%M:%S")
     applied = {}
     for name in field_names:
-        d = diff_map.get(name)
-        if not d:
+        # AI值：优先取完整提取结果，回退差异明细
+        if name in ai_fields_full:
+            ai_val = str(ai_fields_full.get(name) or "")
+        elif name in diff_map:
+            ai_val = str(diff_map[name].get("ai") or "")
+        else:
             continue
         old_val = str(parsed_fields.get(name) or "")
-        parsed_fields[name] = d.get("ai", "")
+        if ai_val == old_val:
+            continue  # 已一致，无需覆盖
+        parsed_fields[name] = ai_val
         ai_corrections[name] = {
-            "old": old_val, "new": d.get("ai", ""),
+            "old": old_val, "new": ai_val,
             "time": now_str, "source": "manual", "operator": uname,
         }
         if name not in ai_field_list:
             ai_field_list.append(name)
-        # 人工确认采纳AI值后，该字段不再算「手动修改」保护（值已被明确刷新）
-        if name in manual_fields:
-            manual_fields.remove(name)
-        applied[name] = {"old": old_val, "new": d.get("ai", "")}
+        # 应用AI值 = 人工确认覆盖：加入 manual_fields。
+        # 既保证值能落库（部分企业会剔除「禁用自动识别」的字段，仅 manual_fields 例外），
+        # 也保护该值不被后续自动识别覆盖。
+        if name not in manual_fields:
+            manual_fields.append(name)
+        applied[name] = {"old": old_val, "new": ai_val}
 
     if not applied:
-        return jsonify({"code": 400, "msg": "勾选的字段在本次AI结果中不存在"}), 400
+        return jsonify({"code": 400, "msg": "勾选的字段无需应用（值已一致或不在本次AI结果中）"}), 400
 
     update_insurance_record(_db, record_id, {
         "parsed_fields": parsed_fields,
@@ -7082,12 +7133,50 @@ def get_record_ai_check_detail(record_id):
         except (TypeError, json.JSONDecodeError):
             return default
 
+    # 历史对比：取最近一条含完整AI提取结果的流水，AI值用历史快照、列表值取实时，
+    # 按全字段（FIELD_ORDER + AI额外字段）重新比对，供预览弹窗「AI质检」面板直接查看
+    comparison = None
+    last_extract_log = next(
+        (l for l in logs if l.get("extracted_json") and l.get("result") in ("extracted", "applied")),
+        None,
+    )
+    if last_extract_log:
+        from insurance.ai_checker import compute_diff
+        from insurance.policy_parser import FIELD_ORDER
+
+        ai_fields = _load_json(last_extract_log.get("extracted_json"), {}) or {}
+        parsed_fields = _load_json(record.get("parsed_fields"), {}) or {}
+        manual_fields = _load_json(record.get("manual_fields"), []) or []
+
+        compare_fields = list(FIELD_ORDER)
+        for k in ai_fields:
+            if k not in compare_fields:
+                compare_fields.append(k)
+        diffs = compute_diff(parsed_fields, ai_fields, compare_fields, manual_fields)
+        diff_names = {d["field"] for d in diffs}
+        same_fields = []
+        for f in compare_fields:
+            cur = str(parsed_fields.get(f) or "").strip()
+            ai = str(ai_fields.get(f) or "").strip()
+            if f not in diff_names and (cur or ai):
+                same_fields.append({"field": f, "current": cur, "ai": ai})
+        comparison = {
+            "log_id": last_extract_log["id"],
+            "model": last_extract_log.get("model") or "",
+            "duration_ms": last_extract_log.get("duration_ms") or 0,
+            "checked_at": last_extract_log.get("created_at") or "",
+            "diffs": diffs,
+            "same": same_fields,
+            "manual_fields": manual_fields,
+        }
+
     return jsonify({"code": 0, "data": {
         "ai_check_status": record.get("ai_check_status"),
         "ai_checked_at": str(record.get("ai_checked_at") or ""),
         "ai_fields": _load_json(record.get("ai_fields"), []),
         "ai_corrections": _load_json(record.get("ai_corrections"), {}),
         "logs": logs,
+        "comparison": comparison,
     }})
 
 
