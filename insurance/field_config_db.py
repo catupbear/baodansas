@@ -1050,8 +1050,8 @@ def save_column_config(db, config_type: str, scope: str, scope_id, columns: list
 # 默认排序（list_columns=识别记录列表初始排序 / export_columns=导出Excel排序）
 # ------------------------------------------------------------------ #
 
-# 未配置时的默认排序：创建时间升序
-DEFAULT_SORT_CONFIG = {"sort_by": "created_at", "sort_order": "asc"}
+# 未配置时的默认排序：创建时间降序（新记录在前）
+DEFAULT_SORT_CONFIG = {"sort_by": "created_at", "sort_order": "desc"}
 
 
 def _normalize_sort_config(val) -> dict:
@@ -1059,7 +1059,7 @@ def _normalize_sort_config(val) -> dict:
     if isinstance(val, dict) and val.get("sort_by"):
         return {
             "sort_by": str(val["sort_by"]),
-            "sort_order": "desc" if val.get("sort_order") == "desc" else "asc",
+            "sort_order": "asc" if val.get("sort_order") == "asc" else "desc",
         }
     return dict(DEFAULT_SORT_CONFIG)
 
