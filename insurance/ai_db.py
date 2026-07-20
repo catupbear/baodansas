@@ -425,10 +425,10 @@ def query_ai_check_issues(db, filters: dict = None, page: int = 1, page_size: in
 
 def get_ai_check_stats(db, date_start: str = "", date_end: str = "") -> dict:
     """
-    企业质检统计：按企业聚合 ai_check_log（仅 auto 流水），
+    企业质检统计：按企业聚合 ai_check_log（自动 + 手动质检），
     返回 质检数/准确数/修正数/待确认数/真实准确率/token 消耗/高频出错字段 + 全局合计。
     """
-    where, params = ["l.trigger_type = 'auto'"], []
+    where, params = ["l.trigger_type IN ('auto', 'manual')"], []
     if date_start:
         where.append("l.created_at >= %s")
         params.append(date_start + " 00:00:00")
