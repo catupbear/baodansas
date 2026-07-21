@@ -137,11 +137,21 @@ class ContactsManager:
 
     def get_name(self, user_id: str) -> str:
         """
-        获取用户昵称（优先从缓存读取）
+        获取用户昵称。
         支持内部员工和外部联系人
         """
         if not user_id:
             return ""
+
+        # 统一联系人信息表优先（改名后这里是最新值，由 task_contact_sync 独立任务维护；
+        # contacts_cache 是永久缓存，命中就不会再刷新，与 get_room_name 的取舍一致）
+        try:
+            from storage.contact_db import get_contact_name
+            name = get_contact_name(self.db, user_id)
+            if name:
+                return name
+        except Exception:
+            pass
 
         # 先查缓存（包括失败标记）
         cached = self._get_cache(user_id)
