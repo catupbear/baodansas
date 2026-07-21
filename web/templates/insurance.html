@@ -12566,7 +12566,7 @@ const _app = createApp({
                     // 数据标签：点上方直接显示数值
                     if (n <= 15) {
                         x.fillStyle = color; x.font = 'bold 10px sans-serif'; x.textAlign = 'center';
-                        x.fillText(sdAxisNum(v), px, py - 8);
+                        x.fillText(sdFullNum(v), px, py - 8);
                     }
                 });
             });
@@ -12580,10 +12580,11 @@ const _app = createApp({
                 lx += 26 + x.measureText(s.label).width + 14;
             });
         }
-        function sdAxisNum(v) {
+        function sdAxisNum(v) {  // 仅坐标轴刻度用缩写，数据值一律用 sdFullNum 显示完整数字
             if (v >= 10000) return (v / 10000).toFixed(v >= 100000 ? 0 : 1) + '万';
             return Math.round(v).toLocaleString('zh-CN');
         }
+        function sdFullNum(v) { return Math.round(v).toLocaleString('zh-CN'); }
         function drawSdDonut(id, ch) {
             const env = sdCanvasCtx(id);
             if (!env || !ch.items.length) return;
@@ -12598,14 +12599,14 @@ const _app = createApp({
                 x.fillStyle = SD_PIE[i % SD_PIE.length]; x.fill(); a = a2;
             });
             x.fillStyle = '#1c1410'; x.font = 'bold 15px sans-serif'; x.textAlign = 'center';
-            x.fillText(ch.is_count ? total.toLocaleString('zh-CN') + '单' : sdAxisNum(total), cx, cy + 1);
+            x.fillText(ch.is_count ? total.toLocaleString('zh-CN') + '单' : sdFullNum(total), cx, cy + 1);
             x.font = '11px sans-serif'; x.fillStyle = '#9ca3af'; x.fillText('合计', cx, cy + 18);
             let ly = Math.max(cy - ch.items.length * 12, 16);
             ch.items.forEach((it, i) => {
                 x.fillStyle = SD_PIE[i % SD_PIE.length]; x.fillRect(w * 0.56, ly - 8, 11, 11);
                 x.fillStyle = '#6b7280'; x.font = '12px sans-serif'; x.textAlign = 'left';
                 const pct = total ? (it.value / total * 100).toFixed(1) : 0;
-                x.fillText(`${it.name}  ${sdAxisNum(it.value)} (${pct}%)`, w * 0.56 + 17, ly + 1);
+                x.fillText(`${it.name}  ${sdFullNum(it.value)} (${pct}%)`, w * 0.56 + 17, ly + 1);
                 ly += 24;
             });
         }
@@ -12627,7 +12628,7 @@ const _app = createApp({
                 g.addColorStop(0, '#fb923c'); g.addColorStop(1, '#ea580c');
                 x.fillStyle = g; x.beginPath(); x.roundRect(L, y - 8, bw, 16, 8); x.fill();
                 x.fillStyle = '#1c1410'; x.textAlign = 'left'; x.font = 'bold 12px sans-serif';
-                x.fillText(ch.is_count ? it.value + '单' : sdAxisNum(it.value), L + bw + 8, y + 4);
+                x.fillText(ch.is_count ? it.value + '单' : sdFullNum(it.value), L + bw + 8, y + 4);
             });
         }
 
