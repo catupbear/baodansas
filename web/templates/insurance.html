@@ -1889,7 +1889,7 @@
                 <div v-for="c in salesData.cards" :key="c.id||c.title" class="sd-card" style="padding:14px 16px">
                     <div class="text-xs text-gray-400 flex items-center">{{ c.title }}
                         <span v-if="c.filters && c.filters.length" style="font-size:10px;background:#fff7ed;color:#ea580c;border:1px solid #fdba74;border-radius:4px;padding:0 4px;margin-left:4px">条件</span>
-                        <span class="sd-qi">?<span class="sd-qtip">{{ c.explain }}</span></span>
+                        <span class="sd-qi">!<span class="sd-qtip">{{ c.explain }}</span></span>
                     </div>
                     <div class="text-xl font-bold text-gray-800 mt-1.5">{{ sdMoney(c.value, c.is_count) }}<span v-if="c.is_count" class="text-xs font-normal text-gray-400"> 单</span></div>
                 </div>
@@ -1902,7 +1902,7 @@
                     <div class="flex items-center justify-between text-sm mb-1.5">
                         <span class="font-semibold text-gray-700 flex items-center">{{ t.name }}
                             <span class="sd-lb" style="margin-left:6px">{{ sdFiltersText(t.filters) || '全部保单' }} · {{ t.period_label }}<template v-if="t.period_type==='custom'">（{{ t.period_start }} ~ {{ t.period_end }}）</template></span>
-                            <span class="sd-qi">?<span class="sd-qtip">{{ t.explain }}</span></span>
+                            <span class="sd-qi">!<span class="sd-qtip">{{ t.explain }}</span></span>
                         </span>
                         <span class="font-bold" :class="t.rate>=100?'text-green-600':'text-orange-600'">{{ t.rate }}%</span>
                     </div>
@@ -1915,7 +1915,7 @@
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
                 <div v-for="(ch, ci) in sdVisibleCharts" :key="ci" class="sd-card" :class="ch.type==='trend'?'lg:col-span-2':''">
                     <div class="sd-h2"><span class="bar"></span>{{ ch.title }}
-                        <span class="sd-qi">?<span class="sd-qtip">{{ ch.explain }}</span></span>
+                        <span class="sd-qi">!<span class="sd-qtip">{{ ch.explain }}</span></span>
                         <span v-if="ch.type!=='trend' && ch.total" class="mini">合计 {{ sdMoney(ch.total, ch.is_count) }}</span>
                     </div>
                     <div v-if="(ch.type==='trend' && (!ch.labels || !ch.labels.length)) || (ch.type!=='trend' && (!ch.items || !ch.items.length))"
