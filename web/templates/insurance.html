@@ -12727,6 +12727,17 @@ const _app = createApp({
             return Math.round(v).toLocaleString('zh-CN');
         }
         function sdFullNum(v) { return Math.round(v).toLocaleString('zh-CN'); }
+        // 环形图悬停提示：全局单例 tooltip + 每个图记录扇区角度做命中检测
+        let _sdTipEl = null;
+        function _sdTip() {
+            if (!_sdTipEl) {
+                _sdTipEl = document.createElement('div');
+                _sdTipEl.style.cssText = 'display:none;position:fixed;z-index:9999;background:rgba(30,30,30,0.88);color:#fff;padding:7px 12px;border-radius:8px;font-size:12px;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.18);line-height:1.7';
+                document.body.appendChild(_sdTipEl);
+            }
+            return _sdTipEl;
+        }
+        const _sdEsc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
         function drawSdDonut(id, ch) {
             const env = sdCanvasCtx(id);
             if (!env || !ch.items.length) return;
@@ -12734,12 +12745,36 @@ const _app = createApp({
             const total = ch.total || 1;
             const cx = w * 0.30, cy = h / 2, r1 = Math.min(h / 2 - 14, 84), r2 = r1 * 0.62;
             let a = -Math.PI / 2;
+            const arcs = [];
             ch.items.forEach((it, i) => {
                 const frac = total ? it.value / total : 0;
                 const a2 = a + Math.PI * 2 * frac;
                 x.beginPath(); x.arc(cx, cy, r1, a, a2); x.arc(cx, cy, r2, a2, a, true); x.closePath();
-                x.fillStyle = SD_PIE[i % SD_PIE.length]; x.fill(); a = a2;
+                x.fillStyle = SD_PIE[i % SD_PIE.length]; x.fill();
+                arcs.push({ start: a, end: a2, it });
+                a = a2;
             });
+            // 悬停扇区显示 名称/数值/占比
+            const canvasEl = document.getElementById(id);
+            canvasEl.onmousemove = (e) => {
+                const rect = canvasEl.getBoundingClientRect();
+                const dx = e.clientX - rect.left - cx, dy = e.clientY - rect.top - cy;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const tip = _sdTip();
+                if (dist < r2 || dist > r1) { tip.style.display = 'none'; return; }
+                let ang = Math.atan2(dy, dx);
+                if (ang < -Math.PI / 2) ang += Math.PI * 2;  // 归一到扇区角度区间 [-π/2, 3π/2)
+                const hit = arcs.find(s => ang >= s.start && ang < s.end);
+                if (!hit) { tip.style.display = 'none'; return; }
+                const pct = total ? (hit.it.value / total * 100).toFixed(1) : 0;
+                const val = ch.is_count ? Number(hit.it.value).toLocaleString('zh-CN') + ' 单'
+                    : '¥' + Number(hit.it.value).toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+                tip.innerHTML = `<b>${_sdEsc(hit.it.name)}</b><br>${val}（${pct}%）`;
+                tip.style.display = 'block';
+                tip.style.left = (e.clientX + 12) + 'px';
+                tip.style.top = (e.clientY + 12) + 'px';
+            };
+            canvasEl.onmouseleave = () => { _sdTip().style.display = 'none'; };
             x.fillStyle = '#1c1410'; x.font = 'bold 15px sans-serif'; x.textAlign = 'center';
             x.fillText(ch.is_count ? total.toLocaleString('zh-CN') + '单' : sdFullNum(total), cx, cy + 1);
             x.font = '11px sans-serif'; x.fillStyle = '#9ca3af'; x.fillText('合计', cx, cy + 18);
