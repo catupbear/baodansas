@@ -279,13 +279,16 @@ def create_app(config: dict) -> Flask:
     # 消息监控（需要密码）
     @app.route("/monitor")
     def monitor_page():
-        return render_template("monitor_login.html")
+        return render_template("monitor_login.html",
+                               next_url=request.args.get("next", ""))
 
     @app.route("/monitor/chat")
     def monitor_chat():
         from flask import session
         if not session.get("monitor_auth"):
-            return redirect("/monitor")
+            # 未登录时把完整路径（含 roomid/corpid 深链参数）带到登录页，登录后原样回跳
+            from urllib.parse import quote
+            return redirect("/monitor?next=" + quote(request.full_path))
         return render_template("index.html")
 
     @app.route("/monitor/login", methods=["POST"])
@@ -294,8 +297,13 @@ def create_app(config: dict) -> Flask:
         password = request.form.get("password", "")
         if password == config.get("monitor", {}).get("password", "wuhu2025"):
             session["monitor_auth"] = True
-            return redirect("/monitor/chat")
-        return render_template("monitor_login.html", error="密码错误")
+            next_url = request.form.get("next", "")
+            # 只允许回跳站内 /monitor 路径，防止开放重定向
+            if not next_url.startswith("/monitor"):
+                next_url = "/monitor/chat"
+            return redirect(next_url)
+        return render_template("monitor_login.html", error="密码错误",
+                               next_url=request.form.get("next", ""))
 
     # 尝试初始化 SDK 和回调服务（SDK不可用时仅前端可用）
     sdk_config = config["sdk"]

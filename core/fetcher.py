@@ -415,33 +415,40 @@ class MessageFetcher:
             notify_error("消息解析", "_process_item", f"JSON解析失败, seq={msg_seq}", str(e))
 
     def _check_text_msg_dingtalk_notify(self, seq: int, parsed: dict):
-        """外部联系人在群里发的普通聊天文本 → 转发到钉钉群（消息转发机器人）。
+        """外部联系人在群里发的普通聊天文本/图片 → 转发到钉钉群（消息转发机器人）。
 
         过滤规则：
-          - 仅群文本消息（msgtype=text 且 roomid 非空），文件/图片等不转发
+          - 仅群消息（roomid 非空），类型限 text/image，文件等其他类型不转发
           - 内部员工发的不转发：外部联系人 userid 以 wm/wo 开头（wb=互联企业），
             其余视为本企业内部成员（与 contacts.get_name 的判断规则一致）
           - 命令文本不转发：「发送台账xx」台账导出命令、政策补充/报价回填文本
           - 「群公告」机器人广播不转发
-        通知内容含：归属企业、群名、发送人、时间、消息内容。
+        文本走紧凑三段式 Markdown；图片经 SDK 下载→COS→预签名 URL，在钉钉里直接显示图片。
         旁路通知：任何异常只记日志，绝不影响消息处理主流程。
         """
         try:
             from core.notify import text_msg_notify_enabled, notify_group_text
             if not text_msg_notify_enabled():
                 return
-            if parsed.get("msgtype", "") != "text":
+            msgtype = parsed.get("msgtype", "")
+            if msgtype not in ("text", "image"):
                 return
             roomid = parsed.get("roomid", "")
             if not roomid:
                 return
-            _content = parsed.get("content", {}) or {}
-            text = _content.get("text") or _content.get("content") or ""
-            if not text:
-                return
             sender = parsed.get("from", "")
             # 过滤内部人员：非 wm/wo/wb 开头的 userid 视为本企业内部员工
             if not sender.startswith(("wm", "wo", "wb")):
+                return
+            _content = parsed.get("content", {}) or {}
+
+            # 图片消息：下载/上传耗时，走独立后台线程旁路处理
+            if msgtype == "image":
+                self._forward_group_image_to_dingtalk(seq, roomid, sender, _content, parsed)
+                return
+
+            text = _content.get("text") or _content.get("content") or ""
+            if not text:
                 return
             if "群公告" in text:
                 return
@@ -460,29 +467,104 @@ class MessageFetcher:
             except Exception:
                 pass
 
-            # 解析群名/发送人名（用本 fetcher 所属企业的通讯录凭证），失败回退原始 id
-            room_name = roomid
-            sender_name = sender
-            if getattr(self, "contacts", None):
-                try:
-                    room_name = self.contacts.get_room_name(roomid) or roomid
-                except Exception:
-                    pass
-                try:
-                    sender_name = self.contacts.get_name(sender) or sender
-                except Exception:
-                    pass
-
-            msg_time = ""
-            ts = parsed.get("msgtime", 0)
-            if ts:
-                msg_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts / 1000))
+            room_name, sender_name = self._resolve_room_sender(roomid, sender)
+            msg_time = self._format_msg_time(parsed)
 
             notify_group_text(room_name, sender_name, text,
-                              enterprise=self.enterprise_name, msg_time=msg_time)
+                              enterprise=self.enterprise_name, msg_time=msg_time,
+                              detail_url=self._monitor_chat_url(roomid))
             logger.info("群文本消息已转发钉钉: seq=%d room=%s sender=%s", seq, roomid, sender)
         except Exception as e:
             logger.warning("群文本消息转发钉钉失败（不影响主流程）seq=%d: %s", seq, e)
+
+    # 消息监控页地址（与 policy_expiry_reminder.BASE_URL 同域名，钉钉深链用）
+    _MONITOR_CHAT_URL = "https://wxbot.wuhuxiche.com/monitor/chat"
+
+    def _monitor_chat_url(self, roomid: str) -> str:
+        """钉钉通知「查看会话记录」深链：登录后直达本企业对应群的聊天界面"""
+        from urllib.parse import urlencode
+        params = {"roomid": roomid}
+        if self.corpid:
+            params["corpid"] = self.corpid
+        return f"{self._MONITOR_CHAT_URL}?{urlencode(params)}"
+
+    def _resolve_room_sender(self, roomid: str, sender: str) -> tuple:
+        """解析群名/发送人名（用本 fetcher 所属企业的通讯录凭证），失败回退原始 id"""
+        room_name = roomid
+        sender_name = sender
+        if getattr(self, "contacts", None):
+            try:
+                room_name = self.contacts.get_room_name(roomid) or roomid
+            except Exception:
+                pass
+            try:
+                sender_name = self.contacts.get_name(sender) or sender
+            except Exception:
+                pass
+        return room_name, sender_name
+
+    @staticmethod
+    def _format_msg_time(parsed: dict) -> str:
+        """消息时间 → 通知里的紧凑格式（月-日 时:分:秒），无时间戳返回空串"""
+        ts = parsed.get("msgtime", 0)
+        if not ts:
+            return ""
+        return time.strftime("%m-%d %H:%M:%S", time.localtime(ts / 1000))
+
+    # 群图片转发的单张大小上限（与保单识别 MAX_MEMORY_SIZE 同口径，超过不转发）
+    _IMAGE_FORWARD_MAX_SIZE = 20 * 1024 * 1024
+
+    def _forward_group_image_to_dingtalk(self, seq: int, roomid: str,
+                                         sender: str, content: dict, parsed: dict):
+        """外部联系人群聊图片 → SDK 下载 → COS → 预签名 URL → 钉钉通知显示图片。
+
+        下载/上传耗时且非关键路径，放后台线程执行，不阻塞消息拉取主循环；
+        COS 或 SDK 未配置时静默跳过（本地开发环境 SDK 降级不影响）。
+        """
+        sdkfileid = content.get("sdkfileid", "")
+        if not sdkfileid:
+            return
+        filesize = content.get("filesize", 0) or 0
+        if filesize > self._IMAGE_FORWARD_MAX_SIZE:
+            logger.info("群图片过大不转发钉钉: seq=%d size=%d", seq, filesize)
+            return
+        cos = getattr(getattr(self, "insurance_handler", None), "cos_storage", None)
+        if not cos or not self.finance_sdk:
+            logger.info("群图片转发跳过（COS 或 SDK 未配置）: seq=%d", seq)
+            return
+
+        # 名称/时间解析走通讯录缓存，开销小，留在主线程保证与文本通知口径一致
+        room_name, sender_name = self._resolve_room_sender(roomid, sender)
+        msg_time = self._format_msg_time(parsed)
+        md5sum = content.get("md5sum", "") or f"seq{seq}"
+
+        def _worker():
+            try:
+                from core.notify import notify_group_image
+                ret, data = self.finance_sdk.get_media_data_bytes(
+                    sdkfileid, self.proxy, self.passwd, self.timeout
+                )
+                if ret != 0 or not data:
+                    logger.warning("群图片下载失败: seq=%d ret=%s", seq, ret)
+                    return
+                # 按 md5 命名可幂等重传；企业微信群聊图片均为 jpg 编码
+                cos_key = f"chatimg/{roomid}/{md5sum}.jpg"
+                url = cos.upload_bytes(data, cos_key)
+                if not url:
+                    return
+                # 预签名 7 天有效，inline 强制内嵌显示（避免存量下载头影响钉钉渲染）
+                signed = cos.get_presigned_url_from_url(
+                    url, expires=7 * 24 * 3600,
+                    response_content_type="image/jpeg", inline=True,
+                ) or url
+                notify_group_image(room_name, sender_name, signed,
+                                   enterprise=self.enterprise_name, msg_time=msg_time,
+                                   detail_url=self._monitor_chat_url(roomid))
+                logger.info("群图片消息已转发钉钉: seq=%d room=%s sender=%s", seq, roomid, sender)
+            except Exception as e:
+                logger.warning("群图片转发钉钉失败（不影响主流程）seq=%d: %s", seq, e)
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _check_policy_fill_trigger(self, seq: int, parsed: dict):
         """群内"政策报价"文本（车牌 + 商业X/交强X/驾意X）按车牌回填政策字段。
