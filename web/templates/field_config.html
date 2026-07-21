@@ -1285,17 +1285,17 @@
             <div style="padding:24px; max-height:65vh; overflow-y:auto;">
                 <div class="formula-grid" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:16px;">
                     <div>
-                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">比例写入字段</label>
+                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">比例写入字段 <span style="color:#dc2626;">*</span></label>
                         <search-select v-model="ratioForm.field" :options="formulaFields" placeholder="如：应付费率"
                                        empty-hint="暂无自定义字段，输入新字段名可直接新建"
                                        create-label="添加为导出列自定义字段" @create="createRatioField"></search-select>
                     </div>
                     <div>
-                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">保司</label>
+                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">保司 <span style="color:#dc2626;">*</span></label>
                         <search-select v-model="ratioForm.company" :options="ratioCompanyOptions" placeholder="简称或全部"></search-select>
                     </div>
                     <div>
-                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">险种</label>
+                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">险种 <span style="color:#dc2626;">*</span></label>
                         <search-select v-model="ratioForm.policyType" :options="ratioPolicyOptions" placeholder="简称或全部"></search-select>
                     </div>
                 </div>
