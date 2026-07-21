@@ -12741,11 +12741,19 @@ const _app = createApp({
         }
         const _sdEsc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
         function drawSdDonut(id, ch) {
+            const c0 = document.getElementById(id);
+            if (!c0 || !ch.items.length) return;
+            // 窄屏（手机）改上下布局：圆环居中在上、图例单列在下，画布高度按条目数撑开
+            const narrow = c0.clientWidth < 480;
+            const lhN = 22, donutH = 168;
+            c0.setAttribute('height', narrow ? donutH + 16 + ch.items.length * lhN + 8 : 250);
             const env = sdCanvasCtx(id);
-            if (!env || !ch.items.length) return;
+            if (!env) return;
             const { x, w, h } = env;
             const total = ch.total || 1;
-            const cx = w * 0.30, cy = h / 2, r1 = Math.min(h / 2 - 14, 84), r2 = r1 * 0.62;
+            const cx = narrow ? w / 2 : w * 0.30;
+            const cy = narrow ? donutH / 2 : h / 2;
+            const r1 = narrow ? 64 : Math.min(h / 2 - 14, 84), r2 = r1 * 0.62;
             let a = -Math.PI / 2;
             const arcs = [];
             ch.items.forEach((it, i) => {
@@ -12780,17 +12788,33 @@ const _app = createApp({
             x.fillStyle = '#1c1410'; x.font = 'bold 15px sans-serif'; x.textAlign = 'center';
             x.fillText(ch.is_count ? total.toLocaleString('zh-CN') + '单' : sdFullNum(total), cx, cy + 1);
             x.font = '11px sans-serif'; x.fillStyle = '#9ca3af'; x.fillText('合计', cx, cy + 18);
-            // 图例行距/字号随条目数自适应，保司全量展示时不溢出画布
-            const lh = Math.min(24, Math.max(14, Math.floor((h - 24) / ch.items.length)));
-            const legendFont = lh < 19 ? '11px sans-serif' : '12px sans-serif';
-            let ly = Math.max(cy - ch.items.length * lh / 2 + lh / 2, 14);
-            ch.items.forEach((it, i) => {
-                x.fillStyle = SD_PIE[i % SD_PIE.length]; x.fillRect(w * 0.56, ly - 8, 11, 11);
-                x.fillStyle = '#6b7280'; x.font = legendFont; x.textAlign = 'left';
-                const pct = total ? (it.value / total * 100).toFixed(1) : 0;
-                x.fillText(`${it.name}  ${sdFullNum(it.value)} (${pct}%)`, w * 0.56 + 17, ly + 1);
-                ly += lh;
-            });
+            if (narrow) {
+                // 窄屏：图例单列排在圆环下方，超宽的长保司名截断加省略号
+                x.font = '12px sans-serif'; x.textAlign = 'left';
+                const maxTextW = w - 40 - 17;
+                let ly = donutH + 24;
+                ch.items.forEach((it, i) => {
+                    x.fillStyle = SD_PIE[i % SD_PIE.length]; x.fillRect(20, ly - 8, 11, 11);
+                    x.fillStyle = '#6b7280';
+                    const pct = total ? (it.value / total * 100).toFixed(1) : 0;
+                    let txt = `${it.name}  ${sdFullNum(it.value)} (${pct}%)`;
+                    while (x.measureText(txt).width > maxTextW && txt.length > 8) txt = txt.slice(0, -4) + '…';
+                    x.fillText(txt, 37, ly + 1);
+                    ly += lhN;
+                });
+            } else {
+                // 宽屏：图例在右侧，行距/字号随条目数自适应，保司全量展示时不溢出画布
+                const lh = Math.min(24, Math.max(14, Math.floor((h - 24) / ch.items.length)));
+                const legendFont = lh < 19 ? '11px sans-serif' : '12px sans-serif';
+                let ly = Math.max(cy - ch.items.length * lh / 2 + lh / 2, 14);
+                ch.items.forEach((it, i) => {
+                    x.fillStyle = SD_PIE[i % SD_PIE.length]; x.fillRect(w * 0.56, ly - 8, 11, 11);
+                    x.fillStyle = '#6b7280'; x.font = legendFont; x.textAlign = 'left';
+                    const pct = total ? (it.value / total * 100).toFixed(1) : 0;
+                    x.fillText(`${it.name}  ${sdFullNum(it.value)} (${pct}%)`, w * 0.56 + 17, ly + 1);
+                    ly += lh;
+                });
+            }
         }
         function drawSdBar(id, ch) {
             const env = sdCanvasCtx(id);
