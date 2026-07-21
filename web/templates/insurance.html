@@ -10921,13 +10921,15 @@ const _app = createApp({
         const pageMergeByPlate = ref(false);  // 识别记录页"按车牌合并显示"开关
         // 把当前全量原始记录按车牌合并成"伪记录"（display_fields=合并行），
         // 复用导出接口的合并算法（return_json），保证页面与导出 Excel 完全一致。
-        async function _applyMerge() {
+        async function _applyMerge(rawOverride) {
             // 记住刷新前已展开的合并行(按车牌/车架号/保单号分组键)，刷新后恢复展开状态，
             // 避免静默自动刷新时把用户正在看的展开内容强制收起
             const _prevExpanded = new Set(
                 (records.value || []).filter(r => r._merged && r._expanded).map(r => r._plate)
             );
-            const raw = records.value;
+            // rawOverride：静默刷新时传入新拉的原始记录，在后台完成合并后才一次性上屏，
+            // 中途失败直接 return 保持旧视图（不传则沿用当前 records，原有行为）
+            const raw = rawOverride || records.value;
             const invoices = raw.map(r => ({ fields: r.display_fields || {}, id: r.id, file_name: r.filename }));
             let mrows = [];
             try {
@@ -11062,12 +11064,19 @@ const _app = createApp({
                     _reocring: false,
                 }));
                 // append=true：移动端触底加载，把下一页追加到已有列表；否则整页替换
-                records.value = append ? records.value.concat(_newRecords) : _newRecords;
+                // 合并视图的静默刷新：不先上屏平铺原始记录（合并接口在途/失败时页面会闪成/滞留
+                // 平铺分页视图），改为后台合并完成后一次性替换
+                const _mergeSilently = silent && pageMergeByPlate.value && !append;
+                if (!_mergeSilently) {
+                    records.value = append ? records.value.concat(_newRecords) : _newRecords;
+                }
                 if (data.column_config && data.column_config.columns) {
                     listColumnConfig.value = data.column_config.columns;
                 }
-                recordPagination.total = data.total || 0;
-                recordPagination.totalPages = Math.ceil(recordPagination.total / recordPagination.pageSize) || 1;
+                if (!_mergeSilently) {
+                    recordPagination.total = data.total || 0;
+                    recordPagination.totalPages = Math.ceil(recordPagination.total / recordPagination.pageSize) || 1;
+                }
                 // Tab 统计直接用列表接口「内联返回」的 stats（同一次查询、同筛选、同时刻），
                 // 彻底保证「列表 ↔ 统计」一致，不再单独请求统计接口造成不同步。
                 if (data.stats) {
@@ -11083,7 +11092,7 @@ const _app = createApp({
                 }
                 // 按车牌合并视图：把全量原始记录合并成伪记录（会重设 total/totalPages 为合并后行数）
                 if (pageMergeByPlate.value) {
-                    await _applyMerge();
+                    await _applyMerge(_mergeSilently ? _newRecords : undefined);
                 }
             } catch (e) {
                 console.error('加载记录失败', e);
@@ -12099,10 +12108,17 @@ const _app = createApp({
             // 记录列表定时自动刷新(30秒)：仅在"识别记录"页、页面可见、无弹窗/预览打开、非加载中时
             // 静默刷新，保留当前筛选/页码/勾选；页面切到后台标签自动暂停。按车牌合并模式下也刷新
             // （_applyMerge 会保留已展开行的展开状态，不会打断正在看的内容）
-            const _canAutoRefreshRecords = () => {
+            // 用户活跃检测：正在操作页面（15秒内有鼠标/键盘/滚动/触摸）时不自动刷新，空闲才刷
+            let _lastUserActivity = Date.now();
+            ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart', 'scroll'].forEach(ev =>
+                window.addEventListener(ev, () => { _lastUserActivity = Date.now(); }, { passive: true, capture: true }));
+            // ignoreActivity：切回标签页触发的立即刷新是用户主动行为，跳过"正在操作"检测
+            const _canAutoRefreshRecords = (ignoreActivity = false) => {
                 if (document.hidden) return false;
                 if (pageTab.value !== 'records') return false;
                 if (isLoadingRecords.value) return false;
+                if (!ignoreActivity && Date.now() - _lastUserActivity < 15000) return false;  // 正在操作，别打扰
+                if (selectedRecordIds.value.length) return false;          // 勾选中（批量操作中间态）不刷新
                 if (previewVisible.value || recordDetailVisible.value || mappingModalVisible.value
                         || contactEditVisible.value || pricingVisible.value || profileVisible.value) return false;
                 // 移动端卡片流已触底加载多页时跳过（静默刷新只请求当前页，会把追加的数据刷掉）
@@ -12114,7 +12130,7 @@ const _app = createApp({
             // 改完比例规则/计算公式等配置后切回"识别记录"标签页，之前得等最多30秒或手动刷新才能
             // 看到最新数据，容易被当成"改了不生效"（2026-07-21反馈）
             document.addEventListener('visibilitychange', () => {
-                if (!document.hidden && _canAutoRefreshRecords()) loadRecords(false, true);
+                if (!document.hidden && _canAutoRefreshRecords(true)) loadRecords(false, true);
             });
 
             // 手机端顶部标题栏固定后，下面的搜索/筛选栏要贴着它固定——标题栏实际高度会因为

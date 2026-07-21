@@ -634,6 +634,30 @@ def _build_trend(ch: dict, records: list, date_start: str, date_end: str,
         buckets.setdefault(key, []).append(r)
     keys = sorted(buckets.keys())
 
+    # 补全时间轴：范围内没数据的桶补 0——否则只剩有单的月份/日期，两点连成误导性斜线
+    ds, de = _parse_date(date_start), _parse_date(date_end)
+    if ds and de and ds <= de:
+        fill = []
+        if granularity == "day":
+            d = ds
+            while d <= de:
+                fill.append(d.strftime("%Y-%m-%d"))
+                d += timedelta(days=1)
+        elif granularity == "week":
+            d = ds - timedelta(days=ds.weekday())
+            while d <= de:
+                fill.append(d.strftime("%Y-%m-%d") + "周")
+                d += timedelta(days=7)
+        else:  # month
+            y, m = ds.year, ds.month
+            while (y, m) <= (de.year, de.month):
+                fill.append(f"{y:04d}-{m:02d}")
+                m += 1
+                if m > 12:
+                    y, m = y + 1, 1
+        if len(fill) <= 400:  # 异常大范围兜底：仍退回仅有数据的桶
+            keys = fill
+
     series = []
     for m in metrics:
         agg = m.get("agg") or "sum"
@@ -641,7 +665,7 @@ def _build_trend(ch: dict, records: list, date_start: str, date_end: str,
         filters = _sanitize_filters(m.get("filters"))
         series.append({
             "label": m.get("label") or field or "指标",
-            "values": [_aggregate(buckets[k], agg, field, filters) for k in keys],
+            "values": [_aggregate(buckets.get(k, []), agg, field, filters) for k in keys],
         })
     metric_desc = "、".join(f"「{m.get('field') or '保单量'}」{_AGG_LABEL.get(m.get('agg') or 'sum')}"
                            for m in metrics)
