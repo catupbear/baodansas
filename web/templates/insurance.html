@@ -237,6 +237,12 @@
         .sd-qi:hover .sd-qtip { display: block; }
         .sd-qi.qright .sd-qtip { left: auto; right: -10px; transform: none; }
         .sd-qi.qright .sd-qtip::after { left: auto; right: 14px; transform: none; }
+        /* 贴近屏幕边缘时的位置修正（JS 检测溢出后加类），窄屏限宽防两侧同时溢出 */
+        .sd-qi .sd-qtip { max-width: calc(100vw - 24px); }
+        .sd-qi .sd-qtip.tip-left { left: -8px; transform: none; }
+        .sd-qi .sd-qtip.tip-left::after { left: 12px; transform: none; }
+        .sd-qi .sd-qtip.tip-right { left: auto; right: -8px; transform: none; }
+        .sd-qi .sd-qtip.tip-right::after { left: auto; right: 12px; transform: none; }
         /* 目标进度条 */
         .sd-pbar { height: 6px; background: #f3f4f6; border-radius: 3px; overflow: hidden; }
         .sd-pbar i { display: block; height: 100%; background: linear-gradient(90deg, #fdba74, #ea580c); border-radius: 3px; }
@@ -12743,6 +12749,19 @@ const _app = createApp({
             return _sdTipEl;
         }
         const _sdEsc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+        // 「!」说明气泡贴近屏幕左右边缘时自动改为边缘对齐，避免被截断（手机上常见）
+        document.addEventListener('mouseover', (e) => {
+            const qi = e.target && e.target.closest ? e.target.closest('.sd-qi') : null;
+            if (!qi) return;
+            const tip = qi.querySelector('.sd-qtip');
+            if (!tip) return;
+            tip.classList.remove('tip-left', 'tip-right');
+            const r = qi.getBoundingClientRect();
+            const tw = Math.min(250, window.innerWidth - 24);
+            const centerLeft = r.left + r.width / 2 - tw / 2;
+            if (centerLeft < 8) tip.classList.add('tip-left');
+            else if (centerLeft + tw > window.innerWidth - 8) tip.classList.add('tip-right');
+        }, true);
         function drawSdDonut(id, ch) {
             const c0 = document.getElementById(id);
             if (!c0 || !ch.items.length) return;
