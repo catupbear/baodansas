@@ -7352,24 +7352,32 @@ def get_ai_check_stats_api():
 
 
 # ============================================================
-# 销售看板（本期仅内部超级管理员可用；后续放开企业管理员时
-# 调整 _sales_dash_guard 的权限判断即可）
+# 销售看板（超管可代管查看任意企业；企业管理员只能看自己企业，
+# 由 _sales_dash_guard 统一校验；员工暂不开放）
 # ============================================================
 
 def _sales_dash_guard():
     """
     销售看板系列接口统一权限校验 + 企业解析。
     返回 (enterprise_id, err_response)：校验失败时 enterprise_id 为 None。
-    本期仅 super_admin 可访问，必须显式指定 enterprise_id。
+    - super_admin：可代管查看任意企业，必须显式指定 enterprise_id（跨企业查看，权限最高）
+    - enterprise（企业管理员）：只能看自己企业的数据，enterprise_id 固定取自己账号的
+      scope，即使传了别的 enterprise_id 也会被忽略，避免越权查看其他企业
     """
-    if g.current_user.get("role") != ROLE_SUPER_ADMIN:
-        return None, (jsonify({"code": 403, "msg": "无权限"}), 403)
-    eid = request.args.get("enterprise_id") or (request.get_json(silent=True) or {}).get("enterprise_id")
-    try:
-        eid = int(eid)
-    except (TypeError, ValueError):
-        return None, (jsonify({"code": 400, "msg": "缺少 enterprise_id 参数"}), 400)
-    return eid, None
+    role = g.current_user.get("role")
+    if role == ROLE_SUPER_ADMIN:
+        eid = request.args.get("enterprise_id") or (request.get_json(silent=True) or {}).get("enterprise_id")
+        try:
+            eid = int(eid)
+        except (TypeError, ValueError):
+            return None, (jsonify({"code": 400, "msg": "缺少 enterprise_id 参数"}), 400)
+        return eid, None
+    if role == ROLE_ENTERPRISE:
+        eid = g.current_user.get("parent_id") or g.current_user.get("user_id")
+        if not eid:
+            return None, (jsonify({"code": 403, "msg": "无权限"}), 403)
+        return int(eid), None
+    return None, (jsonify({"code": 403, "msg": "无权限"}), 403)
 
 
 def _sales_dash_user_config(enterprise_id: int) -> dict:
@@ -7435,17 +7443,22 @@ def sales_dashboard_config():
         return jsonify({"code": 0, "data": dashboard_db.get_dashboard_config(_db, eid)})
     body = request.get_json(force=True) or {}
     try:
+        is_super = g.current_user.get("role") == ROLE_SUPER_ADMIN
         if body.get("reset"):
             dashboard_db.reset_dashboard_config(_db, eid)
             return jsonify({"code": 0, "msg": "已恢复默认模板"})
         if "enabled" in body and "config" not in body:
+            # 看板开关是超管管理动作，企业管理员不可自行开关
+            if not is_super:
+                return jsonify({"code": 403, "msg": "无权限"}), 403
             dashboard_db.set_dashboard_enabled(
                 _db, eid, bool(body["enabled"]), g.current_user["user_id"])
             return jsonify({"code": 0, "msg": "已更新看板开关"})
         config = body.get("config")
         if not isinstance(config, dict) or not config:
             return jsonify({"code": 400, "msg": "config 不能为空"}), 400
-        scope = "global" if body.get("scope") == "global" else "enterprise"
+        # 系统默认模板影响所有企业，仅超管可写；企业管理员只能存自己企业的配置
+        scope = "global" if (body.get("scope") == "global" and is_super) else "enterprise"
         dashboard_db.save_dashboard_config(
             _db, scope, eid, config, g.current_user["user_id"])
         return jsonify({"code": 0, "msg": "配置已保存"})

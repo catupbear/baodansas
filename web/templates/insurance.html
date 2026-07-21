@@ -633,8 +633,8 @@
                     <button v-if="isSuperAdmin" @click="pageTab = 'dashboard'; loadDashboard()" :class="pageTab === 'dashboard' ? 'active' : ''" class="page-tab-btn">
                         数据看板
                     </button>
-                    <!-- 销售看板：本期仅内部超管可见，后续放开企业管理员时调整 v-if -->
-                    <button v-if="isSuperAdmin" @click="pageTab = 'sales'; loadSalesDash()" :class="pageTab === 'sales' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;">
+                    <!-- 销售看板：超管 + 企业管理员可见（员工暂不开放） -->
+                    <button v-if="currentUser && ['super_admin','enterprise'].includes(currentUser.role)" @click="pageTab = 'sales'; loadSalesDash()" :class="pageTab === 'sales' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;">
                         销售看板<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">NEW</span>
                     </button>
                     <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="openRenewalTab()" :class="pageTab === 'renewal' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;position:relative;">
@@ -830,7 +830,7 @@
                         :style="pageTab==='dashboard'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
                     数据看板
                 </button>
-                <button v-if="isSuperAdmin" @click="pageTab='sales';loadSalesDash();mobileMenuOpen=false"
+                <button v-if="currentUser && ['super_admin','enterprise'].includes(currentUser.role)" @click="pageTab='sales';loadSalesDash();mobileMenuOpen=false"
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
                         :style="pageTab==='sales'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
                     销售看板
@@ -1805,23 +1805,25 @@
     </main>
 
     <!-- ========== AI质检 Tab（仅超管） ========== -->
-    <!-- ==================== 销售看板（本期仅超管） ==================== -->
-    <main v-if="pageTab === 'sales' && isSuperAdmin && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-4 pb-8">
-        <!-- 二级 Tab + 企业选择 -->
+    <!-- ==================== 销售看板（超管 + 企业管理员） ==================== -->
+    <main v-if="pageTab === 'sales' && currentUser && ['super_admin','enterprise'].includes(currentUser.role) && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-4 pb-8">
+        <!-- 二级 Tab + 企业选择（企业选择仅超管代管时显示，企业管理员固定看自己企业） -->
         <div class="sd-tabs">
             <button :class="salesTab==='board'?'on':''" @click="salesTab='board'; loadSalesDash()">看板</button>
             <button :class="salesTab==='config'?'on':''" @click="openSalesConfig()">看板配置</button>
             <button :class="salesTab==='targets'?'on':''" @click="openSalesTargets()">目标管理</button>
             <span style="flex:1"></span>
-            <span class="sd-lb">企业：</span>
-            <select v-model="salesEnterprise" @change="onSalesEnterpriseChange"
-                class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 outline-none focus:border-orange-400" style="max-width:180px">
-                <option value="">请选择企业...</option>
-                <option v-for="e in dashboardEnterprises" :key="e.id" :value="e.id">{{ e.name }}</option>
-            </select>
+            <template v-if="isSuperAdmin">
+                <span class="sd-lb">企业：</span>
+                <select v-model="salesEnterprise" @change="onSalesEnterpriseChange"
+                    class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 outline-none focus:border-orange-400" style="max-width:180px">
+                    <option value="">请选择企业...</option>
+                    <option v-for="e in dashboardEnterprises" :key="e.id" :value="e.id">{{ e.name }}</option>
+                </select>
+            </template>
         </div>
 
-        <div v-if="!salesEnterprise" class="flex items-center justify-center py-24 text-gray-400 text-sm">请先在右上角选择要查看的企业</div>
+        <div v-if="isSuperAdmin && !salesEnterprise" class="flex items-center justify-center py-24 text-gray-400 text-sm">请先在右上角选择要查看的企业</div>
 
         <template v-else>
         <!-- ========== 看板 ========== -->
@@ -1929,7 +1931,7 @@
                     <span>当前配置来源：<b>{{ salesConfigSource==='enterprise'?'企业自定义':(salesConfigSource==='global'?'系统默认模板':'内置默认') }}</b>，保存后生成该企业专属配置</span>
                     <span style="flex:1"></span>
                     <button class="sd-btn ghost" @click="resetSalesConfig">恢复默认模板</button>
-                    <button class="sd-btn ghost" @click="saveSalesConfig('global')" title="保存为系统默认模板，对所有未自定义的企业生效">存为系统默认</button>
+                    <button v-if="isSuperAdmin" class="sd-btn ghost" @click="saveSalesConfig('global')" title="保存为系统默认模板，对所有未自定义的企业生效">存为系统默认</button>
                     <button class="sd-btn orange" :disabled="salesSaving" @click="saveSalesConfig('enterprise')">{{ salesSaving?'保存中...':'保存配置' }}</button>
                 </div>
 
@@ -12093,7 +12095,7 @@ const _app = createApp({
         });
 
         // ============================================================
-        // 销售看板（本期仅超管；后续放开企业管理员时调整入口 v-if 与后端权限）
+        // 销售看板（超管代管任意企业需先选企业；企业管理员固定看自己企业，enterprise_id 由后端解析）
         // ============================================================
         const salesTab = ref('board');
         const salesLoading = ref(false);
@@ -12161,6 +12163,7 @@ const _app = createApp({
         }
 
         async function sdEnsureEnterprises() {
+            if (!isSuperAdmin.value) return;  // 企业管理员无需企业列表，后端按自己账号解析
             if (!dashboardEnterprises.value.length) {
                 try {
                     const r = await authFetch('/api/auth/enterprises');
@@ -12169,6 +12172,8 @@ const _app = createApp({
                 } catch (e) {}
             }
         }
+        // 超管必须先选企业才能请求；企业管理员直接放行（enterprise_id 传空，后端忽略）
+        function sdNeedEnterprise() { return isSuperAdmin.value && !salesEnterprise.value; }
         function sdQs(extra) {
             const params = new URLSearchParams({ enterprise_id: salesEnterprise.value, ...(extra || {}) });
             return params.toString();
@@ -12176,7 +12181,7 @@ const _app = createApp({
 
         async function loadSalesDash() {
             await sdEnsureEnterprises();
-            if (!salesEnterprise.value) return;
+            if (sdNeedEnterprise()) return;
             const [ds, de] = sdRange();
             if (!ds || !de) return;
             salesLoading.value = true;
@@ -12215,7 +12220,7 @@ const _app = createApp({
         async function openSalesConfig() {
             salesTab.value = 'config';
             await sdEnsureEnterprises();
-            if (!salesEnterprise.value) return;
+            if (sdNeedEnterprise()) return;
             await Promise.all([loadSalesFields(), loadSalesTargetsData()]);
             try {
                 const r = await authFetch(`/api/insurance/sales-dashboard/config?${sdQs()}`);
@@ -12306,7 +12311,7 @@ const _app = createApp({
         async function openSalesTargets() {
             salesTab.value = 'targets';
             await sdEnsureEnterprises();
-            if (!salesEnterprise.value) return;
+            if (sdNeedEnterprise()) return;
             await Promise.all([loadSalesFields(), loadSalesTargetsData(), (async () => {
                 try {
                     const r = await authFetch(`/api/insurance/sales-dashboard/salesmen?${sdQs()}`);
