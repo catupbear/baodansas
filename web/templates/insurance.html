@@ -6793,8 +6793,11 @@ const _app = createApp({
             return listColumnConfig.value
                 .filter(c => c.visible !== false)
                 .sort((a, b) => (a.order || 0) - (b.order || 0))
-                .map(c => ({ key: c.key, display_name: c.display_name || c.key, frozen: !!c.frozen, width: c.width || null }));
+                .map(c => ({ key: c.key, display_name: c.display_name || c.key, frozen: !!c.frozen, width: c.width || null, is_mobile: c.is_mobile !== false }));
         });
+        // 手机端识别记录卡片实际展示的字段：在页面列基础上按「手机端」勾选再筛一层
+        // （is_mobile !== false 兼容还没保存过这个新配置的客户，默认跟桌面页面列一致）
+        const mVisibleListColumns = computed(() => visibleListColumns.value.filter(c => c.is_mobile !== false));
         // 冻结列的 left 偏移量映射（key → CSS left 值）
         // 复选框列固定 40px 宽，冻结列依次累加
         // 冻结列样式：所有标记 frozen 的列依次堆叠到左侧
@@ -11890,7 +11893,7 @@ const _app = createApp({
         function mIsLong(key) { return M_LONG_KEYS.includes(key); }
         // 摘要字段：优先取核心字段，不足 4 个时按列配置顺序补齐（跳过长文本字段）
         const mSummaryCols = computed(() => {
-            const cols = visibleListColumns.value.filter(c => !M_HEADER_KEYS.includes(c.key));
+            const cols = mVisibleListColumns.value.filter(c => !M_HEADER_KEYS.includes(c.key));
             const picked = M_SUMMARY_PREF.map(k => cols.find(c => c.key === k)).filter(Boolean);
             for (const c of cols) {
                 if (picked.length >= 4) break;
@@ -11902,7 +11905,7 @@ const _app = createApp({
         // 展开区分组：可见列（排除头部/摘要已展示的）按分组归类，未归类的落入「其他」
         const mDetailGroups = computed(() => {
             const summaryKeys = mSummaryCols.value.map(c => c.key);
-            const rest = visibleListColumns.value.filter(c => !M_HEADER_KEYS.includes(c.key) && !summaryKeys.includes(c.key));
+            const rest = mVisibleListColumns.value.filter(c => !M_HEADER_KEYS.includes(c.key) && !summaryKeys.includes(c.key));
             const groups = [];
             for (const g of M_FIELD_GROUPS) {
                 const cols = rest.filter(c => g.keys.includes(c.key));

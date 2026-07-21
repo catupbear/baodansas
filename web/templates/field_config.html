@@ -813,6 +813,7 @@
                                 <th style="width:180px;">显示名称</th>
                                 <th style="width:150px;">固定值</th>
                                 <th style="width:60px;">百分比</th>
+                                <th style="width:60px;" title="勾选后此字段才会在手机端识别记录卡片里显示；未单独设置过时默认跟「显示」一致">手机端</th>
                                 <th style="width:40px;"></th>
                             </tr>
                         </thead>
@@ -832,6 +833,7 @@
                                 <td><input type="text" v-model="col.display_name" :disabled="activeSource === 'enterprise'" :placeholder="col.key" /></td>
                                 <td><input v-if="col.custom" type="text" v-model="fixedValues[col.key]" placeholder="无数据时自动填充" style="font-size:12px;" @change="saveFixedValues" /></td>
                                 <td style="text-align:center;"><input v-if="col.custom" type="checkbox" v-model="col.is_percent" :disabled="activeSource === 'enterprise'" title="勾选后此列按百分比处理：填 10 表示 10%，公式按 0.1 计算，导出显示 10%" /></td>
+                                <td style="text-align:center;"><input type="checkbox" v-model="col.is_mobile" :disabled="activeSource === 'enterprise' || !col.visible" :title="!col.visible ? '此字段未在「显示」中勾选，手机端也不会显示' : '勾选后手机端识别记录卡片显示此字段'" /></td>
                                 <td><button v-if="col.custom" @click="removeCustomCol(listColItems, idx)" :disabled="activeSource === 'enterprise'" style="color:var(--danger);cursor:pointer;background:none;border:none;font-size:14px;" title="删除">✕</button></td>
                             </tr>
                         </tbody>
@@ -1922,6 +1924,12 @@ createApp({
                     const columns = config.columns && config.columns.length ? config.columns : JSON.parse(JSON.stringify(DEFAULT_COLUMNS));
                     // 确保每列都有 frozen 属性（兼容旧配置）
                     columns.forEach(c => { if (c.frozen === undefined) c.frozen = false; });
+                    // 手机端显示字段（仅页面列）：兼容旧配置没有这个属性的情况，
+                    // 默认跟当前"显示"勾选保持一致——客户没有单独设置过手机端字段时，
+                    // 手机端展示跟桌面页面列配置完全一样，之后才可以自己收窄勾选范围
+                    if (configType === 'list_columns') {
+                        columns.forEach(c => { if (c.is_mobile === undefined) c.is_mobile = !!c.visible; });
+                    }
                     columns.sort((a, b) => (a.order || 0) - (b.order || 0));
                     const ds = (config.default_sort && config.default_sort.sort_by)
                         ? config.default_sort : { sort_by: 'created_at', sort_order: 'desc' };
@@ -2127,6 +2135,7 @@ createApp({
             let key = name, n = 2;
             while (allKeys.has(key)) { key = `${name}#${n++}`; }
             const newCol = { key, visible: true, order: items.length, display_name: name, custom: true, is_percent: false };
+            if (target === 'list') newCol.is_mobile = true;
             items.push(newCol);
             // 双向同步：用同一个唯一 key 添加到另一侧
             const otherItems = target === 'list' ? exportColItems.value : listColItems.value;
