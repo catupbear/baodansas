@@ -7533,11 +7533,25 @@ def sales_dashboard_fields():
     eid, err = _sales_dash_guard()
     if err:
         return err
-    from insurance.field_mapping import OUTPUT_COLUMNS
     user_config = _sales_dash_user_config(eid)
     formula_fields = [item.get("key") for item in (user_config.get("fee_formula") or [])
                       if item.get("key")]
-    all_fields = list(OUTPUT_COLUMNS)
+    # 统计字段来自该企业页面列配置中启用的列（而非全部台账导出列）；读取失败兜底全部导出列
+    all_fields = []
+    try:
+        from insurance.field_config_db import get_column_config
+        from auth.db import get_enterprise_admin_user
+        ent_admin = get_enterprise_admin_user(_db, eid)
+        if ent_admin:
+            cc = get_column_config(_db, "list_columns",
+                                   ent_admin["id"], ent_admin["role"], ent_admin.get("parent_id"))
+            all_fields = [c.get("key") for c in (cc.get("columns") or [])
+                          if c.get("visible") and c.get("key")]
+    except Exception:
+        logger.warning("销售看板读取企业列配置失败 ent=%s", eid, exc_info=True)
+    if not all_fields:
+        from insurance.field_mapping import OUTPUT_COLUMNS
+        all_fields = list(OUTPUT_COLUMNS)
     for f in formula_fields:
         if f not in all_fields:
             all_fields.append(f)
