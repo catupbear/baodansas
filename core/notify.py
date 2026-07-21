@@ -307,8 +307,21 @@ def text_msg_notify_enabled() -> bool:
     return _text_msg_notifier is not None
 
 
+def _group_msg_header(icon: str, room_name: str, sender_name: str,
+                      enterprise: str, msg_time: str) -> list:
+    """
+    群消息转发通知的紧凑三段式头部：
+    第一行标题=群名，第二行=发送人 · 时间 · 企业（弱化为一行元信息）。
+    """
+    meta = f"**{sender_name or '未知'}** · {msg_time or time.strftime('%m-%d %H:%M:%S')}"
+    if enterprise:
+        meta += f" · {enterprise}"
+    return [f"#### {icon} {room_name}", "", meta, ""]
+
+
 def notify_group_text(room_name: str, sender_name: str, text: str,
-                      enterprise: str = "", msg_time: str = ""):
+                      enterprise: str = "", msg_time: str = "",
+                      detail_url: str = ""):
     """
     群内普通聊天文本转发到钉钉（异步不阻塞）。
 
@@ -320,20 +333,43 @@ def notify_group_text(room_name: str, sender_name: str, text: str,
         text:        消息文本内容
         enterprise:  归属企业名（多企业部署时区分来源，可选）
         msg_time:    消息时间（可选，缺省用当前时间）
+        detail_url:  「查看会话」深链（消息监控页 /monitor/chat?roomid=...，可选）
     """
     if not _text_msg_notifier:
         return
 
     title = f"💬 {room_name}"
-    lines = [
-        "### 💬 群消息",
-        f"- **群**: {room_name}",
-        f"- **发送人**: {sender_name or '未知'}",
-        f"- **时间**: {msg_time or time.strftime('%Y-%m-%d %H:%M:%S')}",
-        f"- **内容**: {text[:1000]}",
-    ]
-    if enterprise:
-        lines.insert(1, f"- **企业**: {enterprise}")
+    # 正文用引用块突出；多行文本每行都要带引用前缀，否则钉钉只引用第一行
+    quoted = "> " + text[:1000].replace("\n", "  \n> ")
+    lines = _group_msg_header("💬", room_name, sender_name, enterprise, msg_time)
+    lines.append(quoted)
+    if detail_url:
+        lines += ["", f"[查看会话记录 →]({detail_url})"]
+    content = "\n".join(lines)
+
+    threading.Thread(
+        target=_text_msg_notifier.send, args=(title, content),
+        kwargs={"dedup": False}, daemon=True
+    ).start()
+
+
+def notify_group_image(room_name: str, sender_name: str, image_url: str,
+                       enterprise: str = "", msg_time: str = "",
+                       detail_url: str = ""):
+    """
+    群内图片消息转发到钉钉：图片本体直接显示在通知里（Markdown 图片语法）。
+
+    image_url 需为钉钉客户端可直接访问的 URL（COS 预签名直连），
+    链接过期后历史通知里的图片会加载失败，但通知本身仍在。
+    """
+    if not _text_msg_notifier:
+        return
+
+    title = f"🖼 {room_name}"
+    lines = _group_msg_header("🖼", room_name, sender_name, enterprise, msg_time)
+    lines.append(f"![图片]({image_url})")
+    if detail_url:
+        lines += ["", f"[查看会话记录 →]({detail_url})"]
     content = "\n".join(lines)
 
     threading.Thread(

@@ -90,6 +90,7 @@
     <div class="error-msg">{{ error }}</div>
     {% endif %}
     <form method="POST" action="/monitor/login">
+        <input type="hidden" name="next" value="{{ next_url or '' }}">
         <div class="form-group">
             <label>访问密码</label>
             <input type="password" name="password" placeholder="请输入密码" autofocus required>

@@ -2345,8 +2345,29 @@ async function submitQuoteRescan() {
 
 (async function init() {
     await loadEnterprises();
+
+    // 深链参数：钉钉通知「查看会话」带 roomid/corpid，直达对应企业的对应会话
+    const deepQuery = new URLSearchParams(location.search);
+    const deepCorpid = deepQuery.get("corpid") || "";
+    const deepRoomid = deepQuery.get("roomid") || "";
+    if (deepCorpid) {
+        const sel = document.getElementById("corpSelect");
+        if ([...sel.options].some(o => o.value === deepCorpid)) {
+            sel.value = deepCorpid;
+            currentCorpid = deepCorpid;
+        }
+    }
+
     loadStats();
-    loadConversations();
+    await loadConversations();
+    if (deepRoomid) {
+        // 群会话的 conversation_id 就是 roomid（storage/db.py get_conversations 的构造规则）
+        const conv = conversations.find(c => c.conversation_id === deepRoomid);
+        if (conv) {
+            selectConv(conv.conversation_id, conv.roomid || "",
+                       conv.display_name || conv.conversation_id);
+        }
+    }
     setupAutoRefresh();
     loadSendConfig();
 })();
