@@ -41,7 +41,7 @@ DEFAULT_CONFIG = {
         {"type": "trend", "title": "保费趋势", "granularity": "auto",
          "metrics": [{"label": "保费", "agg": "sum", "field": "保费"}]},
         {"type": "donut", "title": "保司保费占比", "dimension": "保险公司",
-         "metric": {"agg": "sum", "field": "保费"}, "top": 5},
+         "metric": {"agg": "sum", "field": "保费"}, "top": 0},
         {"type": "bar", "title": "险种保费分布", "dimension": "险种",
          "metric": {"agg": "sum", "field": "保费"}},
     ],
@@ -654,6 +654,12 @@ def _build_trend(ch: dict, records: list, date_start: str, date_end: str,
     }
 
 
+# 分组展示归并：图表按维度分组时把左侧值并入右侧组（仅影响图表展示，不改台账字段/筛选条件）
+_DIMENSION_MERGE = {
+    "险种": {"驾意险": "非车险"},
+}
+
+
 def _build_group_chart(ch: dict, records: list, date_start: str, date_end: str,
                        time_field: str, user_config: dict) -> dict:
     """占比/分布图：按维度分组聚合"""
@@ -663,9 +669,11 @@ def _build_group_chart(ch: dict, records: list, date_start: str, date_end: str,
     field = metric.get("field")
     top = int(ch.get("top") or 0)
 
+    merge_map = _DIMENSION_MERGE.get(dimension, {})
     groups = {}
     for r in records:
         key = str(r.get(dimension) or "").strip() or "未知"
+        key = merge_map.get(key, key)
         groups.setdefault(key, []).append(r)
     items = [{"name": k, "value": _aggregate(v, agg, field), "count": len(v)}
              for k, v in groups.items()]

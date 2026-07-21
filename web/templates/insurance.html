@@ -1924,8 +1924,8 @@
                 </div>
             </div>
 
-            <!-- 业务员排行 -->
-            <div v-if="salesData.ranking" class="sd-card">
+            <!-- 发送人排行：暂时隐藏——发送人名取的是企微同步的微信名而非绑定名，数据源修正后再放开 -->
+            <div v-if="false && salesData.ranking" class="sd-card">
                 <div class="sd-h2"><span class="bar"></span>{{ salesData.ranking.title }}
                     <span class="mini">按{{ salesData.ranking.dimension }}分组 · 排序依据：{{ salesData.ranking.sort_by }}</span>
                 </div>
@@ -12279,7 +12279,7 @@ const _app = createApp({
                     const cfg = j.data.config || {};
                     // 补齐结构默认值，避免模板绑定报错
                     cfg.cards = cfg.cards || [];
-                    cfg.charts = (cfg.charts || []).map(ch => ({ top: 5, metrics: [], metric: { agg: 'sum', field: '保费' }, granularity: 'auto', ...ch }));
+                    cfg.charts = (cfg.charts || []).map(ch => ({ top: 0, metrics: [], metric: { agg: 'sum', field: '保费' }, granularity: 'auto', ...ch }));
                     cfg.ranking = Object.assign({ dimension: '业务员', sort_by: '保费', columns: [], target_columns: [] }, cfg.ranking || {});
                     salesConfig.value = cfg;
                     salesConfigSource.value = j.data.source;
@@ -12608,13 +12608,16 @@ const _app = createApp({
             x.fillStyle = '#1c1410'; x.font = 'bold 15px sans-serif'; x.textAlign = 'center';
             x.fillText(ch.is_count ? total.toLocaleString('zh-CN') + '单' : sdFullNum(total), cx, cy + 1);
             x.font = '11px sans-serif'; x.fillStyle = '#9ca3af'; x.fillText('合计', cx, cy + 18);
-            let ly = Math.max(cy - ch.items.length * 12, 16);
+            // 图例行距/字号随条目数自适应，保司全量展示时不溢出画布
+            const lh = Math.min(24, Math.max(14, Math.floor((h - 24) / ch.items.length)));
+            const legendFont = lh < 19 ? '11px sans-serif' : '12px sans-serif';
+            let ly = Math.max(cy - ch.items.length * lh / 2 + lh / 2, 14);
             ch.items.forEach((it, i) => {
                 x.fillStyle = SD_PIE[i % SD_PIE.length]; x.fillRect(w * 0.56, ly - 8, 11, 11);
-                x.fillStyle = '#6b7280'; x.font = '12px sans-serif'; x.textAlign = 'left';
+                x.fillStyle = '#6b7280'; x.font = legendFont; x.textAlign = 'left';
                 const pct = total ? (it.value / total * 100).toFixed(1) : 0;
                 x.fillText(`${it.name}  ${sdFullNum(it.value)} (${pct}%)`, w * 0.56 + 17, ly + 1);
-                ly += 24;
+                ly += lh;
             });
         }
         function drawSdBar(id, ch) {
