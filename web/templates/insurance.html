@@ -2947,9 +2947,16 @@
 
         <!-- 批量操作栏（勾选时显示选中数量 + 清除） -->
         <div v-if="selectedRecordIds.length" class="card p-3">
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-3 flex-wrap">
                 <span class="text-sm text-gray-600">已选 <span class="font-semibold text-orange-600">{{ selectedRecordIds.length }}</span> 条</span>
                 <button @click="selectedRecordIds = []" class="text-xs text-gray-400 hover:text-gray-600 cursor-pointer">清除选择</button>
+                <template v-if="selectedRecordsSum.length">
+                    <span class="text-gray-300">|</span>
+                    <span v-for="s in selectedRecordsSum" :key="s.key" class="text-sm text-gray-600">
+                        {{ s.display_name }}合计:
+                        <span class="font-semibold text-orange-600">{{ s.value.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2}) }}</span>
+                    </span>
+                </template>
             </div>
         </div>
 
@@ -6793,11 +6800,30 @@ const _app = createApp({
             return listColumnConfig.value
                 .filter(c => c.visible !== false)
                 .sort((a, b) => (a.order || 0) - (b.order || 0))
-                .map(c => ({ key: c.key, display_name: c.display_name || c.key, frozen: !!c.frozen, width: c.width || null, is_mobile: c.is_mobile !== false }));
+                .map(c => ({ key: c.key, display_name: c.display_name || c.key, frozen: !!c.frozen, width: c.width || null, is_mobile: c.is_mobile !== false, is_sum: c.is_sum === true }));
         });
         // 手机端识别记录卡片实际展示的字段：在页面列基础上按「手机端」勾选再筛一层
         // （is_mobile !== false 兼容还没保存过这个新配置的客户，默认跟桌面页面列一致）
         const mVisibleListColumns = computed(() => visibleListColumns.value.filter(c => c.is_mobile !== false));
+        // 页面列配置里勾选了「合计」的字段（默认不勾，需要客户主动开启）
+        const sumColumns = computed(() => visibleListColumns.value.filter(c => c.is_sum));
+        // 勾选记录后，按「合计」字段算出的合计值：{key: display_name, value: 数字}
+        // 合并模式下勾的是合并伪行id，直接读伪行自己的字段值（如"非车险保费"已经是子记录相加后的结果，
+        // 不需要再展开子记录去重复累加）
+        const selectedRecordsSum = computed(() => {
+            if (!selectedRecordIds.value.length || !sumColumns.value.length) return [];
+            const idSet = new Set(selectedRecordIds.value);
+            const picked = records.value.filter(r => idSet.has(r.id));
+            return sumColumns.value.map(col => {
+                let total = 0;
+                for (const r of picked) {
+                    const raw = (r.display_fields || {})[col.key];
+                    const num = parseFloat(String(raw ?? '').replace(/[,\s%￥¥]/g, ''));
+                    if (!isNaN(num)) total += num;
+                }
+                return { key: col.key, display_name: col.display_name, value: total };
+            });
+        });
         // 冻结列的 left 偏移量映射（key → CSS left 值）
         // 复选框列固定 40px 宽，冻结列依次累加
         // 冻结列样式：所有标记 frozen 的列依次堆叠到左侧
@@ -12570,7 +12596,7 @@ const _app = createApp({
             extractionRules, loadExtractionRules,
             rawTextVisible, rawTextContent, rawTextFileName,
             successResults, abnormalResults, nonPolicyResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal, getPolicyHint, getRecordHint, getFailHint,
-            outputColumns, listColumnConfig, visibleListColumns, fieldHelp, pinnedFieldHelp, activeFieldHelpKey, tooltipFloatStyle, showFieldHelp, hideFieldHelp, pinFieldHelp, frozenColStyles, getColStyle, startColResize, getMappedValue, getDocCategory, docCategories,
+            outputColumns, listColumnConfig, visibleListColumns, sumColumns, selectedRecordsSum, fieldHelp, pinnedFieldHelp, activeFieldHelpKey, tooltipFloatStyle, showFieldHelp, hideFieldHelp, pinFieldHelp, frozenColStyles, getColStyle, startColResize, getMappedValue, getDocCategory, docCategories,
             isLoadingFiles, loadingFileCount, loadingFileTotal, loadingPercent,
             handleFileSelect, handleDrop, removeFile, clearFiles,
             previewFile, previewResultFile, showRawText,
