@@ -12139,7 +12139,7 @@ const _app = createApp({
         const salesLoading = ref(false);
         const salesData = ref(null);
         const salesEnterprise = ref('');
-        const salesPeriod = ref('month');
+        const salesPeriod = ref('today');  // 进入看板默认「今日」
         const salesDateStart = ref('');
         const salesDateEnd = ref('');
         const salesConfig = ref(null);
@@ -12159,6 +12159,8 @@ const _app = createApp({
         const sdEmpPersons = ref([]);
 
         const salesPeriodOptions = [
+            { value: 'today', label: '今日' }, { value: 'yesterday', label: '昨日' },
+            { value: 'week', label: '本周' },
             { value: 'month', label: '本月' }, { value: 'last_month', label: '上月' },
             { value: 'quarter', label: '本季度' }, { value: 'year', label: '今年' },
             { value: 'custom', label: '自定义' },
@@ -12175,6 +12177,15 @@ const _app = createApp({
         function sdRange() {
             const now = new Date();
             if (salesPeriod.value === 'custom') return [salesDateStart.value, salesDateEnd.value];
+            if (salesPeriod.value === 'today') { const d = sdFmtDate(now); return [d, d]; }
+            if (salesPeriod.value === 'yesterday') {
+                const d = sdFmtDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+                return [d, d];
+            }
+            if (salesPeriod.value === 'week') {  // 周一 ~ 今天
+                const dow = (now.getDay() + 6) % 7;
+                return [sdFmtDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow)), sdFmtDate(now)];
+            }
             if (salesPeriod.value === 'last_month') {
                 const s = new Date(now.getFullYear(), now.getMonth() - 1, 1);
                 const e = new Date(now.getFullYear(), now.getMonth(), 0);
