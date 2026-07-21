@@ -34,6 +34,22 @@ from core.notify import notify_error, notify_new_company
 
 logger = logging.getLogger(__name__)
 
+
+def mark_filled_source(fields: dict, name: str, source: str):
+    """
+    记录字段的互补来源到 fields["_filled_sources"]（{字段名: 来源}）。
+    该内部键随 parsed_fields 一起落库；重新识别会生成全新 parsed_fields，标记自动重置。
+    下划线开头的内部键不参与字段映射透传（见 field_mapping.apply_mapping）和前端解析字段展示。
+    """
+    if not isinstance(fields, dict):
+        return
+    fs = fields.get("_filled_sources")
+    if not isinstance(fs, dict):
+        fs = {}
+        fields["_filled_sources"] = fs
+    fs[name] = source
+
+
 # 超过该大小（20MB）的文件走临时文件下载
 MAX_MEMORY_SIZE = 20 * 1024 * 1024
 
@@ -954,9 +970,11 @@ class InsuranceHandler:
                 cur = fields.get(f, "")
                 if not cur:
                     fields[f] = val
+                    mark_filled_source(fields, f, "同PDF互补")
                     filled.append(f"{f}={val}")
                 elif f in PERSON_FIELDS and cur != val and len(val) > len(cur):
                     fields[f] = val
+                    mark_filled_source(fields, f, "同PDF互补")
                     filled.append(f"{f}={val}(校验替换:{cur})")
             # 交强险保司校验：交强险是平安时，从同PDF其他保单取保司
             policy_type = fields.get("险种类型", "")
@@ -970,6 +988,7 @@ class InsuranceHandler:
                     if other_company and "平安" not in other_company:
                         fields["保险公司"] = other_company
                         fields["保险公司简称"] = other_fields.get("保险公司简称", "")
+                        mark_filled_source(fields, "保险公司", "同PDF互补")
                         filled.append(f"保险公司={other_company}(交强险校验替换:{cur_company})")
                         break
 
@@ -1075,6 +1094,8 @@ class InsuranceHandler:
         from insurance.field_mapping import apply_mapping
         from insurance.policy_parser import _is_valid_person
 
+        fill_source = f"{match_desc}互补"  # 互补来源标记（同车牌互补/同车架号互补）
+
         # --- 正向互补：历史 → 当前 ---
         missing = [f for f in fill_fields if not parsed_fields.get(f)]
         filled = []
@@ -1090,6 +1111,7 @@ class InsuranceHandler:
                 val = hist_fields.get(field, "")
                 if val and (not need_person_check or _is_valid_person(val)):
                     parsed_fields[field] = val
+                    mark_filled_source(parsed_fields, field, fill_source)
                     filled.append(f"{field}={val}")
                     break
 
@@ -1112,6 +1134,7 @@ class InsuranceHandler:
                     if cur_val and hist_val and cur_val != hist_val:
                         if len(hist_val) > len(cur_val) and _is_valid_person(hist_val):
                             parsed_fields[field] = hist_val
+                            mark_filled_source(parsed_fields, field, fill_source)
                             filled.append(f"{field}={hist_val}(校验替换:{cur_val})")
                 break  # 只对比一条同类车险
 
@@ -1131,6 +1154,7 @@ class InsuranceHandler:
                 if hist_company and "平安" not in hist_company:
                     parsed_fields["保险公司"] = hist_company
                     parsed_fields["保险公司简称"] = hist_short
+                    mark_filled_source(parsed_fields, "保险公司", fill_source)
                     filled.append(f"保险公司={hist_company}(交强险校验替换:{cur_company})")
                     break
 
@@ -1150,6 +1174,7 @@ class InsuranceHandler:
                         if vehicle_val and vehicle_val != parsed_fields.get(field, "") and _is_valid_person(vehicle_val):
                             old_val = parsed_fields.get(field, "")
                             parsed_fields[field] = vehicle_val
+                            mark_filled_source(parsed_fields, field, fill_source)
                             filled.append(f"{field}={vehicle_val}(覆盖:{old_val})")
                     break
 
@@ -1188,6 +1213,7 @@ class InsuranceHandler:
                 if not hist_fields.get(field) and current_vals.get(field):
                     if not need_person_check or _is_valid_person(current_vals[field]):
                         hist_fields[field] = current_vals[field]
+                        mark_filled_source(hist_fields, field, fill_source)
                         back_filled.append(f"{field}={current_vals[field]}")
 
             # 反向校验：当前是车险，历史也是车险，人名字段短值被长值替换
@@ -1200,6 +1226,7 @@ class InsuranceHandler:
                     if cur_val and hist_val and cur_val != hist_val and len(cur_val) > len(hist_val) and _is_valid_person(cur_val):
                         old_val = hist_val
                         hist_fields[field] = cur_val
+                        mark_filled_source(hist_fields, field, fill_source)
                         back_filled.append(f"{field}={cur_val}(校验替换:{old_val})")
 
             # 反向覆盖：当前是车险，历史是非车险，覆盖历史非车险的投保人、被保人、车主
@@ -1212,6 +1239,7 @@ class InsuranceHandler:
                     if cur_val and hist_val != cur_val and _is_valid_person(cur_val):
                         old_val = hist_val
                         hist_fields[field] = cur_val
+                        mark_filled_source(hist_fields, field, fill_source)
                         back_filled.append(f"{field}={cur_val}(覆盖:{old_val})")
 
             if back_filled:
@@ -1279,6 +1307,7 @@ class InsuranceHandler:
                     val = hist_fields.get(field, "")
                     if val:
                         parsed_fields[field] = val
+                        mark_filled_source(parsed_fields, field, "按人名互补")
                         filled.append(f"{field}={val}(from record:{rec['id']})")
                         break
 
@@ -1311,6 +1340,7 @@ class InsuranceHandler:
                     continue
                 if not hist_fields.get(field) and current_vals.get(field):
                     hist_fields[field] = current_vals[field]
+                    mark_filled_source(hist_fields, field, "按人名互补")
                     back_filled.append(f"{field}={current_vals[field]}")
 
             if back_filled:

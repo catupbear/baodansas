@@ -5639,10 +5639,10 @@
                         </div>
                     </div>
                     <!-- 解析字段 -->
-                    <div v-if="currentRecord?.parsed_fields && Object.keys(currentRecord.parsed_fields).length > 0">
+                    <div v-if="currentRecord?.parsed_fields && Object.keys(publicFields(currentRecord.parsed_fields)).length > 0">
                         <h4 class="text-sm font-semibold text-gray-700 mb-2">解析字段</h4>
                         <div class="border rounded-lg overflow-hidden">
-                            <div v-for="(val, key) in currentRecord.parsed_fields" :key="key"
+                            <div v-for="(val, key) in publicFields(currentRecord.parsed_fields)" :key="key"
                                  class="flex border-b last:border-b-0 hover:bg-gray-50 text-sm px-3 py-2">
                                 <span class="text-gray-500 w-32 flex-shrink-0 font-medium">{{ key }}</span>
                                 <span class="text-gray-800 ml-2">{{ val || '—' }}</span>
@@ -8053,10 +8053,23 @@ const _app = createApp({
         }
 
         // 字段数据来源（仅超管，「列表信息」面板展示）：
-        // 优先级 AI质检识别 > 手动修改 > 记录识别引擎(PDF提取/OCR提取)。
+        // 优先级 AI质检识别 > 手动修改 > 互补来源 > 记录识别引擎(PDF提取/OCR提取)。
         // 说明：应用AI值会同时写入 ai_fields 与 manual_fields，故 AI 优先；
+        // 互补来源来自详情接口 field_sources（识别时落库的 parsed_fields._filled_sources
+        // + 详情接口运行时互补），标签直接显示具体来源：同车牌互补/同车架号互补/同PDF互补/
+        // 按人名互补/文件名提取/系统关联（跟单人）；
         // PDF vs OCR 是按整条记录引擎区分（解析器跑PDF文本或OCR文本），非逐字段。
-        // key 为导出列名，manual_fields/ai_fields 可能存导出列名或OCR字段名，两边都匹配。
+        // key 为导出列名，manual_fields/ai_fields/field_sources 可能存导出列名或OCR字段名，两边都匹配。
+        // 过滤下划线开头的内部键（如 _filled_sources 互补来源标记），供解析字段弹窗展示用
+        function publicFields(obj) {
+            if (!obj || typeof obj !== 'object') return {};
+            const out = {};
+            for (const [k, v] of Object.entries(obj)) {
+                if (!k.startsWith('_')) out[k] = v;
+            }
+            return out;
+        }
+
         const _recordMetaFieldKeys = ['文件名', '文档类型', '状态', '创建时间', '识别时间', '群名', '发送人'];
         function fieldSource(key) {
             const rec = previewAutoRecord.value;
@@ -8069,6 +8082,13 @@ const _app = createApp({
             const hit = (arr) => Array.isArray(arr) && arr.some(f => names.has(f));
             if (hit(rec.ai_fields)) return { text: 'AI质检识别', style: 'background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;' };
             if (hit(rec.manual_fields)) return { text: '手动修改', style: 'background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;' };
+            // 互补来源：值非本单 PDF 提取，来自跨保单/同PDF/文件名/系统关联等
+            const srcMap = rec.field_sources || (rec.parsed_fields && rec.parsed_fields._filled_sources) || null;
+            if (srcMap && typeof srcMap === 'object') {
+                for (const n of names) {
+                    if (srcMap[n]) return { text: srcMap[n], style: 'background:#ecfeff;color:#0e7490;border:1px solid #a5f3fc;' };
+                }
+            }
             // 引擎含 ocr（ocr / pdfplumber+ocr）或百度/火山 → OCR提取；pdfplumber/空 → PDF提取
             const eng = (rec.ocr_engine || '').toLowerCase();
             if (eng.includes('ocr') || eng === 'baidu' || eng === 'volc') {
@@ -12847,7 +12867,7 @@ const _app = createApp({
             renewalBatchAssignVisible, renewalBatchAssignee, openBatchAssign, submitBatchAssign, triggerRenewalScan, exportRenewalList,
             renewalQrVisible, renewalQrUrl, renewalConfigVisible, renewalWindowDaysInput, openRenewalQr, openRenewalConfig, saveRenewalConfig, uploadRenewalQrcode, previewRenewalTaskFile,
             deleteRecordVisible, deleteRecordTarget, deleteRecordSaving, openDeleteRecord, confirmDeleteRecord,
-            editingField, editingValue, fieldSaving, startEditField, cancelEditField, saveEditField, isManualField, fieldSource, isDateField,
+            editingField, editingValue, fieldSaving, startEditField, cancelEditField, saveEditField, isManualField, fieldSource, publicFields, isDateField,
             listEditing, startListEdit, cancelListEdit, saveListEdit,
             remarkSelector, remarkPicker, remarkMissing, openRemarkSelector, queryRemarkOptions, pickRemark,
             recordDetailVisible, currentRecord, openRecordDetail,

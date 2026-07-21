@@ -1287,7 +1287,10 @@ def get_record(record_id):
                     tracker_name = upload_user["name"]
             except Exception:
                 pass
+        # 运行时互补来源收集（本接口现算未落库的字段，与 parsed_fields._filled_sources 合并后返回）
+        _rt_sources = {}
         if tracker_name:
+            _rt_sources["跟单人"] = "系统关联"
             if isinstance(record.get("parsed_fields"), dict):
                 record["parsed_fields"]["跟单人"] = tracker_name
             if isinstance(record.get("display_fields"), str):
@@ -1355,10 +1358,13 @@ def get_record(record_id):
                     _sp = _sib_df.get("车牌") or _sib_df.get("车牌号")
                     if _sp:
                         df["车牌"] = _sp
+                        _rt_sources["车牌"] = "同PDF互补"
                 if not df.get("签单日期") and _sib_df.get("签单日期"):
                     df["签单日期"] = _sib_df["签单日期"]
+                    _rt_sources["签单日期"] = "同PDF互补"
                 if not df.get("业务员") and _sib_df.get("业务员"):
                     df["业务员"] = _sib_df["业务员"]
+                    _rt_sources["业务员"] = "同PDF互补"
                 if df.get("车牌") and df.get("签单日期") and df.get("业务员"):
                     break
 
@@ -1371,6 +1377,7 @@ def get_record(record_id):
             )
             if _pm:
                 df["车牌"] = _pm.group(0).replace("-", "")
+                _rt_sources["车牌"] = "文件名提取"
 
         # 3. 同车牌互补：车主、车架号、保司公司名称、保司地址、证件号码、签单日期、业务员
         _plate = df.get("车牌") or df.get("车牌号")
@@ -1385,17 +1392,22 @@ def get_record(record_id):
                     _info = _info_map.get(_plate, {})
                     if not df.get("车主") and _info.get("owner"):
                         df["车主"] = _info["owner"]
+                        _rt_sources["车主"] = "同车牌互补"
                     if not df.get("保司公司名称") and _info.get("insurer_name"):
                         df["保司公司名称"] = _info["insurer_name"]
+                        _rt_sources["保司公司名称"] = "同车牌互补"
                     if not df.get("保司地址") and _info.get("insurer_address"):
                         df["保司地址"] = _info["insurer_address"]
+                        _rt_sources["保司地址"] = "同车牌互补"
                     if _info.get("id_number"):
                         for _id_key in ("投保人身份证号码", "证件号码", "被保险人身份证号码"):
                             if _id_key in df and not df[_id_key]:
                                 df[_id_key] = _info["id_number"]
+                                _rt_sources[_id_key] = "同车牌互补"
                                 break
                         if not df.get("投保人身份证号码"):
                             df["投保人身份证号码"] = _info["id_number"]
+                            _rt_sources["投保人身份证号码"] = "同车牌互补"
                 except Exception:
                     pass
             # 补车架号（关联表里没有，从同车牌记录查）
@@ -1412,6 +1424,7 @@ def get_record(record_id):
                         _vin = _pf.get("车架号VIN") or _pf.get("车架号")
                         if _vin:
                             df["车架号"] = _vin
+                            _rt_sources["车架号"] = "同车牌互补"
                             break
                 except Exception:
                     pass
@@ -1423,10 +1436,21 @@ def get_record(record_id):
                     _sign = _sign_map.get(_plate, {})
                     if not df.get("签单日期") and _sign.get("sign_date"):
                         df["签单日期"] = _sign["sign_date"]
+                        _rt_sources["签单日期"] = "同车牌互补"
                     if not df.get("业务员") and _sign.get("salesperson"):
                         df["业务员"] = _sign["salesperson"]
+                        _rt_sources["业务员"] = "同车牌互补"
                 except Exception:
                     pass
+
+        # 字段来源汇总：落库标记（识别时互补，随 parsed_fields 存储）+ 本接口运行时互补，
+        # 供前端「列表信息」面板的数据来源标签区分互补来源（键为 OCR 字段名或导出列名）
+        _pf_src = record.get("parsed_fields")
+        _stored_src = _pf_src.get("_filled_sources") if isinstance(_pf_src, dict) else None
+        record["field_sources"] = {
+            **(_stored_src if isinstance(_stored_src, dict) else {}),
+            **_rt_sources,
+        }
 
         return jsonify({"code": 0, "data": record, "siblings": siblings})
     except Exception as e:
@@ -1575,11 +1599,13 @@ def overwrite_manual_with_ocr(record_id):
         if not isinstance(mf, list):
             mf = []
 
-        # 写入识别值并解除手动标记
+        # 写入识别值并解除手动标记（同时清除互补来源标记——值已恢复为纯提取结果）
         for field_name, ocr_value in fields.items():
             pf[field_name] = ocr_value
             if field_name in mf:
                 mf.remove(field_name)
+            if isinstance(pf.get("_filled_sources"), dict):
+                pf["_filled_sources"].pop(field_name, None)
 
         # 同步更新 display_fields（与手动修改字段接口相同的映射逻辑）
         df = record.get("display_fields") or "{}"
@@ -2374,6 +2400,7 @@ def update_supported_companies_config():
 
 def _cross_fill_from_siblings(db, record_id: int, file_md5: str, parsed_fields: dict):
     """从同一 PDF（相同 file_md5）的兄弟记录中互补缺失的基础字段"""
+    from insurance.handler import mark_filled_source
     if not file_md5:  # 空 md5 不能作分组键，否则会把所有空md5记录当成兄弟互相污染
         return
     fill_fields = ["车牌号", "投保人", "被保险人", "车主", "证件号码",
@@ -2410,6 +2437,7 @@ def _cross_fill_from_siblings(db, record_id: int, file_md5: str, parsed_fields: 
             val = pf.get(f, "")
             if val:
                 parsed_fields[f] = val
+                mark_filled_source(parsed_fields, f, "同PDF互补")
                 filled.append(f"{f}={val}")
                 missing.remove(f)
         if not missing:
@@ -5227,7 +5255,8 @@ def export_excel():
                         row["车船税"] = val
                     all_known = set(MERGE_SHARED_FIELDS) | set(MERGE_SPLIT_FIELDS) | {"车船税", "险种", "险种类型", "_src_id", "_order"}
                     for k, v in fields.items():
-                        if k not in all_known and k not in row and v:
+                        # 下划线开头为内部键（_filled_sources 等），不透传到合并行
+                        if not k.startswith("_") and k not in all_known and k not in row and v:
                             row[k] = v
                     _sid = fields.get("_src_id")
                     row["_src_ids"] = [_sid] if _sid is not None else []
