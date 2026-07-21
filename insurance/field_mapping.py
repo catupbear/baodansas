@@ -156,7 +156,10 @@ def apply_mapping(fields: Dict[str, str], company_short: str = "") -> Dict[str, 
         result[col] = value
 
     # 透传自定义字段：不在已知 OCR 字段中、也不在 output_columns 中的字段直接保留
+    # 下划线开头为内部键（如 _filled_sources 互补来源标记），不透传到导出列
     for key, val in fields.items():
+        if key.startswith("_"):
+            continue
         if key not in known_ocr_fields and key not in result:
             result[key] = val
 
