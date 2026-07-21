@@ -31,7 +31,7 @@ _PERIOD_LABEL = {"month": "当月", "quarter": "当季度", "year": "今年", "c
 
 # 系统默认模板（global scope 无记录时的兜底配置）
 DEFAULT_CONFIG = {
-    "time_field": "签单日期",
+    "time_field": "识别日期",
     "cards": [
         {"id": "c1", "title": "总保费", "agg": "sum", "field": "保费"},
         {"id": "c2", "title": "总佣金", "agg": "sum", "field": "佣金"},
@@ -440,7 +440,13 @@ def load_records(db, enterprise_id: int, date_start: str, date_end: str,
     时间按 time_field 对应的 ISO 日期列过滤，无值回退 created_at 日期。
     apply_config_fn: field_config_db.apply_user_config_to_fields（由调用方传入避免循环依赖）
     """
-    iso_col = _TIME_FIELD_COL.get(time_field, "sign_date_iso")
+    if time_field == "识别日期":
+        time_sel = "NULL"                       # time_day 置空，循环里回退 created_day
+        time_where = "DATE(r.created_at)"
+    else:
+        iso_col = _TIME_FIELD_COL.get(time_field, "sign_date_iso")
+        time_sel = f"pf.{iso_col}"
+        time_where = f"COALESCE(pf.{iso_col}, DATE(r.created_at))"
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -448,13 +454,13 @@ def load_records(db, enterprise_id: int, date_start: str, date_end: str,
             SELECT r.id, r.display_fields, r.manual_fields, r.company_short,
                    r.sender, r.user_id,
                    DATE(r.created_at) AS created_day,
-                   pf.{iso_col} AS time_day,
+                   {time_sel} AS time_day,
                    pf.salesperson, pf.policy_type, pf.company, pf.total_premium, pf.sign_date
             FROM insurance_records r
             LEFT JOIN insurance_policy_fields pf ON pf.record_id = r.id
             WHERE r.enterprise_id = %s AND r.deleted_at IS NULL AND r.status = 'done'
               AND (r.doc_category = '保单' OR r.doc_category = '' OR r.doc_category IS NULL)
-              AND COALESCE(pf.{iso_col}, DATE(r.created_at)) BETWEEN %s AND %s
+              AND {time_where} BETWEEN %s AND %s
         """, (enterprise_id, date_start, date_end))
         rows = cursor.fetchall()
         # 无 sender 的手动上传记录：批量查上传人姓名，用作「发送人」
@@ -540,7 +546,9 @@ def get_dashboard_data(db, enterprise_id: int, date_start: str, date_end: str,
     """
     resolved = get_dashboard_config(db, enterprise_id)
     config = resolved["config"]
-    time_field = config.get("time_field") or "签单日期"
+    # 统一按识别日期统计（与台账列表口径一致，2026-07-21 定），不再读企业配置里的
+    # time_field（存量企业配置里存有"签单日期"，读它会导致口径不一致）
+    time_field = "识别日期"
 
     records = load_records(db, enterprise_id, date_start, date_end,
                            time_field, user_config, apply_config_fn)
