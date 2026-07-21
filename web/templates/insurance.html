@@ -2950,13 +2950,6 @@
             <div class="flex items-center gap-3 flex-wrap">
                 <span class="text-sm text-gray-600">已选 <span class="font-semibold text-orange-600">{{ selectedRecordIds.length }}</span> 条</span>
                 <button @click="selectedRecordIds = []" class="text-xs text-gray-400 hover:text-gray-600 cursor-pointer">清除选择</button>
-                <template v-if="selectedRecordsSum.length">
-                    <span class="text-gray-300">|</span>
-                    <span v-for="s in selectedRecordsSum" :key="s.key" class="text-sm text-gray-600">
-                        {{ s.display_name }}合计:
-                        <span class="font-semibold text-orange-600">{{ s.value.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2}) }}</span>
-                    </span>
-                </template>
             </div>
         </div>
 
@@ -3273,6 +3266,23 @@
                         </tr>
                         </template>
                     </tbody>
+                    <tfoot v-if="selectedRecordIds.length && sumColumns.length">
+                        <tr style="background:#fff7ed;">
+                            <td class="sticky-col-check" style="background:#fff7ed !important;"></td>
+                            <td class="action-col-sticky" :class="{'action-col-narrow': pageMergeByPlate}" style="background:#fff7ed !important;font-weight:600;color:#c2410c;">合计（已选{{ selectedRecordIds.length }}条）</td>
+                            <template v-for="(col, colIdx) in visibleListColumns" :key="'sum-' + col.key">
+                                <td v-if="isSuperAdmin && col.key === '承保公司'"></td>
+                                <td :class="[col.frozen ? 'frozen-col' : '', col.frozen && col.key === frozenColStyles._lastFrozenKey ? 'frozen-col-last' : '']"
+                                    :style="getColStyle(col, true)" style="font-weight:600;color:#c2410c;">
+                                    {{ sumMap[col.key] !== undefined ? sumMap[col.key].toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2}) : '' }}
+                                </td>
+                            </template>
+                            <td v-if="isSuperAdmin"></td>
+                            <td v-if="isSuperAdmin"></td>
+                            <td v-if="isSuperAdmin"></td>
+                            <td v-if="isSuperAdmin"></td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
 
@@ -6824,6 +6834,8 @@ const _app = createApp({
                 return { key: col.key, display_name: col.display_name, value: total };
             });
         });
+        // 合计值按字段key查找，供表格底部合计行渲染用
+        const sumMap = computed(() => Object.fromEntries(selectedRecordsSum.value.map(s => [s.key, s.value])));
         // 冻结列的 left 偏移量映射（key → CSS left 值）
         // 复选框列固定 40px 宽，冻结列依次累加
         // 冻结列样式：所有标记 frozen 的列依次堆叠到左侧
@@ -12596,7 +12608,7 @@ const _app = createApp({
             extractionRules, loadExtractionRules,
             rawTextVisible, rawTextContent, rawTextFileName,
             successResults, abnormalResults, nonPolicyResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal, getPolicyHint, getRecordHint, getFailHint,
-            outputColumns, listColumnConfig, visibleListColumns, sumColumns, selectedRecordsSum, fieldHelp, pinnedFieldHelp, activeFieldHelpKey, tooltipFloatStyle, showFieldHelp, hideFieldHelp, pinFieldHelp, frozenColStyles, getColStyle, startColResize, getMappedValue, getDocCategory, docCategories,
+            outputColumns, listColumnConfig, visibleListColumns, sumColumns, selectedRecordsSum, sumMap, fieldHelp, pinnedFieldHelp, activeFieldHelpKey, tooltipFloatStyle, showFieldHelp, hideFieldHelp, pinFieldHelp, frozenColStyles, getColStyle, startColResize, getMappedValue, getDocCategory, docCategories,
             isLoadingFiles, loadingFileCount, loadingFileTotal, loadingPercent,
             handleFileSelect, handleDrop, removeFile, clearFiles,
             previewFile, previewResultFile, showRawText,
