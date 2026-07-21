@@ -5148,7 +5148,12 @@ def export_excel():
                                 merged[f] = val
                                 break
 
-                    # 差异字段：按险种分配
+                    # 差异字段：按险种分配。保费/佣金/公司利润/跟单人利润等金额类字段要"累加"
+                    # 而不是"组里第一条有值的记录"——MERGE_PREFIXES 里驾意险(accident)和
+                    # 非车险(non_vehicle)共用同一个"非车险"前缀，一辆车若同时有这两类保单
+                    # （或同类两份），合并前只取第一条会把另一份的保费直接丢掉，应该是两份
+                    # 相加（2026-07-21反馈）。保单号/费率类字段不是金额，仍按第一条有值的取
+                    _MERGE_SUM_FIELDS = {"保费", "佣金", "公司利润", "跟单人利润"}
                     for record in group:
                         policy_type = record.get("险种", "") or record.get("险种类型", "")
                         type_code, _ = get_policy_type_code(policy_type)
@@ -5156,7 +5161,16 @@ def export_excel():
                         for f in MERGE_SPLIT_FIELDS:
                             col_name = f"{prefix}{f}"
                             val = record.get(f, "")
-                            if val and not merged.get(col_name):
+                            if not val:
+                                continue
+                            if f in _MERGE_SUM_FIELDS:
+                                try:
+                                    num = float(str(val).replace(",", ""))
+                                    merged[col_name] = f"{float(merged.get(col_name) or 0) + num:.2f}"
+                                    continue
+                                except (ValueError, TypeError):
+                                    pass
+                            if not merged.get(col_name):
                                 merged[col_name] = val
 
                     # 车船税（不拆分）
