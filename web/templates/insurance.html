@@ -1913,7 +1913,7 @@
 
             <!-- 图表 -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                <div v-for="(ch, ci) in salesData.charts" :key="ci" class="sd-card" :class="ch.type==='trend'?'lg:col-span-2':''">
+                <div v-for="(ch, ci) in sdVisibleCharts" :key="ci" class="sd-card" :class="ch.type==='trend'?'lg:col-span-2':''">
                     <div class="sd-h2"><span class="bar"></span>{{ ch.title }}
                         <span class="sd-qi">?<span class="sd-qtip">{{ ch.explain }}</span></span>
                         <span v-if="ch.type!=='trend' && ch.total" class="mini">合计 {{ sdMoney(ch.total, ch.is_count) }}</span>
@@ -12526,9 +12526,16 @@ const _app = createApp({
         }
         const SD_COLORS = ['#ea580c', '#2563eb', '#16a34a', '#9333ea', '#eab308'];
         const SD_PIE = ['#ea580c', '#fb923c', '#fdba74', '#2563eb', '#60a5fa', '#16a34a', '#86efac', '#9333ea', '#d1d5db'];
+        // 时间范围为单天（今日/昨日/自定义同一天）时趋势图只有一个点，直接不展示
+        const sdVisibleCharts = computed(() => {
+            const d = salesData.value;
+            if (!d || !d.charts) return [];
+            if (d.date_start && d.date_start === d.date_end) return d.charts.filter(ch => ch.type !== 'trend');
+            return d.charts;
+        });
         function drawSalesCharts() {
             if (!salesData.value) return;
-            salesData.value.charts.forEach((ch, i) => {
+            sdVisibleCharts.value.forEach((ch, i) => {
                 if (ch.type === 'trend') drawSdTrend('sdChart' + i, ch);
                 else if (ch.type === 'donut') drawSdDonut('sdChart' + i, ch);
                 else if (ch.type === 'bar') drawSdBar('sdChart' + i, ch);
@@ -12642,7 +12649,7 @@ const _app = createApp({
             salesTab, salesLoading, salesData, salesEnterprise, salesPeriod, salesDateStart, salesDateEnd,
             salesConfig, salesConfigSource, salesSaving, salesFields, salesPeriodOptions, sdFilterFields,
             loadSalesDash, onSalesEnterpriseChange, openSalesConfig, openSalesTargets,
-            saveSalesConfig, resetSalesConfig, sdMoney, sdFiltersText,
+            saveSalesConfig, resetSalesConfig, sdMoney, sdFiltersText, sdVisibleCharts,
             sdModal, sdCardForm, sdOpenCardModal, sdAddCard, sdSetChartMetric, sdAddRankCol, sdToggleTargetCol,
             sdEntTargets, sdEmpItemNames, sdEmpCurrent, sdEmpItem, sdEmpUnified, sdEmpEdit, sdEmpPersons,
             sdSelectEmpItem, sdApplyUnified, sdSavePerson, sdRestoreUnified,
