@@ -513,6 +513,14 @@ def load_records(db, enterprise_id: int, date_start: str, date_end: str,
                 fields["_time_day"] = time_bucket
             except Exception:
                 logger.debug("应用用户配置失败 record_id=%s", row.get("id"), exc_info=True)
+        # 注入按险种拆分的保费列（商业险保费/交强险保费/非车险保费）——与台账合并视图
+        # 的拆分列同口径：本记录险种对应的列 = 保费，其余 = 0；已有真实值（手工填写）不覆盖。
+        # 不注入的话，目标/指标卡选这些字段统计时单条记录上取不到值，会恒为 0
+        try:
+            from insurance.field_config_db import _split_fee_context
+            fields = _split_fee_context(fields)
+        except Exception:
+            logger.debug("拆分保费注入失败 record_id=%s", row.get("id"), exc_info=True)
         # 注入「发送人」（放在公式应用之后，保证不被配置过滤/覆盖）
         _sender = (row.get("sender") or "").strip()
         if _sender:
