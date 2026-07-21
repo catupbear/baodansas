@@ -1965,8 +1965,6 @@
         <div v-show="salesTab==='config'">
             <div v-if="salesConfig" class="space-y-4">
                 <div class="flex items-center gap-2 flex-wrap" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:11px 16px;font-size:13px;color:#9a3412">
-                    <!-- 配置来源仅超管可见（内部信息，客户无需感知） -->
-                    <span v-if="isSuperAdmin">当前配置来源：<b>{{ salesConfigSource==='enterprise'?'企业自定义':(salesConfigSource==='global'?'系统默认模板':'内置默认') }}</b>，保存后生成该企业专属配置</span>
                     <span style="flex:1"></span>
                     <button class="sd-btn ghost" @click="resetSalesConfig">恢复默认模板</button>
                     <button v-if="isSuperAdmin" class="sd-btn ghost" @click="saveSalesConfig('global')" title="保存为系统默认模板，对所有未自定义的企业生效">存为系统默认</button>
