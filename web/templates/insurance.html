@@ -5817,6 +5817,14 @@
             </svg>
             <span style="font-size:10px;font-weight:500;">数据看板</span>
         </button>
+        <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role) && !notActivated" @click="pageTab='sales';loadSalesDash()"
+                style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;"
+                :style="pageTab==='sales'?'color:#ea580c;':'color:#9ca3af;'">
+            <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+            </svg>
+            <span style="font-size:10px;font-weight:500;">业绩看板</span>
+        </button>
         <button @click="mobileMenuOpen=true"
                 style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;color:#9ca3af;">
             <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
