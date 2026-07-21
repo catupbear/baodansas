@@ -2298,7 +2298,7 @@
                     </thead>
                     <tbody>
                         <tr v-for="issue in aiIssues.list" :key="issue.id" style="border-top:1px solid #f3f4f6;">
-                            <td style="padding:7px 12px;color:#6b7280;white-space:nowrap;">{{ issue.ai_checked_at || '—' }}</td>
+                            <td style="padding:7px 12px;color:#6b7280;white-space:nowrap;">{{ formatTimeSec(issue.ai_checked_at) }}</td>
                             <td style="padding:7px 12px;color:#374151;white-space:nowrap;">{{ issue.company_short || '—' }}</td>
                             <td style="padding:7px 12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="issue.filename">{{ issue.filename || '—' }}</td>
                             <td style="padding:7px 12px;">
@@ -2316,7 +2316,8 @@
                             </td>
                             <td style="padding:7px 12px;text-align:center;white-space:nowrap;">
                                 <div style="display:inline-flex;gap:4px;flex-wrap:wrap;justify-content:center;">
-                                    <button v-if="issue.cos_url" @click="openIssueFile(issue)" class="btn btn-outline" style="padding:2px 8px;font-size:11px;">查看原件</button>
+                                    <!-- 预览：复用台账「预览+AI质检」弹窗，打开后自动展开AI质检面板并加载历史质检结果（不重新调用大模型） -->
+                                    <button v-if="issue.cos_url" @click="openRecordAiCheck(issue)" class="btn btn-outline" style="padding:2px 8px;font-size:11px;">预览</button>
                                     <template v-if="issue.ai_check_status === 'flagged'">
                                         <button @click="resolveAiIssue(issue, 'adopt')" :disabled="issue._busy" class="btn" style="padding:2px 8px;font-size:11px;background:#f0fdf4;border:1px solid #bbf7d0;color:#16a34a;">采纳AI值</button>
                                         <button @click="resolveAiIssue(issue, 'keep')" :disabled="issue._busy" class="btn" style="padding:2px 8px;font-size:11px;background:#f3f4f6;border:1px solid #d1d5db;color:#6b7280;">保留原值</button>
@@ -5312,6 +5313,15 @@
                                 <template v-if="previewAiCheck.fromHistory && previewAiCheck.checkedAt"> · {{ previewAiCheck.checkedAt }}</template>
                                 <template v-else-if="previewAiCheck.durationMs"> · 耗时{{ (previewAiCheck.durationMs/1000).toFixed(1) }}s</template>
                             </span>
+                            <!-- 查看本次大模型API原始返回值：历史记录若未落库该字段则置灰提示 -->
+                            <button v-if="previewAiCheck.state === 'done'"
+                                    @click="previewAiCheck.rawResponse && (aiRawResponseModalVisible = true)"
+                                    :disabled="!previewAiCheck.rawResponse"
+                                    class="cursor-pointer"
+                                    :style="'margin-left:auto;font-size:11px;border-radius:6px;padding:2px 8px;flex-shrink:0;' + (previewAiCheck.rawResponse ? 'border:1px solid #ddd6fe;color:#6d28d9;background:white;cursor:pointer;' : 'border:1px solid #e5e7eb;color:#c4c4c4;background:#f9fafb;cursor:not-allowed;')"
+                                    :title="previewAiCheck.rawResponse ? '查看本次大模型API原始返回值' : '无原始返回数据（历史记录未保存）'">
+                                原始返回
+                            </button>
                         </div>
 
                         <!-- 加载历史中 -->
@@ -5452,6 +5462,26 @@
             </div>
         </div>
     </transition>
+
+    <!-- ========== AI质检「原始返回」弹窗（仅超管） ========== -->
+    <!-- 展示本次/历史那次大模型API调用的原始返回文本，供排查模型输出异常、JSON解析失败等问题 -->
+    <div v-if="isSuperAdmin && aiRawResponseModalVisible" class="fixed inset-0 flex items-center justify-center" style="z-index:1002;background:rgba(0,0,0,0.4);" @click.self="aiRawResponseModalVisible = false">
+        <div style="background:white;border-radius:12px;width:min(680px,94vw);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,0.2);overflow:hidden;">
+            <div style="padding:14px 18px;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span style="font-size:16px;">✨</span>
+                <span style="font-size:14px;font-weight:600;color:#1f2937;">API原始返回值</span>
+                <span v-if="previewAiCheck.model" style="padding:1px 8px;background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;border-radius:9999px;font-size:11px;">{{ previewAiCheck.model }}</span>
+                <button @click="copyAiRawResponse" class="cursor-pointer"
+                        style="margin-left:auto;font-size:11px;border-radius:6px;padding:3px 10px;border:1px solid #e5e7eb;background:white;color:#6b7280;">
+                    {{ aiRawResponseCopied ? '已复制 ✓' : '复制' }}
+                </button>
+                <button @click="aiRawResponseModalVisible = false" style="color:#9ca3af;cursor:pointer;font-size:18px;line-height:1;border:none;background:none;">&times;</button>
+            </div>
+            <div style="overflow:auto;flex:1;padding:14px 18px;">
+                <pre style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.6;color:#374151;white-space:pre-wrap;word-break:break-all;user-select:text;margin:0;">{{ aiRawResponseFormatted || '无原始返回数据' }}</pre>
+            </div>
+        </div>
+    </div>
 
     <!-- ========== 记录详情弹窗 ========== -->
     <transition name="fade">
@@ -6406,9 +6436,44 @@ const _app = createApp({
             applyOk: false,
             corrections: {},      // 应用历史 {字段:{old,new,time,operator}}，排查用
             showHistory: false,   // 是否展开应用历史
+            rawResponse: '',      // 本次/历史那次调用的大模型API原始返回文本（未解析），排查用
         });
         let _previewAiCheckTimer = null;
         const previewAiCheckSelectedCount = computed(() => previewAiCheck.diffs.filter(i => i.checked).length);
+
+        // 「查看原始返回」弹窗：展示 previewAiCheck.rawResponse，JSON 能解析则美化展示，否则原样展示
+        const aiRawResponseModalVisible = ref(false);
+        const aiRawResponseCopied = ref(false);
+        const aiRawResponseFormatted = computed(() => {
+            const raw = previewAiCheck.rawResponse || '';
+            if (!raw) return '';
+            try {
+                return JSON.stringify(JSON.parse(raw), null, 2);
+            } catch (e) {
+                return raw;  // 非合法JSON（如纯文本/截断内容），原样展示
+            }
+        });
+        // 复制原始返回内容到剪贴板
+        function copyAiRawResponse() {
+            const text = aiRawResponseFormatted.value;
+            if (!text) return;
+            navigator.clipboard.writeText(text).then(() => {
+                aiRawResponseCopied.value = true;
+                setTimeout(() => { aiRawResponseCopied.value = false; }, 2000);
+            }).catch(() => {
+                // 降级方案
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                aiRawResponseCopied.value = true;
+                setTimeout(() => { aiRawResponseCopied.value = false; }, 2000);
+            });
+        }
 
         // 识别对比（仅超级管理员）：对原文重新解析的纯识别结果，与列表当前值对比
         const previewShowCompare = ref(false);
@@ -9323,16 +9388,18 @@ const _app = createApp({
             previewAiCheck.checkedAt = d.checked_at || '';
             previewAiCheck.fromHistory = !!fromHistory;
             previewAiCheck.showSame = false;
+            previewAiCheck.rawResponse = d.raw_response || '';
             previewAiCheck.state = 'done';
         }
         // 重置面板状态（打开预览/切换保单时调用）
         function resetPreviewAiCheck() {
             if (_previewAiCheckTimer) { clearInterval(_previewAiCheckTimer); _previewAiCheckTimer = null; }
+            aiRawResponseModalVisible.value = false;
             Object.assign(previewAiCheck, {
                 recordId: null, state: 'idle', error: '', logId: null, model: '', durationMs: 0,
                 checkedAt: '', fromHistory: false, diffs: [], same: [], showSame: false,
                 busy: false, elapsedSec: 0, stage: '',
-                applyMsg: '', applyOk: false, corrections: {}, showHistory: false,
+                applyMsg: '', applyOk: false, corrections: {}, showHistory: false, rawResponse: '',
             });
         }
         // 列表行「AI质检」：打开预览弹窗并直接进入AI质检面板（有历史看结果，无则待质检）
@@ -9942,9 +10009,6 @@ const _app = createApp({
                 try { raw = JSON.parse(raw); } catch (e) { return []; }
             }
             return Array.isArray(raw) ? raw : [];
-        }
-        function openIssueFile(issue) {
-            if (issue && issue.cos_url) window.open(issue.cos_url, '_blank');
         }
         // 问题列表操作：采纳AI值 / 保留原值 / 还原原值
         async function resolveAiIssue(issue, action) {
@@ -11018,6 +11082,29 @@ const _app = createApp({
             if (isNaN(d.getTime())) return ts;
             const pad = n => String(n).padStart(2, '0');
             return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+
+        // 格式化时间（精确到秒，且兼容后端个别接口把 datetime 对象序列化成
+        // RFC1123/GMT 格式字符串的情况，如 "Tue, 21 Jul 2026 16:01:16 GMT"）。
+        // 这种 GMT 格式是 Flask 默认 JSON encoder 对未转字符串的 datetime 对象做序列化
+        // 产生的，标了 GMT 但数值其实就是数据库里的原始北京时间，并未做真正的时区换算——
+        // 因此这里不走 new Date() 的本地 getter（会被浏览器时区二次偏移），
+        // 而是直接从字符串里把年月日时分秒的数字取出来拼接，完全不经过时区转换。
+        function formatTimeSec(ts) {
+            if (!ts) return '—';
+            if (typeof ts === 'string') {
+                // RFC1123/GMT 格式："Tue, 21 Jul 2026 16:01:16 GMT"
+                const gmtMatch = /^\w+,\s*(\d{1,2})\s+(\w+)\s+(\d{4})\s+(\d{2}):(\d{2}):(\d{2})\s+GMT$/.exec(ts);
+                if (gmtMatch) {
+                    const months = { Jan:'01', Feb:'02', Mar:'03', Apr:'04', May:'05', Jun:'06',
+                                      Jul:'07', Aug:'08', Sep:'09', Oct:'10', Nov:'11', Dec:'12' };
+                    const day = gmtMatch[1].padStart(2, '0');
+                    return `${gmtMatch[3]}-${months[gmtMatch[2]] || '01'}-${day} ${gmtMatch[4]}:${gmtMatch[5]}:${gmtMatch[6]}`;
+                }
+                // 普通 "YYYY-MM-DD HH:mm:ss" / "YYYY-MM-DDTHH:mm:ss" 等，直接截取前19位展示
+                return ts.replace('T', ' ').slice(0, 19);
+            }
+            return String(ts);
         }
 
         // 重试单条识别记录
@@ -12518,6 +12605,7 @@ const _app = createApp({
             previewRawText, previewOcrRawText, previewRawTextTab, activeRawText, formattedRawText, previewFieldsList, rawTextCopied, copyRawText,
             previewShowCompare, previewCompareList, previewCompareDiffCount, previewCompareMeta, previewCompareLoading, previewCompareError, togglePreviewCompare, loadPreviewCompare,
             previewShowAiCheck, previewAiCheck, previewAiCheckSelectedCount, togglePreviewAiCheck, openRecordAiCheck, loadPreviewAiCheckHistory, runPreviewAiCheck, previewAiCheckToggleAll, applyPreviewAiCheck,
+            aiRawResponseModalVisible, aiRawResponseFormatted, aiRawResponseCopied, copyAiRawResponse,
             extractionRules, loadExtractionRules,
             rawTextVisible, rawTextContent, rawTextFileName,
             successResults, abnormalResults, nonPolicyResults, failedResults, filteredSuccessResults, displayResults, tabs, progressPercent, isAbnormal, getPolicyHint, getRecordHint, getFailHint,
@@ -12556,7 +12644,7 @@ const _app = createApp({
             runAiCheck, aiCheckToggleAll, applyAiCheck,
             aiCheckDetailModal, openAiCheckDetail, revertAiCheckDetail,
             aiStats, aiIssues, aiIssuesTotalPages, loadAiStats, loadAiIssues, refreshAiPending,
-            openAiCheckTab, aiIssuesGotoPage, parseIssueDiffs, openIssueFile, resolveAiIssue,
+            openAiCheckTab, aiIssuesGotoPage, parseIssueDiffs, resolveAiIssue,
             // AI质检设置（仅超管）
             aiSettings, aiScopeModal, AI_SCOPE_STATUS_OPTIONS, aiScopeCondCount,
             openAiSettings, toggleAiCfgEnabled, toggleAiCfgAutoFix,
@@ -12572,7 +12660,7 @@ const _app = createApp({
             recordPagination, visiblePages, recordStats,
             recordActiveTab, recordTabs, filterNonPolicy, exportFilterNonPolicy, recordCompanyFilter, recordPolicyTypeFilter, recordDocTypeFilter,
             recordCompanyList, loadRecordCompanies, recordDocTypes, exportRecordsExcel,
-            loadRecords, loadRecordStats, gotoRecordPage, getParsedField, getRecordMappedValue, formatTime,
+            loadRecords, loadRecordStats, gotoRecordPage, getParsedField, getRecordMappedValue, formatTime, formatTimeSec,
             pageMergeByPlate, togglePageMerge,
             retryRecord, reocrRecord, reuploadRecord, reocrPreviewFile, previewReocring, syncRecordToDingtalk, previewRecord, previewAutoRecord, previewSiblings, siblingDropdownOpen, switchToSibling, loadAutoRecordRawText,
             markNormalVisible, markNormalRecord, markNormalReason, markNormalSaving, getQuickReasons, openMarkNormal, confirmMarkNormal, undoMarkNormal,
