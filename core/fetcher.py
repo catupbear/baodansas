@@ -601,7 +601,7 @@ class MessageFetcher:
         配置键 quote_fill_template_notify（insurance_config 表）：
           enabled           开关（默认关闭）
           robot_id          FlowBot 机器人 ID，缺省复用 flowbot_fail_notify 的机器人
-          tech_support_name 客服微信名，缺省"技术客服（午虎保单台账系统）"
+          tech_support_name 客服微信名，缺省"客户客服（午虎保单台账系统）"
           template          自定义文案，{plate} 占位符替换车牌
         同一群每天最多提醒一次（内存节流，进程重启后重置）。
         旁路通知：任何异常只记日志，绝不影响消息处理主流程。
@@ -639,7 +639,7 @@ class MessageFetcher:
                 logger.info("未配置模板提醒跳过：无群名 seq=%d room=%s", seq, roomid)
                 return
 
-            tech_name = cfg.get("tech_support_name") or "技术客服（午虎保单台账系统）"
+            tech_name = cfg.get("tech_support_name") or "客户客服（午虎保单台账系统）"
             template = cfg.get("template") or self._POLICY_FILL_NO_TEMPLATE_TEMPLATE
             msg = template.replace("{plate}", plate or "未知")
 
@@ -744,7 +744,7 @@ class MessageFetcher:
                 except Exception:
                     pass
 
-            tech_name = cfg.get("tech_support_name") or "技术客服（午虎保单台账系统）"
+            tech_name = cfg.get("tech_support_name") or "客户客服（午虎保单台账系统）"
             sent = False
             if room_name and robot_id:
                 at_list = list(dict.fromkeys(n for n in (sender_name, tech_name) if n))

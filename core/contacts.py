@@ -243,9 +243,11 @@ class ContactsManager:
                     result = []
                     for m in members:
                         mid = m.get("memberid", "")
-                        name = self._get_cache(mid) if mid else ""
-                        if not name or name == "__unresolvable__":
-                            name = self.get_name(mid) if mid else ""
+                        # get_name() 已经是"先查 wecom_contacts 权威表，查不到再退回旧永久
+                        # 缓存，还没有才请求API"的完整逻辑，这里不要再单独先查旧缓存
+                        # ——否则旧缓存里只要有值（哪怕是过期的旧昵称）就会直接用掉，
+                        # 永远轮不到 wecom_contacts 里的新值
+                        name = self.get_name(mid) if mid else ""
                         result.append({"userid": mid, "name": name or mid})
                     return result
                 elif data.get("errcode") in (301059, 301039):
@@ -281,9 +283,7 @@ class ContactsManager:
                     mid = m.get("userid", "")
                     name = m.get("name", "")
                     if not name:
-                        name = self._get_cache(mid) if mid else ""
-                        if not name or name == "__unresolvable__":
-                            name = mid
+                        name = self.get_name(mid) if mid else ""
                     result.append({"userid": mid, "name": name or mid})
                 return result
             elif data.get("errcode") == 92002 and self._fallback_contacts:
@@ -313,9 +313,7 @@ class ContactsManager:
 
         result = []
         for sid in senders:
-            name = self._get_cache(sid) if sid else ""
-            if not name or name == "__unresolvable__":
-                name = sid
+            name = self.get_name(sid) if sid else ""
             result.append({"userid": sid, "name": name or sid})
         return result
 
