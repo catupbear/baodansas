@@ -8718,6 +8718,7 @@ const _app = createApp({
         const batchExportCols = ref(null);       // 暂存导出列
         const batchExportMerge = ref(false);     // 暂存合并开关
         const batchExportTplSuffix = ref('');    // 暂存模板名后缀（用于文件名）
+        const batchExportPreserveOrder = ref(false); // 暂存是否保持传入顺序（识别记录导出为 true）
 
         const isAllExportFieldsSelected = computed(() =>
             exportAvailableFields.value.length > 0 && exportSelectedFields.value.length === exportAvailableFields.value.length
@@ -8825,10 +8826,11 @@ const _app = createApp({
                     batchExportCols.value = selectedCols;
                     batchExportMerge.value = merge;
                     batchExportTplSuffix.value = tplSuffix;
+                    batchExportPreserveOrder.value = true;
                     batchExportVisible.value = true;
                     return;
                 }
-                await sendExportRequest(allData, selectedCols, merge, `保单识别记录${tplSuffix}`);
+                await sendExportRequest(allData, selectedCols, merge, `保单识别记录${tplSuffix}`, true);
             } else {
                 // 手动上传结果导出
                 const count = getManualExportCount(type);
@@ -8840,6 +8842,7 @@ const _app = createApp({
                     batchExportCols.value = selectedCols || exportSelectedFields.value;
                     batchExportMerge.value = merge;
                     batchExportTplSuffix.value = tplSuffix;
+                    batchExportPreserveOrder.value = false;
                     batchExportVisible.value = true;
                     return;
                 }
@@ -8853,14 +8856,16 @@ const _app = createApp({
             const sliced = batchExportAllData.value.slice(range.start - 1, range.end);
             batchExportVisible.value = false;
             const batchLabel = `第${batchIdx + 1}批${batchExportTplSuffix.value}`;
-            await sendExportRequest(sliced, batchExportCols.value, batchExportMerge.value, batchLabel);
+            await sendExportRequest(sliced, batchExportCols.value, batchExportMerge.value, batchLabel, batchExportPreserveOrder.value);
         }
 
         // 通用导出请求（发送数据到后端生成Excel）
-        async function sendExportRequest(data, selectedCols, mergeByPlate, labelPrefix) {
+        async function sendExportRequest(data, selectedCols, mergeByPlate, labelPrefix, preserveOrder = false) {
             try {
                 showMessage('正在导出，请稍候...', true);
-                const postBody = { invoices: data, export_type: 'success', merge_by_plate: mergeByPlate, config_applied: true, export_label: labelPrefix };
+                // preserveOrder=true（识别记录导出）：数据已按用户所选排序（如创建时间）排好，
+                // 告知后端不要再按车牌整体重排，保证导出 Excel 与列表顺序一致
+                const postBody = { invoices: data, export_type: 'success', merge_by_plate: mergeByPlate, config_applied: true, export_label: labelPrefix, preserve_order: preserveOrder };
                 if (selectedCols) postBody.field_names = selectedCols;
                 if (recordFilter.date_start) postBody.date_start = recordFilter.date_start.slice(0, 10);
                 if (recordFilter.date_end) postBody.date_end = recordFilter.date_end.slice(0, 10);
