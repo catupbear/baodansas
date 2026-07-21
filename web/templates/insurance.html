@@ -633,9 +633,9 @@
                     <button v-if="isSuperAdmin" @click="pageTab = 'dashboard'; loadDashboard()" :class="pageTab === 'dashboard' ? 'active' : ''" class="page-tab-btn">
                         数据看板
                     </button>
-                    <!-- 销售看板：超管 + 企业管理员可见（员工暂不开放） -->
-                    <button v-if="currentUser && ['super_admin','enterprise'].includes(currentUser.role)" @click="pageTab = 'sales'; loadSalesDash()" :class="pageTab === 'sales' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;">
-                        销售看板<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">NEW</span>
+                    <!-- 销售看板：超管 + 企业管理员可用；员工可见入口但进入后为锁定提示 -->
+                    <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="pageTab = 'sales'; loadSalesDash()" :class="pageTab === 'sales' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;">
+                        销售看板<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
                     </button>
                     <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="openRenewalTab()" :class="pageTab === 'renewal' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;position:relative;">
                         续保管理系统<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
@@ -830,10 +830,10 @@
                         :style="pageTab==='dashboard'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
                     数据看板
                 </button>
-                <button v-if="currentUser && ['super_admin','enterprise'].includes(currentUser.role)" @click="pageTab='sales';loadSalesDash();mobileMenuOpen=false"
+                <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="pageTab='sales';loadSalesDash();mobileMenuOpen=false"
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
                         :style="pageTab==='sales'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
-                    销售看板
+                    销售看板<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
                 </button>
                 <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="openRenewalTab();mobileMenuOpen=false"
                         style="display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
@@ -1805,10 +1805,48 @@
     </main>
 
     <!-- ========== AI质检 Tab（仅超管） ========== -->
-    <!-- ==================== 销售看板（超管 + 企业管理员） ==================== -->
-    <main v-if="pageTab === 'sales' && currentUser && ['super_admin','enterprise'].includes(currentUser.role) && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-4 pb-8">
+    <!-- ==================== 销售看板（超管 + 企业管理员；员工进入为锁定提示） ==================== -->
+    <main v-if="pageTab === 'sales' && currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role) && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-4 pb-8">
+
+        <!-- 员工：磨砂锁定视图（骨架示意打底 + 毛玻璃遮罩 + 开通提示弹窗） -->
+        <div v-if="currentUser.role === 'employee'" style="position:relative;min-height:520px;border-radius:14px;overflow:hidden;">
+            <div style="filter:blur(7px);opacity:0.6;pointer-events:none;user-select:none;" aria-hidden="true">
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+                    <div v-for="i in 5" :key="'skc'+i" class="sd-card" style="padding:14px 16px">
+                        <div style="height:10px;width:56%;background:#e5e7eb;border-radius:5px;"></div>
+                        <div style="height:22px;width:72%;background:#d1d5db;border-radius:6px;margin-top:12px;"></div>
+                    </div>
+                </div>
+                <div class="sd-card mb-4" style="padding:18px">
+                    <div style="height:12px;width:120px;background:#e5e7eb;border-radius:5px;margin-bottom:14px;"></div>
+                    <div style="display:flex;align-items:flex-end;gap:10px;height:150px;">
+                        <div v-for="(h,i) in [42,68,55,88,60,95,74,50,82,66,90,58]" :key="'skb'+i" style="flex:1;background:#fdba74;border-radius:5px 5px 0 0;" :style="{height:h+'%'}"></div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div class="sd-card" style="padding:18px">
+                        <div style="height:12px;width:100px;background:#e5e7eb;border-radius:5px;margin-bottom:14px;"></div>
+                        <div v-for="i in 4" :key="'skr'+i" style="height:12px;background:#f3f4f6;border-radius:5px;margin-bottom:10px;" :style="{width:(95-i*16)+'%'}"></div>
+                    </div>
+                    <div class="sd-card" style="padding:18px">
+                        <div style="height:12px;width:100px;background:#e5e7eb;border-radius:5px;margin-bottom:14px;"></div>
+                        <div v-for="i in 4" :key="'skl'+i" style="height:12px;background:#f3f4f6;border-radius:5px;margin-bottom:10px;" :style="{width:(88-i*12)+'%'}"></div>
+                    </div>
+                </div>
+            </div>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);background:rgba(255,255,255,0.35);">
+                <div style="background:#fff;border-radius:16px;padding:30px 38px;box-shadow:0 10px 40px rgba(0,0,0,0.14);text-align:center;max-width:320px;">
+                    <div style="width:52px;height:52px;border-radius:50%;background:#fff7ed;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;">
+                        <svg style="width:26px;height:26px;color:#ea580c;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    </div>
+                    <div style="font-size:16px;font-weight:700;color:#1f2937;margin-bottom:6px;">销售看板未开通</div>
+                    <div style="font-size:13px;color:#6b7280;line-height:1.7;">请联系企业管理员开通权限</div>
+                </div>
+            </div>
+        </div>
+
         <!-- 二级 Tab + 企业选择（企业选择仅超管代管时显示，企业管理员固定看自己企业） -->
-        <div class="sd-tabs">
+        <div v-if="currentUser.role !== 'employee'" class="sd-tabs">
             <button :class="salesTab==='board'?'on':''" @click="salesTab='board'; loadSalesDash()">看板</button>
             <button :class="salesTab==='config'?'on':''" @click="openSalesConfig()">看板配置</button>
             <button :class="salesTab==='targets'?'on':''" @click="openSalesTargets()">目标管理</button>
@@ -1825,7 +1863,7 @@
 
         <div v-if="isSuperAdmin && !salesEnterprise" class="flex items-center justify-center py-24 text-gray-400 text-sm">请先在右上角选择要查看的企业</div>
 
-        <template v-else>
+        <template v-else-if="currentUser.role !== 'employee'">
         <!-- ========== 看板 ========== -->
         <div v-show="salesTab==='board'">
             <!-- 时间筛选 -->
@@ -12180,6 +12218,7 @@ const _app = createApp({
         }
 
         async function loadSalesDash() {
+            if (currentUser.value && currentUser.value.role === 'employee') return;  // 员工仅展示锁定提示，不请求数据
             await sdEnsureEnterprises();
             if (sdNeedEnterprise()) return;
             const [ds, de] = sdRange();
