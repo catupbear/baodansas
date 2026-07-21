@@ -1851,14 +1851,15 @@
             <button :class="salesTab==='config'?'on':''" @click="openSalesConfig()">看板配置</button>
             <button :class="salesTab==='targets'?'on':''" @click="openSalesTargets()">目标管理</button>
             <span style="flex:1"></span>
-            <template v-if="isSuperAdmin">
-                <span class="sd-lb">企业：</span>
+            <!-- label+下拉包成整体，窄屏换行时不被拆散（拆散会只剩"企业："、下拉被挤没） -->
+            <div v-if="isSuperAdmin" style="display:flex;align-items:center;gap:6px;min-width:0;">
+                <span class="sd-lb" style="white-space:nowrap;">企业：</span>
                 <select v-model="salesEnterprise" @change="onSalesEnterpriseChange"
-                    class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 outline-none focus:border-orange-400" style="max-width:180px">
+                    class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 outline-none focus:border-orange-400" style="max-width:180px;min-width:120px;">
                     <option value="">请选择企业...</option>
                     <option v-for="e in dashboardEnterprises" :key="e.id" :value="e.id">{{ e.name }}</option>
                 </select>
-            </template>
+            </div>
         </div>
 
         <div v-if="isSuperAdmin && !salesEnterprise" class="flex items-center justify-center py-24 text-gray-400 text-sm">请先在右上角选择要查看的企业</div>
