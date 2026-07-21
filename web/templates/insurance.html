@@ -618,7 +618,7 @@
                                   d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
                     </div>
-                    <h1 class="text-lg font-bold text-white tracking-tight">午虎AI保单台账</h1>
+                    <h1 class="text-lg font-bold text-white tracking-tight">{{ pageTab === 'sales' ? '业绩看板' : '午虎AI保单台账' }}</h1>
                     <!-- 内部管理界面醒目标识（仅内部超级管理员可见） -->
                     <span v-if="isSuperAdmin" style="display:inline-flex;align-items:center;gap:4px;background:#fff;color:#dc2626;border-radius:8px;padding:5px 12px;font-size:13px;font-weight:800;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,0.22);letter-spacing:0.5px;border:2px solid #fecaca;">
                         <svg style="width:16px;height:16px;flex-shrink:0;" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
@@ -1847,9 +1847,9 @@
 
         <!-- 二级 Tab + 企业选择（企业选择仅超管代管时显示，企业管理员固定看自己企业） -->
         <div v-if="currentUser.role !== 'employee'" class="sd-tabs">
-            <button :class="salesTab==='board'?'on':''" @click="salesTab='board'; loadSalesDash()">看板</button>
-            <button :class="salesTab==='config'?'on':''" @click="openSalesConfig()">看板配置</button>
-            <button :class="salesTab==='targets'?'on':''" @click="openSalesTargets()">目标管理</button>
+            <!-- 「看板」为默认视图不设Tab；配置/目标按钮再点一次切回看板 -->
+            <button :class="salesTab==='config'?'on':''" @click="salesTab==='config' ? loadSalesDash() : openSalesConfig()">看板配置</button>
+            <button :class="salesTab==='targets'?'on':''" @click="salesTab==='targets' ? loadSalesDash() : openSalesTargets()">目标管理</button>
             <span style="flex:1"></span>
             <!-- label+下拉包成整体，窄屏换行时不被拆散（拆散会只剩"企业："、下拉被挤没） -->
             <div v-if="isSuperAdmin" style="display:flex;align-items:center;gap:6px;min-width:0;">
@@ -12369,6 +12369,7 @@ const _app = createApp({
 
         async function loadSalesDash() {
             if (currentUser.value && currentUser.value.role === 'employee') return;  // 员工仅展示锁定提示，不请求数据
+            salesTab.value = 'board';  // 无论从哪个入口/页签触发，回到看板视图
             await sdEnsureEnterprises();
             if (sdNeedEnterprise()) return;
             const [ds, de] = sdRange();
