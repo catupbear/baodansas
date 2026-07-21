@@ -6841,6 +6841,7 @@ def ai_extract_record(record_id):
             "prompt_tokens": extract["prompt_tokens"],
             "completion_tokens": extract["completion_tokens"],
             "duration_ms": extract["duration_ms"],
+            "raw_response": extract.get("raw_response", ""),  # 大模型API原始返回文本，供前端「查看原始返回」展示
         })
         log_id = insert_ai_check_log(_db, log)
         # 回写记录质检状态/时间，使手动质检记录出现在问题列表与待确认统计中
@@ -6860,6 +6861,7 @@ def ai_extract_record(record_id):
             "diffs": diffs,
             "same": same_fields,
             "manual_fields": manual_fields,
+            "raw_response": extract.get("raw_response", ""),  # 本次调用的原始返回文本
         }})
     except AIExtractError as e:
         log.update({"result": "error", "error_message": str(e)[:500]})
@@ -7299,6 +7301,7 @@ def get_record_ai_check_detail(record_id):
             "diffs": diffs,
             "same": same_fields,
             "manual_fields": manual_fields,
+            "raw_response": last_extract_log.get("raw_response") or "",  # 历史快照的原始返回文本（旧记录可能为空）
         }
 
     return jsonify({"code": 0, "data": {

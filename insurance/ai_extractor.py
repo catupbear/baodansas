@@ -28,6 +28,9 @@ _RENDER_SCALE = 2.0  # 基础缩放（72dpi * 2 = 144dpi），渲染后再按长
 
 DEFAULT_TIMEOUT = 60
 
+# 原始返回值落库/回传前端的最大长度，避免个别模型返回超长内容占用过多存储
+_MAX_RAW_RESPONSE_LEN = 50000
+
 
 class AIExtractError(Exception):
     """AI 提取失败（所有模型都不可用/解析失败）。"""
@@ -155,11 +158,14 @@ def call_vision_model(model_cfg: dict, prompt: str, images: list) -> dict:
         raise AIExtractError(f"模型无返回内容: {json.dumps(data, ensure_ascii=False)[:300]}")
     answer = (choices[0].get("message") or {}).get("content") or ""
     usage = data.get("usage") or {}
+    # 完整原始响应文本（未解析的 HTTP body），供前端「查看原始返回」按钮展示，
+    # 便于排查模型输出异常/JSON解析失败等问题；按长度截断避免占用过多存储
+    raw_response = resp.text[:_MAX_RAW_RESPONSE_LEN] if resp.text else ""
     try:
         fields = normalize_fields(_parse_json_answer(answer))
     except (json.JSONDecodeError, ValueError) as e:
         raise AIExtractError(f"模型输出非合法JSON: {e}; 原文: {answer[:300]}")
-    return {"fields": fields, "usage": usage, "raw": answer}
+    return {"fields": fields, "usage": usage, "raw": answer, "raw_response": raw_response}
 
 
 def extract_fields_from_pdf(db, pdf_bytes: bytes) -> dict:
@@ -175,6 +181,7 @@ def extract_fields_from_pdf(db, pdf_bytes: bytes) -> dict:
           "duration_ms": int,
           "fallback_used": bool,   # 是否发生了降级
           "errors": [str],         # 降级过程中每个失败模型的错误
+          "raw_response": str,     # 最终成功那次调用的完整原始响应文本（未解析）
         }
     失败抛 AIExtractError。
     """
@@ -204,6 +211,7 @@ def extract_fields_from_pdf(db, pdf_bytes: bytes) -> dict:
                 "duration_ms": int((time.time() - start) * 1000),
                 "fallback_used": idx > 0,
                 "errors": errors,
+                "raw_response": result.get("raw_response", ""),
             }
         except Exception as e:
             err = f"[{m.get('name') or m.get('model')}] {e}"

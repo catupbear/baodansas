@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>销售合同（含保密协议）</title>
+<style>
+  @page {
+    size: A4;
+    margin: 2.5cm 2cm;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "SimSun", "宋体", "Noto Serif CJK SC", serif;
+    font-size: 14px;
+    line-height: 2;
+    color: #222;
+    background: #f5f5f5;
+    padding: 20px;
+  }
+  .contract {
+    max-width: 794px;
+    margin: 0 auto;
+    background: #fff;
+    padding: 60px 70px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  .contract-title {
+    text-align: center;
+    font-size: 22px;
+    font-weight: bold;
+    letter-spacing: 4px;
+    margin-bottom: 6px;
+    font-family: "SimHei", "黑体", sans-serif;
+  }
+  .contract-subtitle {
+    text-align: center;
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 30px;
+  }
+  .contract-no {
+    text-align: right;
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 20px;
+  }
+  .section-title {
+    font-family: "SimHei", "黑体", sans-serif;
+    font-size: 15px;
+    font-weight: bold;
+    margin: 28px 0 10px 0;
+    padding-left: 0;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 4px;
+  }
+  .article {
+    margin-bottom: 6px;
+    text-indent: 2em;
+    text-align: justify;
+  }
+  .article-title {
+    font-weight: bold;
+    text-indent: 0;
+    margin-top: 14px;
+    margin-bottom: 2px;
+  }
+  .sub-item {
+    text-indent: 3em;
+    margin-bottom: 2px;
+  }
+  .party-info {
+    margin: 10px 0;
+    line-height: 2.2;
+  }
+  .party-info .label {
+    display: inline-block;
+    width: 100px;
+    text-align: justify;
+    text-align-last: justify;
+  }
+  .blank {
+    display: inline-block;
+    min-width: 180px;
+    border-bottom: 1px solid #333;
+    margin: 0 4px;
+    text-align: center;
+    color: #999;
+    font-size: 13px;
+  }
+  .blank-short {
+    min-width: 80px;
+  }
+  .sign-area {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 50px;
+    page-break-inside: avoid;
+  }
+  .sign-block {
+    width: 45%;
+    line-height: 2.8;
+  }
+  .sign-block .label {
+    display: inline-block;
+    width: 120px;
+  }
+  .divider {
+    border: none;
+    border-top: 2px solid #333;
+    margin: 40px 0 30px 0;
+  }
+  .highlight {
+    font-weight: bold;
+  }
+  .confidential-tag {
+    display: inline-block;
+    background: #c0392b;
+    color: #fff;
+    font-size: 12px;
+    padding: 2px 10px;
+    border-radius: 3px;
+    letter-spacing: 2px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .note {
+    font-size: 12px;
+    color: #999;
+    text-indent: 2em;
+    margin-top: 4px;
+  }
+  .appendix-title {
+    text-align: center;
+    font-size: 18px;
+    font-weight: bold;
+    font-family: "SimHei", "黑体", sans-serif;
+    margin: 40px 0 20px 0;
+    letter-spacing: 3px;
+  }
+
+  @media print {
+    body { background: #fff; padding: 0; }
+    .contract { box-shadow: none; padding: 0; max-width: 100%; }
+    .no-print { display: none; }
+  }
+
+  .print-btn {
+    position: fixed;
+    top: 20px;
+    right: 30px;
+    padding: 10px 24px;
+    background: #2c3e50;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  .print-btn:hover { background: #1a252f; }
+</style>
+</head>
+<body>
+
+<button class="print-btn no-print" onclick="window.print()">打印 / 导出PDF</button>
+
+<div class="contract">
+
+  <!-- 合同编号 -->
+  <div class="contract-no">合同编号：<span class="blank blank-short">&nbsp;</span></div>
+
+  <!-- 标题 -->
+  <div class="contract-title">软件服务销售合同</div>
+  <div class="contract-subtitle">（含保密协议）</div>
+
+  <!-- 双方信息 -->
+  <div class="party-info">
+    <p><span class="label">甲方</span>（客户方）：<span class="blank">&nbsp;</span></p>
+    <p><span class="label">统一社会信用代码</span>：<span class="blank">&nbsp;</span></p>
+    <p><span class="label">法定代表人</span>：<span class="blank">&nbsp;</span></p>
+    <p><span class="label">联系地址</span>：<span class="blank">&nbsp;</span></p>
+    <p><span class="label">联系电话</span>：<span class="blank">&nbsp;</span></p>
+  </div>
+  <div class="party-info">
+    <p><span class="label">乙方</span>（系统提供方）：<span class="blank">&nbsp;</span></p>
+    <p><span class="label">统一社会信用代码</span>：<span class="blank">&nbsp;</span></p>
+    <p><span class="label">法定代表人</span>：<span class="blank">&nbsp;</span></p>
+    <p><span class="label">联系地址</span>：<span class="blank">&nbsp;</span></p>
+    <p><span class="label">联系电话</span>：<span class="blank">&nbsp;</span></p>
+  </div>
+
+  <p class="article">鉴于乙方拥有保单台账管理系统（以下简称"本系统"）的合法经营权和技术服务能力，甲方有意向使用本系统进行保单信息的数字化管理。双方本着平等互利、诚实信用的原则，经友好协商，就乙方向甲方提供软件服务事宜达成如下协议：</p>
+
+  <!-- 第一条 服务内容 -->
+  <div class="section-title">第一条　服务内容与范围</div>
+  <p class="article">1.1 乙方向甲方提供"午虎AI保单台账系统"软件服务（SaaS模式），包括保单智能识别、台账管理、数据导出及相关增值功能。</p>
+  <p class="article">1.2 具体服务内容及功能范围由双方另行协商确定。</p>
+
+  <!-- 第二条 服务期限 -->
+  <div class="section-title">第二条　服务期限</div>
+  <p class="article">2.1 服务期限自 <span class="blank blank-short">&nbsp;</span> 年 <span class="blank blank-short">&nbsp;</span> 月 <span class="blank blank-short">&nbsp;</span> 日起至 <span class="blank blank-short">&nbsp;</span> 年 <span class="blank blank-short">&nbsp;</span> 月 <span class="blank blank-short">&nbsp;</span> 日止。</p>
+  <p class="article">2.2 合同到期后如需继续使用，双方可协商续签。</p>
+
+  <!-- 第三条 费用与支付 -->
+  <div class="section-title">第三条　费用与支付</div>
+  <p class="article">3.1 服务费用：人民币 <span class="blank">&nbsp;</span> 元/年（大写：<span class="blank">&nbsp;</span>）。</p>
+  <p class="article">3.2 支付方式：甲方应在合同签署后 <span class="blank blank-short">&nbsp;</span> 个工作日内，将首年服务费用一次性支付至乙方指定账户。续期费用在每个服务周期届满前15日内支付。</p>
+  <p class="article">3.3 乙方收款账户信息：</p>
+  <p class="sub-item">开户名称：<span class="blank">&nbsp;</span></p>
+  <p class="sub-item">开户银行：<span class="blank">&nbsp;</span></p>
+  <p class="sub-item">银行账号：<span class="blank">&nbsp;</span></p>
+  <p class="article">3.4 乙方在收到款项后向甲方开具等额普通发票。</p>
+
+  <!-- 第四条 乙方权利与义务 -->
+  <div class="section-title">第四条　乙方权利与义务</div>
+  <p class="article">4.1 乙方应按照本合同约定向甲方提供稳定、安全的软件服务。</p>
+  <p class="article">4.2 乙方应在工作日提供技术支持服务。</p>
+
+  <p class="article">4.3 服务到期未续费的，系统将自动停止服务。</p>
+
+  <!-- 第五条 甲方权利与义务 -->
+  <div class="section-title">第五条　甲方权利与义务</div>
+  <p class="article">5.1 甲方有权在服务期限内正常使用本系统的全部约定功能。</p>
+  <p class="article">5.2 甲方应按时足额支付服务费用。</p>
+  <p class="article">5.3 甲方应妥善保管系统账号和密码，因甲方原因导致账号泄露而造成的损失由甲方自行承担。</p>
+  <p class="article">5.4 甲方不得对本系统进行反编译、反汇编或任何形式的逆向工程。</p>
+  <p class="article">5.5 甲方保证其上传至系统的保单文件及相关数据均为合法取得，不侵犯任何第三方权益。</p>
+
+  <!-- 第六条 数据权属与处理 -->
+  <div class="section-title">第六条　数据权属与处理</div>
+  <p class="article">6.1 甲方上传至系统的原始数据（包括保单PDF文件、客户信息等）的所有权归甲方所有。乙方仅在提供本合同约定服务所必需的范围内处理上述数据。</p>
+  <p class="article">6.2 未经甲方书面同意，乙方不得将甲方数据用于本合同约定服务以外的任何用途，包括但不限于向第三方提供、用于商业推广等。为实现本合同约定的AI智能识别功能，乙方可将必要数据传输至合作的AI服务提供商进行处理，甲方对此知悉并同意。</p>
+
+  <p class="article">6.3 乙方因提供服务而生成的脱敏统计数据（不包含任何可识别客户个人信息）的知识产权归乙方所有。</p>
+
+  <!-- 第七条 保密信息的定义 -->
+  <div class="section-title">第七条　保密信息的定义</div>
+  <p class="article">7.1 本合同所称"保密信息"是指一方（"披露方"）向另一方（"接收方"）披露的、与本合同履行相关的、不为公众所知悉的信息，包括但不限于：</p>
+  <p class="sub-item highlight">（1）客户保单信息：投保人姓名、被保险人姓名、身份证号码、联系方式、保单号、保险金额、保险期限、车辆信息（车牌号、车架号、发动机号）等一切与保单相关的信息；</p>
+  <p class="sub-item highlight">（2）客户个人信息：姓名、身份证号、手机号、地址、银行账号等个人身份识别信息及财产信息；</p>
+  <p class="sub-item">（3）商业秘密：经营策略、客户名单、渠道信息、定价策略、财务数据、业务数据等商业经营信息；</p>
+  <p class="sub-item">（4）双方在合作过程中产生的往来函件、会议记录、协商内容等。</p>
+  <p class="article">7.2 以下信息不属于保密信息：</p>
+  <p class="sub-item">（1）在披露时已为公众所知或在披露后非因接收方过错而成为公众所知的信息；</p>
+  <p class="sub-item">（2）接收方在接收前已合法持有的信息（有书面证据证明）；</p>
+  <p class="sub-item">（3）接收方从有权披露的第三方合法获得的信息；</p>
+  <p class="sub-item">（4）法律法规或监管机构依法要求披露的信息（但接收方应在法律允许的范围内提前通知披露方）。</p>
+
+  <!-- 第八条 保密义务 -->
+  <div class="section-title">第八条　保密义务</div>
+  <p class="article highlight">8.1 乙方承诺对甲方的全部客户保单信息及个人信息承担严格保密义务，具体包括：</p>
+  <p class="sub-item">（1）不得向任何第三方（包括但不限于乙方的关联公司、合作伙伴、潜在客户）披露甲方客户的保单信息和个人信息；</p>
+  <p class="sub-item">（2）不得将甲方客户信息用于本合同约定服务以外的任何目的；</p>
+  <p class="sub-item">（3）不得复制、下载、转存甲方客户信息至乙方提供服务所必需的系统之外的任何载体；</p>
+  <p class="sub-item">（4）不得利用甲方客户信息直接或间接联系甲方的客户，进行任何形式的营销、推广或商业活动。</p>
+  <p class="article">8.2 乙方应采取合理的技术措施和管理措施保护甲方数据安全，并将接触甲方保密信息的人员限制在最小必要范围内。</p>
+
+
+
+  <!-- 第九条 违约责任 -->
+  <div class="section-title">第九条　违约责任</div>
+  <p class="article">9.1 任何一方违反本合同约定的，违约方应承担相应的违约责任，赔偿守约方因此遭受的直接损失。</p>
+  <p class="article">9.2 任何一方违反本合同保密条款的，违约方应赔偿由此给守约方造成的损失。</p>
+
+  <!-- 第十条 保密期限 -->
+  <div class="section-title">第十条　保密期限</div>
+  <p class="article highlight">10.1 本合同项下的保密义务在合同有效期内及合同终止后持续有效。</p>
+
+  <!-- 第十一条 合同变更与解除 -->
+  <div class="section-title">第十一条　合同变更与解除</div>
+  <p class="article">11.1 本合同的变更须经双方协商一致，并签署书面变更协议。</p>
+  <p class="article">11.2 有下列情形之一的，任何一方有权书面通知对方解除本合同：</p>
+  <p class="sub-item">（1）对方严重违反本合同约定，经书面催告后15日内仍未改正的；</p>
+  <p class="sub-item">（2）对方被依法宣告破产、解散或被吊销营业执照的；</p>
+  <p class="sub-item">（3）因不可抗力致使本合同目的无法实现，持续超过60日的。</p>
+  <p class="article">11.3 合同解除不影响双方在本合同项下已产生的权利义务，保密义务在合同解除后继续有效。</p>
+
+  <!-- 第十二条 争议解决 -->
+  <div class="section-title">第十二条　争议解决</div>
+  <p class="article">12.1 因本合同引起的或与本合同有关的争议，双方应首先通过友好协商解决。</p>
+  <p class="article">12.2 协商不成的，任何一方均有权向乙方所在地有管辖权的人民法院提起诉讼。</p>
+
+  <!-- 第十三条 其他 -->
+  <div class="section-title">第十三条　其他约定</div>
+  <p class="article">13.1 本合同一式两份，甲乙双方各执一份，具有同等法律效力。</p>
+  <p class="article">13.2 本合同未尽事宜，双方可另行签署补充协议。</p>
+  <p class="article">13.3 本合同自双方法定代表人或授权代表签字并加盖公章之日起生效。</p>
+
+  <!-- 签署区 -->
+  <div class="sign-area">
+    <div class="sign-block">
+      <p><strong>甲方（盖章）：</strong></p>
+      <p>&nbsp;</p>
+      <p>&nbsp;</p>
+      <p><span class="label">法定代表人</span>（或授权代表）：</p>
+      <p>&nbsp;</p>
+      <p><span class="label">签署日期</span>：______年____月____日</p>
+    </div>
+    <div class="sign-block">
+      <p><strong>乙方（盖章）：</strong></p>
+      <p>&nbsp;</p>
+      <p>&nbsp;</p>
+      <p><span class="label">法定代表人</span>（或授权代表）：</p>
+      <p>&nbsp;</p>
+      <p><span class="label">签署日期</span>：______年____月____日</p>
+    </div>
+  </div>
+
+  <p class="note" style="margin-top:40px;">※ 本合同模板仅供参考，建议在正式签署前咨询专业法律顾问。</p>
+
+</div>
+
+</body>
+</html>
