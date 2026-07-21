@@ -3754,6 +3754,21 @@ def _extract_premium(text: str, fields: dict, company_short: str):
                     fields["保费合计"] = m.group(2)
                     break
 
+    # 华安"安车保"驾乘险等格式：保障项目表中保额带"元"、与保费空格分隔（非粘连），
+    # 整单仅一行带保费："意外伤害自费医疗补偿保险（全车共享） 30000元 330.0"。
+    # 仅在"保险费（人民币"表头之后的表格区域内找，遇到特约/合计/签章即停，
+    # 避免匹配到条款正文里"…100元 …"之类的叙述文字
+    if "保费合计" not in fields:
+        m_head = re.search(r'保险费[（(]人民币', text)
+        if m_head:
+            for line in text[m_head.end():].split('\n')[:40]:
+                if re.search(r'特别约定|保险费合计|签章|温馨提示', line):
+                    break
+                m = re.search(r'\d[\d,]*元\s+(\d{1,6}\.\d{1,2})\s*$', line.strip())
+                if m:
+                    fields["保费合计"] = m.group(1)
+                    break
+
     # 永安交强险等格式兜底："保险费合计"标签行本身是空模板（值在OCR错位后的别处），
     # 实际金额跟车船税一样以"大写金额+紧跟小写数字"形式散落在文中（如"玖佰伍拾元整
     # 950.00"），且往往不止一处（后面还有车船税"叁佰陆拾元整 360.00"）。取文中第一处
