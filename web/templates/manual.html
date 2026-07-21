@@ -358,7 +358,14 @@ createApp({
                 const j = await resp.json();
                 if (j.code === 0) {
                     sections.value = j.data.sections || [];
-                    if (sections.value.length) activeId.value = sections.value[0].id;
+                    // URL 的 hash 指向某个章节时优先用它（刷新/直接分享链接/前进后退都能定位到对应章节），
+                    // 不是有效章节 id 时才退回第一个章节
+                    const hashId = decodeURIComponent(location.hash.replace(/^#/, ''));
+                    if (hashId && sections.value.some(s => s.id === hashId)) {
+                        activeId.value = hashId;
+                    } else if (sections.value.length) {
+                        activeId.value = sections.value[0].id;
+                    }
                 }
             } catch (e) { console.error('加载使用手册失败', e); }
         }
@@ -499,6 +506,10 @@ createApp({
         }
 
         function selectSection(id) {
+            // 切章节时把 id 写进 URL hash，这样刷新/分享链接/浏览器前进后退都能停在
+            // 当前章节，不用每次都从第一章节开始翻。用 replaceState 而不是直接改
+            // location.hash，避免触发额外的 hashchange 事件和多余的历史记录堆栈
+            history.replaceState(null, '', '#' + encodeURIComponent(id));
             if (editMode.value) {
                 syncEditorToModel();
                 activeId.value = id;
