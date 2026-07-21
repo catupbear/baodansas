@@ -1826,6 +1826,12 @@ def check_related_condition(cond: dict, fields: dict, related_ctx, self_record_i
             return op == "not_exists"
         entries = ((related_ctx or {}).get(match_by) or {}).get(key_val) or []
         rule_ptype = str(cond.get("policy_type") or "").strip()
+        # 记录自身险种与条件险种匹配时，自己也算一张关联单——如驾乘险单判断
+        # 「同车存在驾乘险（带驾乘险出单）」应命中自身，否则驾乘险单上的该类
+        # 条件因自身排除永远不满足，比例恒落默认值（2026-07-21 文十七反馈）
+        self_ptype = str(fields.get("险种类型") or fields.get("险种") or "").strip()
+        if rule_ptype and self_ptype and _related_policy_type_match(rule_ptype, self_ptype):
+            return op == "exists"
         try:
             days = int(cond.get("days") or 7)
         except (ValueError, TypeError):
