@@ -5326,14 +5326,19 @@ def export_excel():
                     headers = list(field_names)
                 ws.append(headers)
 
-                # 排序：按车牌，相同车牌按险种（商业险→交强险→驾意险）
-                _type_order = {"商业险": 0, "交强险": 1, "驾意险": 2}
-                def _normal_sort_key(inv):
-                    fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
-                    plate = fields.get("车牌号", "") or fields.get("车牌", "") or ""
-                    policy_type = fields.get("险种", "") or fields.get("险种类型", "") or ""
-                    return (plate, _type_order.get(policy_type, 99))
-                invoices.sort(key=_normal_sort_key)
+                # 排序：识别记录导出（preserve_order=True）跟随传入顺序——前端已按用户所选
+                # 排序（如创建时间）排好、且同车牌记录已聚组并按险种排序，这里再按车牌整体
+                # 重排会把时间排序打乱，导致导出 Excel 与列表顺序不一致（与合并导出分支
+                # 跟随 _order 的行为对齐）。手动上传导出无此标志，保留按车牌+险种排序，
+                # 使同车保单相邻（商业险→交强险→驾意险）。
+                if not body.get("preserve_order"):
+                    _type_order = {"商业险": 0, "交强险": 1, "驾意险": 2}
+                    def _normal_sort_key(inv):
+                        fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
+                        plate = fields.get("车牌号", "") or fields.get("车牌", "") or ""
+                        policy_type = fields.get("险种", "") or fields.get("险种类型", "") or ""
+                        return (plate, _type_order.get(policy_type, 99))
+                    invoices.sort(key=_normal_sort_key)
                 for inv in invoices:
                     fields = inv.get("fields", {}) if isinstance(inv, dict) else {}
                     if has_config and not skip_config:
