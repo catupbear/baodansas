@@ -317,6 +317,7 @@ def run_ai_check(db, record_id: int) -> dict:
             "prompt_tokens": extract["prompt_tokens"],
             "completion_tokens": extract["completion_tokens"],
             "duration_ms": extract["duration_ms"],
+            "raw_response": extract.get("raw_response", ""),  # 大模型原始返回文本，供排查用
         })
 
         try:

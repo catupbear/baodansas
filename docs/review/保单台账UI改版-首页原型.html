@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>午虎AI保单台账 · 首页改版原型 v4</title>
+<style>
+/* ============ 基础 ============ */
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --bg: #f7f6f3;
+  --card: #ffffff;
+  --border: #e8e5e0;
+  --text: #1f2937;
+  --text-2: #6b7280;
+  --text-3: #9ca3af;
+  --success: #059669;
+  --success-bg: #ecfdf5;
+  --warning: #d97706;
+  --warning-bg: #fffbeb;
+  --danger: #dc2626;
+  --danger-bg: #fef2f2;
+  --info: #2563eb;
+  --info-bg: #eff6ff;
+  --radius: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+/* ---- 主题A：暖橙（现行风格延续） ---- */
+body[data-theme="orange"] {
+  --primary: #ea580c; --primary-dark: #c2410c;
+  --primary-bg: #fff7ed; --primary-border: #fed7aa;
+  --nav-grad: linear-gradient(135deg, #7c2d12 0%, #c2410c 55%, #ea580c 100%);
+  --nav-shadow: rgba(124,45,18,0.25);
+}
+/* ---- 主题B：商务蓝 ---- */
+body[data-theme="blue"] {
+  --primary: #2563eb; --primary-dark: #1d4ed8;
+  --primary-bg: #eff6ff; --primary-border: #bfdbfe;
+  --nav-grad: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 55%, #3b82f6 100%);
+  --nav-shadow: rgba(30,58,138,0.25);
+  --bg: #f5f7fa; --border: #e5e8ee;
+}
+/* ---- 主题C：青绿 ---- */
+body[data-theme="teal"] {
+  --primary: #0d9488; --primary-dark: #0f766e;
+  --primary-bg: #f0fdfa; --primary-border: #99f6e4;
+  --nav-grad: linear-gradient(135deg, #134e4a 0%, #0f766e 55%, #14b8a6 100%);
+  --nav-shadow: rgba(19,78,74,0.25);
+  --bg: #f4f8f7; --border: #e2e9e7;
+}
+/* ---- 主题D：石墨 + 金橙点缀（浅色顶栏变深灰） ---- */
+body[data-theme="dark"] {
+  --primary: #f59e0b; --primary-dark: #b45309;
+  --primary-bg: #fffbeb; --primary-border: #fde68a;
+  --nav-grad: linear-gradient(135deg, #111827 0%, #1f2937 60%, #374151 100%);
+  --nav-shadow: rgba(17,24,39,0.3);
+  --bg: #f5f5f4; --border: #e7e5e4;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  min-height: 100vh;
+}
+button { font-family: inherit; cursor: pointer; border: none; background: none; }
+input, select { font-family: inherit; outline: none; }
+
+/* ============ 视角切换：默认客户视角，超管专属元素隐藏 ============ */
+body:not(.role-admin) .sa-only { display: none !important; }
+
+/* ============ 顶部导航 ============ */
+.nav {
+  background: var(--nav-grad);
+  color: #fff;
+  position: sticky; top: 0; z-index: 50;
+  box-shadow: 0 2px 12px var(--nav-shadow);
+}
+.nav-inner {
+  max-width: 1440px; margin: 0 auto;
+  display: flex; align-items: center; gap: 16px;
+  padding: 0 24px; height: 56px;
+}
+.nav-logo { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.nav-logo .logo-box {
+  width: 32px; height: 32px; border-radius: 9px;
+  background: rgba(255,255,255,0.2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px;
+}
+.nav-logo h1 { font-size: 16px; font-weight: 700; letter-spacing: 0.3px; white-space: nowrap; }
+.admin-mark {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #fff; color: #dc2626; border-radius: 7px;
+  padding: 3px 9px; font-size: 11.5px; font-weight: 800;
+  white-space: nowrap; letter-spacing: .5px;
+}
+
+.nav-tabs { display: flex; align-items: center; gap: 2px; height: 100%; margin-left: 4px; }
+.nav-tab {
+  position: relative;
+  height: 100%; padding: 0 15px;
+  display: flex; align-items: center; gap: 5px;
+  color: rgba(255,255,255,0.75);
+  font-size: 14px; font-weight: 500;
+  transition: color .15s;
+  white-space: nowrap;
+}
+.nav-tab:hover { color: #fff; }
+.nav-tab.active { color: #fff; font-weight: 700; }
+.nav-tab.active::after {
+  content: ''; position: absolute; left: 12px; right: 12px; bottom: 0;
+  height: 3px; border-radius: 3px 3px 0 0; background: #fff;
+}
+.nav-badge {
+  min-width: 17px; height: 17px; padding: 0 5px;
+  border-radius: 999px; background: #facc15; color: #713f12;
+  font-size: 10px; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.nav-badge.red { background: #ef4444; color: #fff; }
+
+.nav-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.quota-pill {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 999px; padding: 5px 12px;
+  font-size: 12px; color: rgba(255,255,255,0.92);
+  white-space: nowrap;
+}
+.quota-pill b { color: #fde68a; font-weight: 700; }
+
+/* 头像下拉 */
+.user-menu { position: relative; }
+.user-btn {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 999px; padding: 4px 12px 4px 4px;
+  color: #fff; font-size: 13px; transition: background .15s;
+}
+.user-btn:hover { background: rgba(255,255,255,0.24); }
+.avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: #fff; color: var(--primary-dark);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 13px;
+}
+.user-btn .caret { font-size: 10px; opacity: .8; }
+.dropdown {
+  position: absolute; right: 0; top: calc(100% + 10px);
+  width: 232px; background: #fff; border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.16);
+  border: 1px solid var(--border);
+  padding: 6px; display: none; z-index: 100;
+  animation: pop .14s ease;
+}
+.dropdown.open { display: block; }
+@keyframes pop { from { opacity:0; transform: translateY(-6px); } to { opacity:1; transform:none; } }
+.dd-head { padding: 12px 12px 10px; border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+.dd-head .name { font-weight: 700; font-size: 14px; color: var(--text); }
+.dd-head .sub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.dd-quota { margin: 8px 12px 6px; }
+.dd-quota .bar { height: 6px; border-radius: 3px; background: #f3f4f6; overflow: hidden; }
+.dd-quota .bar i { display: block; height: 100%; width: 64%; background: var(--primary); border-radius: 3px; }
+.dd-quota .txt { font-size: 11.5px; color: var(--text-3); margin-top: 4px; display: flex; justify-content: space-between; }
+.dd-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 9px 12px; border-radius: 9px;
+  font-size: 13.5px; color: var(--text); text-align: left;
+  transition: background .12s; text-decoration: none;
+}
+.dd-item:hover { background: var(--primary-bg); color: var(--primary-dark); }
+.dd-item .ico { width: 18px; text-align: center; font-size: 15px; }
+.dd-item.buy { color: #b45309; font-weight: 600; }
+.dd-sep { height: 1px; background: var(--border); margin: 6px 4px; }
+.dd-item.logout { color: var(--danger); }
+.dd-item.logout:hover { background: var(--danger-bg); }
+
+/* ============ 主体 ============ */
+.main { max-width: 1440px; margin: 0 auto; padding: 20px 24px 48px; }
+
+/* 搜索区 */
+.search-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.search-box {
+  flex: 1; min-width: 300px; max-width: 520px;
+  display: flex; align-items: center; gap: 10px;
+  background: var(--card); border: 1.5px solid var(--border);
+  border-radius: 999px; padding: 0 18px; height: 44px;
+  transition: border-color .15s, box-shadow .15s;
+  box-shadow: var(--shadow);
+}
+.search-box:focus-within { border-color: var(--primary); box-shadow: 0 0 0 4px var(--primary-bg); }
+.search-box .ico { color: var(--text-3); font-size: 16px; }
+.search-box input {
+  flex: 1; border: none; font-size: 14.5px; background: transparent; color: var(--text);
+}
+.search-box input::placeholder { color: var(--text-3); }
+
+.date-chips { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.chip {
+  padding: 7px 13px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--card);
+  font-size: 13px; color: var(--text-2); transition: all .13s;
+  white-space: nowrap;
+}
+.chip:hover { border-color: var(--primary-border); color: var(--primary-dark); }
+.chip.active {
+  background: var(--primary-bg); border-color: var(--primary);
+  color: var(--primary-dark); font-weight: 600;
+}
+.filter-btn {
+  display: flex; align-items: center; gap: 7px;
+  padding: 0 18px; height: 44px; border-radius: 999px;
+  background: var(--card); border: 1.5px solid var(--border);
+  font-size: 14px; font-weight: 600; color: var(--text-2);
+  transition: all .15s; box-shadow: var(--shadow);
+  white-space: nowrap;
+}
+.filter-btn:hover { border-color: var(--primary); color: var(--primary-dark); }
+.filter-btn .count {
+  min-width: 18px; height: 18px; border-radius: 999px;
+  background: var(--primary); color: #fff; font-size: 11px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0 5px;
+}
+
+/* 已选条件标签 */
+.active-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.f-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--primary-bg); border: 1px solid var(--primary-border);
+  color: var(--primary-dark); border-radius: 999px;
+  padding: 4px 6px 4px 12px; font-size: 12.5px; font-weight: 500;
+}
+.f-tag .x {
+  width: 18px; height: 18px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--primary-dark); font-size: 12px; transition: background .12s;
+}
+.f-tag .x:hover { background: rgba(0,0,0,0.08); }
+.clear-all { font-size: 12.5px; color: var(--text-3); padding: 4px 8px; }
+.clear-all:hover { color: var(--danger); }
+
+/* ============ 记录卡片 ============ */
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.card-head {
+  display: flex; align-items: center;
+  padding: 0 16px; border-bottom: 1px solid var(--border);
+  min-height: 52px; gap: 2px; flex-wrap: wrap;
+}
+.status-tab {
+  position: relative; padding: 16px 12px;
+  font-size: 14px; font-weight: 500; color: var(--text-2);
+  display: flex; align-items: center; gap: 6px;
+  transition: color .13s; white-space: nowrap;
+}
+.status-tab:hover { color: var(--text); }
+.status-tab.active { color: var(--primary-dark); font-weight: 700; }
+.status-tab.active::after {
+  content: ''; position: absolute; left: 8px; right: 8px; bottom: -1px;
+  height: 2.5px; border-radius: 2px; background: var(--primary);
+}
+.status-tab .num {
+  font-size: 11.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+  background: #f3f4f6; color: var(--text-3);
+}
+.status-tab.active .num { background: var(--primary-bg); color: var(--primary-dark); }
+.status-tab.warn .num { background: var(--warning-bg); color: var(--warning); }
+.status-tab.bad .num { background: var(--danger-bg); color: var(--danger); }
+.status-tab.gray .num { background: #f3f4f6; color: var(--text-3); }
+.np-check {
+  display: flex; align-items: center; gap: 6px; margin-left: 10px;
+  font-size: 12px; color: var(--text-2); cursor: pointer; user-select: none; white-space: nowrap;
+}
+
+.head-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 9px;
+  font-size: 13.5px; font-weight: 600; transition: all .15s;
+}
+.btn-primary { background: var(--primary); color: #fff; box-shadow: 0 2px 8px var(--nav-shadow); }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-ghost { background: #fff; border: 1px solid var(--border); color: var(--text-2); }
+.btn-ghost:hover { border-color: var(--primary-border); color: var(--primary-dark); background: var(--primary-bg); }
+
+/* 批量操作栏（勾选后出现） */
+.batch-bar {
+  display: none; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 16px; background: var(--primary-bg);
+  border-bottom: 1px solid var(--primary-border);
+}
+.batch-bar.show { display: flex; animation: pop .15s ease; }
+.batch-bar .sel-info { font-size: 13px; color: var(--primary-dark); font-weight: 700; }
+.batch-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  border: 1px solid; transition: all .13s; background: #fff;
+}
+.batch-btn.orange { color: var(--primary-dark); border-color: var(--primary-border); }
+.batch-btn.orange:hover { background: var(--primary); color: #fff; }
+.batch-btn.green { color: var(--success); border-color: #a7f3d0; }
+.batch-btn.green:hover { background: var(--success); color: #fff; }
+.batch-btn.purple { color: #6d28d9; border-color: #ddd6fe; }
+.batch-btn.purple:hover { background: #7c3aed; color: #fff; }
+.batch-clear { font-size: 12.5px; color: var(--text-3); margin-left: auto; }
+.batch-clear:hover { color: var(--danger); }
+
+/* 表格 */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 1200px; }
+thead th {
+  text-align: left; padding: 11px 14px;
+  font-size: 12.5px; font-weight: 600; color: var(--text-3);
+  background: #fafaf8; border-bottom: 1px solid var(--border);
+  white-space: nowrap; user-select: none;
+}
+thead th.sortable { cursor: pointer; }
+thead th.sortable:hover { color: var(--primary-dark); }
+thead th .arr { font-size: 10px; margin-left: 2px; }
+tbody td {
+  padding: 12px 14px; border-bottom: 1px solid #f1efec;
+  font-size: 13.5px; color: var(--text); white-space: nowrap;
+}
+tbody tr { transition: background .1s; }
+tbody tr:hover { background: var(--primary-bg); }
+tbody tr:last-child td { border-bottom: none; }
+.plate { font-weight: 700; font-variant-numeric: tabular-nums; }
+.muted { color: var(--text-3); font-size: 12.5px; }
+.money { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+}
+.tag.ok { background: var(--success-bg); color: var(--success); }
+.tag.warn { background: var(--warning-bg); color: var(--warning); }
+.tag.bad { background: var(--danger-bg); color: var(--danger); }
+.tag.gray { background: #f3f4f6; color: var(--text-3); }
+.tag.type { background: var(--info-bg); color: var(--info); font-weight: 500; }
+.tag.type2 { background: #f5f3ff; color: #7c3aed; font-weight: 500; }
+.tag.merge { background: var(--primary-bg); color: var(--primary-dark); font-weight: 700; cursor: pointer; }
+
+/* 合并行的子记录 */
+tr.child-row { background: #fbfaf8; display: none; }
+tr.child-row.show { display: table-row; }
+tr.child-row td { padding: 9px 14px; font-size: 12.5px; color: var(--text-2); }
+tr.child-row td:first-child { border-left: 3px solid var(--primary-border); }
+
+.row-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+/* 行操作：图标+文字，客户一眼看懂 */
+.op-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 9px; border-radius: 7px;
+  font-size: 12px; color: var(--text-2);
+  border: 1px solid var(--border); background: #fff;
+  transition: all .12s; white-space: nowrap;
+}
+.op-btn:hover { background: var(--primary-bg); color: var(--primary-dark); border-color: var(--primary-border); }
+.op-btn.purple:hover { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
+.op-btn.hl { border-color: var(--primary-border); color: var(--primary-dark); font-weight: 600; }
+.op-btn.more { color: var(--text-3); }
+.op-mini {
+  padding: 2px 8px; border-radius: 6px; font-size: 11.5px;
+  color: var(--text-3); border: 1px solid var(--border); background: #fff;
+}
+.op-mini:hover { color: var(--primary-dark); border-color: var(--primary-border); }
+
+/* 行内「更多」下拉菜单（全局共享一个，JS 定位到按钮旁） */
+.more-menu {
+  position: fixed; z-index: 300; display: none;
+  width: 200px; background: #fff; border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 36px rgba(0,0,0,0.16);
+  padding: 5px;
+}
+.more-menu.open { display: block; animation: pop .13s ease; }
+.mm-item {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%; padding: 9px 11px; border-radius: 8px;
+  font-size: 13px; color: var(--text); text-align: left;
+  transition: background .12s;
+}
+.mm-item:hover { background: var(--primary-bg); color: var(--primary-dark); }
+.mm-item.red { color: var(--danger); }
+.mm-item.red:hover { background: var(--danger-bg); }
+.mm-item .ico { width: 16px; text-align: center; }
+.mm-item .desc { margin-left: auto; font-size: 11px; color: var(--text-3); }
+
+/* 分页 */
+.pager {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-top: 1px solid var(--border);
+  font-size: 13px; color: var(--text-2); flex-wrap: wrap; gap: 8px;
+}
+.pager-btns { display: flex; gap: 4px; }
+.pg {
+  min-width: 30px; height: 30px; padding: 0 8px; border-radius: 8px;
+  border: 1px solid var(--border); background: #fff;
+  font-size: 13px; color: var(--text-2);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.pg.cur { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 700; }
+.pg:hover:not(.cur) { border-color: var(--primary-border); color: var(--primary-dark); }
+
+/* ============ 筛选抽屉 ============ */
+.drawer-mask {
+  position: fixed; inset: 0; background: rgba(15,23,42,0.45);
+  backdrop-filter: blur(2px); z-index: 90;
+  opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.drawer-mask.open { opacity: 1; pointer-events: auto; }
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 95;
+  width: min(420px, 92vw); background: #fff;
+  box-shadow: -12px 0 40px rgba(0,0,0,0.14);
+  transform: translateX(105%); transition: transform .25s ease;
+  display: flex; flex-direction: column;
+}
+.drawer.open { transform: none; }
+.drawer-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 22px; border-bottom: 1px solid var(--border);
+}
+.drawer-head h3 { font-size: 16px; font-weight: 700; }
+.drawer-close {
+  width: 32px; height: 32px; border-radius: 9px; font-size: 16px;
+  color: var(--text-3); display: flex; align-items: center; justify-content: center;
+}
+.drawer-close:hover { background: #f3f4f6; color: var(--text); }
+.drawer-body { flex: 1; overflow-y: auto; padding: 20px 22px; }
+.f-group { margin-bottom: 20px; }
+.f-label { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 9px; display: flex; align-items: center; gap: 6px; }
+.f-label .hint { font-weight: 400; font-size: 12px; color: var(--text-3); }
+.f-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.f-select, .f-input {
+  width: 100%; padding: 9px 12px; border: 1px solid var(--border);
+  border-radius: 9px; font-size: 13.5px; background: #fff; color: var(--text);
+  transition: border-color .13s;
+}
+.f-select:focus, .f-input:focus { border-color: var(--primary); }
+.opt-chip {
+  padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border);
+  background: #fff; font-size: 13px; color: var(--text-2); transition: all .13s;
+}
+.opt-chip:hover { border-color: var(--primary-border); }
+.opt-chip.on {
+  background: var(--primary-bg); border-color: var(--primary);
+  color: var(--primary-dark); font-weight: 600;
+}
+.f-range { display: flex; align-items: center; gap: 8px; }
+.f-range .f-input { flex: 1; min-width: 0; }
+.f-check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-2); cursor: pointer; }
+.f-check + .f-check { margin-top: 8px; }
+.adv-toggle {
+  width: 100%; text-align: center; padding: 10px;
+  font-size: 13px; color: var(--text-3); border-top: 1px dashed var(--border);
+}
+.adv-toggle:hover { color: var(--primary-dark); }
+.drawer-foot {
+  display: flex; gap: 10px; padding: 16px 22px;
+  border-top: 1px solid var(--border);
+}
+.drawer-foot .btn { flex: 1; justify-content: center; padding: 11px; font-size: 14px; }
+
+/* ============ 原型控制条（主题/视角切换） ============ */
+.proto-bar {
+  position: fixed; left: 16px; bottom: 16px; z-index: 400;
+  background: #1f2937; color: #fff; border-radius: 12px;
+  padding: 10px 14px; font-size: 12px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+  display: flex; flex-direction: column; gap: 8px; opacity: .95;
+}
+.proto-bar .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.proto-bar .lb { color: #9ca3af; width: 34px; flex-shrink: 0; }
+.theme-dot {
+  width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent;
+  transition: transform .12s;
+}
+.theme-dot:hover { transform: scale(1.15); }
+.theme-dot.cur { border-color: #fff; }
+.theme-dot.t-orange { background: linear-gradient(135deg,#c2410c,#ea580c); }
+.theme-dot.t-blue { background: linear-gradient(135deg,#1d4ed8,#3b82f6); }
+.theme-dot.t-teal { background: linear-gradient(135deg,#0f766e,#14b8a6); }
+.theme-dot.t-dark { background: linear-gradient(135deg,#111827,#f59e0b); }
+.role-btn {
+  padding: 4px 12px; border-radius: 999px; font-size: 12px;
+  background: #374151; color: #d1d5db; transition: all .13s;
+}
+.role-btn.cur { background: #f59e0b; color: #111827; font-weight: 700; }
+.proto-bar .tip { color: #6b7280; font-size: 11px; }
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .nav-inner { padding: 0 14px; gap: 10px; overflow-x: auto; }
+  .quota-pill { display: none; }
+  .nav-tab { padding: 0 10px; font-size: 13px; }
+  .main { padding: 14px 12px 40px; }
+  .search-box { min-width: 0; width: 100%; }
+  .date-chips { overflow-x: auto; width: 100%; padding-bottom: 2px; flex-wrap: nowrap; }
+  .filter-btn { height: 40px; }
+}
+</style>
+</head>
+<body data-theme="orange">
+
+<!-- ============ 顶部导航（精简版） ============ -->
+<header class="nav">
+  <div class="nav-inner">
+    <div class="nav-logo">
+      <div class="logo-box">🛡️</div>
+      <h1>午虎AI保单台账</h1>
+      <!-- 内部管理标识：仅超管视角显示（对应现网 isSuperAdmin 徽标） -->
+      <span class="admin-mark sa-only">⚡ 内部管理</span>
+    </div>
+    <nav class="nav-tabs">
+      <!-- 客户可见：首页台账 + 续保管理（与现网角色条件一致） -->
+      <button class="nav-tab active">首页台账</button>
+      <button class="nav-tab">续保管理 <span class="nav-badge">限免</span><span class="nav-badge red">6</span></button>
+      <!-- 以下 Tab 现网为超管专属 -->
+      <button class="nav-tab sa-only">数据看板</button>
+      <button class="nav-tab sa-only">销售看板 <span class="nav-badge">NEW</span></button>
+      <button class="nav-tab sa-only">✨ AI质检 <span class="nav-badge red">23</span></button>
+    </nav>
+    <div class="nav-right">
+      <!-- 剩余额度：客户最关心的信息，常驻展示（数据来自现网个人中心用量卡片） -->
+      <div class="quota-pill">📄 本月已用 <b>714</b> / 2,000 页</div>
+      <!-- 头像下拉：收纳 购买套餐/使用手册/系统设置/个人中心/退出 -->
+      <div class="user-menu">
+        <button class="user-btn" onclick="toggleMenu(event)">
+          <span class="avatar">张</span>
+          张三 <span class="caret">▾</span>
+        </button>
+        <div class="dropdown" id="userDropdown">
+          <div class="dd-head">
+            <div class="name">张三 <span style="font-size:11px;background:var(--primary-bg);color:var(--primary-dark);border-radius:5px;padding:1px 6px;font-weight:600;margin-left:4px;">企业管理员</span></div>
+            <div class="sub">138****8888 · 华途保险代理</div>
+          </div>
+          <!-- 套餐用量（对应现网个人中心的用量卡片） -->
+          <div class="dd-quota">
+            <div class="bar"><i></i></div>
+            <div class="txt"><span>企业版 · 本月 714/2,000 页</span><span>32 天后到期</span></div>
+          </div>
+          <a class="dd-item" href="javascript:;"><span class="ico">👤</span> 个人中心 <span class="desc" style="margin-left:auto;font-size:11px;color:var(--text-3);">改名/密码</span></a>
+          <a class="dd-item" href="javascript:;"><span class="ico">⚙️</span> 系统设置</a>
+          <a class="dd-item" href="javascript:;"><span class="ico">📖</span> 使用手册</a>
+          <a class="dd-item buy" href="javascript:;"><span class="ico">💎</span> 购买套餐</a>
+          <a class="dd-item" href="javascript:;"><span class="ico">💬</span> 联系客服</a>
+          <div class="dd-sep"></div>
+          <a class="dd-item logout" href="javascript:;"><span class="ico">↩︎</span> 退出登录</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- ============ 搜索区：一框搜 + 日期快捷 + 筛选入口 ============ -->
+  <div class="search-bar">
+    <div class="search-box">
+      <span class="ico">🔍</span>
+      <input placeholder="搜索车牌号 / 保单号 / 投保人 / 文件名…">
+    </div>
+    <!-- 日期快捷：与现网 dateShortcuts 一致（全部/今天/昨天/本周/上周/本月/上月/自定义） -->
+    <div class="date-chips">
+      <button class="chip">全部</button>
+      <button class="chip">今天</button>
+      <button class="chip">昨天</button>
+      <button class="chip">本周</button>
+      <button class="chip">上周</button>
+      <button class="chip active">本月</button>
+      <button class="chip">上月</button>
+      <button class="chip">自定义 ▾</button>
+    </div>
+    <button class="filter-btn" onclick="openDrawer()">
+      ⚙ 筛选 <span class="count">2</span>
+    </button>
+  </div>
+
+  <!-- 已选条件标签：一眼看到当前过滤了什么，点 ✕ 移除 -->
+  <div class="active-filters">
+    <span class="f-tag">日期类型：签单日期 <button class="x">✕</button></span>
+    <span class="f-tag">保司：人保财险 <button class="x">✕</button></span>
+    <span class="f-tag">险种：商业险 <button class="x">✕</button></span>
+    <button class="clear-all">清空全部</button>
+  </div>
+
+  <!-- ============ 记录卡片：状态Tab + 操作 + 表格 ============ -->
+  <div class="card">
+    <!-- 状态 Tab：与现网 recordTabs 一致（全部/成功/需人工补充/非保单/失败） -->
+    <div class="card-head">
+      <button class="status-tab active">全部 <span class="num">126</span></button>
+      <button class="status-tab">成功 <span class="num">98</span></button>
+      <button class="status-tab warn">需人工补充 <span class="num">15</span></button>
+      <button class="status-tab gray">非保单 <span class="num">9</span></button>
+      <button class="status-tab bad">失败 <span class="num">4</span></button>
+      <!-- 「全部」Tab 下显示过滤非保单开关（同现网） -->
+      <label class="np-check" title="排除电子标志、发票、缴款通知等非保单文档">
+        <input type="checkbox" checked> 过滤非保单
+      </label>
+      <div class="head-actions">
+        <button class="btn btn-primary" title="上传PDF/图片进行识别（跳转上传页）">⬆ 手动上传</button>
+        <button class="btn btn-ghost" title="按当前筛选条件导出Excel（可选列/按车牌合并）">⬇ 导出Excel</button>
+      </div>
+    </div>
+
+    <!-- 批量操作栏：勾选记录后自动出现 -->
+    <div class="batch-bar" id="batchBar">
+      <span class="sel-info">已选 <span id="selCount">0</span> 条</span>
+      <button class="batch-btn green" title="打包下载所选记录的保单原件">⬇ 批量导出保单原件</button>
+      <button class="batch-btn orange" title="所选记录重新提交OCR识别">↻ 批量重新识别</button>
+      <button class="batch-btn purple sa-only" title="超管专属：逐条送AI质检">✨ 批量AI质检</button>
+      <button class="batch-clear" onclick="clearSelection()">✕ 清除选择</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:36px;"><input type="checkbox" id="checkAll" onclick="toggleAll(this)"></th>
+            <th class="sortable" title="点击列头排序">车牌号</th>
+            <th class="sortable" title="点击列头排序">保司</th>
+            <th>险种</th>
+            <th>投保人</th>
+            <th class="sortable" title="点击列头排序">总保费</th>
+            <th class="sortable" title="点击列头排序">签单日期 <span class="arr">↓</span></th>
+            <th>来源</th>
+            <th>状态</th>
+            <th style="width:260px;">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- 合并行示例：同车牌多张保单归并显示（对应现网 _merged 逻辑），点「3单 ▾」展开 -->
+          <tr>
+            <td><input type="checkbox"></td>
+            <td class="plate">粤B·D12345 <span class="tag merge" onclick="toggleChildren(this, event)">3单 ▾</span></td>
+            <td>人保财险</td>
+            <td><span class="tag type">商业险</span><span class="muted"> 等3项</span></td>
+            <td>深圳市顺达物流有限公司</td>
+            <td class="money">¥10,190.00</td>
+            <td>2026-07-18</td>
+            <td class="muted">群聊 · 顺达车队群</td>
+            <td><span class="tag ok">✓ 成功</span></td>
+            <td><div class="row-actions">
+              <button class="op-btn" title="在线预览保单原件">📄 预览</button>
+              <button class="op-btn" title="重新提交OCR识别">↻ 重识别</button>
+              <button class="op-btn more" onclick="openMore(event, 'normal')">更多 ▾</button>
+            </div></td>
+          </tr>
+          <!-- 合并行的子记录（展开后显示） -->
+          <tr class="child-row">
+            <td></td>
+            <td>└ 商业险</td>
+            <td>人保财险</td>
+            <td><span class="tag type">商业险</span></td>
+            <td class="muted">PICC-粤BD12345-商业险.pdf</td>
+            <td class="money">¥8,650.00</td>
+            <td>2026-07-18</td>
+            <td class="muted"></td>
+            <td><span class="tag ok">✓</span></td>
+            <td><div class="row-actions">
+              <button class="op-mini">预览</button><button class="op-mini">重识别</button><button class="op-mini">报错</button>
+            </div></td>
+          </tr>
+          <tr class="child-row">
+            <td></td>
+            <td>└ 交强险</td>
+            <td>人保财险</td>
+            <td><span class="tag type2">交强险</span></td>
+            <td class="muted">PICC-粤BD12345-交强险.pdf</td>
+            <td class="money">¥1,180.00</td>
+            <td>2026-07-18</td>
+            <td class="muted"></td>
+            <td><span class="tag ok">✓</span></td>
+            <td><div class="row-actions">
+              <button class="op-mini">预览</button><button class="op-mini">重识别</button><button class="op-mini">报错</button>
+            </div></td>
+          </tr>
+          <tr class="child-row">
+            <td></td>
+            <td>└ 驾意险</td>
+            <td>人保财险</td>
+            <td><span class="tag type2">驾意险</span></td>
+            <td class="muted">PICC-粤BD12345-驾乘.pdf</td>
+            <td class="money">¥360.00</td>
+            <td>2026-07-18</td>
+            <td class="muted"></td>
+            <td><span class="tag ok">✓</span></td>
+            <td><div class="row-actions">
+              <button class="op-mini">预览</button><button class="op-mini">重识别</button><button class="op-mini">报错</button>
+            </div></td>
+          </tr>
+          <!-- 普通成功记录 -->
+          <tr>
+            <td><input type="checkbox"></td>
+            <td class="plate">粤A·88K66</td>
+            <td>平安产险</td>
+            <td><span class="tag type">商业险</span></td>
+            <td>广州宏远运输有限公司</td>
+            <td class="money">¥12,300.00</td>
+            <td>2026-07-17</td>
+            <td class="muted">手动上传</td>
+            <td><span class="tag ok">✓ 成功</span></td>
+            <td><div class="row-actions">
+              <button class="op-btn" title="在线预览保单原件">📄 预览</button>
+              <button class="op-btn" title="重新提交OCR识别">↻ 重识别</button>
+              <button class="op-btn more" onclick="openMore(event, 'normal')">更多 ▾</button>
+            </div></td>
+          </tr>
+          <!-- 需人工补充（异常）记录：可标记正常 -->
+          <tr>
+            <td><input type="checkbox"></td>
+            <td class="plate">粤C·3H789</td>
+            <td>太平洋产险</td>
+            <td><span class="tag type2">驾意险</span></td>
+            <td>李国强</td>
+            <td class="money muted">缺失</td>
+            <td>2026-07-16</td>
+            <td class="muted">群聊 · 珠海合作群</td>
+            <td><span class="tag warn">⚠ 需人工补充</span></td>
+            <td><div class="row-actions">
+              <button class="op-btn" title="在线预览保单原件">📄 预览</button>
+              <button class="op-btn purple" title="核实无误后，将该记录标记为正常（需填原因）">✓ 标记正常</button>
+              <button class="op-btn more" onclick="openMore(event, 'abnormal')">更多 ▾</button>
+            </div></td>
+          </tr>
+          <!-- 非保单记录 -->
+          <tr>
+            <td><input type="checkbox"></td>
+            <td class="plate muted">—</td>
+            <td class="muted">—</td>
+            <td><span class="tag gray">电子保单标志</span></td>
+            <td class="muted">交强险标志-粤BF5209.pdf</td>
+            <td class="muted">—</td>
+            <td class="muted">—</td>
+            <td class="muted">群聊 · 顺达车队群</td>
+            <td><span class="tag gray">◌ 非保单</span></td>
+            <td><div class="row-actions">
+              <button class="op-btn" title="在线预览文件">📄 预览</button>
+              <button class="op-btn more" onclick="openMore(event, 'nonpolicy')">更多 ▾</button>
+            </div></td>
+          </tr>
+          <!-- 失败记录（有原件）：重识别为主操作 -->
+          <tr>
+            <td><input type="checkbox"></td>
+            <td class="plate muted">—</td>
+            <td class="muted">识别失败</td>
+            <td class="muted">—</td>
+            <td class="muted">扫描件-模糊-0715.pdf</td>
+            <td class="muted">—</td>
+            <td class="muted">—</td>
+            <td class="muted">私聊 · 王经理</td>
+            <td><span class="tag bad">✕ 失败</span></td>
+            <td><div class="row-actions">
+              <button class="op-btn hl" title="重新提交OCR识别">↻ 重识别</button>
+              <button class="op-btn" title="在线预览保单原件">📄 预览</button>
+              <button class="op-btn more" onclick="openMore(event, 'failed')">更多 ▾</button>
+            </div></td>
+          </tr>
+          <!-- 失败记录（无原件）：需重新上传 -->
+          <tr>
+            <td><input type="checkbox"></td>
+            <td class="plate muted">—</td>
+            <td class="muted">识别失败</td>
+            <td class="muted">—</td>
+            <td class="muted">保单-下载超时.pdf</td>
+            <td class="muted">—</td>
+            <td class="muted">—</td>
+            <td class="muted">群聊 · 顺达车队群</td>
+            <td><span class="tag bad">✕ 失败</span></td>
+            <td><div class="row-actions">
+              <button class="op-btn hl" title="原文件缺失，请重新上传该保单">⬆ 重新上传</button>
+              <button class="op-btn more" onclick="openMore(event, 'failed_nofile')">更多 ▾</button>
+            </div></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pager">
+      <span>共 126 条 · 已选 <span id="pagerSel">0</span> 条</span>
+      <div class="pager-btns">
+        <button class="pg">‹</button>
+        <button class="pg cur">1</button>
+        <button class="pg">2</button>
+        <button class="pg">3</button>
+        <button class="pg">…</button>
+        <button class="pg">7</button>
+        <button class="pg">›</button>
+      </div>
+      <span>每页 <select style="border:1px solid var(--border);border-radius:6px;padding:2px 6px;"><option>20</option><option>50</option></select> 条</span>
+    </div>
+  </div>
+</main>
+
+<!-- ============ 筛选抽屉（覆盖现网全部客户可用筛选项） ============ -->
+<div class="drawer-mask" id="drawerMask" onclick="closeDrawer()"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-head">
+    <h3>筛选条件</h3>
+    <button class="drawer-close" onclick="closeDrawer()">✕</button>
+  </div>
+  <div class="drawer-body">
+
+    <div class="f-group">
+      <div class="f-label">来源</div>
+      <div class="f-row">
+        <button class="opt-chip on">全部</button>
+        <button class="opt-chip">群聊</button>
+        <button class="opt-chip">私聊</button>
+        <button class="opt-chip">手动上传</button>
+      </div>
+    </div>
+
+    <div class="f-group">
+      <div class="f-label">群聊 / 联系人 <span class="hint">随「来源」联动</span></div>
+      <select class="f-select">
+        <option>全部群</option>
+        <option>顺达车队群</option>
+        <option>珠海合作群</option>
+      </select>
+    </div>
+
+    <div class="f-group">
+      <div class="f-label">保司</div>
+      <div class="f-row">
+        <button class="opt-chip on">人保财险</button>
+        <button class="opt-chip">平安产险</button>
+        <button class="opt-chip">太平洋产险</button>
+        <button class="opt-chip">国任保险</button>
+        <button class="opt-chip">更多 ▾</button>
+      </div>
+    </div>
+
+    <div class="f-group">
+      <div class="f-label">险种</div>
+      <div class="f-row">
+        <button class="opt-chip on">商业险</button>
+        <button class="opt-chip">交强险</button>
+        <button class="opt-chip">驾意险</button>
+        <button class="opt-chip">非车险</button>
+      </div>
+    </div>
+
+    <div class="f-group">
+      <div class="f-label">日期 <span class="hint">类型可选，配合顶部快捷按钮</span></div>
+      <select class="f-select" style="margin-bottom:8px;">
+        <option>签单日期</option>
+        <option>创建日期</option>
+        <option>识别日期</option>
+        <option>起保日期</option>
+        <option>终保日期</option>
+      </select>
+      <div class="f-range">
+        <input class="f-input" type="date" value="2026-07-01">
+        <span class="muted">至</span>
+        <input class="f-input" type="date" value="2026-07-21">
+      </div>
+    </div>
+
+    <!-- 超管专属筛选（客户视角不显示） -->
+    <div class="f-group sa-only">
+      <div class="f-label">企业 <span class="hint">超管专属</span></div>
+      <select class="f-select"><option>全部企业</option><option>华途保险代理</option></select>
+    </div>
+    <div class="f-group sa-only">
+      <div class="f-label">核对状态 <span class="hint">超管专属</span></div>
+      <div class="f-row">
+        <button class="opt-chip on">全部</button>
+        <button class="opt-chip">今日未核对</button>
+        <button class="opt-chip">今日已核对</button>
+      </div>
+    </div>
+
+    <div class="f-group">
+      <div class="f-label">更多选项</div>
+      <label class="f-check"><input type="checkbox" checked> 按保单号去重</label>
+      <label class="f-check"><input type="checkbox" checked> 过滤非保单文档（电子标志、发票等）</label>
+    </div>
+
+    <!-- 低频字段收进「高级筛选」，默认折叠（对应现网高级搜索面板） -->
+    <div class="f-group" id="advGroup" style="display:none;">
+      <div class="f-label">高级筛选</div>
+      <div style="display:grid;gap:8px;margin-bottom:14px;">
+        <input class="f-input" placeholder="承保公司（全称模糊搜索）">
+        <input class="f-input" placeholder="被保人">
+        <input class="f-input" placeholder="业务员">
+        <select class="f-select">
+          <option>文档类型：全部</option>
+          <option>保险单</option>
+          <option>电子保单标志</option>
+          <option>发票</option>
+          <option>缴款通知</option>
+        </select>
+        <!-- 超管专属：识别方式 -->
+        <select class="f-select sa-only">
+          <option>识别方式：全部（超管专属）</option>
+          <option>PDF提取</option>
+          <option>PDF+OCR</option>
+          <option>百度OCR</option>
+        </select>
+      </div>
+      <div class="f-label" style="font-weight:600;font-size:12.5px;">签单日期区间</div>
+      <div class="f-range" style="margin-bottom:10px;"><input class="f-input" type="date"><span class="muted">至</span><input class="f-input" type="date"></div>
+      <div class="f-label" style="font-weight:600;font-size:12.5px;">起保日期区间</div>
+      <div class="f-range" style="margin-bottom:10px;"><input class="f-input" type="date"><span class="muted">至</span><input class="f-input" type="date"></div>
+      <div class="f-label" style="font-weight:600;font-size:12.5px;">终保日期区间</div>
+      <div class="f-range"><input class="f-input" type="date"><span class="muted">至</span><input class="f-input" type="date"></div>
+    </div>
+    <button class="adv-toggle" onclick="toggleAdv(this)">展开高级筛选 ▾</button>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn btn-ghost" onclick="closeDrawer()">重置</button>
+    <button class="btn btn-primary" onclick="closeDrawer()">应用筛选</button>
+  </div>
+</aside>
+
+<!-- 行内「更多」下拉菜单（共享，按行类型动态填充） -->
+<div class="more-menu" id="moreMenu"></div>
+
+<!-- ============ 原型控制条：主题 & 视角切换 ============ -->
+<div class="proto-bar">
+  <div class="row">
+    <span class="lb">配色</span>
+    <button class="theme-dot t-orange cur" title="暖橙（现行延续）" onclick="setTheme('orange', this)"></button>
+    <button class="theme-dot t-blue" title="商务蓝" onclick="setTheme('blue', this)"></button>
+    <button class="theme-dot t-teal" title="青绿" onclick="setTheme('teal', this)"></button>
+    <button class="theme-dot t-dark" title="石墨金" onclick="setTheme('dark', this)"></button>
+  </div>
+  <div class="row">
+    <span class="lb">视角</span>
+    <button class="role-btn cur" id="roleCustomer" onclick="setRole(false)">客户</button>
+    <button class="role-btn" id="roleAdmin" onclick="setRole(true)">超管</button>
+  </div>
+  <div class="tip">原型 v4 · 试试：勾选行 / 车牌旁「3单▾」/ 行内「更多▾」/「筛选」抽屉</div>
+</div>
+
+<script>
+// ============ 主题切换 ============
+function setTheme(t, el) {
+  document.body.dataset.theme = t;
+  document.querySelectorAll('.theme-dot').forEach(d => d.classList.remove('cur'));
+  el.classList.add('cur');
+}
+// ============ 视角切换（客户 / 超管）============
+function setRole(isAdmin) {
+  document.body.classList.toggle('role-admin', isAdmin);
+  document.getElementById('roleCustomer').classList.toggle('cur', !isAdmin);
+  document.getElementById('roleAdmin').classList.toggle('cur', isAdmin);
+  document.getElementById('moreMenu').classList.remove('open');
+}
+// ============ 头像下拉 ============
+function toggleMenu(e) {
+  e.stopPropagation();
+  document.getElementById('userDropdown').classList.toggle('open');
+}
+document.addEventListener('click', () => {
+  document.getElementById('userDropdown').classList.remove('open');
+  document.getElementById('moreMenu').classList.remove('open');
+});
+// ============ 筛选抽屉 ============
+function openDrawer() {
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerMask').classList.add('open');
+}
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawerMask').classList.remove('open');
+}
+// 高级筛选折叠
+function toggleAdv(btn) {
+  const g = document.getElementById('advGroup');
+  const open = g.style.display !== 'none';
+  g.style.display = open ? 'none' : 'block';
+  btn.textContent = open ? '展开高级筛选 ▾' : '收起高级筛选 ▴';
+}
+// ============ 合并行展开/收起 ============
+function toggleChildren(el, e) {
+  e.stopPropagation();
+  let tr = el.closest('tr').nextElementSibling;
+  let open = el.textContent.includes('▾');
+  while (tr && tr.classList.contains('child-row')) {
+    tr.classList.toggle('show', open);
+    tr = tr.nextElementSibling;
+  }
+  el.textContent = open ? '3单 ▴' : '3单 ▾';
+}
+// ============ 行内「更多」下拉（按行类型 + 视角动态填充） ============
+const MORE_ITEMS = {
+  normal: [
+    { ico: '⚑', text: '报错反馈', desc: '识别有误', red: true },
+    { ico: '✨', text: 'AI质检', desc: '超管专属', sa: true },
+    { ico: '🗑', text: '删除记录', desc: '超管专属', red: true, sa: true },
+  ],
+  abnormal: [
+    { ico: '↻', text: '重新识别', desc: '再跑一次OCR' },
+    { ico: '⚑', text: '报错反馈', desc: '识别有误', red: true },
+    { ico: '🗑', text: '删除记录', desc: '超管专属', red: true, sa: true },
+  ],
+  nonpolicy: [
+    { ico: '↻', text: '重新识别', desc: '误判可重识别' },
+    { ico: '⚑', text: '报错反馈', desc: '识别有误', red: true },
+    { ico: '🗑', text: '删除记录', desc: '超管专属', red: true, sa: true },
+  ],
+  failed: [
+    { ico: '⚑', text: '报错反馈', desc: '识别有误', red: true },
+    { ico: '🗑', text: '删除记录', desc: '超管专属', red: true, sa: true },
+  ],
+  failed_nofile: [
+    { ico: '⚑', text: '报错反馈', desc: '文件缺失', red: true },
+    { ico: '🗑', text: '删除记录', desc: '超管专属', red: true, sa: true },
+  ],
+};
+function openMore(e, type) {
+  e.stopPropagation();
+  const isAdmin = document.body.classList.contains('role-admin');
+  const menu = document.getElementById('moreMenu');
+  menu.innerHTML = MORE_ITEMS[type]
+    .filter(i => !i.sa || isAdmin)
+    .map(i => `<button class="mm-item${i.red ? ' red' : ''}"><span class="ico">${i.ico}</span>${i.text}<span class="desc">${i.desc}</span></button>`)
+    .join('');
+  const r = e.currentTarget.getBoundingClientRect();
+  menu.classList.add('open');
+  const h = menu.offsetHeight;
+  const top = (r.bottom + h + 8 > window.innerHeight) ? r.top - h - 6 : r.bottom + 6;
+  menu.style.top = top + 'px';
+  menu.style.left = Math.min(r.left, window.innerWidth - 210) + 'px';
+}
+window.addEventListener('scroll', () => document.getElementById('moreMenu').classList.remove('open'), true);
+// ============ 批量操作：勾选行后显示批量操作栏 ============
+function rowChecks() { return document.querySelectorAll('tbody tr:not(.child-row) input[type="checkbox"]'); }
+function updateBatchBar() {
+  const n = [...rowChecks()].filter(c => c.checked).length;
+  document.getElementById('selCount').textContent = n;
+  document.getElementById('pagerSel').textContent = n;
+  document.getElementById('batchBar').classList.toggle('show', n > 0);
+}
+function toggleAll(el) {
+  rowChecks().forEach(c => c.checked = el.checked);
+  updateBatchBar();
+}
+function clearSelection() {
+  rowChecks().forEach(c => c.checked = false);
+  document.getElementById('checkAll').checked = false;
+  updateBatchBar();
+}
+rowChecks().forEach(c => c.addEventListener('change', updateBatchBar));
+// ============ 原型演示交互 ============
+document.querySelectorAll('.date-chips .chip').forEach(c => c.addEventListener('click', () => {
+  document.querySelectorAll('.date-chips .chip').forEach(x => x.classList.remove('active'));
+  c.classList.add('active');
+}));
+document.querySelectorAll('.status-tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.status-tab').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+}));
+document.querySelectorAll('.opt-chip').forEach(c => c.addEventListener('click', () => c.classList.toggle('on')));
+</script>
+</body>
+</html>
