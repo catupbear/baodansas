@@ -2030,7 +2030,7 @@
 
                 <!-- 排行配置 -->
                 <div class="sd-card">
-                    <div class="sd-h2"><span class="bar"></span>业务员排行配置</div>
+                    <div class="sd-h2"><span class="bar"></span>排行配置</div>
                     <div class="sd-cfg-row">
                         <span class="sd-lb">分组维度：</span>
                         <select v-model="salesConfig.ranking.dimension" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ d }}</option></select>
@@ -2109,11 +2109,11 @@
                             <span style="flex:1"></span>
                             <span class="sd-lb">全员统一值：</span>
                             <input type="number" v-model="sdEmpUnified" style="width:110px;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font-size:13px">
-                            <button class="sd-btn orange" style="padding:6px 12px;font-size:12px" @click="sdApplyUnified">应用到全部业务员</button>
+                            <button class="sd-btn orange" style="padding:6px 12px;font-size:12px" @click="sdApplyUnified">应用到全部发送人</button>
                         </div>
                         <div style="overflow-x:auto;margin-top:6px">
                             <table class="sd-rank">
-                                <thead><tr><th style="text-align:left">业务员</th><th>目标值</th><th style="text-align:left">来源</th><th>操作</th></tr></thead>
+                                <thead><tr><th style="text-align:left">发送人</th><th>目标值</th><th style="text-align:left">来源</th><th>操作</th></tr></thead>
                                 <tbody>
                                     <tr v-for="p in sdEmpPersons" :key="p.name">
                                         <td style="text-align:left" class="font-medium">{{ p.name }}</td>
@@ -2137,11 +2137,11 @@
                                             </template>
                                         </td>
                                     </tr>
-                                    <tr v-if="!sdEmpPersons.length"><td colspan="4" class="text-center text-gray-300 py-6">台账中暂无业务员数据</td></tr>
+                                    <tr v-if="!sdEmpPersons.length"><td colspan="4" class="text-center text-gray-300 py-6">台账中暂无发送人数据</td></tr>
                                 </tbody>
                             </table>
                         </div>
-                        <div class="sd-hint" style="margin-top:10px">业务员名单自动来源于台账「业务员」字段去重值；单独设置优先于统一值；排行表展示哪些目标项的完成率列，在「看板配置 → 业务员排行配置」中勾选。</div>
+                        <div class="sd-hint" style="margin-top:10px">发送人名单自动来源于台账记录的微信发送人（已绑定的显示真实姓名）；单独设置优先于统一值；排行表展示哪些目标项的完成率列，在「看板配置 → 排行配置」中勾选。</div>
                     </template>
                 </div>
             </div>
@@ -2227,9 +2227,9 @@
                     <div class="sd-mguide">
                         <b class="tt">💡 操作说明</b>
                         · 员工目标项 = 一类考核口径（统计字段 + 筛选条件 + 周期），如「车险保费目标」；<br>
-                        · 创建后可先填全员统一值一键应用到所有业务员，再对个别业务员单独设置（单独值优先于统一值）；<br>
-                        · 业务员名单自动取自台账「业务员」字段，无需手动维护；<br>
-                        · 每个目标项可在「看板配置 → 业务员排行配置」中勾选，作为排行表的「目标 / 完成率」列展示。
+                        · 创建后可先填全员统一值一键应用到所有发送人，再对个别发送人单独设置（单独值优先于统一值）；<br>
+                        · 发送人名单自动取自台账记录的微信发送人（已绑定的显示真实姓名），无需手动维护；<br>
+                        · 每个目标项可在「看板配置 → 排行配置」中勾选，作为排行表的「目标 / 完成率」列展示。
                     </div>
                     <div class="sd-frow"><span class="fl">目标项名称</span><input type="text" v-model="sdEmpForm.name" placeholder="如：车险保费目标" style="width:200px"></div>
                     <div class="sd-frow"><span class="fl">统计口径</span>
@@ -12146,7 +12146,7 @@ const _app = createApp({
         const salesConfigSource = ref('default');
         const salesSaving = ref(false);
         const salesFields = ref(['保费', '佣金', '不含税保费']);
-        const salesDims = ref(['保险公司', '险种', '业务员', '跟单人', '转介绍人']);
+        const salesDims = ref(['保险公司', '险种', '发送人', '业务员', '跟单人', '转介绍人']);
         const salesTargets = ref([]);
         const salesSalesmen = ref([]);
         const sdModal = reactive({ card: false, target: false, emp: false });

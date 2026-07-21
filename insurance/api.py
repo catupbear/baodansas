@@ -7545,7 +7545,7 @@ def sales_dashboard_fields():
         "fields": all_fields,
         "formula_fields": formula_fields,
         # 建议的分组维度（前端下拉优先展示）
-        "dimensions": ["保险公司", "险种", "业务员", "跟单人", "转介绍人"],
+        "dimensions": ["保险公司", "险种", "发送人", "业务员", "跟单人", "转介绍人"],
     }})
 
 

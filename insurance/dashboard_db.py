@@ -46,7 +46,7 @@ DEFAULT_CONFIG = {
          "metric": {"agg": "sum", "field": "保费"}},
     ],
     "ranking": {
-        "title": "业务员业绩排行", "dimension": "业务员", "sort_by": "保费",
+        "title": "发送人业绩排行", "dimension": "发送人", "sort_by": "保费",
         "columns": [
             {"title": "保费", "agg": "sum", "field": "保费"},
             {"title": "保单量", "agg": "count"},
@@ -446,6 +446,7 @@ def load_records(db, enterprise_id: int, date_start: str, date_end: str,
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute(f"""
             SELECT r.id, r.display_fields, r.manual_fields, r.company_short,
+                   r.sender, r.user_id,
                    DATE(r.created_at) AS created_day,
                    pf.{iso_col} AS time_day,
                    pf.salesperson, pf.policy_type, pf.company, pf.total_premium, pf.sign_date
@@ -456,8 +457,26 @@ def load_records(db, enterprise_id: int, date_start: str, date_end: str,
               AND COALESCE(pf.{iso_col}, DATE(r.created_at)) BETWEEN %s AND %s
         """, (enterprise_id, date_start, date_end))
         rows = cursor.fetchall()
+        # 无 sender 的手动上传记录：批量查上传人姓名，用作「发送人」
+        _upload_ids = {r["user_id"] for r in rows
+                       if not (r.get("sender") or "").strip() and r.get("user_id")}
+        upload_name_map = {}
+        if _upload_ids:
+            ph = ",".join(["%s"] * len(_upload_ids))
+            cursor.execute(f"SELECT id, name FROM users WHERE id IN ({ph})", list(_upload_ids))
+            for u in cursor.fetchall():
+                if u.get("name"):
+                    upload_name_map[u["id"]] = u["name"]
     finally:
         conn.close()
+
+    # 发送人显示名映射：管理员绑定别名 > 绑定用户真实姓名 > 微信原名
+    try:
+        from auth.db import get_sender_alias_map, get_sender_user_name_map
+        sender_alias_map = get_sender_alias_map(db, enterprise_id) or {}
+        sender_name_map = get_sender_user_name_map(db, enterprise_id) or {}
+    except Exception:
+        sender_alias_map, sender_name_map = {}, {}
 
     records = []
     for row in rows:
@@ -494,6 +513,12 @@ def load_records(db, enterprise_id: int, date_start: str, date_end: str,
                 fields["_time_day"] = time_bucket
             except Exception:
                 logger.debug("应用用户配置失败 record_id=%s", row.get("id"), exc_info=True)
+        # 注入「发送人」（放在公式应用之后，保证不被配置过滤/覆盖）
+        _sender = (row.get("sender") or "").strip()
+        if _sender:
+            fields["发送人"] = sender_alias_map.get(_sender) or sender_name_map.get(_sender) or _sender
+        else:
+            fields["发送人"] = upload_name_map.get(row.get("user_id")) or ""
         records.append(fields)
     return records
 
@@ -669,7 +694,7 @@ def _build_ranking(db, config: dict, records: list, all_targets: list, enterpris
                    apply_config_fn, today: date) -> dict:
     """业务员排行：页面时间范围内按维度分组聚合各列 + 员工目标项完成率列"""
     rk = config.get("ranking") or {}
-    dimension = rk.get("dimension") or "业务员"
+    dimension = rk.get("dimension") or "发送人"
     columns = rk.get("columns") or []
     sort_by = rk.get("sort_by") or (columns[0].get("title") if columns else "")
 
@@ -754,10 +779,10 @@ def _build_ranking(db, config: dict, records: list, all_targets: list, enterpris
         col_explains[tc["name"] + "·完成率"] = (
             _build_explain(meta["metric_agg"], meta["metric_field"], meta["filters"],
                            ps, pe, time_field, user_config)
-            + "\n计算公式：完成率 = 该业务员周期内实际值 ÷ 其目标值（单独设置优先于全员统一值）")
+            + "\n计算公式：完成率 = 该成员周期内实际值 ÷ 其目标值（单独设置优先于全员统一值）")
 
     return {
-        "title": rk.get("title") or "业务员业绩排行",
+        "title": rk.get("title") or "发送人业绩排行",
         "dimension": dimension, "sort_by": sort_by,
         "columns": [c.get("title") or c.get("field") for c in columns],
         "target_columns": [tc["name"] for tc in target_col_data],
@@ -767,18 +792,39 @@ def _build_ranking(db, config: dict, records: list, all_targets: list, enterpris
 
 
 def get_salesmen(db, enterprise_id: int) -> list:
-    """企业台账「业务员」去重名单（员工目标设置下拉用）"""
+    """企业台账「发送人」去重名单（员工目标设置下拉用）：
+    绑定别名 > 绑定用户真实姓名 > 微信原名；无 sender 的手动上传记录取上传人姓名"""
+    try:
+        from auth.db import get_sender_alias_map, get_sender_user_name_map
+        alias_map = get_sender_alias_map(db, enterprise_id) or {}
+        name_map = get_sender_user_name_map(db, enterprise_id) or {}
+    except Exception:
+        alias_map, name_map = {}, {}
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute("""
-            SELECT DISTINCT pf.salesperson AS name
+            SELECT DISTINCT r.sender, r.user_id
             FROM insurance_records r
-            JOIN insurance_policy_fields pf ON pf.record_id = r.id
             WHERE r.enterprise_id = %s AND r.deleted_at IS NULL AND r.status = 'done'
-              AND pf.salesperson IS NOT NULL AND pf.salesperson <> ''
-            ORDER BY name
         """, (enterprise_id,))
-        return [row["name"] for row in cursor.fetchall() if row.get("name")]
+        rows = cursor.fetchall()
+        uids = {r["user_id"] for r in rows
+                if not (r.get("sender") or "").strip() and r.get("user_id")}
+        uname = {}
+        if uids:
+            ph = ",".join(["%s"] * len(uids))
+            cursor.execute(f"SELECT id, name FROM users WHERE id IN ({ph})", list(uids))
+            for u in cursor.fetchall():
+                if u.get("name"):
+                    uname[u["id"]] = u["name"]
+        out = set()
+        for r in rows:
+            s = (r.get("sender") or "").strip()
+            if s:
+                out.add(alias_map.get(s) or name_map.get(s) or s)
+            elif r.get("user_id") and uname.get(r["user_id"]):
+                out.add(uname[r["user_id"]])
+        return sorted(out)
     finally:
         conn.close()
