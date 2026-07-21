@@ -3266,6 +3266,7 @@
                         </tr>
                         </template>
                     </tbody>
+                    <!-- 合计行功能暂时注释掉，需要恢复时取消注释即可（依赖的 sumColumns/sumMap 等JS逻辑仍保留）
                     <tfoot v-if="selectedRecordIds.length && sumColumns.length">
                         <tr style="background:#fff7ed;">
                             <td class="sticky-col-check" style="background:#fff7ed !important;"></td>
@@ -3283,6 +3284,7 @@
                             <td v-if="isSuperAdmin"></td>
                         </tr>
                     </tfoot>
+                    -->
                 </table>
             </div>
 
