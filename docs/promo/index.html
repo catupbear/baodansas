@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>午虎AI保单台账系统 — 节省内勤成本</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap');
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-deep: #06060f;
+  --bg-card: #0d0d1a;
+  --border-subtle: rgba(255,255,255,0.06);
+  --text-primary: #f0f0f5;
+  --text-secondary: rgba(240,240,245,0.55);
+  --text-muted: rgba(240,240,245,0.35);
+  --gradient-title: linear-gradient(135deg, #ffb347 0%, #ff6723 50%, #ff4444 100%);
+  --gradient-cta: linear-gradient(135deg, #8b5cf6 0%, #a855f7 50%, #c084fc 100%);
+  --gradient-saving: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  overflow-x: hidden;
+  line-height: 1.6;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(139,92,246,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(255,140,34,0.05) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.page { position: relative; z-index: 1; max-width: 960px; width: 100%; }
+
+/* 标题区 */
+.header {
+  text-align: center;
+  margin-bottom: 56px;
+  animation: fadeInUp 0.8s ease-out;
+}
+
+.header h1 {
+  font-size: clamp(32px, 5vw, 56px);
+  font-weight: 900;
+  line-height: 1.2;
+  letter-spacing: -1.5px;
+  margin-bottom: 16px;
+}
+
+.gradient-text {
+  background: var(--gradient-title);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.header p {
+  font-size: 17px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+/* 对比卡片 */
+.cost-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  animation: fadeInUp 0.8s ease-out 0.15s both;
+}
+
+.cost-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 40px 36px;
+  position: relative;
+  overflow: hidden;
+}
+
+.cost-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+}
+
+.cost-card.manual::before {
+  background: linear-gradient(90deg, #ef4444, #f97316);
+}
+
+.cost-card.ai::before {
+  background: var(--gradient-saving);
+}
+
+.cost-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cost-card.manual .cost-card-title::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+}
+
+.cost-card.ai .cost-card-title::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.cost-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 15px;
+}
+
+.cost-row:last-of-type { border-bottom: none; }
+
+.cost-row .label { color: var(--text-secondary); }
+.cost-row .value { font-weight: 700; }
+
+.cost-total {
+  margin-top: 24px;
+  padding: 20px 24px;
+  border-radius: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cost-card.manual .cost-total {
+  background: rgba(239,68,68,0.06);
+  border: 1px solid rgba(239,68,68,0.1);
+}
+
+.cost-card.ai .cost-total {
+  background: rgba(16,185,129,0.06);
+  border: 1px solid rgba(16,185,129,0.1);
+}
+
+.cost-total .label {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.cost-total .value {
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: -1px;
+}
+
+.cost-card.manual .cost-total .value { color: #f87171; }
+.cost-card.ai .cost-total .value { color: #34d399; }
+
+/* 节省横幅 */
+.saving-banner {
+  margin-top: 28px;
+  background: linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(139,92,246,0.08) 100%);
+  border: 1px solid rgba(16,185,129,0.15);
+  border-radius: 20px;
+  padding: 36px 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  animation: fadeInUp 0.8s ease-out 0.3s both;
+}
+
+.saving-text {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.saving-sub {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.saving-right {
+  text-align: right;
+}
+
+.saving-amount {
+  font-size: 48px;
+  font-weight: 900;
+  background: var(--gradient-saving);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -2px;
+  line-height: 1;
+}
+
+.saving-note {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+/* CTA */
+.cta {
+  text-align: center;
+  margin-top: 48px;
+  animation: fadeInUp 0.8s ease-out 0.45s both;
+}
+
+.btn-primary {
+  padding: 16px 44px;
+  background: var(--gradient-cta);
+  border: none;
+  border-radius: 14px;
+  color: white;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.3s;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(139,92,246,0.35);
+}
+
+.cta-note {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 12px;
+}
+
+/* 动画 */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 响应式 */
+@media (max-width: 700px) {
+  .cost-grid { grid-template-columns: 1fr; }
+  .saving-banner { flex-direction: column; text-align: center; gap: 20px; }
+  .saving-right { text-align: center; }
+  .cost-card { padding: 28px 24px; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="header">
+    <h1>一年省下 <span class="gradient-text">¥69,001</span></h1>
+    <p>午虎AI保单台账系统 vs 传统人工录入，算一笔账就明白了</p>
+  </div>
+
+  <div class="cost-grid">
+    <div class="cost-card manual">
+      <div class="cost-card-title">传统人工录入</div>
+      <div class="cost-row"><span class="label">内勤人员薪资</span><span class="value">¥6,000/月</span></div>
+      <div class="cost-row"><span class="label">处理能力</span><span class="value">有限</span></div>
+      <div class="cost-row"><span class="label">工作时间</span><span class="value">8小时/天（节假日休息）</span></div>
+      <div class="cost-row"><span class="label">出错率</span><span class="value">5%~10%（人工疏漏）</span></div>
+      <div class="cost-total">
+        <span class="label">年度总成本</span>
+        <span class="value">¥72,000</span>
+      </div>
+    </div>
+
+    <div class="cost-card ai">
+      <div class="cost-card-title">午虎AI 台账系统</div>
+      <div class="cost-row"><span class="label">系统服务费（年付）</span><span class="value">最低 ¥249 起/月</span></div>
+      <div class="cost-row"><span class="label">处理能力</span><span class="value">不限量</span></div>
+      <div class="cost-row"><span class="label">工作时间</span><span class="value">7×24 小时全天候</span></div>
+      <div class="cost-row"><span class="label">出错率</span><span class="value">＜1%（AI 校验）</span></div>
+      <div class="cost-total">
+        <span class="label">年度总成本</span>
+        <span class="value">¥2,999</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="saving-banner">
+    <div>
+      <div class="saving-text">每年为您节省</div>
+      <div class="saving-sub">相当于减少 1 名内勤人员的全部开支</div>
+    </div>
+    <div class="saving-right">
+      <div class="saving-amount">¥69,001+</div>
+      <div class="saving-note">每多一名内勤，节省翻倍</div>
+    </div>
+  </div>
+
+  <div class="cta">
+    <button class="btn-primary">免费开始使用 →</button>
+    <div class="cta-note">前2个月免费试用 · 10 分钟即可接入</div>
+  </div>
+</div>
+
+</body>
+</html>

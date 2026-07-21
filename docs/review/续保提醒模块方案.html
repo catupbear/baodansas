@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>续保提醒模块 - 方案规划</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root { --brand: #c2410c; --brand-light: #fed7aa; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; }
+  .brand-gradient { background: linear-gradient(135deg, #c2410c 0%, #ea580c 100%); }
+  .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #f1f5f9; }
+  .tag { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+  .tag-new { background: #dbeafe; color: #1d4ed8; }
+  .tag-modify { background: #fef3c7; color: #92400e; }
+  .tag-core { background: #fce7f3; color: #be185d; }
+  .section-title { font-size: 20px; font-weight: 700; color: #1e293b; margin-bottom: 16px; padding-left: 12px; border-left: 4px solid #c2410c; }
+  .file-path { font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: 13px; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; }
+  th { background: #f8fafc; color: #475569; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+  .flow-step { position: relative; padding-left: 36px; }
+  .flow-step::before { content: ''; position: absolute; left: 14px; top: 28px; bottom: -16px; width: 2px; background: #e2e8f0; }
+  .flow-step:last-child::before { display: none; }
+  .flow-dot { position: absolute; left: 6px; top: 6px; width: 18px; height: 18px; border-radius: 50%; background: #c2410c; display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: 700; }
+  .mockup { background: #1e293b; border-radius: 12px; padding: 20px; color: #94a3b8; font-family: monospace; font-size: 13px; line-height: 1.8; overflow-x: auto; }
+  .mockup .highlight { color: #fb923c; }
+  .mockup .green { color: #4ade80; }
+  .mockup .blue { color: #60a5fa; }
+  .mockup .dim { color: #475569; }
+  .mockup .white { color: #f1f5f9; }
+  .decision-box { background: linear-gradient(135deg, #fffbeb, #fef3c7); border: 1px solid #f59e0b; border-radius: 12px; padding: 20px; }
+  .proto-card { background: linear-gradient(to bottom, #f8fafc, #fff); border: 2px solid #e2e8f0; border-radius: 12px; padding: 16px; transition: all 0.2s; }
+  .proto-card:hover { border-color: #c2410c; box-shadow: 0 4px 12px rgba(194,65,12,0.1); }
+</style>
+</head>
+<body class="text-slate-700">
+
+<!-- Header -->
+<div class="brand-gradient text-white py-8 px-6">
+  <div class="max-w-5xl mx-auto">
+    <div class="flex items-center gap-3 mb-2">
+      <span class="text-3xl">📋</span>
+      <h1 class="text-2xl font-bold">续保提醒模块 — 技术方案</h1>
+    </div>
+    <p class="text-orange-100 text-sm mt-1">基于现有保单识别数据，构建客户续保跟进闭环</p>
+    <p class="text-orange-200 text-xs mt-3">wxbot / insurance 模块扩展 · 2026-07-13</p>
+  </div>
+</div>
+
+<div class="max-w-5xl mx-auto px-6 py-8 space-y-10">
+
+<!-- ========== 一、功能概览 ========== -->
+<section>
+  <h2 class="section-title">一、功能概览</h2>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="proto-card">
+      <div class="text-2xl mb-2">📊</div>
+      <h3 class="font-bold text-slate-800 mb-1">续保看板</h3>
+      <p class="text-sm text-slate-500">按到期时间维度展示待续保客户统计：即将到期（7天）、本月到期、下月到期，一目了然</p>
+    </div>
+    <div class="proto-card">
+      <div class="text-2xl mb-2">👤</div>
+      <h3 class="font-bold text-slate-800 mb-1">客户跟进</h3>
+      <p class="text-sm text-slate-500">管理员指派跟进人（默认=保单上传人），记录每次跟进内容和时间，直到成交关闭</p>
+    </div>
+    <div class="proto-card">
+      <div class="text-2xl mb-2">📥</div>
+      <h3 class="font-bold text-slate-800 mb-1">数据导入引导</h3>
+      <p class="text-sm text-slate-500">弹窗引导客户联系客服，提供往年台账/保单导入，附客服二维码</p>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 二、数据来源与设计 ========== -->
+<section>
+  <h2 class="section-title">二、数据来源</h2>
+  <div class="card p-5">
+    <p class="text-sm mb-4">续保提醒的核心数据来自现有的 <code class="file-path">insurance_policy_fields</code> 表，已有 <code class="file-path">end_date_iso (DATE)</code> 索引字段，可直接按日期范围查询即将到期的保单。</p>
+    <div class="bg-slate-50 rounded-lg p-4 text-sm">
+      <p class="font-semibold text-slate-800 mb-2">可用字段（已有）：</p>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+        <span class="tag tag-core">end_date_iso — 止保日期</span>
+        <span class="tag tag-core">plate_no — 车牌号</span>
+        <span class="tag tag-core">insured — 被保险人</span>
+        <span class="tag tag-core">applicant — 投保人</span>
+        <span class="tag tag-core">company_short — 保司简称</span>
+        <span class="tag tag-core">policy_type — 险种</span>
+        <span class="tag tag-core">policy_no — 保单号</span>
+        <span class="tag tag-core">vin — 车架号</span>
+        <span class="tag tag-core">total_premium — 保费合计</span>
+        <span class="tag tag-core">start_date_iso — 起保日期</span>
+      </div>
+      <p class="text-slate-500 mt-3">关联 <code>insurance_records</code> 可获取：sender_name（上传人）、room_name（群名）、created_at（识别时间）</p>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 三、数据库设计 ========== -->
+<section>
+  <h2 class="section-title">三、新增数据库表</h2>
+
+  <!-- 表1: renewal_tasks -->
+  <div class="card p-5 mb-4">
+    <div class="flex items-center gap-2 mb-3">
+      <span class="tag tag-new">新建</span>
+      <h3 class="font-bold text-slate-800">renewal_tasks — 续保任务表</h3>
+    </div>
+    <p class="text-sm text-slate-500 mb-3">每个"客户+到期周期"生成一条续保任务，聚合同一客户的多张保单</p>
+    <table class="text-sm">
+      <thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>id</td><td>INT PK AUTO_INCREMENT</td><td>主键</td></tr>
+        <tr><td>customer_key</td><td>VARCHAR(128) UNIQUE</td><td>客户唯一标识（车牌号 或 VIN，去重用）</td></tr>
+        <tr><td>plate_no</td><td>VARCHAR(32)</td><td>车牌号</td></tr>
+        <tr><td>vin</td><td>VARCHAR(64)</td><td>车架号</td></tr>
+        <tr><td>insured</td><td>VARCHAR(128)</td><td>被保险人</td></tr>
+        <tr><td>applicant</td><td>VARCHAR(128)</td><td>投保人</td></tr>
+        <tr><td>company_short</td><td>VARCHAR(64)</td><td>承保公司</td></tr>
+        <tr><td>policy_type</td><td>VARCHAR(64)</td><td>险种（交强/商业/驾意）</td></tr>
+        <tr><td>end_date</td><td>DATE</td><td>最近一次到期日</td></tr>
+        <tr><td>total_premium</td><td>VARCHAR(64)</td><td>上期保费</td></tr>
+        <tr><td>policy_record_ids</td><td>TEXT</td><td>关联的 insurance_records.id 列表（JSON数组）</td></tr>
+        <tr><td>assignee</td><td>VARCHAR(64)</td><td>跟进人ID（默认=保单上传人 sender）</td></tr>
+        <tr><td>assignee_name</td><td>VARCHAR(128)</td><td>跟进人姓名</td></tr>
+        <tr><td>status</td><td>ENUM</td><td>pending / following / won / lost / expired</td></tr>
+        <tr><td>priority</td><td>TINYINT DEFAULT 0</td><td>优先级（0普通 1高 2紧急）</td></tr>
+        <tr><td>remark</td><td>TEXT</td><td>备注</td></tr>
+        <tr><td>remind_at</td><td>DATE</td><td>下次提醒日期</td></tr>
+        <tr><td>created_at</td><td>TIMESTAMP</td><td>创建时间</td></tr>
+        <tr><td>updated_at</td><td>TIMESTAMP</td><td>更新时间</td></tr>
+      </tbody>
+    </table>
+    <div class="mt-3 text-xs text-slate-400">
+      索引：customer_key(UNIQUE), end_date, status, assignee, remind_at
+    </div>
+  </div>
+
+  <!-- 表2: renewal_followups -->
+  <div class="card p-5">
+    <div class="flex items-center gap-2 mb-3">
+      <span class="tag tag-new">新建</span>
+      <h3 class="font-bold text-slate-800">renewal_followups — 跟进记录表</h3>
+    </div>
+    <p class="text-sm text-slate-500 mb-3">每次跟进产生一条记录，形成时间线</p>
+    <table class="text-sm">
+      <thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>id</td><td>INT PK AUTO_INCREMENT</td><td>主键</td></tr>
+        <tr><td>task_id</td><td>INT</td><td>关联 renewal_tasks.id</td></tr>
+        <tr><td>operator</td><td>VARCHAR(64)</td><td>操作人ID</td></tr>
+        <tr><td>operator_name</td><td>VARCHAR(128)</td><td>操作人姓名</td></tr>
+        <tr><td>action</td><td>VARCHAR(32)</td><td>类型：followup / assign / status_change / remark</td></tr>
+        <tr><td>content</td><td>TEXT</td><td>跟进内容</td></tr>
+        <tr><td>next_remind_at</td><td>DATE</td><td>下次提醒日期（可选）</td></tr>
+        <tr><td>created_at</td><td>TIMESTAMP</td><td>跟进时间</td></tr>
+      </tbody>
+    </table>
+    <div class="mt-3 text-xs text-slate-400">
+      索引：task_id, operator, created_at
+    </div>
+  </div>
+</section>
+
+<!-- ========== 四、核心流程 ========== -->
+<section>
+  <h2 class="section-title">四、核心业务流程</h2>
+  <div class="card p-6">
+    <div class="space-y-6">
+      <div class="flow-step">
+        <div class="flow-dot">1</div>
+        <h4 class="font-bold text-slate-800">自动扫描生成续保任务</h4>
+        <p class="text-sm text-slate-500 mt-1">
+          定时任务（每天凌晨）扫描 <code class="file-path">insurance_policy_fields.end_date_iso</code>，<br>
+          查找未来 90 天内到期的保单，按 <code>车牌号/VIN</code> 聚合，自动创建/更新 renewal_tasks。<br>
+          跟进人默认 = 最近一张保单的 <code>sender</code>（上传人）。
+        </p>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">2</div>
+        <h4 class="font-bold text-slate-800">管理员分配 & 查看</h4>
+        <p class="text-sm text-slate-500 mt-1">
+          管理员在续保页面查看看板 → 筛选 → 批量/单个指派跟进人 → 设置优先级。<br>
+          支持按「到期时间 / 状态 / 跟进人 / 保司」多维筛选。
+        </p>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">3</div>
+        <h4 class="font-bold text-slate-800">跟进人执行跟进</h4>
+        <p class="text-sm text-slate-500 mt-1">
+          跟进人登录后看到自己的待跟进列表 → 点击客户 → 查看往年保单历史 → 添加跟进记录。<br>
+          每次跟进可设置「下次提醒日期」（如3天后、1周后），系统到期提醒。
+        </p>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">4</div>
+        <h4 class="font-bold text-slate-800">成交关闭</h4>
+        <p class="text-sm text-slate-500 mt-1">
+          客户续保成功 → 标记为「已成交」，记录成交备注。<br>
+          客户明确不续 → 标记为「已流失」，记录原因。<br>
+          超过到期日 30 天未跟进 → 自动标记为「已过期」。
+        </p>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">5</div>
+        <h4 class="font-bold text-slate-800">导入引导（增量数据）</h4>
+        <p class="text-sm text-slate-500 mt-1">
+          页面顶部提示条 + 弹窗引导：「提供往年台账/保单，系统自动识别并纳入续保管理」。<br>
+          展示客服微信二维码，客户可扫码联系导入。
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 五、页面原型 ========== -->
+<section>
+  <h2 class="section-title">五、页面原型（文字版）</h2>
+
+  <!-- 看板区域 -->
+  <div class="card p-5 mb-4">
+    <h3 class="font-semibold text-slate-800 mb-3">5.1 顶部看板</h3>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div class="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+        <div class="text-2xl font-bold text-red-600">12</div>
+        <div class="text-xs text-red-400 mt-1">已过期未处理</div>
+      </div>
+      <div class="bg-orange-50 border border-orange-200 rounded-lg p-3 text-center">
+        <div class="text-2xl font-bold text-orange-600">28</div>
+        <div class="text-xs text-orange-400 mt-1">7天内到期</div>
+      </div>
+      <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
+        <div class="text-2xl font-bold text-yellow-600">65</div>
+        <div class="text-xs text-yellow-400 mt-1">本月到期</div>
+      </div>
+      <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+        <div class="text-2xl font-bold text-blue-600">43</div>
+        <div class="text-xs text-blue-400 mt-1">下月到期</div>
+      </div>
+      <div class="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+        <div class="text-2xl font-bold text-green-600">89</div>
+        <div class="text-xs text-green-400 mt-1">本月已成交</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导入引导 -->
+  <div class="card p-5 mb-4">
+    <h3 class="font-semibold text-slate-800 mb-3">5.2 导入引导提示条</h3>
+    <div class="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-lg p-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">💡</span>
+        <div>
+          <p class="text-sm font-medium text-orange-800">数据越全，续保提醒越精准！</p>
+          <p class="text-xs text-orange-600">联系客服提供往年台账或保单PDF，系统自动识别并纳入续保管理</p>
+        </div>
+      </div>
+      <button class="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 transition whitespace-nowrap">
+        联系客服导入
+      </button>
+    </div>
+  </div>
+
+  <!-- 弹窗预览 -->
+  <div class="card p-5 mb-4">
+    <h3 class="font-semibold text-slate-800 mb-3">5.3 客服引导弹窗（点击"联系客服导入"后）</h3>
+    <div class="max-w-sm mx-auto bg-white border-2 border-slate-200 rounded-2xl p-6 text-center">
+      <div class="text-4xl mb-3">📱</div>
+      <h4 class="text-lg font-bold text-slate-800 mb-2">扫码联系客服</h4>
+      <p class="text-sm text-slate-500 mb-4">提供您的往年保单台账（Excel）或保单PDF，<br>我们将免费为您导入系统</p>
+      <div class="w-40 h-40 mx-auto bg-slate-100 border-2 border-dashed border-slate-300 rounded-xl flex items-center justify-center text-slate-400 text-xs mb-4">
+        [ 客服微信二维码 ]<br>
+        <span class="text-[10px]">后台设置页上传</span>
+      </div>
+      <p class="text-xs text-slate-400">支持格式：PDF保单、Excel台账</p>
+      <button class="mt-4 text-sm text-slate-400 hover:text-slate-600">关闭</button>
+    </div>
+  </div>
+
+  <!-- 列表区域 -->
+  <div class="card p-5 mb-4">
+    <h3 class="font-semibold text-slate-800 mb-3">5.4 续保任务列表</h3>
+
+    <!-- 筛选栏 -->
+    <div class="flex flex-wrap gap-2 mb-4 text-sm">
+      <select class="border rounded-lg px-3 py-1.5 text-slate-600 bg-white">
+        <option>全部状态</option><option>待跟进</option><option>跟进中</option><option>已成交</option><option>已流失</option>
+      </select>
+      <select class="border rounded-lg px-3 py-1.5 text-slate-600 bg-white">
+        <option>全部跟进人</option><option>张三</option><option>李四</option>
+      </select>
+      <select class="border rounded-lg px-3 py-1.5 text-slate-600 bg-white">
+        <option>到期时间</option><option>7天内</option><option>本月</option><option>下月</option><option>已过期</option>
+      </select>
+      <input type="text" placeholder="搜索车牌/被保人/投保人..." class="border rounded-lg px-3 py-1.5 text-slate-600 flex-1 min-w-[200px]">
+      <button class="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-sm">批量分配</button>
+    </div>
+
+    <!-- 示例数据行 -->
+    <div class="overflow-x-auto">
+      <table class="text-sm">
+        <thead>
+          <tr>
+            <th><input type="checkbox"></th>
+            <th>车牌号</th>
+            <th>被保险人</th>
+            <th>承保公司</th>
+            <th>险种</th>
+            <th>到期日</th>
+            <th>剩余天数</th>
+            <th>上期保费</th>
+            <th>跟进人</th>
+            <th>状态</th>
+            <th>最近跟进</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="bg-red-50/50">
+            <td><input type="checkbox"></td>
+            <td class="font-medium text-slate-800">粤B·12345</td>
+            <td>张三</td>
+            <td>人保</td>
+            <td><span class="tag" style="background:#dbeafe;color:#1d4ed8">交强</span></td>
+            <td class="text-red-600 font-medium">2026-07-15</td>
+            <td><span class="text-red-600 font-bold">2天</span></td>
+            <td>¥1,200</td>
+            <td>王五</td>
+            <td><span class="tag" style="background:#fef3c7;color:#92400e">跟进中</span></td>
+            <td class="text-xs text-slate-400">07-12 已电话联系</td>
+            <td><button class="text-orange-600 text-xs hover:underline">跟进</button></td>
+          </tr>
+          <tr>
+            <td><input type="checkbox"></td>
+            <td class="font-medium text-slate-800">粤A·67890</td>
+            <td>李四</td>
+            <td>平安</td>
+            <td><span class="tag" style="background:#fce7f3;color:#be185d">商业</span></td>
+            <td>2026-07-25</td>
+            <td><span class="text-orange-600 font-bold">12天</span></td>
+            <td>¥3,800</td>
+            <td>赵六</td>
+            <td><span class="tag" style="background:#e0e7ff;color:#3730a3">待跟进</span></td>
+            <td class="text-xs text-slate-400">—</td>
+            <td><button class="text-orange-600 text-xs hover:underline">跟进</button></td>
+          </tr>
+          <tr>
+            <td><input type="checkbox"></td>
+            <td class="font-medium text-slate-800">粤S·11111</td>
+            <td>王八</td>
+            <td>太平洋</td>
+            <td><span class="tag" style="background:#dbeafe;color:#1d4ed8">交强</span></td>
+            <td>2026-08-10</td>
+            <td>28天</td>
+            <td>¥950</td>
+            <td><span class="text-slate-400 italic text-xs">未分配</span></td>
+            <td><span class="tag" style="background:#f1f5f9;color:#64748b">待分配</span></td>
+            <td class="text-xs text-slate-400">—</td>
+            <td><button class="text-blue-600 text-xs hover:underline">分配</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 跟进详情弹窗 -->
+  <div class="card p-5">
+    <h3 class="font-semibold text-slate-800 mb-3">5.5 客户详情 & 跟进记录（侧滑面板）</h3>
+    <div class="border-2 border-slate-200 rounded-xl overflow-hidden max-w-lg">
+      <!-- 客户头部 -->
+      <div class="bg-slate-50 p-4 border-b">
+        <div class="flex justify-between items-start">
+          <div>
+            <h4 class="font-bold text-lg text-slate-800">粤B·12345 — 张三</h4>
+            <p class="text-xs text-slate-400 mt-1">人保 · 交强险 · 到期：2026-07-15</p>
+          </div>
+          <span class="tag" style="background:#fef3c7;color:#92400e">跟进中</span>
+        </div>
+      </div>
+
+      <!-- 往年保单 -->
+      <div class="p-4 border-b">
+        <h5 class="text-sm font-semibold text-slate-600 mb-2">📋 历史保单</h5>
+        <div class="space-y-2 text-xs">
+          <div class="flex justify-between items-center bg-slate-50 rounded-lg p-2">
+            <span>2025-07-15 ~ 2026-07-15</span>
+            <span class="text-slate-500">人保 · 交强 · ¥1,200</span>
+          </div>
+          <div class="flex justify-between items-center bg-slate-50 rounded-lg p-2">
+            <span>2024-07-15 ~ 2025-07-15</span>
+            <span class="text-slate-500">平安 · 交强 · ¥1,100</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 跟进时间线 -->
+      <div class="p-4 border-b">
+        <h5 class="text-sm font-semibold text-slate-600 mb-3">📝 跟进记录</h5>
+        <div class="space-y-4 text-sm">
+          <div class="flex gap-3">
+            <div class="w-2 h-2 rounded-full bg-orange-400 mt-1.5 flex-shrink-0"></div>
+            <div>
+              <div class="flex gap-2 items-baseline">
+                <span class="font-medium text-slate-700">王五</span>
+                <span class="text-xs text-slate-400">07-12 14:30</span>
+              </div>
+              <p class="text-slate-500 text-xs mt-0.5">电话联系客户，客户表示需要对比报价后决定。下周一再跟。</p>
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <div class="w-2 h-2 rounded-full bg-blue-400 mt-1.5 flex-shrink-0"></div>
+            <div>
+              <div class="flex gap-2 items-baseline">
+                <span class="font-medium text-slate-700">系统</span>
+                <span class="text-xs text-slate-400">07-10 08:00</span>
+              </div>
+              <p class="text-slate-500 text-xs mt-0.5">自动创建续保任务，分配给 王五</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 新增跟进 -->
+      <div class="p-4">
+        <textarea class="w-full border rounded-lg p-2 text-sm resize-none h-16" placeholder="输入跟进内容..."></textarea>
+        <div class="flex justify-between items-center mt-2">
+          <div class="flex items-center gap-2 text-xs text-slate-400">
+            <label>下次提醒：</label>
+            <input type="date" class="border rounded px-2 py-1 text-xs">
+          </div>
+          <button class="px-4 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium">提交跟进</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 六、API 设计 ========== -->
+<section>
+  <h2 class="section-title">六、API 设计</h2>
+  <div class="card p-5">
+    <table class="text-sm">
+      <thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td class="font-mono text-green-600">GET</td><td class="font-mono">/api/renewal/stats</td><td>看板统计数据（各状态/时段计数）</td></tr>
+        <tr><td class="font-mono text-green-600">GET</td><td class="font-mono">/api/renewal/list</td><td>任务列表（分页 + 筛选：status/assignee/date_range/keyword）</td></tr>
+        <tr><td class="font-mono text-green-600">GET</td><td class="font-mono">/api/renewal/detail/{id}</td><td>任务详情（含历史保单 + 跟进记录时间线）</td></tr>
+        <tr><td class="font-mono text-blue-600">POST</td><td class="font-mono">/api/renewal/assign</td><td>分配跟进人（支持批量：task_ids + assignee）</td></tr>
+        <tr><td class="font-mono text-blue-600">POST</td><td class="font-mono">/api/renewal/followup</td><td>添加跟进记录（task_id + content + next_remind_at）</td></tr>
+        <tr><td class="font-mono text-blue-600">POST</td><td class="font-mono">/api/renewal/status</td><td>变更状态（task_id + status + remark）</td></tr>
+        <tr><td class="font-mono text-green-600">GET</td><td class="font-mono">/api/renewal/history/{customer_key}</td><td>客户往年保单列表</td></tr>
+        <tr><td class="font-mono text-blue-600">POST</td><td class="font-mono">/api/renewal/scan</td><td>手动触发一次扫描生成任务</td></tr>
+        <tr><td class="font-mono text-green-600">GET</td><td class="font-mono">/api/renewal/config</td><td>获取续保配置（提醒天数、客服二维码等）</td></tr>
+        <tr><td class="font-mono text-blue-600">POST</td><td class="font-mono">/api/renewal/config</td><td>保存续保配置</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ========== 七、文件改动清单 ========== -->
+<section>
+  <h2 class="section-title">七、文件改动清单</h2>
+  <div class="card p-5">
+    <table class="text-sm">
+      <thead><tr><th>文件</th><th>操作</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="file-path">insurance/renewal_db.py</td>
+          <td><span class="tag tag-new">新建</span></td>
+          <td>续保模块数据库操作（建表 + CRUD）</td>
+        </tr>
+        <tr>
+          <td class="file-path">insurance/renewal_api.py</td>
+          <td><span class="tag tag-new">新建</span></td>
+          <td>续保模块 Flask Blueprint（/api/renewal/*）</td>
+        </tr>
+        <tr>
+          <td class="file-path">insurance/renewal_scanner.py</td>
+          <td><span class="tag tag-new">新建</span></td>
+          <td>定时扫描逻辑：查询即将到期保单 → 生成/更新任务</td>
+        </tr>
+        <tr>
+          <td class="file-path">web/templates/renewal.html</td>
+          <td><span class="tag tag-new">新建</span></td>
+          <td>续保提醒前端页面（Vue 3 + Tailwind，与 insurance.html 风格统一）</td>
+        </tr>
+        <tr>
+          <td class="file-path">main.py</td>
+          <td><span class="tag tag-modify">修改</span></td>
+          <td>注册 renewal Blueprint + 启动定时扫描线程</td>
+        </tr>
+        <tr>
+          <td class="file-path">insurance/db.py</td>
+          <td><span class="tag tag-modify">修改</span></td>
+          <td>init_db() 中增加续保相关表的建表调用</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ========== 八、定时扫描策略 ========== -->
+<section>
+  <h2 class="section-title">八、定时扫描策略</h2>
+  <div class="card p-5">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <h4 class="font-semibold text-slate-800 mb-2">扫描规则</h4>
+        <ul class="text-sm text-slate-600 space-y-2">
+          <li>• 每天凌晨 02:00 自动执行（后台线程 + APScheduler 或简单 threading.Timer）</li>
+          <li>• 扫描范围：end_date_iso 在 [今天-30天, 今天+90天] 的保单</li>
+          <li>• 按 <code>plate_no</code> 或 <code>vin</code> 聚合（无车牌用VIN）</li>
+          <li>• 已存在且状态为 won/lost 的任务不重复创建</li>
+          <li>• 新保单识别成功后也即时检查是否需创建续保任务</li>
+        </ul>
+      </div>
+      <div>
+        <h4 class="font-semibold text-slate-800 mb-2">提醒频率（可配置）</h4>
+        <ul class="text-sm text-slate-600 space-y-2">
+          <li>• 到期前 90 天：首次创建任务</li>
+          <li>• 到期前 30 天：如仍未跟进，标高优先级</li>
+          <li>• 到期前 7 天：标紧急</li>
+          <li>• 到期后 30 天：未成交自动标「已过期」</li>
+          <li>• 跟进人设置的「下次提醒」优先于全局节奏</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 九、待确认项 ========== -->
+<section>
+  <h2 class="section-title">九、待确认项</h2>
+  <div class="decision-box space-y-4">
+    <div>
+      <h4 class="font-semibold text-amber-800">1. 客服二维码管理方式</h4>
+      <p class="text-sm text-amber-700 mt-1">方案A：在续保设置页上传图片，存入 insurance_config 表（推荐，复用现有配置机制）<br>方案B：放在 static 目录，硬编码路径</p>
+    </div>
+    <div>
+      <h4 class="font-semibold text-amber-800">2. 跟进人体系</h4>
+      <p class="text-sm text-amber-700 mt-1">当前系统无用户登录体系（auth 模块情况待确认），跟进人可先用 sender（企微用户ID + 姓名）标识，后续如需细分权限再扩展。是否可行？</p>
+    </div>
+    <div>
+      <h4 class="font-semibold text-amber-800">3. 通知方式</h4>
+      <p class="text-sm text-amber-700 mt-1">提醒到期是否需要推送通知（如企微机器人消息）？还是仅页面展示？第一期建议仅页面，后续再接企微通知。</p>
+    </div>
+    <div>
+      <h4 class="font-semibold text-amber-800">4. 导出功能</h4>
+      <p class="text-sm text-amber-700 mt-1">续保任务列表是否需要导出 Excel？（可复用保单模块的导出逻辑）</p>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 十、工期估算 ========== -->
+<section>
+  <h2 class="section-title">十、工期估算</h2>
+  <div class="card p-5">
+    <table class="text-sm">
+      <thead><tr><th>阶段</th><th>内容</th><th>估时</th></tr></thead>
+      <tbody>
+        <tr><td>后端核心</td><td>renewal_db + renewal_scanner + renewal_api</td><td>~2h</td></tr>
+        <tr><td>前端页面</td><td>renewal.html（看板 + 列表 + 筛选 + 侧滑详情 + 弹窗）</td><td>~3h</td></tr>
+        <tr><td>集成注册</td><td>main.py 注册 + 定时任务启动</td><td>~0.5h</td></tr>
+        <tr><td>联调测试</td><td>端到端流程验证</td><td>~1h</td></tr>
+        <tr class="font-bold"><td colspan="2">合计</td><td>~6.5h</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Footer -->
+<div class="text-center py-8 text-sm text-slate-400">
+  <p>方案确认后开始开发 · 如需调整请反馈</p>
+</div>
+
+</div>
+</body>
+</html>
