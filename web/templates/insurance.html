@@ -8123,9 +8123,11 @@ const _app = createApp({
                 if (children.length) {
                     try {
                         const invoices = children.map(c => ({ fields: c.display_fields || {}, id: c.id, file_name: c.filename }));
+                        const _mergeBody2 = { invoices, merge_by_plate: true, return_json: true, config_applied: true, export_type: 'success' };
+                        if (isSuperAdmin.value && recordEnterpriseFilter.value) _mergeBody2.enterprise_id = recordEnterpriseFilter.value;
                         const mresp = await authFetch('/api/insurance/export/excel', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ invoices, merge_by_plate: true, return_json: true, config_applied: true, export_type: 'success' })
+                            body: JSON.stringify(_mergeBody2)
                         });
                         const mj = await mresp.json();
                         const mrows = (mj.data && mj.data.rows) || [];
@@ -10849,9 +10851,15 @@ const _app = createApp({
             const invoices = raw.map(r => ({ fields: r.display_fields || {}, id: r.id, file_name: r.filename }));
             let mrows = [];
             try {
+                // 超管带企业筛选浏览时必须带上 enterprise_id，后端才能解析到该企业自己的
+                // 计算公式/列配置；不传的话会退回用超管自己账号的配置去算，公式引用的字段
+                // (如"结算金额")就会算错——企业账号自己登录时天然是自己的身份，看不出问题，
+                // 只有超管带筛选浏览时才会复现（2026-07-21反馈）
+                const _mergeBody = { invoices, merge_by_plate: true, return_json: true, config_applied: true, export_type: 'success' };
+                if (isSuperAdmin.value && recordEnterpriseFilter.value) _mergeBody.enterprise_id = recordEnterpriseFilter.value;
                 const resp = await authFetch('/api/insurance/export/excel', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ invoices, merge_by_plate: true, return_json: true, config_applied: true, export_type: 'success' })
+                    body: JSON.stringify(_mergeBody)
                 });
                 const j = await resp.json();
                 mrows = (j.data && j.data.rows) || [];
