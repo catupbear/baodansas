@@ -635,7 +635,7 @@
                     </button>
                     <!-- 销售看板：超管 + 企业管理员可用；员工可见入口但进入后为锁定提示 -->
                     <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="pageTab = 'sales'; loadSalesDash()" :class="pageTab === 'sales' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;">
-                        销售看板<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
+                        业绩看板<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
                     </button>
                     <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="openRenewalTab()" :class="pageTab === 'renewal' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;position:relative;">
                         续保管理系统<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
@@ -833,7 +833,7 @@
                 <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="pageTab='sales';loadSalesDash();mobileMenuOpen=false"
                         style="display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
                         :style="pageTab==='sales'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
-                    销售看板<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
+                    业绩看板<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
                 </button>
                 <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="openRenewalTab();mobileMenuOpen=false"
                         style="display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
@@ -1839,7 +1839,7 @@
                     <div style="width:52px;height:52px;border-radius:50%;background:#fff7ed;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;">
                         <svg style="width:26px;height:26px;color:#ea580c;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                     </div>
-                    <div style="font-size:16px;font-weight:700;color:#1f2937;margin-bottom:6px;">销售看板未开通</div>
+                    <div style="font-size:16px;font-weight:700;color:#1f2937;margin-bottom:6px;">业绩看板未开通</div>
                     <div style="font-size:13px;color:#6b7280;line-height:1.7;">请联系企业管理员开通权限</div>
                 </div>
             </div>
@@ -1879,7 +1879,6 @@
                 </template>
                 <span v-if="salesData" class="sd-lb">{{ salesData.date_start }} ~ {{ salesData.date_end }}（按{{ salesData.time_field }}）· {{ salesData.record_count }} 单</span>
                 <span style="flex:1"></span>
-                <span v-if="salesData" class="sd-lb">配置来源：{{ salesData.config_source==='enterprise'?'企业自定义':(salesData.config_source==='global'?'系统默认模板':'内置默认') }}</span>
             </div>
 
             <div v-if="salesLoading" class="flex items-center justify-center py-24 text-gray-400 text-sm">加载中...</div>
