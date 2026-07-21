@@ -23,7 +23,7 @@ worker 通知/匹配一次；时间比较全部用 DB NOW()，不依赖各机器
 配置（insurance_config 表 quote_fill_miss_notify 键，沿用现有）：
   enabled            「未录入」提醒开关（默认关；不影响入池与自动匹配回填）
   robot_id           FlowBot 机器人 ID，缺省复用 flowbot_fail_notify
-  tech_support_name  客服微信名，缺省"客户客服（午虎保单台账系统）"
+  tech_support_name  客服微信名，缺省"技术客服（午虎保单台账系统）"
   template           未录入提醒文案（{plate} 占位）
   delay_minutes      延迟提醒分钟数，默认 10
   pool_expire_hours  池子有效期小时数，默认 48
@@ -46,7 +46,7 @@ _MATCHED_GRACE_MINUTES = 10
 # 默认配置
 _DEFAULT_DELAY_MINUTES = 10
 _DEFAULT_EXPIRE_HOURS = 48
-_DEFAULT_TECH_NAME = "客户客服（午虎保单台账系统）"
+_DEFAULT_TECH_NAME = "技术客服（午虎保单台账系统）"
 
 # 「未录入」默认提醒文案（{plate} 动态替换车牌），原 core/fetcher.py 迁入
 MISS_TEMPLATE = (
