@@ -38,7 +38,7 @@ DEFAULT_CONFIG = {
         {"id": "c3", "title": "保单量", "agg": "count"},
     ],
     "charts": [
-        {"type": "trend", "title": "保费趋势", "granularity": "month",
+        {"type": "trend", "title": "保费趋势", "granularity": "auto",
          "metrics": [{"label": "保费", "agg": "sum", "field": "保费"}]},
         {"type": "donut", "title": "保司保费占比", "dimension": "保险公司",
          "metric": {"agg": "sum", "field": "保费"}, "top": 5},
@@ -581,8 +581,13 @@ def get_dashboard_data(db, enterprise_id: int, date_start: str, date_end: str,
 
 def _build_trend(ch: dict, records: list, date_start: str, date_end: str,
                  time_field: str, user_config: dict) -> dict:
-    """趋势图：按时间粒度分桶，逐指标聚合"""
-    granularity = ch.get("granularity") or "month"
+    """趋势图：按时间粒度分桶，逐指标聚合。
+    granularity=auto（默认）按时间范围自适应：≤31天按日、≤92天按周、更长按月"""
+    granularity = ch.get("granularity") or "auto"
+    if granularity == "auto":
+        ds, de = _parse_date(date_start), _parse_date(date_end)
+        span = (de - ds).days + 1 if ds and de else 31
+        granularity = "day" if span <= 31 else ("week" if span <= 92 else "month")
     metrics = ch.get("metrics") or []
 
     def bucket_key(day_str):

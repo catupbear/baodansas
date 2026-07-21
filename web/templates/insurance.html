@@ -2006,7 +2006,7 @@
                         <input type="text" v-model="ch.title" style="width:140px" placeholder="标题">
                         <template v-if="ch.type==='trend'">
                             <span class="sd-lb">粒度：</span>
-                            <select v-model="ch.granularity"><option value="month">按月</option><option value="week">按周</option><option value="day">按日</option></select>
+                            <select v-model="ch.granularity"><option value="auto">自动（跟随时间范围）</option><option value="month">按月</option><option value="week">按周</option><option value="day">按日</option></select>
                             <span class="sd-lb">指标：</span>
                             <template v-for="(m, mi) in ch.metrics" :key="mi">
                                 <select v-model="m.field" style="max-width:120px" @change="m.label=m.field"><option v-for="f in salesFields" :key="f" :value="f">{{ f }}</option></select>
@@ -12279,7 +12279,7 @@ const _app = createApp({
                     const cfg = j.data.config || {};
                     // 补齐结构默认值，避免模板绑定报错
                     cfg.cards = cfg.cards || [];
-                    cfg.charts = (cfg.charts || []).map(ch => ({ top: 5, metrics: [], metric: { agg: 'sum', field: '保费' }, ...ch }));
+                    cfg.charts = (cfg.charts || []).map(ch => ({ top: 5, metrics: [], metric: { agg: 'sum', field: '保费' }, granularity: 'auto', ...ch }));
                     cfg.ranking = Object.assign({ dimension: '业务员', sort_by: '保费', columns: [], target_columns: [] }, cfg.ranking || {});
                     salesConfig.value = cfg;
                     salesConfigSource.value = j.data.source;
