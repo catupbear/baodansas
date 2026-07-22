@@ -112,7 +112,7 @@ def list_users(db, role: str = "", parent_id: int = None, sales_type: str = "") 
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        sql = "SELECT id, phone, role, parent_id, name, enabled, activated, is_sales, sales_type, created_at, updated_at FROM users WHERE 1=1"
+        sql = "SELECT id, phone, role, parent_id, name, plain_password, enabled, activated, is_sales, sales_type, created_at, updated_at FROM users WHERE 1=1"
         params = []
         if role:
             sql += " AND role = %s"
@@ -155,8 +155,8 @@ def create_user(db, phone: str, password: str, role: str, parent_id: int = None,
                 referral_code = code
                 break
         cursor.execute(
-            "INSERT INTO users (phone, password_hash, role, parent_id, name, referral_code, referrer_id, is_sales, sales_type, activated) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            (phone, generate_password_hash(password), role, parent_id, name, referral_code, referrer_id, 1 if is_sales else 0, "", 1 if activated else 0),
+            "INSERT INTO users (phone, password_hash, plain_password, role, parent_id, name, referral_code, referrer_id, is_sales, sales_type, activated) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (phone, generate_password_hash(password), password, role, parent_id, name, referral_code, referrer_id, 1 if is_sales else 0, "", 1 if activated else 0),
         )
         conn.commit()
         return cursor.lastrowid
@@ -187,8 +187,8 @@ def reset_password(db, user_id: int, new_password: str):
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute(
-            "UPDATE users SET password_hash = %s WHERE id = %s",
-            (generate_password_hash(new_password), user_id),
+            "UPDATE users SET password_hash = %s, plain_password = %s WHERE id = %s",
+            (generate_password_hash(new_password), new_password, user_id),
         )
         conn.commit()
     finally:
@@ -835,6 +835,26 @@ def init_users_renewal_column(db):
         except Exception:
             pass  # 列已存在，跳过
         conn.commit()
+    finally:
+        conn.close()
+
+
+def init_users_plain_password_column(db):
+    """为 users 表添加 plain_password 字段（幂等迁移）。
+    保存账号密码的明文，供超管在「人员配置」页查看/告知客户。
+    存量用户无明文（历史仅存哈希），显示为空，重置密码后即回填。"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "ALTER TABLE users ADD COLUMN plain_password VARCHAR(64) DEFAULT NULL "
+                "COMMENT '密码明文（供超管在人员配置查看，仅超管可见）'"
+            )
+            conn.commit()
+            logger.info("users 表添加列 plain_password 完成")
+        except Exception:
+            pass  # 列已存在，跳过
     finally:
         conn.close()
 

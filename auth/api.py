@@ -4,6 +4,7 @@
 """
 
 import logging
+import secrets
 
 from flask import Blueprint, jsonify, request, g
 
@@ -541,8 +542,9 @@ def api_create_enterprise():
     try:
         eid = create_enterprise(_db, name, contact_person, contact_phone)
         update_enterprise(_db, eid, {"enterprise_no": enterprise_no})
-        # 同步创建该企业的管理员账号：登录账号=企业编号(小写去横线)，姓名=企业管理员，初始密码=wuhu2025
-        create_user(_db, admin_phone, "wuhu2025", ROLE_ENTERPRISE, eid, "企业管理员", activated=1)
+        # 同步创建该企业的管理员账号：登录账号=企业编号(小写去横线)，姓名=企业管理员，初始密码=4位随机数
+        admin_password = f"{secrets.randbelow(10000):04d}"
+        create_user(_db, admin_phone, admin_password, ROLE_ENTERPRISE, eid, "企业管理员", activated=1)
         # 初始化企业默认导出列配置：包含全部识别字段（都勾选导出）
         try:
             from insurance.field_config_db import init_enterprise_default_template
