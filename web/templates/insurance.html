@@ -643,10 +643,27 @@
                     <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="pageTab = 'sales'; loadSalesDash()" :class="pageTab === 'sales' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;">
                         业绩看板<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
                     </button>
-                    <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="openRenewalTab()" :class="pageTab === 'renewal' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;position:relative;">
-                        续保管理系统<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
-                        <span v-if="renewalBadgeCount > 0" style="position:absolute;top:-8px;right:-8px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.35);border:2px solid #c2410c;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
-                    </button>
+                    <!-- 企业工作台：级联下拉（续保管理 / 保单跟进 ▸ 公户车盖章跟进） -->
+                    <div v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" class="nav-more-wrap">
+                        <button @click.stop="workbenchOpen = !workbenchOpen" :class="pageTab === 'renewal' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;position:relative;">
+                            企业工作台<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span> ▾
+                            <span v-if="renewalBadgeCount > 0" style="position:absolute;top:-8px;right:-8px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.35);border:2px solid #c2410c;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
+                        </button>
+                        <div v-if="workbenchOpen" class="nav-more-dropdown" @click.stop style="min-width:170px;">
+                            <button @click="openRenewalTab(); workbenchOpen = false" class="nav-more-item">
+                                🔄 续保管理
+                                <span v-if="renewalBadgeCount > 0" style="margin-left:auto;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#dc2626;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
+                            </button>
+                            <div style="position:relative;" @mouseenter="wbSealOpen = true" @mouseleave="wbSealOpen = false">
+                                <button @click="wbComingSoon('保单跟进'); workbenchOpen = false" class="nav-more-item" style="width:100%;">
+                                    📞 保单跟进<span style="margin-left:auto;color:#9ca3af;">▸</span>
+                                </button>
+                                <div v-if="wbSealOpen" class="nav-more-dropdown" style="left:100%;top:0;margin-left:2px;">
+                                    <button @click="wbComingSoon('公户车盖章跟进'); workbenchOpen = false; wbSealOpen = false" class="nav-more-item" style="white-space:nowrap;">🖋 公户车盖章跟进</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <!-- 更多：收纳 AI质检 / 导出记录，避免顶部导航栏按钮太多挤成一整排 -->
                     <div v-if="isSuperAdmin" class="nav-more-wrap">
                         <button @click.stop="moreMenuOpen = !moreMenuOpen" class="page-tab-btn" style="position:relative;white-space:nowrap;">
@@ -855,12 +872,23 @@
                         :style="pageTab==='sales'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
                     业绩看板<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
                 </button>
-                <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="openRenewalTab();mobileMenuOpen=false"
-                        style="display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
-                        :style="pageTab==='renewal'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
-                    <span>续保管理系统<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span></span>
-                    <span v-if="renewalBadgeCount > 0" style="min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
-                </button>
+                <template v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)">
+                    <div style="padding:10px 12px 2px;font-size:12px;color:#9ca3af;font-weight:700;">企业工作台<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span></div>
+                    <button @click="openRenewalTab();mobileMenuOpen=false"
+                            style="display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;padding:9px 12px 9px 22px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
+                            :style="pageTab==='renewal'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
+                        <span>🔄 续保管理</span>
+                        <span v-if="renewalBadgeCount > 0" style="min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
+                    </button>
+                    <button @click="wbComingSoon('保单跟进');mobileMenuOpen=false"
+                            style="display:block;width:100%;text-align:left;padding:9px 12px 9px 22px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;background:none;color:#374151;">
+                        📞 保单跟进
+                    </button>
+                    <button @click="wbComingSoon('公户车盖章跟进');mobileMenuOpen=false"
+                            style="display:block;width:100%;text-align:left;padding:9px 12px 9px 38px;border-radius:8px;font-size:13px;font-weight:500;border:none;cursor:pointer;background:none;color:#6b7280;">
+                        🖋 公户车盖章跟进
+                    </button>
+                </template>
             </div>
             <!-- 未激活：工作台入口 -->
             <div v-else style="padding:12px 16px;border-bottom:1px solid #f3f4f6;">
@@ -5851,13 +5879,26 @@
         </button>
     </div>
 
+    <!-- ========== 企业工作台未上线模块占位弹窗 ========== -->
+    <teleport to="body">
+      <div v-if="wbComingName" @click.self="wbComingName=''"
+           style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px;">
+        <div style="background:#fff;border-radius:18px;padding:30px 28px;width:360px;max-width:95vw;box-shadow:0 24px 70px rgba(0,0,0,0.25);text-align:center;">
+          <div style="width:60px;height:60px;margin:0 auto 16px;border-radius:16px;background:linear-gradient(135deg,#fb923c,#ea580c);display:flex;align-items:center;justify-content:center;font-size:30px;">🚧</div>
+          <div style="font-size:17px;font-weight:800;color:#1f2937;margin-bottom:8px;">「{{ wbComingName }}」即将上线</div>
+          <div style="font-size:13px;color:#6b7280;line-height:1.8;margin-bottom:20px;">功能正在开发中，上线后会第一时间在这里通知您，敬请期待。</div>
+          <button @click="wbComingName=''" class="btn btn-primary" style="padding:8px 26px;font-size:13px;">我知道了</button>
+        </div>
+      </div>
+    </teleport>
+
     <!-- ========== 续保功能引导弹窗（每会话首次进入续保页弹出） ========== -->
     <teleport to="body">
       <div v-if="renewalPromoVisible" @click.self="renewalPromoVisible=false"
            style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px;">
         <div style="background:#fff;border-radius:18px;padding:30px 28px;width:410px;max-width:95vw;box-shadow:0 24px 70px rgba(0,0,0,0.25);text-align:center;">
           <div style="width:60px;height:60px;margin:0 auto 16px;border-radius:16px;background:linear-gradient(135deg,#fb923c,#ea580c);display:flex;align-items:center;justify-content:center;font-size:30px;">⏰</div>
-          <div style="font-size:17px;font-weight:800;color:#1f2937;margin-bottom:10px;">续保管理系统 · 限时免费</div>
+          <div style="font-size:17px;font-weight:800;color:#1f2937;margin-bottom:10px;">续保管理 · 限时免费</div>
           <!-- 未开启功能：只引导开启 -->
           <template v-if="!isSuperAdmin && !renewalInfoRevealed">
             <div style="font-size:13px;color:#6b7280;line-height:1.9;text-align:left;margin-bottom:20px;">
@@ -6218,6 +6259,12 @@ const _app = createApp({
         // ========== 移动端菜单 ==========
         const mobileMenuOpen = ref(false);
         const moreMenuOpen = ref(false);
+        // 企业工作台级联下拉 + 未上线模块占位提示
+        const workbenchOpen = ref(false);
+        const wbSealOpen = ref(false);
+        const wbComingName = ref('');
+        function wbComingSoon(name) { wbComingName.value = name; }
+        document.addEventListener('click', () => { workbenchOpen.value = false; wbSealOpen.value = false; });
         // 点击下拉外部区域自动关闭（按钮/下拉内容自身用 @click.stop 阻止冒泡到这里）
         document.addEventListener('click', () => { moreMenuOpen.value = false; });
 
@@ -13035,7 +13082,7 @@ const _app = createApp({
             errorReportMsg, errorReportOk, openErrorReport, submitErrorReport,
             // 通知面板
             // 移动端菜单
-            mobileMenuOpen, moreMenuOpen,
+            mobileMenuOpen, moreMenuOpen, workbenchOpen, wbSealOpen, wbComingName, wbComingSoon,
             // 识别记录移动端卡片视图
             mobileFilterOpen, mSheetRecord, mLoadingMore,
             mField, mHasPlate, mCardTitle, mPolicyChipClass, mIsLong,
