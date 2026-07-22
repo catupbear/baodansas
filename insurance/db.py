@@ -1186,9 +1186,25 @@ def save_insurance_record(db, record: dict) -> int:
 
         conn.commit()
         logger.debug("保单记录已插入, id=%d", record_id)
-        return record_id
     finally:
         conn.close()
+
+    # 加油包消费：标准版企业当月用量超出月额度(3000)后，每新增一条识别记录
+    # 从加油包扣1次（最早到期的包先扣）。企业版无限额度不扣。失败不影响主流程
+    try:
+        _eid = data.get("enterprise_id")
+        if _eid:
+            from auth.db import (get_enterprise_by_id, get_enterprise_monthly_pdf_usage,
+                                 consume_boost_pack)
+            _ent = get_enterprise_by_id(db, _eid)
+            if _ent and _ent.get("plan_type") not in ("enterprise", "enterprise_trial"):
+                # 本条已计入当月用量，>3000 即本条属于超额部分
+                if get_enterprise_monthly_pdf_usage(db, _eid) > 3000:
+                    if consume_boost_pack(db, _eid):
+                        logger.info("企业 %s 月额度已超，本条识别消费加油包1次", _eid)
+    except Exception as e:
+        logger.debug("加油包消费检查失败: %s", e)
+    return record_id
 
 
 def update_insurance_record(db, record_id: int, updates: dict):

@@ -379,6 +379,8 @@
                                     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;row-gap:6px;max-width:210px;">
                                         <button @click="openReportModal(ent)" class="op-btn blue">导出报告</button>
                                         <button @click="openPlanModal(ent)" class="op-btn orange">开通</button>
+                                <button @click="openBoostModal(ent)" class="op-btn amber">⛽ 加油包</button>
+                                        <button @click="openBoostModal(ent)" class="op-btn amber" title="识别加油包：99元/1200次/3个月，可叠加">⛽ 加油包</button>
                                         <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled ? 'amber' : 'green']">{{ ent.enabled ? '禁用' : '启用' }}</button>
                                         <button @click="toggleMerge(ent)" :class="['op-btn', ent.merge_by_plate ? 'orange on' : 'gray']" title="开启后该企业识别记录默认按车牌合并显示">车牌合并{{ ent.merge_by_plate ? '✓' : '' }}</button>
                                                                             </div>
@@ -529,6 +531,37 @@
 
         <!-- 开通套餐弹窗 -->
         <transition name="fade">
+            <!-- 加油包管理弹窗 -->
+            <div v-if="showBoostModal" class="modal-mask" @click.self="showBoostModal=false">
+                <div class="modal-content" style="max-width:560px;">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-1">⛽ 识别加油包</h3>
+                    <p style="font-size:13px;color:#9ca3af;margin-bottom:14px;">{{ boostEnt ? boostEnt.name : '' }} · ¥99 / 1,200次 / 3个月有效 · 可叠加</p>
+                    <div v-if="boostBalance" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#9a3412;">
+                        当前余量 <b style="color:#ea580c;">{{ boostBalance.remaining }}</b> 次
+                        <span v-if="boostBalance.nearest_expire" style="color:#9ca3af;margin-left:8px;">最近到期 {{ String(boostBalance.nearest_expire).slice(0,10) }}</span>
+                    </div>
+                    <div style="max-height:260px;overflow-y:auto;margin-bottom:14px;">
+                        <table style="width:100%;font-size:12px;border-collapse:collapse;">
+                            <thead><tr style="color:#9ca3af;text-align:left;"><th style="padding:6px 8px;">购买时间</th><th>已用/总数</th><th>到期时间</th><th>状态</th><th></th></tr></thead>
+                            <tbody>
+                                <tr v-for="p in boostPacks" :key="p.id" style="border-top:1px solid #f3f4f6;">
+                                    <td style="padding:7px 8px;color:#374151;">{{ String(p.purchased_at).slice(0,10) }}</td>
+                                    <td style="color:#374151;">{{ p.used_count }} / {{ p.total_count }}</td>
+                                    <td style="color:#374151;">{{ String(p.expire_at).slice(0,10) }}</td>
+                                    <td><span :style="{color: p.active ? (p.used_count >= p.total_count ? '#9ca3af' : '#16a34a') : '#dc2626'}">{{ !p.active ? '已过期' : (p.used_count >= p.total_count ? '已用完' : '生效中') }}</span></td>
+                                    <td style="text-align:right;"><button @click="removeBoostPack(p)" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:12px;">删除</button></td>
+                                </tr>
+                                <tr v-if="!boostPacks.length"><td colspan="5" style="padding:14px;text-align:center;color:#d1d5db;">暂无加油包</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;gap:10px;">
+                        <button @click="showBoostModal=false" class="btn-secondary" style="padding:8px 16px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:13px;">关闭</button>
+                        <button @click="addBoostPack" :disabled="boostSubmitting" style="padding:8px 16px;border-radius:8px;border:none;background:#ea580c;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">{{ boostSubmitting ? '开通中...' : '+ 开通一个加油包' }}</button>
+                    </div>
+                </div>
+            </div>
+
             <div v-if="showPlanModal" class="modal-mask" @click.self="closePlanModal">
                 <div class="modal-content">
                     <h3 class="text-lg font-semibold text-gray-800 mb-1">开通套餐</h3>
@@ -1171,6 +1204,48 @@ createApp({
             showModal.value = false;
         }
 
+        // ===== 识别加油包管理 =====
+        const showBoostModal = ref(false);
+        const boostEnt = ref(null);
+        const boostPacks = ref([]);
+        const boostBalance = ref(null);
+        const boostSubmitting = ref(false);
+        async function loadBoostPacks() {
+            if (!boostEnt.value) return;
+            try {
+                const res = await authFetch(`/api/auth/enterprises/${boostEnt.value.id}/boost-packs`);
+                const data = await res.json();
+                if (data.code === 0) { boostPacks.value = data.data.packs || []; boostBalance.value = data.data.balance || null; }
+            } catch (e) {}
+        }
+        function openBoostModal(ent) {
+            boostEnt.value = ent; boostPacks.value = []; boostBalance.value = null;
+            showBoostModal.value = true;
+            loadBoostPacks();
+        }
+        async function addBoostPack() {
+            if (!boostEnt.value) return;
+            if (!confirm(`确定为「${boostEnt.value.name}」开通一个加油包？\n¥99 / 1,200次 / 自今日起3个月有效`)) return;
+            boostSubmitting.value = true;
+            try {
+                const res = await authFetch(`/api/auth/enterprises/${boostEnt.value.id}/boost-packs`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                const data = await res.json();
+                if (data.code === 0) { showToast('加油包已开通'); await loadBoostPacks(); }
+                else showToast(data.msg || '开通失败', 'error');
+            } catch (e) { showToast('开通失败', 'error'); }
+            finally { boostSubmitting.value = false; }
+        }
+        async function removeBoostPack(p) {
+            if (!confirm(`确定删除这个加油包？（已用 ${p.used_count}/${p.total_count}）删除后余量立即失效`)) return;
+            try {
+                const res = await authFetch(`/api/auth/boost-packs/${p.id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.code === 0) { showToast('已删除'); await loadBoostPacks(); }
+                else showToast(data.msg || '删除失败', 'error');
+            } catch (e) { showToast('删除失败', 'error'); }
+        }
+
         function openPlanModal(ent) {
             planEditEnt.value = ent;
             planForm.plan_type = ent.plan_type || 'standard';
@@ -1364,6 +1439,7 @@ createApp({
             openCreateModal, openEditModal, closeModal, submitForm,
             showPlanModal, planEditEnt, planForm, planFormError, planSubmitting, planCurrentExpiry,
             openPlanModal, closePlanModal, submitPlanForm,
+            showBoostModal, boostEnt, boostPacks, boostBalance, boostSubmitting, openBoostModal, addBoostPack, removeBoostPack,
             toggleEnabled, toggleMerge, logout, toast, formatTime, gotoMembers, gotoMonitor,
             showReportModal, reportTarget, reportRange, reportStart, reportEnd, reportSubmitting,
             reportLink, reportCopied, copyReportLink,

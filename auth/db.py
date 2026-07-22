@@ -966,6 +966,118 @@ def get_or_create_referral_code(db, user_id: int) -> str:
         conn.close()
 
 
+def init_boost_pack_table(db):
+    """识别加油包表（幂等）：99元/1200次，购买起3个月有效，可叠加（多条记录）"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS enterprise_boost_packs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                enterprise_id INT NOT NULL,
+                total_count INT NOT NULL DEFAULT 1200 COMMENT '总次数',
+                used_count INT NOT NULL DEFAULT 0 COMMENT '已用次数',
+                price DECIMAL(10,2) NOT NULL DEFAULT 99.00,
+                purchased_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                expire_at DATETIME NOT NULL COMMENT '过期时间（购买起3个月）',
+                created_by INT DEFAULT NULL COMMENT '开通操作的超管user_id',
+                remark VARCHAR(255) DEFAULT '',
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_ent_expire (enterprise_id, expire_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='识别加油包'
+        """)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def create_boost_pack(db, enterprise_id: int, created_by=None,
+                      total_count: int = 1200, price: float = 99.0,
+                      months: int = 3, remark: str = "") -> int:
+    """开通一个加油包，返回记录id"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO enterprise_boost_packs "
+            "(enterprise_id, total_count, price, expire_at, created_by, remark) "
+            "VALUES (%s, %s, %s, DATE_ADD(NOW(), INTERVAL %s MONTH), %s, %s)",
+            (enterprise_id, total_count, price, months, created_by, remark))
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def list_boost_packs(db, enterprise_id: int) -> list:
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT id, total_count, used_count, price, purchased_at, expire_at, remark, "
+            "       (expire_at > NOW()) AS active "
+            "FROM enterprise_boost_packs WHERE enterprise_id=%s ORDER BY expire_at DESC",
+            (enterprise_id,))
+        rows = cursor.fetchall()
+        for r in rows:
+            for k in ("purchased_at", "expire_at"):
+                if r.get(k) and not isinstance(r[k], str):
+                    r[k] = str(r[k])
+            r["price"] = float(r["price"] or 0)
+            r["active"] = bool(r["active"])
+        return rows
+    finally:
+        conn.close()
+
+
+def delete_boost_pack(db, pack_id: int):
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM enterprise_boost_packs WHERE id=%s", (pack_id,))
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        conn.close()
+
+
+def get_boost_balance(db, enterprise_id: int) -> dict:
+    """未过期加油包的剩余次数合计与最近到期时间"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT COALESCE(SUM(total_count - used_count), 0) AS remaining, "
+            "       MIN(expire_at) AS nearest_expire "
+            "FROM enterprise_boost_packs "
+            "WHERE enterprise_id=%s AND expire_at > NOW() AND used_count < total_count",
+            (enterprise_id,))
+        row = cursor.fetchone() or {}
+        ne = row.get("nearest_expire")
+        return {"remaining": int(row.get("remaining") or 0),
+                "nearest_expire": str(ne) if ne else None}
+    except Exception:
+        return {"remaining": 0, "nearest_expire": None}
+    finally:
+        conn.close()
+
+
+def consume_boost_pack(db, enterprise_id: int) -> bool:
+    """消费1次加油包：最早到期且有余量的包 used_count+1（单条UPDATE原子）"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE enterprise_boost_packs SET used_count = used_count + 1 "
+            "WHERE enterprise_id=%s AND expire_at > NOW() AND used_count < total_count "
+            "ORDER BY expire_at ASC LIMIT 1",
+            (enterprise_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
 def check_enterprise_quota(db, enterprise_id: int) -> dict:
     """
     检查企业配额状态，同时检查套餐是否到期。
@@ -1023,16 +1135,19 @@ def check_enterprise_quota(db, enterprise_id: int) -> dict:
     if plan_type in ("enterprise", "enterprise_trial"):
         return {"exceeded": False, "expired": False, "plan_type": plan_type}
 
-    # 标准版：检查月度额度
+    # 标准版：检查月度额度；月额度用完后自动用加油包次数兜底
     usage = get_enterprise_monthly_pdf_usage(db, enterprise_id)
     remaining = max(0, 3000 - usage)
+    boost = get_boost_balance(db, enterprise_id)
     return {
-        "exceeded": usage >= 3000,
+        "exceeded": usage >= 3000 and boost["remaining"] <= 0,
         "expired": False,
         "plan_type": plan_type,
         "usage": usage,
         "limit": 3000,
         "remaining": remaining,
+        "boost_remaining": boost["remaining"],
+        "boost_nearest_expire": boost["nearest_expire"],
     }
 
 

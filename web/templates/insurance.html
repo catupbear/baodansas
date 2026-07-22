@@ -802,6 +802,20 @@
                     <button class="pm-cta pm-cta-fill" @click="showPricingQr=true">立即咨询开通</button>
                 </div>
             </div>
+            <!-- 加油包：月额度不够时的弹性补充（适用于标准版） -->
+            <div style="margin-top:14px;border:1px dashed #fdba74;background:#fff7ed;border-radius:14px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <span style="font-size:26px;">⛽</span>
+                    <div>
+                        <div style="font-size:14px;font-weight:700;color:#1c1410;">识别加油包
+                            <span style="font-size:16px;color:#ea580c;font-weight:800;margin-left:6px;">¥99</span>
+                            <span style="font-size:12px;color:#9a3412;">/ 1,200 次</span>
+                        </div>
+                        <div style="font-size:12px;color:#9a3412;margin-top:2px;">有效期 3 个月 · 可叠加购买 · 月额度用完后自动使用 · 适用于标准版套餐</div>
+                    </div>
+                </div>
+                <button class="pm-cta pm-cta-outline" style="width:auto;padding:8px 18px;margin:0;" @click="showPricingQr=true">立即咨询开通</button>
+            </div>
         </div>
     </div>
 
@@ -1008,6 +1022,11 @@
                             <div v-if="quotaInfo.plan_type !== 'enterprise' && quotaInfo.plan_type !== 'enterprise_trial'" style="font-size:11px;color:#bbb;">
                                 剩余 {{ Math.max(3000 - quotaInfo.monthly_usage, 0) }} 次
                             </div>
+                        </div>
+                        <!-- 加油包余量（有才显示） -->
+                        <div v-if="quotaInfo.boost_remaining > 0" style="margin-top:8px;padding-top:8px;border-top:1px dashed #f0f0f0;display:flex;align-items:center;justify-content:space-between;">
+                            <span style="font-size:11px;color:#9a3412;">⛽ 加油包余量 <b style="color:#ea580c;">{{ Number(quotaInfo.boost_remaining).toLocaleString('zh-CN') }}</b> 次</span>
+                            <span v-if="quotaInfo.boost_nearest_expire" style="font-size:11px;color:#bbb;">最近到期 {{ String(quotaInfo.boost_nearest_expire).slice(0, 10) }}</span>
                         </div>
                     </template>
                 </div>
@@ -1221,13 +1240,13 @@
                 </svg>
                 <span style="font-size:13px;color:#991b1b;">套餐已到期（{{ quotaPlanExpiry }}），无法上传保单，请联系管理员续费</span>
             </div>
-            <!-- 标准版额度耗尽提示 -->
-            <div v-else-if="quotaInfo.plan_type === 'standard' && quotaInfo.monthly_usage >= 3000"
+            <!-- 标准版额度耗尽提示（有加油包余量时不拦，自动用加油包） -->
+            <div v-else-if="quotaInfo.plan_type === 'standard' && quotaInfo.monthly_usage >= 3000 && !(quotaInfo.boost_remaining > 0)"
                 style="background:#fff7ed;border:1px solid #fb923c;border-radius:10px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
                 <svg style="width:18px;height:18px;color:#ea580c;flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
                 </svg>
-                <span style="font-size:13px;color:#9a3412;">本月PDF识别额度已用完（{{ quotaInfo.monthly_usage }}/3000），无法上传，请联系管理员升级套餐</span>
+                <span style="font-size:13px;color:#9a3412;">本月PDF识别额度已用完（{{ quotaInfo.monthly_usage }}/3000），无法上传，可购买识别加油包（¥99/1200次）或升级套餐，请联系客服</span>
             </div>
 
             <div class="drop-zone rounded-xl p-10 text-center cursor-pointer"

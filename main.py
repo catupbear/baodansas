@@ -26,7 +26,7 @@ from insurance.api import insurance_bp, init_insurance_api
 from insurance.renewal_db import init_renewal_tables
 from insurance.renewal_api import renewal_bp, init_renewal_api
 from quote.handler import QuoteHandler
-from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table, init_sms_verification_table, init_referral_columns, init_is_sales_column, init_enterprise_plan_column, init_wallet_tables, init_activated_column, init_users_renewal_column, init_enterprise_follow_status_column, init_enterprise_remark_column, init_enterprise_onboarded_column
+from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table, init_sms_verification_table, init_referral_columns, init_is_sales_column, init_enterprise_plan_column, init_wallet_tables, init_activated_column, init_users_renewal_column, init_enterprise_follow_status_column, init_enterprise_remark_column, init_enterprise_onboarded_column, init_boost_pack_table
 from auth.jwt_utils import init_jwt
 from auth.decorators import init_auth_decorators
 from auth.api import auth_bp, init_auth_api
@@ -129,6 +129,7 @@ def create_app(config: dict) -> Flask:
     init_enterprise_follow_status_column(db)
     init_enterprise_remark_column(db)
     init_enterprise_onboarded_column(db)
+    init_boost_pack_table(db)
     init_wallet_tables(db)
 
     # 初始化短信模块

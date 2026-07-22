@@ -159,13 +159,46 @@ def get_my_quota():
     monthly_usage = get_enterprise_monthly_pdf_usage(_db, enterprise_id)
     monthly_limit = None if plan_type in ("enterprise", "enterprise_trial") else 3000
 
+    from .db import get_boost_balance
+    _boost = get_boost_balance(_db, enterprise_id)
     return jsonify({"code": 0, "data": {
         "plan_type": plan_type,
         "plan_months": plan_months,
         "plan_start_at": plan_start_at,
         "monthly_usage": monthly_usage,
         "monthly_limit": monthly_limit,
+        "boost_remaining": _boost["remaining"],
+        "boost_nearest_expire": _boost["nearest_expire"],
     }})
+
+
+# ============================================================
+# 识别加油包（99元/1200次/3个月，可叠加；超管开通管理）
+# ============================================================
+
+@auth_bp.route("/api/auth/enterprises/<int:eid>/boost-packs", methods=["GET", "POST"])
+@admin_required
+def api_enterprise_boost_packs(eid):
+    from .db import list_boost_packs, create_boost_pack, get_boost_balance
+    if request.method == "GET":
+        return jsonify({"code": 0, "data": {
+            "packs": list_boost_packs(_db, eid),
+            "balance": get_boost_balance(_db, eid),
+        }})
+    body = request.get_json(silent=True) or {}
+    pack_id = create_boost_pack(
+        _db, eid,
+        created_by=g.current_user["user_id"],
+        remark=(body.get("remark") or "").strip()[:200])
+    return jsonify({"code": 0, "msg": "加油包已开通", "data": {"id": pack_id}})
+
+
+@auth_bp.route("/api/auth/boost-packs/<int:pack_id>", methods=["DELETE"])
+@admin_required
+def api_delete_boost_pack(pack_id):
+    from .db import delete_boost_pack
+    n = delete_boost_pack(_db, pack_id)
+    return jsonify({"code": 0, "msg": "已删除" if n else "记录不存在"})
 
 
 # ============================================================
