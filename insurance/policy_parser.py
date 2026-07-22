@@ -1931,6 +1931,19 @@ def _extract_insured(text: str, text_merged: str, fields: dict, company_short: s
         if "被保险人" in fields:
             return
 
+    # ===== 华安商业险竖排表格：标签"被保/险人"被竖排拆成两行，姓名在"被保"行的上一行 =====
+    # "名 称 孙世利 联系电话 …\n被保\n证件号码 …\n险人\n地 址 …"（2026-07-22实测）
+    if company_short == "华安" and "被保险人" not in fields:
+        lines = text.split('\n')
+        for i, ln in enumerate(lines):
+            if ln.strip() == '被保' and i > 0:
+                m = re.match(r'\s*名\s*称\s*(\S{2,30})', lines[i - 1])
+                if m and _is_valid_person(m.group(1)):
+                    fields["被保险人"] = m.group(1)
+                break
+        if "被保险人" in fields:
+            return
+
     # ===== 紫金被保险人清单格式 =====
     # "被保险人清单" → 表头含"被保险人姓名" → 数据行"序号 姓名 ..."，可能多人
     if company_short == "紫金":
