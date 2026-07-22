@@ -379,7 +379,6 @@
                                     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;row-gap:6px;max-width:210px;">
                                         <button @click="openReportModal(ent)" class="op-btn blue">导出报告</button>
                                         <button @click="openPlanModal(ent)" class="op-btn orange">开通</button>
-                                <button @click="openBoostModal(ent)" class="op-btn amber">⛽ 加油包</button>
                                         <button @click="openBoostModal(ent)" class="op-btn amber" title="识别加油包：99元/1200次/3个月，可叠加">⛽ 加油包</button>
                                         <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled ? 'amber' : 'green']">{{ ent.enabled ? '禁用' : '启用' }}</button>
                                         <button @click="toggleMerge(ent)" :class="['op-btn', ent.merge_by_plate ? 'orange on' : 'gray']" title="开启后该企业识别记录默认按车牌合并显示">车牌合并{{ ent.merge_by_plate ? '✓' : '' }}</button>
@@ -438,6 +437,7 @@
                                 <button @click="gotoMonitor(ent)" class="op-btn orange">监控设置</button>
                                 <button @click="openReportModal(ent)" class="op-btn blue">导出报告</button>
                                 <button @click="openPlanModal(ent)" class="op-btn orange">开通</button>
+                                <button @click="openBoostModal(ent)" class="op-btn amber" title="识别加油包：99元/1200次/3个月，可叠加">⛽ 加油包</button>
                                 <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled?'amber':'green']">{{ ent.enabled?'禁用':'启用' }}</button>
                                 <button @click="toggleMerge(ent)" :class="['op-btn', ent.merge_by_plate?'orange on':'gray']">车牌合并{{ ent.merge_by_plate?'✓':'' }}</button>
                                 <button @click="toggleSeal(ent)" :class="['op-btn', ent.seal_tracking_enabled?'orange on':'gray']">公户盖章{{ ent.seal_tracking_enabled?'✓':'' }}</button>
