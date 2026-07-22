@@ -649,7 +649,8 @@
                             企业工作台<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span> ▾
                             <span v-if="renewalBadgeCount > 0" style="position:absolute;top:-8px;right:-8px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.35);border:2px solid #c2410c;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
                         </button>
-                        <div v-if="workbenchOpen" class="nav-more-dropdown" @click.stop style="min-width:170px;">
+                        <!-- overflow:visible 覆盖基类的 hidden，否则定位在容器外的三级面板会被裁剪 -->
+                        <div v-if="workbenchOpen" class="nav-more-dropdown" @click.stop style="min-width:170px;overflow:visible;">
                             <button @click="openRenewalTab(); workbenchOpen = false" class="nav-more-item">
                                 🔄 续保管理
                                 <span v-if="renewalBadgeCount > 0" style="margin-left:auto;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#dc2626;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
