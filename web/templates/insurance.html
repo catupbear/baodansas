@@ -5839,15 +5839,27 @@
         <div style="background:#fff;border-radius:18px;padding:30px 28px;width:410px;max-width:95vw;box-shadow:0 24px 70px rgba(0,0,0,0.25);text-align:center;">
           <div style="width:60px;height:60px;margin:0 auto 16px;border-radius:16px;background:linear-gradient(135deg,#fb923c,#ea580c);display:flex;align-items:center;justify-content:center;font-size:30px;">⏰</div>
           <div style="font-size:17px;font-weight:800;color:#1f2937;margin-bottom:10px;">续保管理系统 · 限时免费</div>
-          <div style="font-size:13px;color:#6b7280;line-height:1.9;text-align:left;margin-bottom:20px;">
-            系统会根据台账保单的到期时间自动生成续保提醒，帮您提前跟进客户，不错过每一单续保。<br>
-            往年的台账或保单也可以导入进来统一管理——点击「导入往年保单」，客服将协助您完成导入。
-          </div>
-          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-            <button v-if="!isSuperAdmin && !renewalInfoRevealed" @click="renewalPromoVisible=false; enableRenewalFeature()" class="btn btn-primary" style="padding:8px 18px;font-size:13px;">开启功能</button>
-            <button @click="renewalPromoVisible=false; openRenewalQr()" class="btn" :class="(!isSuperAdmin && !renewalInfoRevealed) ? 'btn-outline' : 'btn-primary'" style="padding:8px 18px;font-size:13px;">导入往年保单</button>
-            <button @click="renewalPromoVisible=false" class="btn btn-outline" style="padding:8px 18px;font-size:13px;">我知道了</button>
-          </div>
+          <!-- 未开启功能：只引导开启 -->
+          <template v-if="!isSuperAdmin && !renewalInfoRevealed">
+            <div style="font-size:13px;color:#6b7280;line-height:1.9;text-align:left;margin-bottom:20px;">
+              系统会根据台账保单的到期时间自动生成续保提醒，帮您提前跟进客户，不错过每一单续保。<br>
+              功能限时免费开放，点击「立即开启」即可使用。
+            </div>
+            <div style="display:flex;gap:10px;justify-content:center;">
+              <button @click="renewalPromoVisible=false; enableRenewalFeature()" class="btn btn-primary" style="padding:8px 22px;font-size:13px;">立即开启</button>
+              <button @click="renewalPromoVisible=false" class="btn btn-outline" style="padding:8px 18px;font-size:13px;">暂不开启</button>
+            </div>
+          </template>
+          <!-- 已开启功能：只引导导入往年保单 -->
+          <template v-else>
+            <div style="font-size:13px;color:#6b7280;line-height:1.9;text-align:left;margin-bottom:20px;">
+              想让往年的客户也纳入续保提醒？把往年台账或保单导入进来统一管理——点击「导入往年保单」，客服将协助您完成导入，历史客户的续保一单不漏。
+            </div>
+            <div style="display:flex;gap:10px;justify-content:center;">
+              <button @click="renewalPromoVisible=false; openRenewalQr()" class="btn btn-primary" style="padding:8px 22px;font-size:13px;">导入往年保单</button>
+              <button @click="renewalPromoVisible=false" class="btn btn-outline" style="padding:8px 18px;font-size:13px;">我知道了</button>
+            </div>
+          </template>
         </div>
       </div>
     </teleport>
