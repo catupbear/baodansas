@@ -240,7 +240,6 @@
                                 <th style="min-width:55px;text-align:center;">企业编号</th>
                                 <th style="min-width:120px;">企业名称</th>
                                 <th style="min-width:95px;">套餐</th>
-                                <th style="min-width:95px;">套餐到期</th>
                                 <th style="min-width:110px;text-align:center;">本月识别量</th>
                                 <th style="min-width:105px;text-align:center;">人员管理</th>
                                 <th style="min-width:105px;text-align:center;">监控设置</th>
@@ -270,7 +269,7 @@
                                         </template>
                                         <span v-else class="badge" style="white-space:nowrap;background:#f3f4f6;color:#9ca3af;border:1px solid #e5e7eb;">未开通</span>
                                     </div>
-                                    <!-- 下一个套餐（叠加续费）：仅显示类型+时长，日期统一在"套餐到期"列 -->
+                                    <!-- 下一个套餐（叠加续费）：仅显示类型+时长，到期日已移至客户管理页展示 -->
                                     <template v-if="ent.next_plan_type">
                                         <div style="display:flex;align-items:center;gap:4px;margin-top:4px;">
                                             <span style="font-size:10px;color:#9ca3af;">续费:</span>
@@ -279,24 +278,6 @@
                                                 {{ ent.next_plan_type==='enterprise' ? '企业版' : ent.next_plan_type==='enterprise_trial' ? '企业试用' : '标准版' }}
                                             </span>
                                             <span style="font-size:10px;color:#9ca3af;">{{ ent.next_plan_months }}个月</span>
-                                        </div>
-                                    </template>
-                                </td>
-
-                                <!-- 套餐到期 -->
-                                <td style="vertical-align:middle;">
-                                    <template v-if="planExpiryStr(ent)">
-                                        <div style="font-size:13px;font-weight:600;"
-                                            :style="{color: planDaysLeft(ent) <= 0 ? '#dc2626' : planDaysLeft(ent) <= 7 ? '#d97706' : '#059669'}">
-                                            {{ planDaysLeft(ent) <= 0 ? '已到期' : planDaysLeft(ent) + ' 天后到期' }}
-                                        </div>
-                                        <div style="font-size:12px;color:#9ca3af;margin-top:2px;">{{ planExpiryStr(ent) }}</div>
-                                    </template>
-                                    <span v-else style="font-size:12px;color:#d1d5db;">未设置</span>
-                                    <!-- 续费套餐的生效时间 -->
-                                    <template v-if="ent.next_plan_type">
-                                        <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #e5e7eb;font-size:11px;color:#9ca3af;">
-                                            续费 {{ nextPlanExpiryStr(ent) }} 起生效
                                         </div>
                                     </template>
                                 </td>
@@ -401,10 +382,6 @@
                                     <span v-if="ent.plan_type">{{ ent.plan_type==='enterprise'?'企业版':ent.plan_type==='enterprise_trial'?'企业试用':'标准版' }} · {{ ent.plan_months||1 }}个月</span>
                                     <span v-else style="color:#9ca3af;">未开通</span>
                                 </div></div>
-                                <div class="ec-item"><div class="k">套餐到期</div>
-                                    <div class="vv" v-if="planExpiryStr(ent)" :style="{color: planDaysLeft(ent)<=0?'#dc2626':planDaysLeft(ent)<=7?'#d97706':'#059669'}">{{ planDaysLeft(ent)<=0?'已到期':planDaysLeft(ent)+' 天后' }}</div>
-                                    <div class="vv" v-else style="color:#d1d5db;">未设置</div>
-                                </div>
                                 <div class="ec-item"><div class="k">本月识别</div><div class="vv">{{ ent.plan_type ? (ent.monthly_pdf_usage || 0) + ' 次' : '暂未开通套餐' }}</div></div>
                                 <div class="ec-item"><div class="k">状态</div><div class="vv"><span :style="{color: ent.enabled?'#059669':'#dc2626'}">{{ ent.enabled?'启用':'禁用' }}</span></div></div>
                                 <div class="ec-item"><div class="k">人员 / 群</div><div class="vv">{{ ent.member_count||0 }} 人 · {{ ent.monitor_count||0 }} 群</div></div>
