@@ -2503,13 +2503,9 @@
 
     <!-- ========== 续保提醒 Tab ========== -->
     <main v-if="pageTab === 'renewal' && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5">
-        <!-- 顶部操作按钮（引导文案改为进入时弹窗提醒，见 renewalPromoVisible 弹窗） -->
-        <div class="flex items-center justify-end gap-2">
-            <button v-if="!isSuperAdmin && !renewalInfoRevealed" @click="enableRenewalFeature()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">
-                开启功能
-            </button>
-            <button v-if="isSuperAdmin" @click="openRenewalConfig()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">⚙ 设置</button>
-            <button @click="openRenewalQr()" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">导入往年保单</button>
+        <!-- 开启功能/导入往年保单入口移入引导弹窗（renewalPromoVisible）；页面仅超管保留设置按钮 -->
+        <div v-if="isSuperAdmin" class="flex items-center justify-end gap-2">
+            <button @click="openRenewalConfig()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">⚙ 设置</button>
         </div>
 
         <!-- 未显示完整信息时，整个统计/筛选/列表区域磨砂遮罩，只有顶部的开关按钮可正常操作 -->
@@ -11500,9 +11496,11 @@ const _app = createApp({
             if (currentUser.value && currentUser.value.role === 'enterprise') {
                 loadRenewalAssignees(currentUser.value.id);
             }
-            // 引导提示改为弹窗：每个会话首次进入续保页弹一次
+            // 引导提示改为弹窗：每个会话首次进入续保页弹一次；
+            // 未开启功能的用户每次进入都弹（开启入口只在弹窗里，不弹会没有开启途径）
+            const _needEnable = currentUser.value && currentUser.value.role !== 'super_admin' && !renewalInfoRevealed.value;
             try {
-                if (!sessionStorage.getItem('renewal_promo_shown')) {
+                if (_needEnable || !sessionStorage.getItem('renewal_promo_shown')) {
                     sessionStorage.setItem('renewal_promo_shown', '1');
                     renewalPromoVisible.value = true;
                 }
