@@ -252,15 +252,19 @@ def api_list_users():
     if limit:
         try: users = users[:int(limit)]
         except: pass
-    # 填充所属企业名称
+    # 填充所属企业名称 + 标记自动创建的企业管理员账号（登录名=企业编号）
     ent_cache = {}
     for u in users:
         pid = u.get("parent_id")
+        u["is_auto_admin"] = False
         if pid:
             if pid not in ent_cache:
-                ent = get_enterprise_by_id(_db, pid)
-                ent_cache[pid] = ent["name"] if ent else ""
-            u["parent_name"] = ent_cache[pid]
+                ent_cache[pid] = get_enterprise_by_id(_db, pid)
+            ent = ent_cache[pid]
+            u["parent_name"] = ent["name"] if ent else ""
+            _no = (ent.get("enterprise_no") or "").strip() if ent else ""
+            if _no and u.get("role") == ROLE_ENTERPRISE and (u.get("phone") or "") == _no.lower().replace("-", ""):
+                u["is_auto_admin"] = True
         else:
             u["parent_name"] = ""
 

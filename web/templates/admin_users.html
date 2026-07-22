@@ -604,7 +604,8 @@ createApp({
             const _ueid = new URLSearchParams(location.search).get('enterprise_id');
             if (_ueid) {
                 const g = groups.find(x => x.key === _ueid);
-                if (g) return g;
+                // 人员管理视图隐藏自动创建的企业管理员内部账号（登录名=企业编号），其密码在客户管理页查看
+                if (g) return { ...g, users: g.users.filter(u => !u.is_auto_admin) };
                 const _uname = new URLSearchParams(location.search).get('enterprise_name') || '该企业';
                 return { key: _ueid, name: _ueid === '__none__' ? '未分组' : _uname, users: [] };
             }
