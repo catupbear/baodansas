@@ -654,11 +654,12 @@
                                 🔄 续保管理
                                 <span v-if="renewalBadgeCount > 0" style="margin-left:auto;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#dc2626;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
                             </button>
-                            <div style="position:relative;" @mouseenter="wbSealOpen = true" @mouseleave="wbSealOpen = false">
+                            <div style="position:relative;" @mouseenter="wbSealEnter" @mouseleave="wbSealLeave">
                                 <button @click="wbComingSoon('保单跟进'); workbenchOpen = false" class="nav-more-item" style="width:100%;">
                                     📋 保单跟进<span style="margin-left:auto;color:#9ca3af;">▸</span>
                                 </button>
-                                <div v-if="wbSealOpen" class="nav-more-dropdown" style="left:100%;top:0;margin-left:2px;">
+                                <!-- 三级面板紧贴二级（不留间隙，否则鼠标移过去会触发关闭） -->
+                                <div v-if="wbSealOpen" class="nav-more-dropdown" style="left:100%;top:0;">
                                     <button @click="wbComingSoon('公户车盖章跟进'); workbenchOpen = false; wbSealOpen = false" class="nav-more-item" style="white-space:nowrap;">🏢 公户车盖章跟进</button>
                                 </div>
                             </div>
@@ -6264,6 +6265,10 @@ const _app = createApp({
         const wbSealOpen = ref(false);
         const wbComingName = ref('');
         function wbComingSoon(name) { wbComingName.value = name; }
+        // 三级面板延时关闭：鼠标短暂离开（如斜向移入面板）不至于闪没
+        let _wbSealTimer = null;
+        function wbSealEnter() { clearTimeout(_wbSealTimer); wbSealOpen.value = true; }
+        function wbSealLeave() { _wbSealTimer = setTimeout(() => { wbSealOpen.value = false; }, 200); }
         document.addEventListener('click', () => { workbenchOpen.value = false; wbSealOpen.value = false; });
         // 点击下拉外部区域自动关闭（按钮/下拉内容自身用 @click.stop 阻止冒泡到这里）
         document.addEventListener('click', () => { moreMenuOpen.value = false; });
@@ -13082,7 +13087,7 @@ const _app = createApp({
             errorReportMsg, errorReportOk, openErrorReport, submitErrorReport,
             // 通知面板
             // 移动端菜单
-            mobileMenuOpen, moreMenuOpen, workbenchOpen, wbSealOpen, wbComingName, wbComingSoon,
+            mobileMenuOpen, moreMenuOpen, workbenchOpen, wbSealOpen, wbComingName, wbComingSoon, wbSealEnter, wbSealLeave,
             // 识别记录移动端卡片视图
             mobileFilterOpen, mSheetRecord, mLoadingMore,
             mField, mHasPlate, mCardTitle, mPolicyChipClass, mIsLong,
