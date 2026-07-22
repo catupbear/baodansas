@@ -39,9 +39,9 @@ EXPIRE_AFTER_DAYS = 30  # 到期后超过这么多天未成交/未流失，自�
 def _fetch_window_records(db, today):
     """
     查窗口内(今天-30, 今天+90)的保单记录，含企业/车牌/VIN等聚合所需字段。
-    只处理 users.renewal_enabled=1 的账号跟单的保单——续保提醒功能按个人账号自助开启，
-    不是按企业；同企业下没开的员工，他跟单的保单不参与扫描/推送（2026-07-15 从企业级
-    改为账号级，几个人开就只影响这几个人自己的数据）。
+    企业级口径：企业的全部保单参与扫描生成任务，不看个人 renewal_enabled 开关
+    （2026-07-22 与用户确认改回企业级——账号级口径下几乎没人自助开启，列表长期缺数据；
+    个人开关仍用于到期提醒推送 policy_expiry_reminder 的收敛，互不影响）。
     """
     conn = db.pool.connection()
     try:
@@ -52,12 +52,10 @@ def _fetch_window_records(db, today):
                    pf.policy_type, pf.policy_no, pf.end_date_iso, pf.total_premium
             FROM insurance_records r
             JOIN insurance_policy_fields pf ON r.id = pf.record_id
-            JOIN users u ON u.id = r.user_id
             WHERE r.deleted_at IS NULL
               AND r.status = 'done'
               AND r.doc_category = '保单'
               AND r.enterprise_id IS NOT NULL
-              AND u.renewal_enabled = 1
               AND pf.end_date_iso IS NOT NULL
               AND pf.end_date_iso BETWEEN %s AND %s
             ORDER BY r.id DESC
@@ -215,14 +213,7 @@ def sync_customer_task(db, plate_no, vin, enterprise_id, user_id=None):
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        # 续保提醒按个人账号自助开关，不是按企业(与批量扫描的过滤口径保持一致)——触发这次
-        # 同步的那条记录如果没有绑定跟单人、或跟单人没开，不参与实时同步
-        if not user_id:
-            return
-        cursor.execute("SELECT renewal_enabled FROM users WHERE id = %s", (user_id,))
-        _u = cursor.fetchone()
-        if not _u or not _u.get("renewal_enabled"):
-            return
+        # 企业级口径(2026-07-22)：不再按个人 renewal_enabled 过滤，与全量扫描一致
         cursor.execute("""
             SELECT r.id AS record_id, r.enterprise_id, r.sender, r.sender_name,
                    pf.plate_no, pf.vin, pf.insured, pf.applicant, pf.company_short,

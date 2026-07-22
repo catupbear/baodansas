@@ -52,17 +52,24 @@ def init_renewal_tables(db):
                 KEY idx_remind_at (remind_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='续保任务(按车牌/VIN+险种+企业,每险种一条)'
         """)
-        # 幂等迁移：旧表加 policy_no 列
+        # 幂等迁移（多worker并发启动会同时执行到这里，ALTER 撞重复/不存在错误一律容错跳过：
+        # 1060=Duplicate column, 1061=Duplicate key, 1091=Can't DROP — 2026-07-22 实测并发竞态炸过 worker）
+        def _try_alter(sql):
+            try:
+                cursor.execute(sql)
+            except pymysql.err.MySQLError as e:
+                if e.args and e.args[0] in (1060, 1061, 1091):
+                    return
+                raise
         cursor.execute(
             "SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS "
             "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='renewal_tasks' AND COLUMN_NAME='policy_no'"
         )
         if cursor.fetchone()["cnt"] == 0:
-            cursor.execute(
+            _try_alter(
                 "ALTER TABLE renewal_tasks ADD COLUMN policy_no VARCHAR(64) DEFAULT '' "
                 "COMMENT '该险种最近一张保单的保单号' AFTER policy_type"
             )
-        # 幂等迁移：唯一键从 (customer_key, enterprise_id) 改为 (customer_key, policy_type, enterprise_id)
         cursor.execute(
             "SELECT COUNT(*) AS cnt FROM information_schema.STATISTICS "
             "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='renewal_tasks' AND INDEX_NAME='uk_customer_type_ent'"
@@ -73,8 +80,8 @@ def init_renewal_tables(db):
                 "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='renewal_tasks' AND INDEX_NAME='uk_customer_ent'"
             )
             if cursor.fetchone()["cnt"] > 0:
-                cursor.execute("ALTER TABLE renewal_tasks DROP INDEX uk_customer_ent")
-            cursor.execute(
+                _try_alter("ALTER TABLE renewal_tasks DROP INDEX uk_customer_ent")
+            _try_alter(
                 "ALTER TABLE renewal_tasks ADD UNIQUE KEY uk_customer_type_ent "
                 "(customer_key, policy_type, enterprise_id)"
             )
