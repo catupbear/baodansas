@@ -7642,7 +7642,8 @@ def _seal_enterprise_scope():
 @insurance_bp.route("/api/insurance/seal-tasks", methods=["GET"])
 @login_required
 def seal_tasks_list():
-    """公户车盖章跟进列表。参数：paid=''/0/1，keyword，page，page_size"""
+    """公户车盖章跟进列表。参数：paid=''/0/1，keyword，page，page_size。
+    企业开了「按车牌合并」时，同车牌+同签单日期的保单合并为一组展示，标记已付按组整体操作。"""
     eid, err = _seal_enterprise_scope()
     if err:
         return err
@@ -7658,9 +7659,6 @@ def seal_tasks_list():
     if eid is not None:
         conds.append("r.enterprise_id = %s")
         params.append(eid)
-    if paid in ("0", "1"):
-        conds.append("r.seal_paid = %s")
-        params.append(int(paid))
     if keyword:
         conds.append("(pf.plate_no LIKE %s OR pf.insured LIKE %s OR pf.policy_no LIKE %s)")
         kw = f"%{keyword}%"
@@ -7670,60 +7668,104 @@ def seal_tasks_list():
     conn = _db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        # 统计（同范围，去掉 paid 过滤单独拼）
-        sconds = ["r.deleted_at IS NULL", "r.status = 'done'",
-                  "(r.doc_category = '保单' OR r.doc_category = '' OR r.doc_category IS NULL)",
-                  "pf.insured REGEXP %s"]
-        sparams = [_CORP_INSURED_REGEXP]
-        if eid is not None:
-            sconds.append("r.enterprise_id = %s")
-            sparams.append(eid)
-        if keyword:
-            sconds.append("(pf.plate_no LIKE %s OR pf.insured LIKE %s OR pf.policy_no LIKE %s)")
-            kw = f"%{keyword}%"
-            sparams.extend([kw, kw, kw])
-        cursor.execute(
-            f"SELECT SUM(r.seal_paid=0) unpaid, SUM(r.seal_paid=1) paid FROM insurance_records r "
-            f"JOIN insurance_policy_fields pf ON pf.record_id = r.id WHERE {' AND '.join(sconds)}",
-            sparams)
-        stats_row = cursor.fetchone() or {}
-        stats = {"unpaid": int(stats_row.get("unpaid") or 0), "paid": int(stats_row.get("paid") or 0)}
+        # 开了「按车牌合并」的企业集合（该企业的组按 车牌+签单日期 合并）
+        cursor.execute("SELECT id FROM enterprises WHERE merge_by_plate = 1")
+        merge_ents = {r["id"] for r in cursor.fetchall()}
 
-        cursor.execute(
-            f"SELECT COUNT(*) cnt FROM insurance_records r "
-            f"JOIN insurance_policy_fields pf ON pf.record_id = r.id WHERE {where}", params)
-        total = cursor.fetchone()["cnt"]
-        offset = (page - 1) * page_size
         cursor.execute(
             f"SELECT r.id AS record_id, r.enterprise_id, r.seal_paid, r.seal_paid_at, r.seal_paid_by, "
             f"       pf.plate_no, pf.insured, pf.company_short, pf.policy_type, pf.policy_no, "
-            f"       pf.sign_date, pf.total_premium, pf.end_date_iso "
+            f"       pf.sign_date, pf.total_premium "
             f"FROM insurance_records r JOIN insurance_policy_fields pf ON pf.record_id = r.id "
-            f"WHERE {where} ORDER BY r.seal_paid ASC, r.id DESC LIMIT %s OFFSET %s",
-            params + [page_size, offset])
+            f"WHERE {where} ORDER BY r.id DESC", params)
         rows = cursor.fetchall()
-        for r in rows:
-            for k in ("seal_paid_at", "end_date_iso"):
-                if r.get(k) is not None:
-                    r[k] = str(r[k])
-        return jsonify({"code": 0, "data": {
-            "stats": stats, "total": total,
-            "pages": max(1, (total + page_size - 1) // page_size), "page": page,
-            "tasks": rows,
-        }})
     finally:
         conn.close()
 
+    # 分组：合并企业按 (企业, 车牌|保单号, 签单日期)；未开合并的企业每保单一组
+    groups = {}
+    order = []
+    for r in rows:
+        ent = r["enterprise_id"]
+        plate = (r.get("plate_no") or "").strip()
+        if ent in merge_ents and plate:
+            key = (ent, plate, (r.get("sign_date") or "").strip())
+        else:
+            key = (ent, "__rec__", r["record_id"])
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(r)
 
-@insurance_bp.route("/api/insurance/seal-tasks/<int:record_id>/paid", methods=["POST"])
+    def _prem_sum(items):
+        total = 0.0
+        ok = True
+        for it in items:
+            try:
+                total += float(str(it.get("total_premium") or "0").replace(",", "") or 0)
+            except (TypeError, ValueError):
+                ok = False
+        return (f"{total:.2f}".rstrip("0").rstrip(".") if total else "") if ok else "、".join(
+            str(it.get("total_premium") or "") for it in items)
+
+    merged = []
+    for key in order:
+        items = groups[key]
+        types, nos = [], []
+        for it in items:
+            pt = (it.get("policy_type") or "").strip()
+            if pt and pt not in types:
+                types.append(pt)
+            no = (it.get("policy_no") or "").strip()
+            if no:
+                nos.append(no)
+        all_paid = all(it.get("seal_paid") for it in items)
+        paid_item = next((it for it in items if it.get("seal_paid")), None)
+        merged.append({
+            "record_ids": [it["record_id"] for it in items],
+            "record_id": items[0]["record_id"],
+            "enterprise_id": key[0],
+            "plate_no": items[0].get("plate_no") or "",
+            "insured": items[0].get("insured") or "",
+            "company_short": "、".join(sorted({(it.get("company_short") or "").strip() for it in items if (it.get("company_short") or "").strip()})),
+            "policy_type": "、".join(types),
+            "policy_nos": nos,
+            "policy_no": nos[0] if nos else "",
+            "sign_date": items[0].get("sign_date") or "",
+            "total_premium": _prem_sum(items) if len(items) > 1 else (items[0].get("total_premium") or ""),
+            "seal_paid": 1 if all_paid else 0,
+            "seal_paid_at": str(paid_item["seal_paid_at"]) if all_paid and paid_item and paid_item.get("seal_paid_at") else None,
+            "seal_paid_by": paid_item.get("seal_paid_by") if all_paid and paid_item else "",
+            "policy_count": len(items),
+        })
+
+    stats = {"unpaid": sum(1 for m in merged if not m["seal_paid"]),
+             "paid": sum(1 for m in merged if m["seal_paid"])}
+    if paid in ("0", "1"):
+        merged = [m for m in merged if m["seal_paid"] == int(paid)]
+    # 未付在前
+    merged.sort(key=lambda m: (m["seal_paid"], -max(m["record_ids"])))
+    total = len(merged)
+    pages = max(1, (total + page_size - 1) // page_size)
+    offset = (page - 1) * page_size
+    return jsonify({"code": 0, "data": {
+        "stats": stats, "total": total, "pages": pages, "page": page,
+        "tasks": merged[offset:offset + page_size],
+    }})
+
+
+@insurance_bp.route("/api/insurance/seal-tasks/mark-paid", methods=["POST"])
 @login_required
-def seal_task_mark_paid(record_id):
-    """标记/取消「已付」。body: {paid: 1/0}"""
+def seal_task_mark_paid():
+    """批量标记/取消「已付」。body: {record_ids: [...], paid: 1/0}"""
     eid, err = _seal_enterprise_scope()
     if err:
         return err
     body = request.get_json(silent=True) or {}
     paid = 1 if body.get("paid") else 0
+    ids = [int(i) for i in (body.get("record_ids") or []) if i]
+    if not ids:
+        return jsonify({"code": 400, "msg": "缺少 record_ids"}), 400
     operator = ""
     try:
         from auth.db import get_user_by_id
@@ -7735,18 +7777,19 @@ def seal_task_mark_paid(record_id):
     conn = _db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("SELECT id, enterprise_id FROM insurance_records WHERE id=%s AND deleted_at IS NULL", (record_id,))
-        rec = cursor.fetchone()
-        if not rec:
+        ph = ",".join(["%s"] * len(ids))
+        cursor.execute(f"SELECT id, enterprise_id FROM insurance_records WHERE id IN ({ph}) AND deleted_at IS NULL", ids)
+        recs = cursor.fetchall()
+        if not recs:
             return jsonify({"code": 404, "msg": "记录不存在"}), 404
-        if g.current_user.get("role") != ROLE_SUPER_ADMIN and rec.get("enterprise_id") != eid:
-            return jsonify({"code": 403, "msg": "无权限"}), 403
+        if g.current_user.get("role") != ROLE_SUPER_ADMIN:
+            if any(r.get("enterprise_id") != eid for r in recs):
+                return jsonify({"code": 403, "msg": "无权限"}), 403
         if paid:
-            cursor.execute("UPDATE insurance_records SET seal_paid=1, seal_paid_at=NOW(), seal_paid_by=%s WHERE id=%s",
-                           (operator[:64], record_id))
+            cursor.execute(f"UPDATE insurance_records SET seal_paid=1, seal_paid_at=NOW(), seal_paid_by=%s WHERE id IN ({ph})",
+                           [operator[:64]] + ids)
         else:
-            cursor.execute("UPDATE insurance_records SET seal_paid=0, seal_paid_at=NULL, seal_paid_by='' WHERE id=%s",
-                           (record_id,))
+            cursor.execute(f"UPDATE insurance_records SET seal_paid=0, seal_paid_at=NULL, seal_paid_by='' WHERE id IN ({ph})", ids)
         conn.commit()
         return jsonify({"code": 0, "msg": "已标记为已付" if paid else "已取消已付"})
     finally:

@@ -2719,11 +2719,16 @@
                     </thead>
                     <tbody>
                         <tr v-for="t in sealTasks" :key="t.record_id" class="border-t border-gray-50">
-                            <td class="px-3 py-2.5 font-medium text-gray-800">{{ t.plate_no || '—' }}</td>
+                            <td class="px-3 py-2.5 font-medium text-gray-800">{{ t.plate_no || '—' }}
+                                <span v-if="t.policy_count > 1" class="text-xs px-1.5 py-0.5 rounded" style="background:#eff6ff;color:#3b82f6;">{{ t.policy_count }}单</span>
+                            </td>
                             <td class="text-gray-700">{{ t.insured || '—' }}</td>
                             <td>{{ t.company_short || '—' }}</td>
                             <td>{{ t.policy_type || '—' }}</td>
-                            <td class="text-xs text-gray-600" style="font-family:ui-monospace,Menlo,monospace;">{{ t.policy_no || '—' }}</td>
+                            <td class="text-xs text-gray-600" style="font-family:ui-monospace,Menlo,monospace;">
+                                <template v-if="t.policy_nos && t.policy_nos.length"><div v-for="no in t.policy_nos" :key="no">{{ no }}</div></template>
+                                <template v-else>—</template>
+                            </td>
                             <td>{{ t.sign_date || '—' }}</td>
                             <td>{{ t.total_premium || '—' }}</td>
                             <td>
@@ -6373,9 +6378,9 @@ const _app = createApp({
         }
         async function markSealPaid(t, paid) {
             try {
-                const r = await authFetch(`/api/insurance/seal-tasks/${t.record_id}/paid`, {
+                const r = await authFetch('/api/insurance/seal-tasks/mark-paid', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ paid }) });
+                    body: JSON.stringify({ record_ids: t.record_ids || [t.record_id], paid }) });
                 const j = await r.json();
                 if (j.code === 0) { await loadSealTasks(); }
                 else alert(j.msg || '操作失败');
