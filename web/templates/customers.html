@@ -206,6 +206,7 @@
                                 <th>跟进状态</th>
                                 <th>接入时间</th>
                                 <th>套餐到期</th>
+                                <th>账号密码</th>
                                 <th>操作</th>
                             </tr>
                         </thead>
@@ -237,6 +238,13 @@
                                             续费 {{ nextPlanExpiryStr(c) }} 起生效
                                         </div>
                                     </template>
+                                </td>
+                                <td>
+                                    <template v-if="c.admin_password">
+                                        <div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;font-weight:600;color:#1c1410;letter-spacing:0.5px;user-select:all;">{{ c.admin_password }}</div>
+                                        <div style="font-size:11px;color:#9ca3af;margin-top:2px;">账号 {{ c.admin_account }}</div>
+                                    </template>
+                                    <span v-else style="font-size:12px;color:#d1d5db;" title="该账号未存明文密码，覆盖为随机密码后即显示">—</span>
                                 </td>
                                 <td>
                                     <button class="op-btn orange" @click="gotoManage(c)">客户系统配置</button>
@@ -272,6 +280,13 @@
                                     <span style="color:#9ca3af;margin-left:4px;">{{ planExpiryStr(c) }}</span>
                                 </template>
                                 <span v-else style="color:#d1d5db;">未设置</span>
+                            </div></div>
+                            <div class="cc-item"><div class="k">账号密码</div><div class="vv">
+                                <template v-if="c.admin_password">
+                                    <span style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600;color:#1c1410;letter-spacing:0.5px;user-select:all;">{{ c.admin_password }}</span>
+                                    <span style="color:#9ca3af;margin-left:4px;">账号 {{ c.admin_account }}</span>
+                                </template>
+                                <span v-else style="color:#d1d5db;">—</span>
                             </div></div>
                         </div>
                         <div class="cc-ops">

@@ -517,6 +517,15 @@ def api_list_enterprises():
         ent["member_count"] = member_map.get(ent["id"], 0)
         ent["monitor_count"] = monitor_map.get(ent["id"], 0)
         ent["referrer_name"] = referrer_map.get(ent.get("referrer_id"), "")
+        # 附带该企业自动创建的管理员账号(登录名=企业编号小写去横线)的密码明文，供客户管理页展示
+        ent["admin_account"] = ""
+        ent["admin_password"] = ""
+        no = (ent.get("enterprise_no") or "").strip()
+        if no:
+            au = get_user_by_phone(_db, no.lower().replace("-", ""))
+            if au:
+                ent["admin_account"] = au.get("phone") or ""
+                ent["admin_password"] = au.get("plain_password") or ""
     return jsonify({"code": 0, "data": enterprises})
 
 
