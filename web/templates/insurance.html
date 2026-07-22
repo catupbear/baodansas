@@ -2503,22 +2503,13 @@
 
     <!-- ========== 续保提醒 Tab ========== -->
     <main v-if="pageTab === 'renewal' && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5">
-        <!-- 导入引导提示条 -->
-        <div class="card p-4 flex items-center justify-between flex-wrap gap-3" style="background:linear-gradient(to right,#fff7ed,#fffbeb);">
-            <div class="flex items-center gap-3">
-                <span class="text-2xl">💡</span>
-                <div>
-                    <p class="text-sm font-medium text-orange-800">续保提醒功能限时免费开放，先用起来！</p>
-                    <p class="text-xs text-orange-600">如需导入往年台账或保单，可联系客服协助</p>
-                </div>
-            </div>
-            <div class="flex items-center gap-2">
-                <button v-if="!isSuperAdmin && !renewalInfoRevealed" @click="enableRenewalFeature()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">
-                    开启功能
-                </button>
-                <button v-if="isSuperAdmin" @click="openRenewalConfig()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">⚙ 设置</button>
-                <button @click="openRenewalQr()" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">导入往年保单</button>
-            </div>
+        <!-- 顶部操作按钮（引导文案改为进入时弹窗提醒，见 renewalPromoVisible 弹窗） -->
+        <div class="flex items-center justify-end gap-2">
+            <button v-if="!isSuperAdmin && !renewalInfoRevealed" @click="enableRenewalFeature()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">
+                开启功能
+            </button>
+            <button v-if="isSuperAdmin" @click="openRenewalConfig()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">⚙ 设置</button>
+            <button @click="openRenewalQr()" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">导入往年保单</button>
         </div>
 
         <!-- 未显示完整信息时，整个统计/筛选/列表区域磨砂遮罩，只有顶部的开关按钮可正常操作 -->
@@ -5844,6 +5835,26 @@
             <span style="font-size:10px;font-weight:500;">更多</span>
         </button>
     </div>
+
+    <!-- ========== 续保功能引导弹窗（每会话首次进入续保页弹出） ========== -->
+    <teleport to="body">
+      <div v-if="renewalPromoVisible" @click.self="renewalPromoVisible=false"
+           style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px;">
+        <div style="background:#fff;border-radius:18px;padding:30px 28px;width:410px;max-width:95vw;box-shadow:0 24px 70px rgba(0,0,0,0.25);text-align:center;">
+          <div style="width:60px;height:60px;margin:0 auto 16px;border-radius:16px;background:linear-gradient(135deg,#fb923c,#ea580c);display:flex;align-items:center;justify-content:center;font-size:30px;">⏰</div>
+          <div style="font-size:17px;font-weight:800;color:#1f2937;margin-bottom:10px;">续保管理系统 · 限时免费</div>
+          <div style="font-size:13px;color:#6b7280;line-height:1.9;text-align:left;margin-bottom:20px;">
+            系统会根据台账保单的到期时间自动生成续保提醒，帮您提前跟进客户，不错过每一单续保。<br>
+            往年的台账或保单也可以导入进来统一管理——点击「导入往年保单」，客服将协助您完成导入。
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+            <button v-if="!isSuperAdmin && !renewalInfoRevealed" @click="renewalPromoVisible=false; enableRenewalFeature()" class="btn btn-primary" style="padding:8px 18px;font-size:13px;">开启功能</button>
+            <button @click="renewalPromoVisible=false; openRenewalQr()" class="btn" :class="(!isSuperAdmin && !renewalInfoRevealed) ? 'btn-outline' : 'btn-primary'" style="padding:8px 18px;font-size:13px;">导入往年保单</button>
+            <button @click="renewalPromoVisible=false" class="btn btn-outline" style="padding:8px 18px;font-size:13px;">我知道了</button>
+          </div>
+        </div>
+      </div>
+    </teleport>
 
     <!-- ========== 账号待激活提示弹窗 ========== -->
     <teleport to="body">
@@ -11481,6 +11492,7 @@ const _app = createApp({
             renewalTasks.value.length > 0 && renewalTasks.value.every(t => renewalSelectedIds.value.includes(t.id))
         );
 
+        const renewalPromoVisible = ref(false);
         function openRenewalTab() {
             pageTab.value = 'renewal';
             loadRenewalStats();
@@ -11488,6 +11500,13 @@ const _app = createApp({
             if (currentUser.value && currentUser.value.role === 'enterprise') {
                 loadRenewalAssignees(currentUser.value.id);
             }
+            // 引导提示改为弹窗：每个会话首次进入续保页弹一次
+            try {
+                if (!sessionStorage.getItem('renewal_promo_shown')) {
+                    sessionStorage.setItem('renewal_promo_shown', '1');
+                    renewalPromoVisible.value = true;
+                }
+            } catch (e) {}
         }
 
         async function loadRenewalStats() {
@@ -12955,7 +12974,7 @@ const _app = createApp({
             internalNoteQuickPhrases, appendInternalNotePhrase,
             renewalInfoRevealed, maskPersonName, maskPlateNo, enableRenewalFeature,
             renewalStats, renewalBadgeCount, renewalTasks, renewalLoading, renewalFilter, renewalPagination, renewalSelectedIds,
-            renewalAssigneesList, renewalScanning, renewalAllSelected, openRenewalTab, loadRenewalStats, loadRenewalList, gotoRenewalPage,
+            renewalAssigneesList, renewalScanning, renewalAllSelected, openRenewalTab, loadRenewalStats, loadRenewalList, gotoRenewalPage, renewalPromoVisible,
             toggleRenewalSelectAll, renewalDaysLeftClass, renewalDaysLeftText, renewalStatusStyle, renewalStatusLabel, renewalActionLabel,
             renewalDetailVisible, renewalDetailTask, renewalDetailAssignee, renewalHistory, renewalFollowups, renewalNoteContent,
             renewalNextRemindAt, renewalNoteSaving, openRenewalDetail, submitRenewalFollowup, changeRenewalStatus, dismissRenewalHint, assignRenewalDetail,
