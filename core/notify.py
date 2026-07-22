@@ -8,6 +8,7 @@ import hmac
 import base64
 import json
 import logging
+import re
 import time
 import threading
 import urllib.parse
@@ -307,16 +308,17 @@ def text_msg_notify_enabled() -> bool:
     return _text_msg_notifier is not None
 
 
-def _group_msg_header(icon: str, room_name: str, sender_name: str,
-                      enterprise: str, msg_time: str) -> list:
+def _group_msg_meta(sender_name: str, enterprise: str, msg_time: str) -> str:
     """
-    群消息转发通知的紧凑三段式头部：
-    第一行标题=群名，第二行=发送人 · 时间 · 企业（弱化为一行元信息）。
+    群消息转发通知的元信息行（发送人 · 时间 · 企业），弱化展示在正文下方。
+    时间去掉秒数（HH:MM:SS → HH:MM），转发通知不需要精确到秒。
     """
-    meta = f"**{sender_name or '未知'}** · {msg_time or time.strftime('%m-%d %H:%M:%S')}"
+    display_time = msg_time or time.strftime("%m-%d %H:%M:%S")
+    display_time = re.sub(r"(\d{1,2}:\d{2}):\d{2}\b", r"\1", display_time)
+    meta = f"**{sender_name or '未知'}** · {display_time}"
     if enterprise:
         meta += f" · {enterprise}"
-    return [f"#### {icon} {room_name}", "", meta, ""]
+    return meta
 
 
 def notify_group_text(room_name: str, sender_name: str, text: str,
@@ -341,8 +343,9 @@ def notify_group_text(room_name: str, sender_name: str, text: str,
     title = f"💬 {room_name}"
     # 正文用引用块突出；多行文本每行都要带引用前缀，否则钉钉只引用第一行
     quoted = "> " + text[:1000].replace("\n", "  \n> ")
-    lines = _group_msg_header("💬", room_name, sender_name, enterprise, msg_time)
-    lines.append(quoted)
+    meta = _group_msg_meta(sender_name, enterprise, msg_time)
+    # 内容优先：标题 → 正文（重点）→ 元信息（弱化）→ 链接，各块用空行分隔避免粘连
+    lines = [f"#### 💬 {room_name}", "", quoted, "", meta]
     if detail_url:
         lines += ["", f"[查看会话记录 →]({detail_url})"]
     content = "\n".join(lines)
@@ -366,8 +369,9 @@ def notify_group_image(room_name: str, sender_name: str, image_url: str,
         return
 
     title = f"🖼 {room_name}"
-    lines = _group_msg_header("🖼", room_name, sender_name, enterprise, msg_time)
-    lines.append(f"![图片]({image_url})")
+    meta = _group_msg_meta(sender_name, enterprise, msg_time)
+    # 内容优先：标题 → 图片（重点）→ 元信息（弱化）→ 链接，各块用空行分隔避免粘连
+    lines = [f"#### 🖼 {room_name}", "", f"![图片]({image_url})", "", meta]
     if detail_url:
         lines += ["", f"[查看会话记录 →]({detail_url})"]
     content = "\n".join(lines)
