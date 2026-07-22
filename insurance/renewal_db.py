@@ -30,7 +30,8 @@ def init_renewal_tables(db):
                 insured            VARCHAR(128) DEFAULT '',
                 applicant          VARCHAR(128) DEFAULT '',
                 company_short      VARCHAR(64) DEFAULT '',
-                policy_type        VARCHAR(64) DEFAULT '',
+                policy_type        VARCHAR(64) NOT NULL DEFAULT '' COMMENT '险种(参与唯一键,每险种一条任务)',
+                policy_no          VARCHAR(64) DEFAULT '' COMMENT '该险种最近一张保单的保单号',
                 end_date           DATE DEFAULT NULL COMMENT '聚合内最近到期日',
                 total_premium      VARCHAR(64) DEFAULT '' COMMENT '展示快照,不做数值聚合',
                 policy_record_ids  TEXT COMMENT '关联insurance_records.id,JSON数组,每次扫描全量覆盖',
@@ -45,12 +46,38 @@ def init_renewal_tables(db):
                 hint_end_date      DATE DEFAULT NULL,
                 created_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at         DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                UNIQUE KEY uk_customer_ent (customer_key, enterprise_id),
+                UNIQUE KEY uk_customer_type_ent (customer_key, policy_type, enterprise_id),
                 KEY idx_ent_status_end (enterprise_id, status, end_date),
                 KEY idx_assignee_status (assignee, status),
                 KEY idx_remind_at (remind_at)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='续保任务(按车牌/VIN+企业聚合)'
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='续保任务(按车牌/VIN+险种+企业,每险种一条)'
         """)
+        # 幂等迁移：旧表加 policy_no 列
+        cursor.execute(
+            "SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='renewal_tasks' AND COLUMN_NAME='policy_no'"
+        )
+        if cursor.fetchone()["cnt"] == 0:
+            cursor.execute(
+                "ALTER TABLE renewal_tasks ADD COLUMN policy_no VARCHAR(64) DEFAULT '' "
+                "COMMENT '该险种最近一张保单的保单号' AFTER policy_type"
+            )
+        # 幂等迁移：唯一键从 (customer_key, enterprise_id) 改为 (customer_key, policy_type, enterprise_id)
+        cursor.execute(
+            "SELECT COUNT(*) AS cnt FROM information_schema.STATISTICS "
+            "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='renewal_tasks' AND INDEX_NAME='uk_customer_type_ent'"
+        )
+        if cursor.fetchone()["cnt"] == 0:
+            cursor.execute(
+                "SELECT COUNT(*) AS cnt FROM information_schema.STATISTICS "
+                "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='renewal_tasks' AND INDEX_NAME='uk_customer_ent'"
+            )
+            if cursor.fetchone()["cnt"] > 0:
+                cursor.execute("ALTER TABLE renewal_tasks DROP INDEX uk_customer_ent")
+            cursor.execute(
+                "ALTER TABLE renewal_tasks ADD UNIQUE KEY uk_customer_type_ent "
+                "(customer_key, policy_type, enterprise_id)"
+            )
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS renewal_followups (
                 id              INT PRIMARY KEY AUTO_INCREMENT,
@@ -86,7 +113,7 @@ def init_renewal_tables(db):
 
 def upsert_task(db, data: dict) -> int:
     """
-    按 (customer_key, enterprise_id) 原子 upsert 一条续保任务。
+    按 (customer_key, policy_type, enterprise_id) 原子 upsert 一条续保任务（每险种一条）。
     已存在且 status IN (won,lost) 时不覆盖任何字段（尊重已关闭状态），
     仅返回其 id；否则插入或更新 end_date/policy_record_ids/priority 等快照字段。
 
@@ -108,18 +135,18 @@ def upsert_task(db, data: dict) -> int:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         # 已关闭(won/lost)的任务不覆盖：先查现状
         cursor.execute(
-            "SELECT id, status FROM renewal_tasks WHERE customer_key=%s AND enterprise_id=%s",
-            (record["customer_key"], record["enterprise_id"]),
+            "SELECT id, status FROM renewal_tasks WHERE customer_key=%s AND policy_type=%s AND enterprise_id=%s",
+            (record["customer_key"], record.get("policy_type") or "", record["enterprise_id"]),
         )
         existing = cursor.fetchone()
         if existing and existing["status"] in ("won", "lost"):
             return existing["id"]
 
         columns = ["customer_key", "enterprise_id", "plate_no", "vin", "insured", "applicant",
-                   "company_short", "policy_type", "end_date", "total_premium",
+                   "company_short", "policy_type", "policy_no", "end_date", "total_premium",
                    "policy_record_ids", "primary_record_id", "priority"]
         values = [record.get(c) for c in columns]
-        update_cols = ["plate_no", "vin", "insured", "applicant", "company_short", "policy_type",
+        update_cols = ["plate_no", "vin", "insured", "applicant", "company_short", "policy_no",
                        "end_date", "total_premium", "policy_record_ids", "primary_record_id", "priority"]
         # 新建任务时才写默认跟进人；已存在(pending/following/expired)不覆盖已有 assignee
         if not existing:
@@ -140,8 +167,8 @@ def upsert_task(db, data: dict) -> int:
         conn.commit()
 
         cursor.execute(
-            "SELECT id FROM renewal_tasks WHERE customer_key=%s AND enterprise_id=%s",
-            (record["customer_key"], record["enterprise_id"]),
+            "SELECT id FROM renewal_tasks WHERE customer_key=%s AND policy_type=%s AND enterprise_id=%s",
+            (record["customer_key"], record.get("policy_type") or "", record["enterprise_id"]),
         )
         row = cursor.fetchone()
         return row["id"] if row else None
@@ -197,12 +224,12 @@ def get_task(db, task_id: int) -> dict:
 
 
 def get_task_by_customer(db, customer_key: str, enterprise_id) -> dict:
-    """按 (customer_key, enterprise_id) 获取单条续保任务，不存在返回 None（供实时同步查存量用）。"""
+    """按 (customer_key, enterprise_id) 取该客户任意一条任务，不存在返回 None（供实时同步判断存量用；每险种一条后同客户可能多条）。"""
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute(
-            "SELECT * FROM renewal_tasks WHERE customer_key=%s AND enterprise_id=%s",
+            "SELECT * FROM renewal_tasks WHERE customer_key=%s AND enterprise_id=%s LIMIT 1",
             (customer_key, enterprise_id),
         )
         row = cursor.fetchone()
@@ -225,7 +252,7 @@ def list_tasks(db, page: int = 1, page_size: int = 20, enterprise_id=None,
     assignee_ids: None=不过滤；[]=空列表返回空结果(员工无可见任务)；[uid,...]=按跟进人过滤
     status: 空=不过滤，'!expired'等暂不支持排除语法，直接传具体状态值
     date_start/date_end: 按 end_date 范围过滤（'YYYY-MM-DD'）
-    keyword: 车牌/被保人/投保人模糊搜索
+    keyword: 车牌/被保人/投保人/保单号模糊搜索
     返回: {"total":N, "pages":N, "page":N, "tasks":[...]}
     """
     conditions = []
@@ -249,9 +276,9 @@ def list_tasks(db, page: int = 1, page_size: int = 20, enterprise_id=None,
         conditions.append("end_date <= %s")
         params.append(date_end)
     if keyword:
-        conditions.append("(plate_no LIKE %s OR insured LIKE %s OR applicant LIKE %s)")
+        conditions.append("(plate_no LIKE %s OR insured LIKE %s OR applicant LIKE %s OR policy_no LIKE %s)")
         kw = f"%{keyword}%"
-        params.extend([kw, kw, kw])
+        params.extend([kw, kw, kw, kw])
 
     where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 

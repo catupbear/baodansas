@@ -2606,7 +2606,7 @@
                 <span class="text-xs text-gray-400">至</span>
                 <input type="date" v-model="renewalFilter.date_end" @change="loadRenewalList()"
                        class="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
-                <input type="text" v-model="renewalFilter.keyword" @keyup.enter="loadRenewalList()" placeholder="搜索车牌/被保人/投保人..."
+                <input type="text" v-model="renewalFilter.keyword" @keyup.enter="loadRenewalList()" placeholder="搜索车牌/被保人/投保人/保单号..."
                        class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 flex-1 min-w-[180px]">
                 <button @click="loadRenewalList()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">筛选</button>
                 <span class="flex-1"></span>
@@ -2633,7 +2633,7 @@
                             <th v-if="isSuperAdmin || currentUser.role === 'enterprise'" style="min-width:36px;">
                                 <input type="checkbox" :checked="renewalAllSelected" @change="toggleRenewalSelectAll">
                             </th>
-                            <th>车牌号</th><th>被保险人</th><th>承保公司</th><th>险种</th>
+                            <th>车牌号</th><th>被保险人</th><th>承保公司</th><th>险种</th><th>保单号</th>
                             <th>到期日</th><th>剩余天数</th><th>上期保费</th><th>跟进人</th><th>状态</th><th>操作</th>
                         </tr>
                     </thead>
@@ -2646,6 +2646,7 @@
                             <td>{{ (renewalInfoRevealed || isSuperAdmin) ? (t.insured || '—') : maskPersonName(t.insured) || '—' }}</td>
                             <td>{{ t.company_short || '—' }}</td>
                             <td>{{ t.policy_type || '—' }}</td>
+                            <td class="text-xs text-gray-600" style="font-family:ui-monospace,Menlo,monospace;">{{ t.policy_no || '—' }}</td>
                             <td>{{ t.end_date }}</td>
                             <td>
                                 <span :class="renewalDaysLeftClass(t)">{{ renewalDaysLeftText(t) }}</span>

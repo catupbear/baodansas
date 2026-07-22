@@ -49,7 +49,7 @@ def _fetch_window_records(db, today):
         cursor.execute("""
             SELECT r.id AS record_id, r.enterprise_id, r.sender, r.sender_name,
                    pf.plate_no, pf.vin, pf.insured, pf.applicant, pf.company_short,
-                   pf.policy_type, pf.end_date_iso, pf.total_premium
+                   pf.policy_type, pf.policy_no, pf.end_date_iso, pf.total_premium
             FROM insurance_records r
             JOIN insurance_policy_fields pf ON r.id = pf.record_id
             JOIN users u ON u.id = r.user_id
@@ -68,7 +68,8 @@ def _fetch_window_records(db, today):
 
 
 def _group_by_customer(rows):
-    """按 (customer_key, enterprise_id) 聚合；车牌优先，否则VIN(归一化大写)；两者都空跳过。"""
+    """按 (customer_key, 险种, enterprise_id) 聚合——每险种一条任务；
+    车牌优先，否则VIN(归一化大写)；两者都空跳过。险种截断到64字符与唯一键列宽一致。"""
     groups = {}
     for row in rows:
         plate = (row.get("plate_no") or "").strip()
@@ -76,7 +77,8 @@ def _group_by_customer(rows):
         customer_key = plate if plate else vin
         if not customer_key:
             continue
-        key = (customer_key, row["enterprise_id"])
+        policy_type = ((row.get("policy_type") or "").strip())[:64]
+        key = (customer_key, policy_type, row["enterprise_id"])
         groups.setdefault(key, []).append(row)
     return groups
 
@@ -97,17 +99,15 @@ def _resolve_default_assignee(db, sender, enterprise_id):
     return None, ""
 
 
-def _build_task_payload(db, customer_key, enterprise_id, rows):
-    """把同一客户的多条保单记录聚合成一条 renewal_tasks 的 upsert payload。"""
+def _build_task_payload(db, customer_key, enterprise_id, rows, policy_type=None):
+    """把同一客户同一险种的多条保单记录聚合成一条 renewal_tasks 的 upsert payload。
+    rows 应为同险种记录（每险种一条任务）；policy_type 不传时取组内第一条的险种。"""
     rows_sorted = sorted(rows, key=lambda r: r["end_date_iso"])
     soonest = rows_sorted[0]
     latest_record = max(rows, key=lambda r: r["record_id"])  # 最新上传的一条，用于解析默认跟进人
 
-    policy_types = []
-    for r in rows_sorted:
-        pt = (r.get("policy_type") or "").strip()
-        if pt and pt not in policy_types:
-            policy_types.append(pt)
+    if policy_type is None:
+        policy_type = ((rows_sorted[0].get("policy_type") or "").strip())[:64]
 
     assignee, assignee_name = _resolve_default_assignee(db, latest_record.get("sender"), enterprise_id)
 
@@ -122,7 +122,8 @@ def _build_task_payload(db, customer_key, enterprise_id, rows):
         "insured": soonest.get("insured") or "",
         "applicant": soonest.get("applicant") or "",
         "company_short": soonest.get("company_short") or "",
-        "policy_type": "、".join(policy_types),
+        "policy_type": policy_type,
+        "policy_no": soonest.get("policy_no") or "",
         "end_date": soonest["end_date_iso"],
         "total_premium": soonest.get("total_premium") or "",
         "policy_record_ids": [r["record_id"] for r in rows],
@@ -225,7 +226,7 @@ def sync_customer_task(db, plate_no, vin, enterprise_id, user_id=None):
         cursor.execute("""
             SELECT r.id AS record_id, r.enterprise_id, r.sender, r.sender_name,
                    pf.plate_no, pf.vin, pf.insured, pf.applicant, pf.company_short,
-                   pf.policy_type, pf.end_date_iso, pf.total_premium
+                   pf.policy_type, pf.policy_no, pf.end_date_iso, pf.total_premium
             FROM insurance_records r
             JOIN insurance_policy_fields pf ON r.id = pf.record_id
             WHERE r.deleted_at IS NULL AND r.status = 'done' AND r.doc_category = '保单'
@@ -249,8 +250,14 @@ def sync_customer_task(db, plate_no, vin, enterprise_id, user_id=None):
     else:
         source_rows = window_rows
 
-    payload = _build_task_payload(db, customer_key, enterprise_id, source_rows)
-    rdb.upsert_task(db, payload)
+    # 每险种一条任务：按险种分组逐条 upsert
+    by_type = {}
+    for r in source_rows:
+        pt = ((r.get("policy_type") or "").strip())[:64]
+        by_type.setdefault(pt, []).append(r)
+    for pt, type_rows in by_type.items():
+        payload = _build_task_payload(db, customer_key, enterprise_id, type_rows, pt)
+        rdb.upsert_task(db, payload)
 
 
 def run_scan(db) -> dict:
@@ -260,8 +267,8 @@ def run_scan(db) -> dict:
     groups = _group_by_customer(rows)
 
     upserted = 0
-    for (customer_key, enterprise_id), group_rows in groups.items():
-        payload = _build_task_payload(db, customer_key, enterprise_id, group_rows)
+    for (customer_key, policy_type, enterprise_id), group_rows in groups.items():
+        payload = _build_task_payload(db, customer_key, enterprise_id, group_rows, policy_type)
         rdb.upsert_task(db, payload)
         upserted += 1
 
