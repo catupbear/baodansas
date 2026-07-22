@@ -3106,7 +3106,7 @@
                                         <input type="file" accept=".pdf" style="display:none;" @change="reuploadRecord(record, $event)" :disabled="record._reuploading">
                                     </label>
                                     <!-- 标记正常（需人工补充记录） -->
-                                    <button v-if="record.is_abnormal && !record.abnormal_override_reason"
+                                    <button v-if="record.is_abnormal && !record.abnormal_override_reason && !record._merged"
                                             @click="openMarkNormal(record)"
                                             class="btn" style="padding:3px 8px;font-size:11px;background:#fef3c7;border:1px solid #fbbf24;color:#92400e;">
                                         标记正常
@@ -3279,7 +3279,7 @@
                             <!-- 内部管理备注（仅超管） -->
                             <td v-if="isSuperAdmin" class="text-sm" style="min-width:220px;max-width:280px;">
                                 <div class="flex flex-col gap-1" style="align-items:flex-start;">
-                                    <span v-if="record.is_abnormal"
+                                    <span v-if="record.is_abnormal && !record._merged"
                                           class="inline-flex items-center gap-1 text-xs"
                                           :style="{color:(record.internal_note && record.internal_note.reviewed_today)?'#16a34a':'#ef4444'}">
                                         <span style="width:6px;height:6px;border-radius:50%;display:inline-block;"
@@ -3459,7 +3459,7 @@
                             </button>
                         </template>
                         <template v-else>
-                            <button v-if="record.is_abnormal && !record.abnormal_override_reason" class="mrc-btn mrc-btn-mark" @click="openMarkNormal(record)">标记正常</button>
+                            <button v-if="record.is_abnormal && !record.abnormal_override_reason && !record._merged" class="mrc-btn mrc-btn-mark" @click="openMarkNormal(record)">标记正常</button>
                             <button v-else-if="record.status === 'failed' && record.cos_url" class="mrc-btn mrc-btn-primary" :disabled="record._reocring" @click="reocrRecord(record)">{{ record._reocring ? '识别中...' : '重新识别' }}</button>
                             <button v-else-if="record.cos_url" class="mrc-btn mrc-btn-view" @click="previewRecord(record)">预览</button>
                             <label v-if="record.status === 'failed' && !record.cos_url" class="mrc-btn mrc-btn-primary" style="cursor:pointer;">
@@ -11128,6 +11128,9 @@ const _app = createApp({
                     // 合并行是前端拼出来的"伪记录"，原始字段(所属企业等)不会自动带过来，
                     // 要显式从子记录里取——不然超管列表页合并显示时"所属企业"列永远是空的
                     enterprise_name: (children[0] && children[0].enterprise_name) || '',
+                    // 需人工补充的缺失提示也要从子记录汇总——否则合并视图下看不到缺了什么
+                    is_abnormal: children.some(c => c.is_abnormal && !c.abnormal_override_reason) ? 1 : 0,
+                    hint: [...new Set(children.map(c => (c.is_abnormal && !c.abnormal_override_reason) ? c.hint : '').filter(Boolean))].join('；'),
                 };
             });
             recordPagination.total = records.value.length;
