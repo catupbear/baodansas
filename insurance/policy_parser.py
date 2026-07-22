@@ -4187,7 +4187,7 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
             return
 
     # 渤海等格式：两个 YYYY-MM-DD 日期拼接在同一行（无分隔符），附近有保险期间关键词
-    # "2026-05-112027-05-10" 或 "2026-05-1100:00:002027-05-1024:00:00"
+    # "2026-05-112027-05-10" 或 "2026-05-1100:00:002026-05-1024:00:00"
     for i, line in enumerate(lines):
         _m = re.search(r'(\d{4}-\d{2}-\d{2})(?:\d{2}:\d{2}(?::\d{2})?)?\s*(\d{4}-\d{2}-\d{2})', line)
         if _m:
@@ -4196,6 +4196,26 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
                 fields["保险起期"] = _m.group(1)
                 fields["保险止期"] = _m.group(2)
                 fields["保险期间"] = f"{_m.group(1)} 至 {_m.group(2)}"
+                return
+
+    # 最终兜底：OCR 列错位导致"至<终保>…止"在前、"自<起保>"在后（华泰驾乘险实测：
+    # "保险期间\n:00:00时起(北京时间)至2027年07月23日23:59:59时止(北京时间)自2026年07月24日00"）。
+    # 不依赖先后顺序，在"保险期间"标签后 200 字内各自独立提取"自<日期>"与"[至到]<日期>…止"，
+    # 并校验起保早于终保，防止乱序误配
+    _m_label = re.search(r"保险期间", period_text)
+    if _m_label:
+        _seg = period_text[_m_label.end():_m_label.end() + 200]
+        _m_s = re.search(r"自\s*(\d{4}年\d{1,2}月\d{1,2}日?)", _seg)
+        _m_e = re.search(r"[至到]\s*(\d{4}年\d{1,2}月\d{1,2}日?)[\s\d:时分秒]*止", _seg)
+        if _m_s and _m_e:
+            def _ymd(s):
+                mm = re.match(r"(\d{4})年(\d{1,2})月(\d{1,2})", s)
+                return (int(mm.group(1)), int(mm.group(2)), int(mm.group(3))) if mm else None
+            _ds, _de = _ymd(_m_s.group(1)), _ymd(_m_e.group(1))
+            if _ds and _de and _ds < _de:
+                fields["保险起期"] = _m_s.group(1)
+                fields["保险止期"] = _m_e.group(1)
+                fields["保险期间"] = f"{_m_s.group(1)} 至 {_m_e.group(1)}"
                 return
 
 
