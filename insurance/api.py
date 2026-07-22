@@ -7737,6 +7737,16 @@ def seal_tasks_list():
             "seal_paid_at": str(paid_item["seal_paid_at"]) if all_paid and paid_item and paid_item.get("seal_paid_at") else None,
             "seal_paid_by": paid_item.get("seal_paid_by") if all_paid and paid_item else "",
             "policy_count": len(items),
+            # 多单合并组的逐条明细，供前端「展开 N 条」查看
+            "children": [{
+                "record_id": it["record_id"],
+                "policy_type": (it.get("policy_type") or "").strip(),
+                "policy_no": (it.get("policy_no") or "").strip(),
+                "company_short": (it.get("company_short") or "").strip(),
+                "total_premium": it.get("total_premium") or "",
+                "sign_date": it.get("sign_date") or "",
+                "seal_paid": 1 if it.get("seal_paid") else 0,
+            } for it in items] if len(items) > 1 else [],
         })
 
     stats = {"unpaid": sum(1 for m in merged if not m["seal_paid"]),
