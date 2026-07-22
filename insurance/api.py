@@ -7608,3 +7608,138 @@ def sales_dashboard_salesmen():
         return err
     from insurance import dashboard_db
     return jsonify({"code": 0, "data": dashboard_db.get_salesmen(_db, eid)})
+
+
+# ============================================================
+# 公户车盖章跟进：被保险人为公司（非个人）的保单列表 + 「是否已付」标记
+# ============================================================
+
+# 公户（企业被保险人）判定关键词
+_CORP_INSURED_REGEXP = ("公司|有限|集团|物流|贸易|运输|租赁|车队|工厂|商行|中心|合作社|服务部|"
+                        "经营部|事务所|门市|建筑|工程|科技|实业|电子|商贸|银行|医院|学校|幼儿园|合伙")
+
+
+def _seal_enterprise_scope():
+    """返回 (enterprise_id, err)。超管可传 enterprise_id 筛选（不传=全部）；企业侧固定本企业。"""
+    role = g.current_user.get("role")
+    if role == ROLE_SUPER_ADMIN:
+        eid = request.args.get("enterprise_id") or (request.get_json(silent=True) or {}).get("enterprise_id")
+        return (int(eid) if eid else None), None
+    eid = g.current_user.get("parent_id")
+    if not eid:
+        return None, (jsonify({"code": 403, "msg": "无企业归属"}), 403)
+    return int(eid), None
+
+
+@insurance_bp.route("/api/insurance/seal-tasks", methods=["GET"])
+@login_required
+def seal_tasks_list():
+    """公户车盖章跟进列表。参数：paid=''/0/1，keyword，page，page_size"""
+    eid, err = _seal_enterprise_scope()
+    if err:
+        return err
+    paid = (request.args.get("paid") or "").strip()
+    keyword = (request.args.get("keyword") or "").strip()
+    page = max(1, int(request.args.get("page", 1) or 1))
+    page_size = min(100, max(1, int(request.args.get("page_size", 20) or 20)))
+
+    conds = ["r.deleted_at IS NULL", "r.status = 'done'",
+             "(r.doc_category = '保单' OR r.doc_category = '' OR r.doc_category IS NULL)",
+             "pf.insured REGEXP %s"]
+    params = [_CORP_INSURED_REGEXP]
+    if eid is not None:
+        conds.append("r.enterprise_id = %s")
+        params.append(eid)
+    if paid in ("0", "1"):
+        conds.append("r.seal_paid = %s")
+        params.append(int(paid))
+    if keyword:
+        conds.append("(pf.plate_no LIKE %s OR pf.insured LIKE %s OR pf.policy_no LIKE %s)")
+        kw = f"%{keyword}%"
+        params.extend([kw, kw, kw])
+    where = " AND ".join(conds)
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        # 统计（同范围，去掉 paid 过滤单独拼）
+        sconds = ["r.deleted_at IS NULL", "r.status = 'done'",
+                  "(r.doc_category = '保单' OR r.doc_category = '' OR r.doc_category IS NULL)",
+                  "pf.insured REGEXP %s"]
+        sparams = [_CORP_INSURED_REGEXP]
+        if eid is not None:
+            sconds.append("r.enterprise_id = %s")
+            sparams.append(eid)
+        if keyword:
+            sconds.append("(pf.plate_no LIKE %s OR pf.insured LIKE %s OR pf.policy_no LIKE %s)")
+            kw = f"%{keyword}%"
+            sparams.extend([kw, kw, kw])
+        cursor.execute(
+            f"SELECT SUM(r.seal_paid=0) unpaid, SUM(r.seal_paid=1) paid FROM insurance_records r "
+            f"JOIN insurance_policy_fields pf ON pf.record_id = r.id WHERE {' AND '.join(sconds)}",
+            sparams)
+        stats_row = cursor.fetchone() or {}
+        stats = {"unpaid": int(stats_row.get("unpaid") or 0), "paid": int(stats_row.get("paid") or 0)}
+
+        cursor.execute(
+            f"SELECT COUNT(*) cnt FROM insurance_records r "
+            f"JOIN insurance_policy_fields pf ON pf.record_id = r.id WHERE {where}", params)
+        total = cursor.fetchone()["cnt"]
+        offset = (page - 1) * page_size
+        cursor.execute(
+            f"SELECT r.id AS record_id, r.enterprise_id, r.seal_paid, r.seal_paid_at, r.seal_paid_by, "
+            f"       pf.plate_no, pf.insured, pf.company_short, pf.policy_type, pf.policy_no, "
+            f"       pf.sign_date, pf.total_premium, pf.end_date_iso "
+            f"FROM insurance_records r JOIN insurance_policy_fields pf ON pf.record_id = r.id "
+            f"WHERE {where} ORDER BY r.seal_paid ASC, r.id DESC LIMIT %s OFFSET %s",
+            params + [page_size, offset])
+        rows = cursor.fetchall()
+        for r in rows:
+            for k in ("seal_paid_at", "end_date_iso"):
+                if r.get(k) is not None:
+                    r[k] = str(r[k])
+        return jsonify({"code": 0, "data": {
+            "stats": stats, "total": total,
+            "pages": max(1, (total + page_size - 1) // page_size), "page": page,
+            "tasks": rows,
+        }})
+    finally:
+        conn.close()
+
+
+@insurance_bp.route("/api/insurance/seal-tasks/<int:record_id>/paid", methods=["POST"])
+@login_required
+def seal_task_mark_paid(record_id):
+    """标记/取消「已付」。body: {paid: 1/0}"""
+    eid, err = _seal_enterprise_scope()
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    paid = 1 if body.get("paid") else 0
+    operator = ""
+    try:
+        from auth.db import get_user_by_id
+        _u = get_user_by_id(_db, g.current_user["user_id"])
+        operator = (_u or {}).get("name") or (_u or {}).get("phone") or ""
+    except Exception:
+        pass
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT id, enterprise_id FROM insurance_records WHERE id=%s AND deleted_at IS NULL", (record_id,))
+        rec = cursor.fetchone()
+        if not rec:
+            return jsonify({"code": 404, "msg": "记录不存在"}), 404
+        if g.current_user.get("role") != ROLE_SUPER_ADMIN and rec.get("enterprise_id") != eid:
+            return jsonify({"code": 403, "msg": "无权限"}), 403
+        if paid:
+            cursor.execute("UPDATE insurance_records SET seal_paid=1, seal_paid_at=NOW(), seal_paid_by=%s WHERE id=%s",
+                           (operator[:64], record_id))
+        else:
+            cursor.execute("UPDATE insurance_records SET seal_paid=0, seal_paid_at=NULL, seal_paid_by='' WHERE id=%s",
+                           (record_id,))
+        conn.commit()
+        return jsonify({"code": 0, "msg": "已标记为已付" if paid else "已取消已付"})
+    finally:
+        conn.close()

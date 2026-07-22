@@ -417,6 +417,9 @@ def init_insurance_tables(db):
             ("ocr_text", "LONGTEXT COMMENT 'OCR识别原文（pdfplumber+ocr模式下保存OCR文本）'"),
             ("deleted_at", "DATETIME DEFAULT NULL COMMENT '软删除时间（非NULL表示已删除，列表/统计默认过滤）'"),
             ("first_recognized_at", "DATETIME DEFAULT NULL COMMENT '首次识别成功完成时间（重新识别不覆盖，updated_at会被重新识别刷新）'"),
+            ("seal_paid", "TINYINT NOT NULL DEFAULT 0 COMMENT '公户车盖章跟进：是否已付（0未付/1已付）'"),
+            ("seal_paid_at", "DATETIME DEFAULT NULL COMMENT '公户车盖章跟进：标记已付时间'"),
+            ("seal_paid_by", "VARCHAR(64) DEFAULT '' COMMENT '公户车盖章跟进：标记已付操作人姓名'"),
         ]
         for col_name, col_def in new_columns:
             try:
