@@ -382,7 +382,7 @@ def update_enterprise(db, enterprise_id: int, data: dict):
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        allowed = {"name", "enterprise_no", "contact_person", "contact_phone", "enabled", "merge_by_plate", "renewal_enabled", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at", "referrer_id", "survey_token", "survey_data", "follow_status", "remark", "onboarded_at"}
+        allowed = {"name", "enterprise_no", "contact_person", "contact_phone", "enabled", "merge_by_plate", "renewal_enabled", "seal_tracking_enabled", "plan_type", "plan_months", "plan_start_at", "next_plan_type", "next_plan_months", "next_plan_start_at", "referrer_id", "survey_token", "survey_data", "follow_status", "remark", "onboarded_at"}
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
             return None
@@ -1403,5 +1403,22 @@ def reject_withdrawal(db, txn_id: int):
             cursor.execute("UPDATE wallets SET balance = balance + %s WHERE user_id=%s", (row["amount"], row["user_id"]))
             cursor.execute("UPDATE wallet_transactions SET status='rejected' WHERE id=%s", (txn_id,))
             conn.commit()
+    finally:
+        conn.close()
+
+
+def init_seal_tracking_column(db):
+    """enterprises 表添加公户车盖章跟进开关列（幂等）"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "ALTER TABLE enterprises ADD COLUMN seal_tracking_enabled TINYINT NOT NULL DEFAULT 0 "
+                "COMMENT '公户车盖章跟进功能开关（超管控制是否开放给该企业）'"
+            )
+            conn.commit()
+        except Exception:
+            pass  # 列已存在
     finally:
         conn.close()

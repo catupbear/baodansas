@@ -7628,6 +7628,14 @@ def _seal_enterprise_scope():
     eid = g.current_user.get("parent_id")
     if not eid:
         return None, (jsonify({"code": 403, "msg": "无企业归属"}), 403)
+    # 企业级开关：超管在企业管理里开启后客户才能用
+    try:
+        from auth.db import get_enterprise_by_id
+        _ent = get_enterprise_by_id(_db, int(eid))
+        if not _ent or not _ent.get("seal_tracking_enabled"):
+            return None, (jsonify({"code": 403, "msg": "公户车盖章跟进功能未开通，请联系客服", "seal_disabled": True}), 403)
+    except Exception:
+        pass
     return int(eid), None
 
 

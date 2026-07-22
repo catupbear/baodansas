@@ -661,7 +661,8 @@
                                 </button>
                                 <!-- 三级面板紧贴二级（不留间隙，否则鼠标移过去会触发关闭） -->
                                 <div v-if="wbSealOpen" class="nav-more-dropdown" style="left:100%;top:0;">
-                                    <button @click="openSealTab(); workbenchOpen = false; wbSealOpen = false" class="nav-more-item" style="white-space:nowrap;">🏢 公户车盖章跟进</button>
+                                    <button v-if="isSuperAdmin || currentUser.seal_tracking_enabled" @click="openSealTab(); workbenchOpen = false; wbSealOpen = false" class="nav-more-item" style="white-space:nowrap;">🏢 公户车盖章跟进</button>
+                                    <div v-else class="nav-more-item" style="color:#d1d5db;cursor:not-allowed;white-space:nowrap;" title="功能未开通，请联系客服">🏢 公户车盖章跟进 🔒</div>
                                 </div>
                             </div>
                         </div>
@@ -886,7 +887,7 @@
                             style="display:block;width:100%;text-align:left;padding:9px 12px 9px 22px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;background:none;color:#374151;">
                         📋 保单跟进
                     </button>
-                    <button @click="openSealTab();mobileMenuOpen=false"
+                    <button v-if="isSuperAdmin || currentUser.seal_tracking_enabled" @click="openSealTab();mobileMenuOpen=false"
                             style="display:block;width:100%;text-align:left;padding:9px 12px 9px 38px;border-radius:8px;font-size:13px;font-weight:500;border:none;cursor:pointer;background:none;color:#6b7280;">
                         🏢 公户车盖章跟进
                     </button>
@@ -2699,6 +2700,14 @@
             <input type="text" v-model="sealFilter.keyword" @keyup.enter="loadSealTasks(1)" placeholder="搜索车牌/被保险人/保单号..."
                    class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-orange-400" style="min-width:220px;">
             <button @click="loadSealTasks(1)" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">搜索</button>
+            <div v-if="isSuperAdmin" style="display:flex;align-items:center;gap:6px;">
+                <span class="text-xs text-gray-500" style="white-space:nowrap;">企业：</span>
+                <select v-model="sealFilter.enterprise_id" @change="loadSealTasks(1)"
+                        class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 outline-none focus:border-orange-400" style="max-width:170px;min-width:110px;">
+                    <option value="">全部企业</option>
+                    <option v-for="e in dashboardEnterprises" :key="e.id" :value="e.id">{{ e.name }}</option>
+                </select>
+            </div>
             <span class="text-xs text-gray-400" style="margin-left:auto;">公户车 = 被保险人为公司的保单</span>
         </div>
         <!-- 列表 -->
@@ -6342,7 +6351,7 @@ const _app = createApp({
         // ===== 公户车盖章跟进 =====
         const sealTasks = ref([]);
         const sealStats = reactive({ unpaid: 0, paid: 0 });
-        const sealFilter = reactive({ paid: '0', keyword: '' });
+        const sealFilter = reactive({ paid: '0', keyword: '', enterprise_id: '' });
         const sealPagination = reactive({ total: 0, page: 1, pages: 1 });
         async function loadSealTasks(page) {
             if (page) sealPagination.page = page;
@@ -6350,6 +6359,7 @@ const _app = createApp({
                 const params = new URLSearchParams({ page: sealPagination.page, page_size: 20 });
                 if (sealFilter.paid !== '') params.set('paid', sealFilter.paid);
                 if (sealFilter.keyword) params.set('keyword', sealFilter.keyword);
+                if (isSuperAdmin.value && sealFilter.enterprise_id) params.set('enterprise_id', sealFilter.enterprise_id);
                 const r = await authFetch(`/api/insurance/seal-tasks?${params}`);
                 const j = await r.json();
                 if (j.code === 0) {
@@ -6359,8 +6369,9 @@ const _app = createApp({
                 }
             } catch (e) { console.error('加载公户车列表失败', e); }
         }
-        function openSealTab() {
+        async function openSealTab() {
             pageTab.value = 'seal';
+            if (isSuperAdmin.value) { try { await sdEnsureEnterprises(); } catch (e) {} }
             loadSealTasks(1);
         }
         async function markSealPaid(t, paid) {
