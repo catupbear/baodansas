@@ -656,10 +656,10 @@
                             </button>
                             <div style="position:relative;" @mouseenter="wbSealOpen = true" @mouseleave="wbSealOpen = false">
                                 <button @click="wbComingSoon('保单跟进'); workbenchOpen = false" class="nav-more-item" style="width:100%;">
-                                    📞 保单跟进<span style="margin-left:auto;color:#9ca3af;">▸</span>
+                                    📋 保单跟进<span style="margin-left:auto;color:#9ca3af;">▸</span>
                                 </button>
                                 <div v-if="wbSealOpen" class="nav-more-dropdown" style="left:100%;top:0;margin-left:2px;">
-                                    <button @click="wbComingSoon('公户车盖章跟进'); workbenchOpen = false; wbSealOpen = false" class="nav-more-item" style="white-space:nowrap;">🖋 公户车盖章跟进</button>
+                                    <button @click="wbComingSoon('公户车盖章跟进'); workbenchOpen = false; wbSealOpen = false" class="nav-more-item" style="white-space:nowrap;">🏢 公户车盖章跟进</button>
                                 </div>
                             </div>
                         </div>
@@ -882,11 +882,11 @@
                     </button>
                     <button @click="wbComingSoon('保单跟进');mobileMenuOpen=false"
                             style="display:block;width:100%;text-align:left;padding:9px 12px 9px 22px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;background:none;color:#374151;">
-                        📞 保单跟进
+                        📋 保单跟进
                     </button>
                     <button @click="wbComingSoon('公户车盖章跟进');mobileMenuOpen=false"
                             style="display:block;width:100%;text-align:left;padding:9px 12px 9px 38px;border-radius:8px;font-size:13px;font-weight:500;border:none;cursor:pointer;background:none;color:#6b7280;">
-                        🖋 公户车盖章跟进
+                        🏢 公户车盖章跟进
                     </button>
                 </template>
             </div>
