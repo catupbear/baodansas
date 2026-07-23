@@ -2139,10 +2139,14 @@ def query_insurance_records(
                     f"WHEN {col} LIKE '%%商业%%' OR {col} LIKE '%%机动车辆保险%%' OR {col} LIKE '%%机动车辆综合险%%' THEN {_sy} "
                     f"ELSE {_fc} END"
                 )
-            # 主排序在前(客户设置)，其后 车牌ASC + 险种rank，最后 id
-            id_order = f"{_sort_map_id[_sort_key]} {_dir}, {_sort_map_id['plate_no']} ASC, {_rank_case('pf')} ASC, r.id DESC"
-            dedup_order = f"{_sort_map_id_dedup[_sort_key]} {_dir}, {_sort_map_id_dedup['plate_no']} ASC, {_rank_case('pf2')} ASC, t.id DESC"
-            final_order = f"{_sort_map_final[_sort_key]} {_dir}, {_sort_map_final['plate_no']} ASC, {_rank_case('pf3')} ASC, r2.id DESC"
+            # 锚点排序：同一车牌用该车主排序列的锚点值 MAX(...) OVER(PARTITION BY 车牌) 参与主排序，
+            # 让同车所有险种保单绑在一起、不被主排序(如创建日期)按各自时间拆散；再按 车牌ASC + 险种rank 组内排。
+            _anchor_id = f"MAX({_sort_map_id[_sort_key]}) OVER (PARTITION BY {_sort_map_id['plate_no']})"
+            _anchor_dedup = f"MAX({_sort_map_id_dedup[_sort_key]}) OVER (PARTITION BY {_sort_map_id_dedup['plate_no']})"
+            _anchor_final = f"MAX({_sort_map_final[_sort_key]}) OVER (PARTITION BY {_sort_map_final['plate_no']})"
+            id_order = f"{_anchor_id} {_dir}, {_sort_map_id['plate_no']} ASC, {_rank_case('pf')} ASC, r.id DESC"
+            dedup_order = f"{_anchor_dedup} {_dir}, {_sort_map_id_dedup['plate_no']} ASC, {_rank_case('pf2')} ASC, t.id DESC"
+            final_order = f"{_anchor_final} {_dir}, {_sort_map_final['plate_no']} ASC, {_rank_case('pf3')} ASC, r2.id DESC"
 
         # 延迟关联：先查 id（轻量排序），再用 id 取完整数据
         offset = (page - 1) * page_size
