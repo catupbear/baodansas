@@ -191,8 +191,9 @@ def get_list():
     return jsonify({"code": 0, "data": result})
 
 
-def _query_history(customer_key: str, enterprise_id):
-    """按车牌或VIN查该客户的全部历史保单（不限90天窗口，实时查询保证完整性）。"""
+def _query_history(customer_key: str, enterprise_id, policy_type: str = ""):
+    """按车牌或VIN查该客户的历史保单（不限90天窗口，实时查询保证完整性）。
+    传 policy_type 时只查该险种（与任务按险种拆分的口径一致）。"""
     conn = _db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -205,6 +206,9 @@ def _query_history(customer_key: str, enterprise_id):
             "AND r.deleted_at IS NULL AND r.status = 'done' AND r.doc_category = '保单'"
         )
         params = [customer_key, customer_key]
+        if policy_type:
+            sql += " AND pf.policy_type = %s"
+            params.append(policy_type)
         if enterprise_id is not None:
             sql += " AND r.enterprise_id = %s"
             params.append(enterprise_id)
@@ -228,7 +232,7 @@ def get_detail(task_id):
         return jsonify({"code": 404, "msg": "任务不存在"}), 404
     if not _can_operate_task(task):
         return jsonify({"code": 403, "msg": "权限不足"}), 403
-    history = _query_history(task["customer_key"], task.get("enterprise_id"))
+    history = _query_history(task["customer_key"], task.get("enterprise_id"), task.get("policy_type"))
     followups = rdb.get_followups(_db, task_id)
     task["created_at"] = str(task["created_at"])
     task["updated_at"] = str(task["updated_at"])
