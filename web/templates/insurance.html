@@ -372,10 +372,10 @@
         .records-table th.action-col-sticky { z-index: 16; background: var(--surface-secondary) !important; }
         .records-table td.action-col-sticky { background: var(--surface) !important; }
         .records-table tbody tr:hover td.action-col-sticky { background: var(--primary-bg) !important; }
-        /* 按车牌合并模式下"操作"列只需容纳一个"展开/收起N条"按钮，280px 太宽 */
+        /* 按车牌合并模式下"操作"列：容纳"展开/收起N条"按钮 + 需人工补充缺失提示（单行不换行） */
         .records-table th.action-col-sticky.action-col-narrow,
         .records-table td.action-col-sticky.action-col-narrow {
-            width: 110px; min-width: 110px; max-width: 110px;
+            width: 190px; min-width: 190px; max-width: 190px;
         }
         /* 合并行展开明细里的操作按钮组：始终固定在横向滚动区域左侧，不随明细内容滚走
            （明细行不在勾选/操作列的网格里，left 必须从0开始，否则会被强行推到比自身
@@ -3286,7 +3286,7 @@
                                 <!-- 需人工补充：缺失字段提示（合并行/普通行都显示，放在始终可见的操作列，不依赖文件名列） -->
                                 <div v-if="record.is_abnormal && !record.abnormal_override_reason && record.hint"
                                      class="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 px-1.5 py-0.5 rounded mt-1 inline-block"
-                                     style="max-width:220px;white-space:normal;line-height:1.35;">⚠ {{ record.hint }}</div>
+                                     style="white-space:nowrap;line-height:1.35;">⚠ {{ record.hint }}</div>
                             </td>
                             <!-- 动态列（按列配置渲染） -->
                             <template v-for="(col, colIdx) in visibleListColumns" :key="col.key">
