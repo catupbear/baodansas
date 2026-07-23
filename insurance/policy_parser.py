@@ -3672,6 +3672,17 @@ def _extract_premium(text: str, fields: dict, company_short: str):
                 fields["保费合计"] = val
                 break
 
+    # 阳光商车无忧驾乘险等：表格严重压平，保费无"保险费合计/总保险费"标签，金额与保额粘连，
+    # 但税额拆分是可靠信号——总含税保费 = 不含税保费 + 增值税，
+    # 如"…100000300.00 (不含税保费:285.85 元,增值税:14.15元)"（税保费/增值税跨行且与保额粘连）
+    if "保费合计" not in fields and company_short == "阳光":
+        _m1 = re.search(r"税保费[:：]\s*(\d+\.\d{1,2})", text)
+        _m2 = re.search(r"增值税[:：][\s\S]{0,60}?(\d{1,4}\.\d{2})\s*元[)）]", text)
+        if _m1 and _m2:
+            _total = float(_m1.group(1)) + float(_m2.group(1))
+            if _total > 0:
+                fields["保费合计"] = f"{_total:.2f}"
+
     # 鼎和等格式：跨行"含税总保险费 人民币：贰佰陆拾\nCNY: 268.00 元"
     if "保费合计" not in fields:
         m = re.search(r"总保险费[\s\S]{0,50}?CNY[：:\s]*([\d,]+\.\d{2})", text)
