@@ -137,7 +137,8 @@ def _detect_renewal_hints(db, enterprise_id_scope=None):
     """
     续保检测提示（半自动）：对状态为 pending 的存量任务，查一次「同客户 + 同险种 +
     不在该任务当前 policy_record_ids 里 + 起保日期紧接着当前任务到期日」的保单记录，
-    命中写入 hint 字段，不改变任务状态；由人工在页面上确认「续保」或「忽略」。
+    命中写入 hint，并按新旧承保公司异同自动置 renew_pending(续保待确认)/transfer_pending(转保待确认)；
+    由人工在页面确认成交或忽略。
 
     两层过滤缺一不可：
     1) 排除 policy_record_ids 里已有的记录——否则同一辆车交强+商业两份保单到期日不同，
@@ -150,7 +151,7 @@ def _detect_renewal_hints(db, enterprise_id_scope=None):
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute(
-            "SELECT id, customer_key, enterprise_id, policy_type, end_date, policy_record_ids FROM renewal_tasks "
+            "SELECT id, customer_key, enterprise_id, policy_type, company_short, end_date, policy_record_ids FROM renewal_tasks "
             "WHERE status = 'pending'"
         )
         tasks = cursor.fetchall()
@@ -175,7 +176,7 @@ def _detect_renewal_hints(db, enterprise_id_scope=None):
             cursor = conn.cursor(pymysql.cursors.DictCursor)
             ph = ",".join(["%s"] * len(known_ids))
             cursor.execute(f"""
-                SELECT r.id AS record_id, pf.end_date_iso
+                SELECT r.id AS record_id, pf.end_date_iso, pf.company_short
                 FROM insurance_records r JOIN insurance_policy_fields pf ON r.id = pf.record_id
                 WHERE (pf.plate_no = %s OR pf.vin = %s)
                   AND r.enterprise_id = %s AND r.deleted_at IS NULL
@@ -190,7 +191,12 @@ def _detect_renewal_hints(db, enterprise_id_scope=None):
         finally:
             conn.close()
         if hit:
+            # 比对新旧承保公司：都识别到且不同 → 转保待确认；否则(相同或信息缺失) → 续保待确认
+            old_co = (t.get("company_short") or "").strip()
+            new_co = (hit.get("company_short") or "").strip()
+            new_status = "transfer_pending" if (old_co and new_co and old_co != new_co) else "renew_pending"
             rdb.set_hint(db, t["id"], hit["record_id"], hit["end_date_iso"])
+            rdb.update_status(db, t["id"], new_status)
             hint_count += 1
     return hint_count
 

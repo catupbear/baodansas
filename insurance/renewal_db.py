@@ -38,7 +38,7 @@ def init_renewal_tables(db):
                 primary_record_id  INT DEFAULT NULL COMMENT '聚合内最近到期日对应的原始record_id,用于前端预览原件',
                 assignee           INT DEFAULT NULL COMMENT '跟进人 user_id',
                 assignee_name      VARCHAR(128) DEFAULT '',
-                status             VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending待跟进/transfer转保/renewed续保/stopped停保/hold暂不考虑(逾期为end_date派生,非存储态)',
+                status             VARCHAR(24) NOT NULL DEFAULT 'pending' COMMENT 'pending待跟进/renew_pending续保待确认/transfer_pending转保待确认/renewed续保成功/transfer转保成功/stopped停保/hold暂不考虑',
                 priority           TINYINT NOT NULL DEFAULT 0 COMMENT '0/1/2,纯自动计算,不支持手动覆盖',
                 remark             TEXT,
                 remind_at          DATE DEFAULT NULL COMMENT '与最新一条followup.next_remind_at同步',
@@ -287,7 +287,11 @@ def list_tasks(db, page: int = 1, page_size: int = 20, enterprise_id=None,
         params.append(status)
     elif only_actionable:
         # 方案：默认只显示需跟进两类（逾期 + 30天内到期）且尚未做续保决定
-        conditions.append("status = 'pending' AND end_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)")
+        # 待确认态(续保/转保待确认)始终显示待人工确认；pending 只显示逾期+30天内
+        conditions.append(
+            "(status IN ('renew_pending','transfer_pending') "
+            "OR (status='pending' AND end_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)))"
+        )
     if date_start:
         conditions.append("end_date >= %s")
         params.append(date_start)
@@ -310,8 +314,8 @@ def list_tasks(db, page: int = 1, page_size: int = 20, enterprise_id=None,
         offset = (page - 1) * page_size
         cursor.execute(
             f"SELECT * FROM renewal_tasks {where_clause} "
-            # 默认排序：续保待确认(有续保检测提示) → 已过期 → 待跟进；组内按到期日升序
-            f"ORDER BY (hint_record_id IS NOT NULL) DESC, (end_date < CURDATE()) DESC, end_date ASC "
+            # 默认排序：续保/转保待确认 → 已过期 → 待跟进；组内按到期日升序
+            f"ORDER BY (status IN ('renew_pending','transfer_pending')) DESC, (end_date < CURDATE()) DESC, end_date ASC "
             f"LIMIT %s OFFSET %s",
             params + [page_size, offset],
         )

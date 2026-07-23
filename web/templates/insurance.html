@@ -2583,8 +2583,10 @@
                         class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white cursor-pointer">
                     <option value="">需跟进（逾期+30天内）</option>
                     <option value="pending">待跟进</option>
-                    <option value="transfer">转保</option>
-                    <option value="renewed">续保</option>
+                    <option value="renew_pending">续保待确认</option>
+                    <option value="transfer_pending">转保待确认</option>
+                    <option value="renewed">续保成功</option>
+                    <option value="transfer">转保成功</option>
                     <option value="stopped">停保</option>
                     <option value="hold">暂不考虑</option>
                 </select>
@@ -2629,7 +2631,7 @@
                                 <input v-if="isSuperAdmin || currentUser.role === 'enterprise'" type="checkbox" :value="t.id" v-model="renewalSelectedIds" class="cursor-pointer">
                                 <span class="font-extrabold text-gray-800" style="font-size:18px;letter-spacing:0.5px;">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.plate_no || t.vin || '—') : (maskPlateNo(t.plate_no || t.vin) || '—') }}</span>
                                 <span class="text-xs px-1.5 py-0.5 rounded-full font-semibold" :style="renewalDaysBadgeStyle(t)">{{ renewalDaysLeftText(t) }}</span>
-                                <span v-if="t.hint_record_id" class="text-xs px-1.5 py-0.5 rounded-full" style="background:#dbeafe;color:#1d4ed8;">🔔 疑似已续保</span>
+                                <span v-if="t.status === 'renew_pending' || t.status === 'transfer_pending'" class="text-xs px-1.5 py-0.5 rounded-full" :style="renewalStatusStyle(t.status)">🔔 {{ renewalStatusLabel(t.status) }}</span>
                             </div>
                             <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5 mt-2 text-xs" style="max-width:760px;">
                                 <div><span class="text-gray-400">投保人：</span><span class="text-gray-700 font-medium">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.applicant || '—') : (maskPersonName(t.applicant) || '—') }}</span></div>
@@ -3773,10 +3775,11 @@
                 </div>
 
                 <div v-if="renewalDetailTask.hint_record_id" class="mx-5 mt-3 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-between text-sm flex-wrap gap-2">
-                    <span class="text-blue-700">🔔 检测到疑似续保新单（止期 {{ renewalDetailTask.hint_end_date }}），确认为续保？</span>
+                    <span class="text-blue-700">🔔 检测到接续新单（止期 {{ renewalDetailTask.hint_end_date }}），{{ renewalDetailTask.status === 'transfer_pending' ? '承保公司不同、疑似转保' : '承保公司相同、疑似续保' }}，请确认</span>
                     <div class="flex gap-2 flex-shrink-0">
                         <button @click="previewRenewalTaskFile(renewalDetailTask.hint_record_id)" class="text-xs px-2 py-1 rounded border border-blue-300 text-blue-700 cursor-pointer">📄 查看新保单</button>
-                        <button @click="changeRenewalStatus('renewed', '检测到续保新单，确认续保')" class="text-xs px-2 py-1 rounded bg-blue-600 text-white cursor-pointer">确认续保</button>
+                        <button v-if="renewalDetailTask.status === 'transfer_pending'" @click="changeRenewalStatus('transfer', '确认转保')" class="text-xs px-2 py-1 rounded bg-blue-600 text-white cursor-pointer">确认转保</button>
+                        <button v-else @click="changeRenewalStatus('renewed', '确认续保')" class="text-xs px-2 py-1 rounded bg-blue-600 text-white cursor-pointer">确认续保</button>
                         <button @click="dismissRenewalHint()" class="text-xs px-2 py-1 rounded border border-gray-300 text-gray-500 cursor-pointer">忽略</button>
                     </div>
                 </div>
@@ -3784,9 +3787,9 @@
                 <div class="px-5 pt-3 flex items-center gap-2 flex-wrap">
                     <span class="text-xs px-2 py-0.5 rounded-full" :style="renewalStatusStyle(renewalDetailTask.status)">{{ renewalStatusLabel(renewalDetailTask.status) }}</span>
                     <button v-if="renewalDetailTask.status !== 'transfer'" @click="changeRenewalStatus('transfer')"
-                            class="text-xs px-2.5 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-50 cursor-pointer">转保</button>
+                            class="text-xs px-2.5 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-50 cursor-pointer">转保成功</button>
                     <button v-if="renewalDetailTask.status !== 'renewed'" @click="changeRenewalStatus('renewed')"
-                            class="text-xs px-2.5 py-1 rounded border border-green-300 text-green-700 hover:bg-green-50 cursor-pointer">续保</button>
+                            class="text-xs px-2.5 py-1 rounded border border-green-300 text-green-700 hover:bg-green-50 cursor-pointer">续保成功</button>
                     <button v-if="renewalDetailTask.status !== 'stopped'" @click="changeRenewalStatus('stopped')"
                             class="text-xs px-2.5 py-1 rounded border border-gray-300 text-gray-500 hover:bg-gray-50 cursor-pointer">停保</button>
                     <button v-if="renewalDetailTask.status !== 'hold'" @click="openRenewalHold()"
@@ -11916,13 +11919,16 @@ const _app = createApp({
 
         const RENEWAL_STATUS_STYLES = {
             pending: 'background:#fef3c7;color:#b45309;',
-            transfer: 'background:#dbeafe;color:#1d4ed8;',
+            renew_pending: 'background:#dbeafe;color:#1d4ed8;',
+            transfer_pending: 'background:#ede9fe;color:#6d28d9;',
             renewed: 'background:#dcfce7;color:#15803d;',
+            transfer: 'background:#dcfce7;color:#15803d;',
             stopped: 'background:#f3f4f6;color:#6b7280;',
             hold: 'background:#ffedd5;color:#c2410c;',
         };
         const RENEWAL_STATUS_LABELS = {
-            pending: '待跟进', transfer: '转保', renewed: '续保', stopped: '停保', hold: '暂不考虑',
+            pending: '待跟进', renew_pending: '续保待确认', transfer_pending: '转保待确认',
+            renewed: '续保成功', transfer: '转保成功', stopped: '停保', hold: '暂不考虑',
         };
         function renewalStatusStyle(status) { return RENEWAL_STATUS_STYLES[status] || ''; }
         function renewalStatusLabel(status) { return RENEWAL_STATUS_LABELS[status] || status; }
@@ -12021,7 +12027,7 @@ const _app = createApp({
         }
 
         function dismissRenewalHint() {
-            changeRenewalStatus(renewalDetailTask.value.status, '忽略续保检测提示');
+            changeRenewalStatus('pending', '忽略续保检测提示');
         }
 
         // 暂不考虑原因框（快捷选项 + 手动输入）

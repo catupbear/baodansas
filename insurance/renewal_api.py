@@ -365,7 +365,7 @@ def change_status():
     status = (body.get("status") or "").strip()
     remark = (body.get("remark") or "").strip()
     hold_reason = (body.get("hold_reason") or "").strip()
-    if status not in ("pending", "transfer", "renewed", "stopped", "hold"):
+    if status not in ("pending", "renew_pending", "transfer_pending", "transfer", "renewed", "stopped", "hold"):
         return jsonify({"code": 400, "msg": "非法状态"}), 400
 
     task = rdb.get_task(_db, task_id)
@@ -376,10 +376,10 @@ def change_status():
 
     # 暂不考虑(hold)写入原因；改为其他状态时清空原因
     rdb.update_status(_db, task_id, status, hold_reason=(hold_reason if status == "hold" else ""))
-    # 续保(renewed)保留续保检测提示 hint 供"查看新保单"；其余状态变更清空提示
-    if status != "renewed":
+    # 成交(续保成功/转保成功)保留续保检测提示 hint 供"查看新保单"；其余状态变更清空提示
+    if status not in ("renewed", "transfer"):
         rdb.set_hint(_db, task_id, None, None)
-    _labels = {"pending": "待跟进", "transfer": "转保", "renewed": "续保", "stopped": "停保", "hold": "暂不考虑"}
+    _labels = {"pending": "待跟进", "renew_pending": "续保待确认", "transfer_pending": "转保待确认", "renewed": "续保成功", "transfer": "转保成功", "stopped": "停保", "hold": "暂不考虑"}
     _content = remark or (
         f"暂不考虑：{hold_reason}" if (status == "hold" and hold_reason)
         else f"状态变更为：{_labels.get(status, status)}"
@@ -462,7 +462,7 @@ _EXPORT_HEADERS = [
     ("sign_date", "签单日期"), ("end_date", "到期日"), ("total_premium", "上期保费"),
     ("assignee_name", "跟进人"), ("status", "续保状态"), ("hold_reason", "暂不考虑原因"), ("remark", "备注"),
 ]
-_STATUS_LABEL = {"pending": "待跟进", "transfer": "转保", "renewed": "续保", "stopped": "停保", "hold": "暂不考虑"}
+_STATUS_LABEL = {"pending": "待跟进", "renew_pending": "续保待确认", "transfer_pending": "转保待确认", "renewed": "续保成功", "transfer": "转保成功", "stopped": "停保", "hold": "暂不考虑"}
 
 
 @renewal_bp.route("/export", methods=["GET"])
