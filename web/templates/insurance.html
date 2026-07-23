@@ -237,6 +237,12 @@
         .sd-qi:hover .sd-qtip { display: block; }
         .sd-qi.qright .sd-qtip { left: auto; right: -10px; transform: none; }
         .sd-qi.qright .sd-qtip::after { left: auto; right: 14px; transform: none; }
+        /* 贴近屏幕边缘时的位置修正（JS 检测溢出后加类），窄屏限宽防两侧同时溢出 */
+        .sd-qi .sd-qtip { max-width: calc(100vw - 24px); }
+        .sd-qi .sd-qtip.tip-left { left: -8px; transform: none; }
+        .sd-qi .sd-qtip.tip-left::after { left: 12px; transform: none; }
+        .sd-qi .sd-qtip.tip-right { left: auto; right: -8px; transform: none; }
+        .sd-qi .sd-qtip.tip-right::after { left: auto; right: 12px; transform: none; }
         /* 目标进度条 */
         .sd-pbar { height: 6px; background: #f3f4f6; border-radius: 3px; overflow: hidden; }
         .sd-pbar i { display: block; height: 100%; background: linear-gradient(90deg, #fdba74, #ea580c); border-radius: 3px; }
@@ -366,10 +372,10 @@
         .records-table th.action-col-sticky { z-index: 16; background: var(--surface-secondary) !important; }
         .records-table td.action-col-sticky { background: var(--surface) !important; }
         .records-table tbody tr:hover td.action-col-sticky { background: var(--primary-bg) !important; }
-        /* 按车牌合并模式下"操作"列只需容纳一个"展开/收起N条"按钮，280px 太宽 */
+        /* 按车牌合并模式下"操作"列：容纳"展开/收起N条"按钮 + 需人工补充缺失提示（单行不换行） */
         .records-table th.action-col-sticky.action-col-narrow,
         .records-table td.action-col-sticky.action-col-narrow {
-            width: 110px; min-width: 110px; max-width: 110px;
+            width: 210px; min-width: 210px; max-width: 210px;
         }
         /* 合并行展开明细里的操作按钮组：始终固定在横向滚动区域左侧，不随明细内容滚走
            （明细行不在勾选/操作列的网格里，left 必须从0开始，否则会被强行推到比自身
@@ -426,6 +432,10 @@
             body { padding-bottom: 60px; overflow-x: clip; }
             #app { overflow-x: clip; max-width: 100vw; }
             .mobile-bottom-nav { display: flex !important; }
+            /* 续保筛选栏移动端整齐：下拉/搜索各占一行，日期并排，去掉撑开空隙 */
+            .renewal-filter-bar > select { width: 100%; max-width: none !important; }
+            .renewal-filter-bar > input[type="text"] { width: 100%; flex: none; min-width: 0; }
+            .renewal-filter-bar .rf-spacer { display: none; }
             /* 状态Tab行在移动端换行 */
             .record-tab-row { flex-wrap: wrap !important; gap: 0 !important; }
             .record-tab-row .record-actions { width: 100%; border-top: 1px solid #f3f4f6; padding: 8px 12px; justify-content: flex-end; }
@@ -618,7 +628,7 @@
                                   d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
                     </div>
-                    <h1 class="text-lg font-bold text-white tracking-tight">午虎AI保单台账</h1>
+                    <h1 class="text-lg font-bold text-white tracking-tight">午虎AI保单台账<span v-if="pageTab === 'sales'" style="font-size:14px;font-weight:600;opacity:0.92;"> · 业绩看板</span></h1>
                     <!-- 内部管理界面醒目标识（仅内部超级管理员可见） -->
                     <span v-if="isSuperAdmin" style="display:inline-flex;align-items:center;gap:4px;background:#fff;color:#dc2626;border-radius:8px;padding:5px 12px;font-size:13px;font-weight:800;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,0.22);letter-spacing:0.5px;border:2px solid #fecaca;">
                         <svg style="width:16px;height:16px;flex-shrink:0;" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
@@ -637,10 +647,30 @@
                     <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="pageTab = 'sales'; loadSalesDash()" :class="pageTab === 'sales' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;">
                         业绩看板<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
                     </button>
-                    <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="openRenewalTab()" :class="pageTab === 'renewal' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;position:relative;">
-                        续保管理系统<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
-                        <span v-if="renewalBadgeCount > 0" style="position:absolute;top:-8px;right:-8px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.35);border:2px solid #c2410c;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
-                    </button>
+                    <!-- 企业工作台：级联下拉（续保管理 / 保单跟进 ▸ 公户车盖章跟进）——对客户开放（超管/企业/员工），入口内各功能有各自权限门槛 -->
+                    <div v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" class="nav-more-wrap">
+                        <button @click.stop="workbenchOpen = !workbenchOpen" :class="pageTab === 'renewal' ? 'active' : ''" class="page-tab-btn" style="white-space:nowrap;position:relative;">
+                            企业工作台<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span> ▾
+                            <span v-if="renewalBadgeCount > 0" style="position:absolute;top:-8px;right:-8px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.35);border:2px solid #c2410c;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
+                        </button>
+                        <!-- overflow:visible 覆盖基类的 hidden，否则定位在容器外的三级面板会被裁剪 -->
+                        <div v-if="workbenchOpen" class="nav-more-dropdown" @click.stop style="min-width:170px;overflow:visible;">
+                            <button @click="openRenewalTab(); workbenchOpen = false" class="nav-more-item">
+                                🔄 续保管理
+                                <span v-if="renewalBadgeCount > 0" style="margin-left:auto;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#dc2626;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
+                            </button>
+                            <div style="position:relative;" @mouseenter="wbSealEnter" @mouseleave="wbSealLeave">
+                                <button @click.stop="wbSealOpen = !wbSealOpen" class="nav-more-item" style="width:100%;">
+                                    📋 保单跟进<span style="margin-left:auto;color:#9ca3af;">▸</span>
+                                </button>
+                                <!-- 三级面板紧贴二级（不留间隙，否则鼠标移过去会触发关闭） -->
+                                <div v-if="wbSealOpen" class="nav-more-dropdown" style="left:100%;top:0;">
+                                    <button v-if="isSuperAdmin || currentUser.seal_tracking_enabled" @click="openSealTab(); workbenchOpen = false; wbSealOpen = false" class="nav-more-item" style="white-space:nowrap;">🏢 公户车盖章跟进</button>
+                                    <div v-else class="nav-more-item" style="color:#d1d5db;cursor:not-allowed;white-space:nowrap;" title="功能未开通，请联系客服">🏢 公户车盖章跟进 🔒</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <!-- 更多：收纳 AI质检 / 导出记录，避免顶部导航栏按钮太多挤成一整排 -->
                     <div v-if="isSuperAdmin" class="nav-more-wrap">
                         <button @click.stop="moreMenuOpen = !moreMenuOpen" class="page-tab-btn" style="position:relative;white-space:nowrap;">
@@ -796,6 +826,20 @@
                     <button class="pm-cta pm-cta-fill" @click="showPricingQr=true">立即咨询开通</button>
                 </div>
             </div>
+            <!-- 加油包：月额度不够时的弹性补充（适用于标准版） -->
+            <div style="margin-top:14px;border:1px dashed #fdba74;background:#fff7ed;border-radius:14px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <span style="font-size:26px;">⛽</span>
+                    <div>
+                        <div style="font-size:14px;font-weight:700;color:#1c1410;">识别加油包
+                            <span style="font-size:16px;color:#ea580c;font-weight:800;margin-left:6px;">¥99</span>
+                            <span style="font-size:12px;color:#9a3412;">/ 1,200 次</span>
+                        </div>
+                        <div style="font-size:12px;color:#9a3412;margin-top:2px;">有效期 3 个月 · 可叠加购买 · 月额度用完后自动使用 · 适用于标准版套餐</div>
+                    </div>
+                </div>
+                <button class="pm-cta pm-cta-outline" style="width:auto;padding:8px 18px;margin:0;" @click="showPricingQr=true">立即咨询开通</button>
+            </div>
         </div>
     </div>
 
@@ -805,6 +849,16 @@
             <button class="pm-qr-close" @click="showPricingQr=false">✕</button>
             <div style="font-size:17px;font-weight:700;color:#111827;margin-bottom:6px;">扫码添加客服微信</div>
             <div style="font-size:13px;color:#6b7280;margin-bottom:18px;">添加客服开通套餐 / 咨询详情</div>
+            <img src="/static/img/wechat_qr.png?v=2" alt="客服二维码" style="width:200px;height:200px;border-radius:14px;background:#fff;padding:6px;border:1px solid #eceef1;display:block;margin:0 auto;">
+        </div>
+    </div>
+
+    <!-- ========== 导入往年保单·引导添加客服弹窗 ========== -->
+    <div v-if="renewalImportVisible" class="pm-qr-overlay" @click.self="renewalImportVisible=false">
+        <div class="pm-qr-modal">
+            <button class="pm-qr-close" @click="renewalImportVisible=false">✕</button>
+            <div style="font-size:17px;font-weight:700;color:#111827;margin-bottom:6px;">导入往年保单</div>
+            <div style="font-size:13px;color:#6b7280;margin-bottom:18px;">扫码添加客服微信，由客服协助把往年台账/保单导入续保管理</div>
             <img src="/static/img/wechat_qr.png?v=2" alt="客服二维码" style="width:200px;height:200px;border-radius:14px;background:#fff;padding:6px;border:1px solid #eceef1;display:block;margin:0 auto;">
         </div>
     </div>
@@ -835,12 +889,21 @@
                         :style="pageTab==='sales'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
                     业绩看板<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span>
                 </button>
-                <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)" @click="openRenewalTab();mobileMenuOpen=false"
-                        style="display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
-                        :style="pageTab==='renewal'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
-                    <span>续保管理系统<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span></span>
-                    <span v-if="renewalBadgeCount > 0" style="min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
-                </button>
+                <!-- 企业工作台：对客户开放（超管/企业/员工） -->
+                <template v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)">
+                    <div style="padding:10px 12px 2px;font-size:12px;color:#9ca3af;font-weight:700;">企业工作台<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span></div>
+                    <button @click="openRenewalTab();mobileMenuOpen=false"
+                            style="display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;padding:9px 12px 9px 22px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
+                            :style="pageTab==='renewal'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
+                        <span>🔄 续保管理</span>
+                        <span v-if="renewalBadgeCount > 0" style="min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
+                    </button>
+                    <div style="padding:9px 12px 2px 22px;font-size:14px;font-weight:500;color:#374151;">📋 保单跟进</div>
+                    <button v-if="isSuperAdmin || currentUser.seal_tracking_enabled" @click="openSealTab();mobileMenuOpen=false"
+                            style="display:block;width:100%;text-align:left;padding:9px 12px 9px 38px;border-radius:8px;font-size:13px;font-weight:500;border:none;cursor:pointer;background:none;color:#6b7280;">
+                        🏢 公户车盖章跟进
+                    </button>
+                </template>
             </div>
             <!-- 未激活：工作台入口 -->
             <div v-else style="padding:12px 16px;border-bottom:1px solid #f3f4f6;">
@@ -1002,6 +1065,11 @@
                             <div v-if="quotaInfo.plan_type !== 'enterprise' && quotaInfo.plan_type !== 'enterprise_trial'" style="font-size:11px;color:#bbb;">
                                 剩余 {{ Math.max(3000 - quotaInfo.monthly_usage, 0) }} 次
                             </div>
+                        </div>
+                        <!-- 加油包余量（有才显示） -->
+                        <div v-if="quotaInfo.boost_remaining > 0" style="margin-top:8px;padding-top:8px;border-top:1px dashed #f0f0f0;display:flex;align-items:center;justify-content:space-between;">
+                            <span style="font-size:11px;color:#9a3412;">⛽ 加油包余量 <b style="color:#ea580c;">{{ Number(quotaInfo.boost_remaining).toLocaleString('zh-CN') }}</b> 次</span>
+                            <span v-if="quotaInfo.boost_nearest_expire" style="font-size:11px;color:#bbb;">最近到期 {{ String(quotaInfo.boost_nearest_expire).slice(0, 10) }}</span>
                         </div>
                     </template>
                 </div>
@@ -1215,13 +1283,13 @@
                 </svg>
                 <span style="font-size:13px;color:#991b1b;">套餐已到期（{{ quotaPlanExpiry }}），无法上传保单，请联系管理员续费</span>
             </div>
-            <!-- 标准版额度耗尽提示 -->
-            <div v-else-if="quotaInfo.plan_type === 'standard' && quotaInfo.monthly_usage >= 3000"
+            <!-- 标准版额度耗尽提示（有加油包余量时不拦，自动用加油包） -->
+            <div v-else-if="quotaInfo.plan_type === 'standard' && quotaInfo.monthly_usage >= 3000 && !(quotaInfo.boost_remaining > 0)"
                 style="background:#fff7ed;border:1px solid #fb923c;border-radius:10px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
                 <svg style="width:18px;height:18px;color:#ea580c;flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
                 </svg>
-                <span style="font-size:13px;color:#9a3412;">本月PDF识别额度已用完（{{ quotaInfo.monthly_usage }}/3000），无法上传，请联系管理员升级套餐</span>
+                <span style="font-size:13px;color:#9a3412;">本月PDF识别额度已用完（{{ quotaInfo.monthly_usage }}/3000），无法上传，可购买识别加油包（¥99/1200次）或升级套餐，请联系客服</span>
             </div>
 
             <div class="drop-zone rounded-xl p-10 text-center cursor-pointer"
@@ -1847,18 +1915,19 @@
 
         <!-- 二级 Tab + 企业选择（企业选择仅超管代管时显示，企业管理员固定看自己企业） -->
         <div v-if="currentUser.role !== 'employee'" class="sd-tabs">
-            <button :class="salesTab==='board'?'on':''" @click="salesTab='board'; loadSalesDash()">看板</button>
-            <button :class="salesTab==='config'?'on':''" @click="openSalesConfig()">看板配置</button>
-            <button :class="salesTab==='targets'?'on':''" @click="openSalesTargets()">目标管理</button>
+            <!-- 「看板」为默认视图不设Tab；配置/目标按钮再点一次切回看板 -->
+            <button :class="salesTab==='config'?'on':''" @click="salesTab==='config' ? loadSalesDash() : openSalesConfig()">看板配置</button>
+            <button :class="salesTab==='targets'?'on':''" @click="salesTab==='targets' ? loadSalesDash() : openSalesTargets()">目标管理</button>
             <span style="flex:1"></span>
-            <template v-if="isSuperAdmin">
-                <span class="sd-lb">企业：</span>
+            <!-- label+下拉包成整体，窄屏换行时不被拆散（拆散会只剩"企业："、下拉被挤没） -->
+            <div v-if="isSuperAdmin" style="display:flex;align-items:center;gap:6px;min-width:0;">
+                <span class="sd-lb" style="white-space:nowrap;">企业：</span>
                 <select v-model="salesEnterprise" @change="onSalesEnterpriseChange"
-                    class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 outline-none focus:border-orange-400" style="max-width:180px">
+                    class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 outline-none focus:border-orange-400" style="max-width:180px;min-width:120px;">
                     <option value="">请选择企业...</option>
                     <option v-for="e in dashboardEnterprises" :key="e.id" :value="e.id">{{ e.name }}</option>
                 </select>
-            </template>
+            </div>
         </div>
 
         <div v-if="isSuperAdmin && !salesEnterprise" class="flex items-center justify-center py-24 text-gray-400 text-sm">请先在右上角选择要查看的企业</div>
@@ -1888,7 +1957,7 @@
                 <div v-for="c in salesData.cards" :key="c.id||c.title" class="sd-card" style="padding:14px 16px">
                     <div class="text-xs text-gray-400 flex items-center">{{ c.title }}
                         <span v-if="c.filters && c.filters.length" style="font-size:10px;background:#fff7ed;color:#ea580c;border:1px solid #fdba74;border-radius:4px;padding:0 4px;margin-left:4px">条件</span>
-                        <span class="sd-qi">?<span class="sd-qtip">{{ c.explain }}</span></span>
+                        <span class="sd-qi">!<span class="sd-qtip">{{ c.explain }}</span></span>
                     </div>
                     <div class="text-xl font-bold text-gray-800 mt-1.5">{{ sdMoney(c.value, c.is_count) }}<span v-if="c.is_count" class="text-xs font-normal text-gray-400"> 单</span></div>
                 </div>
@@ -1901,7 +1970,7 @@
                     <div class="flex items-center justify-between text-sm mb-1.5">
                         <span class="font-semibold text-gray-700 flex items-center">{{ t.name }}
                             <span class="sd-lb" style="margin-left:6px">{{ sdFiltersText(t.filters) || '全部保单' }} · {{ t.period_label }}<template v-if="t.period_type==='custom'">（{{ t.period_start }} ~ {{ t.period_end }}）</template></span>
-                            <span class="sd-qi">?<span class="sd-qtip">{{ t.explain }}</span></span>
+                            <span class="sd-qi">!<span class="sd-qtip">{{ t.explain }}</span></span>
                         </span>
                         <span class="font-bold" :class="t.rate>=100?'text-green-600':'text-orange-600'">{{ t.rate }}%</span>
                     </div>
@@ -1914,7 +1983,7 @@
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
                 <div v-for="(ch, ci) in sdVisibleCharts" :key="ci" class="sd-card" :class="ch.type==='trend'?'lg:col-span-2':''">
                     <div class="sd-h2"><span class="bar"></span>{{ ch.title }}
-                        <span class="sd-qi">?<span class="sd-qtip">{{ ch.explain }}</span></span>
+                        <span class="sd-qi">!<span class="sd-qtip">{{ ch.explain }}</span></span>
                         <span v-if="ch.type!=='trend' && ch.total" class="mini">合计 {{ sdMoney(ch.total, ch.is_count) }}</span>
                     </div>
                     <div v-if="(ch.type==='trend' && (!ch.labels || !ch.labels.length)) || (ch.type!=='trend' && (!ch.items || !ch.items.length))"
@@ -1958,6 +2027,10 @@
                     </table>
                 </div>
             </div>
+            <!-- 底部服务提示 -->
+            <div style="margin-top:20px;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:13px 16px;text-align:center;font-size:13px;color:#9a3412;">
+                💬 如需更多业绩数据支持，请联系您的<b>客户群客服</b>
+            </div>
             </template>
         </div>
 
@@ -1965,8 +2038,6 @@
         <div v-show="salesTab==='config'">
             <div v-if="salesConfig" class="space-y-4">
                 <div class="flex items-center gap-2 flex-wrap" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:11px 16px;font-size:13px;color:#9a3412">
-                    <!-- 配置来源仅超管可见（内部信息，客户无需感知） -->
-                    <span v-if="isSuperAdmin">当前配置来源：<b>{{ salesConfigSource==='enterprise'?'企业自定义':(salesConfigSource==='global'?'系统默认模板':'内置默认') }}</b>，保存后生成该企业专属配置</span>
                     <span style="flex:1"></span>
                     <button class="sd-btn ghost" @click="resetSalesConfig">恢复默认模板</button>
                     <button v-if="isSuperAdmin" class="sd-btn ghost" @click="saveSalesConfig('global')" title="保存为系统默认模板，对所有未自定义的企业生效">存为系统默认</button>
@@ -2494,62 +2565,49 @@
 
     <!-- ========== 续保提醒 Tab ========== -->
     <main v-if="pageTab === 'renewal' && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5">
-        <!-- 导入引导提示条 -->
-        <div class="card p-4 flex items-center justify-between flex-wrap gap-3" style="background:linear-gradient(to right,#fff7ed,#fffbeb);">
-            <div class="flex items-center gap-3">
-                <span class="text-2xl">💡</span>
-                <div>
-                    <p class="text-sm font-medium text-orange-800">续保提醒功能限时免费开放，先用起来！</p>
-                    <p class="text-xs text-orange-600">如需导入往年台账或保单，可联系客服协助</p>
-                </div>
-            </div>
-            <div class="flex items-center gap-2">
-                <button v-if="!isSuperAdmin && !renewalInfoRevealed" @click="enableRenewalFeature()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">
-                    开启功能
-                </button>
-                <button v-if="isSuperAdmin" @click="openRenewalConfig()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">⚙ 设置</button>
-                <button @click="openRenewalQr()" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">导入往年保单</button>
-            </div>
-        </div>
+        <!-- 续保设置按钮已移除（扫描窗口固定，二维码由平台统一配置）；引导入口仍在 renewalPromoVisible 弹窗 -->
 
         <!-- 未显示完整信息时，整个统计/筛选/列表区域磨砂遮罩，只有顶部的开关按钮可正常操作 -->
         <div :style="(renewalInfoRevealed || isSuperAdmin) ? '' : 'filter: blur(6px); pointer-events: none; user-select: none;'"
              style="transition: filter 0.15s;" class="space-y-5">
         <!-- 统计卡片 -->
-        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div class="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
                 <div class="text-2xl font-bold text-red-600">{{ renewalStats.overdue }}</div>
-                <div class="text-xs text-red-400 mt-1">已过期未处理</div>
+                <div class="text-xs text-red-400 mt-1">🔴 已逾期</div>
             </div>
             <div class="bg-orange-50 border border-orange-200 rounded-xl p-3 text-center">
-                <div class="text-2xl font-bold text-orange-600">{{ renewalStats.due_7d }}</div>
-                <div class="text-xs text-orange-400 mt-1">7天内到期</div>
-            </div>
-            <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-center">
-                <div class="text-2xl font-bold text-yellow-600">{{ renewalStats.due_this_month }}</div>
-                <div class="text-xs text-yellow-400 mt-1">本月到期</div>
-            </div>
-            <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
-                <div class="text-2xl font-bold text-blue-600">{{ renewalStats.due_next_month }}</div>
-                <div class="text-xs text-blue-400 mt-1">下月到期</div>
+                <div class="text-2xl font-bold text-orange-600">{{ renewalStats.due_30d }}</div>
+                <div class="text-xs text-orange-400 mt-1">🟠 30天内到期</div>
             </div>
             <div class="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
-                <div class="text-2xl font-bold text-green-600">{{ renewalStats.won_this_month }}</div>
-                <div class="text-xs text-green-400 mt-1">本月已成交</div>
+                <div class="text-2xl font-bold text-green-600">{{ renewalStats.renewed_this_month }}</div>
+                <div class="text-xs text-green-400 mt-1">🟢 本月已续保</div>
+            </div>
+            <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center">
+                <div class="text-2xl font-bold text-gray-600">{{ renewalStats.pending_total }}</div>
+                <div class="text-xs text-gray-400 mt-1">待跟进</div>
             </div>
         </div>
 
         <!-- 筛选栏 -->
         <div class="card p-3">
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2 renewal-filter-bar">
                 <select v-model="renewalFilter.status" @change="loadRenewalList()"
                         class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white cursor-pointer">
-                    <option value="">全部状态</option>
+                    <option value="">需跟进（逾期+30天内）</option>
                     <option value="pending">待跟进</option>
-                    <option value="following">跟进中</option>
-                    <option value="won">已成交</option>
-                    <option value="lost">已流失</option>
-                    <option value="expired">已过期</option>
+                    <option value="renew_pending">续保待确认</option>
+                    <option value="transfer_pending">转保待确认</option>
+                    <option value="renewed">续保成功</option>
+                    <option value="transfer">转保成功</option>
+                    <option value="stopped">停保</option>
+                    <option value="hold">暂不考虑</option>
+                </select>
+                <select v-if="isSuperAdmin" v-model="renewalFilter.enterprise_id" @change="loadRenewalList(); loadRenewalStats();"
+                        class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white cursor-pointer" style="max-width:170px;">
+                    <option value="">全部企业</option>
+                    <option v-for="e in dashboardEnterprises" :key="e.id" :value="e.id">{{ e.name }}</option>
                 </select>
                 <select v-if="currentUser.role === 'enterprise'" v-model="renewalFilter.assignee" @change="loadRenewalList()"
                         class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white cursor-pointer">
@@ -2561,14 +2619,15 @@
                 <span class="text-xs text-gray-400">至</span>
                 <input type="date" v-model="renewalFilter.date_end" @change="loadRenewalList()"
                        class="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
-                <input type="text" v-model="renewalFilter.keyword" @keyup.enter="loadRenewalList()" placeholder="搜索车牌/被保人/投保人..."
+                <input type="text" v-model="renewalFilter.keyword" @keyup.enter="loadRenewalList()" placeholder="搜索车牌/被保人/投保人/保单号..."
                        class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 flex-1 min-w-[180px]">
                 <button @click="loadRenewalList()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">筛选</button>
-                <span class="flex-1"></span>
+                <span class="flex-1 rf-spacer"></span>
                 <button v-if="(isSuperAdmin || currentUser.role === 'enterprise') && renewalSelectedIds.length"
                         @click="openBatchAssign()" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">
                     批量分配({{ renewalSelectedIds.length }})
                 </button>
+                <button @click="renewalImportVisible = true" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">📥 导入往年保单</button>
                 <button v-if="isSuperAdmin" @click="triggerRenewalScan()" :disabled="renewalScanning"
                         class="btn btn-outline" style="padding:6px 14px;font-size:13px;">
                     {{ renewalScanning ? '扫描中...' : '手动扫描' }}
@@ -2581,49 +2640,164 @@
         <div class="card table-card" style="display:flex;flex-direction:column;max-height:calc(100vh - 340px);">
             <div v-if="renewalLoading" class="text-center py-12 text-gray-400">加载中...</div>
             <div v-else-if="!renewalTasks.length" class="text-center py-12 text-gray-400">暂无续保任务</div>
-            <div v-else class="table-scroll-wrapper" style="flex:1;min-height:0;">
-                <table class="records-table text-left">
-                    <thead>
-                        <tr>
-                            <th v-if="isSuperAdmin || currentUser.role === 'enterprise'" style="min-width:36px;">
-                                <input type="checkbox" :checked="renewalAllSelected" @change="toggleRenewalSelectAll">
-                            </th>
-                            <th>车牌号</th><th>被保险人</th><th>承保公司</th><th>险种</th>
-                            <th>到期日</th><th>剩余天数</th><th>上期保费</th><th>跟进人</th><th>状态</th><th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="t in renewalTasks" :key="t.id" :class="t.hint_record_id ? 'bg-blue-50/40' : ''">
-                            <td v-if="isSuperAdmin || currentUser.role === 'enterprise'">
-                                <input type="checkbox" :value="t.id" v-model="renewalSelectedIds">
-                            </td>
-                            <td class="font-medium text-gray-800">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.plate_no || t.vin || '—') : maskPlateNo(t.plate_no || t.vin) || '—' }}</td>
-                            <td>{{ (renewalInfoRevealed || isSuperAdmin) ? (t.insured || '—') : maskPersonName(t.insured) || '—' }}</td>
-                            <td>{{ t.company_short || '—' }}</td>
-                            <td>{{ t.policy_type || '—' }}</td>
-                            <td>{{ t.end_date }}</td>
-                            <td>
-                                <span :class="renewalDaysLeftClass(t)">{{ renewalDaysLeftText(t) }}</span>
-                            </td>
-                            <td>{{ t.total_premium || '—' }}</td>
-                            <td>{{ (renewalInfoRevealed || isSuperAdmin) ? (t.assignee_name || '未分配') : (t.assignee_name ? maskPersonName(t.assignee_name) : '未分配') }}</td>
-                            <td><span class="text-xs px-2 py-0.5 rounded-full" :style="renewalStatusStyle(t.status)">{{ renewalStatusLabel(t.status) }}</span></td>
-                            <td>
-                                <button v-if="t.primary_record_id" @click="previewRenewalTaskFile(t.primary_record_id)" class="btn btn-outline" style="padding:3px 10px;font-size:11px;margin-right:4px;">预览</button>
-                                <button @click="openRenewalDetail(t)" class="btn btn-outline" style="padding:3px 10px;font-size:11px;">跟进</button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div v-else class="table-scroll-wrapper" style="flex:1;min-height:0;overflow-y:auto;">
+                <div class="space-y-3 p-1">
+                    <div v-for="t in renewalTasks" :key="t.id"
+                         class="bg-white border border-gray-100 rounded-xl px-4 py-3 flex justify-between gap-4 flex-wrap"
+                         :style="'border-left:4px solid ' + (renewalOverdue(t) ? '#dc2626' : (renewalSoon(t) ? '#ea580c' : '#e5e7eb')) + ';' + (t.hint_record_id ? 'background:#eff6ff;' : '')">
+                        <!-- 主区：车牌大字 + 关键信息分组 -->
+                        <div style="flex:1;min-width:240px;">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <input v-if="isSuperAdmin || currentUser.role === 'enterprise'" type="checkbox" :value="t.id" v-model="renewalSelectedIds" class="cursor-pointer">
+                                <span class="font-extrabold text-gray-800" style="font-size:18px;letter-spacing:0.5px;">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.plate_no || t.vin || '—') : (maskPlateNo(t.plate_no || t.vin) || '—') }}</span>
+                                <span class="text-xs px-1.5 py-0.5 rounded-full font-semibold" :style="renewalDaysBadgeStyle(t)">{{ renewalDaysLeftText(t) }}</span>
+                                <span v-if="t.status === 'renew_pending' || t.status === 'transfer_pending'" class="text-xs px-1.5 py-0.5 rounded-full" :style="renewalStatusStyle(t.status)">🔔 {{ renewalStatusLabel(t.status) }}</span>
+                            </div>
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5 mt-2 text-xs" style="max-width:760px;">
+                                <div><span class="text-gray-400">投保人：</span><span class="text-gray-700 font-medium">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.applicant || '—') : (maskPersonName(t.applicant) || '—') }}</span></div>
+                                <div><span class="text-gray-400">被保人：</span><span class="text-gray-700 font-medium">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.insured || '—') : (maskPersonName(t.insured) || '—') }}</span></div>
+                                <div><span class="text-gray-400">签单：</span><span class="text-gray-700 font-medium">{{ t.sign_date || '—' }}</span></div>
+                                <div><span class="text-gray-400">往年保费：</span><span class="text-gray-700 font-medium">{{ t.total_premium || '—' }}</span></div>
+                                <div><span class="text-gray-400">险种：</span><span class="text-gray-700 font-medium">{{ t.policy_type || '—' }}</span></div>
+                                <div><span class="text-gray-400">承保公司：</span><span class="text-gray-700 font-medium">{{ t.company_short || '—' }}</span></div>
+                                <div class="col-span-2"><span class="text-gray-400">保单号：</span><span class="text-gray-600" style="font-family:ui-monospace,Menlo,monospace;">{{ t.policy_no || '—' }}</span></div>
+                            </div>
+                        </div>
+                        <!-- 右区：状态 + 操作（移动端横排一行，桌面竖排） -->
+                        <div class="flex flex-row sm:flex-col w-full sm:w-auto justify-between sm:justify-start items-center sm:items-end gap-2" style="min-width:150px;">
+                            <span class="text-xs px-2 py-0.5 rounded-full" :style="renewalStatusStyle(t.status)">{{ renewalStatusLabel(t.status) }}</span>
+                            <div class="flex gap-1.5 flex-wrap justify-end">
+                                <button v-if="t.hint_record_id" @click="previewRenewalTaskFile(t.hint_record_id)" class="btn" style="padding:3px 10px;font-size:11px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;">📄 查看新保单</button>
+                                <button v-if="t.primary_record_id" @click="previewRenewalTaskFile(t.primary_record_id)" class="btn btn-outline" style="padding:3px 10px;font-size:11px;">预览</button>
+                                <button @click="openRenewalDetail(t)" class="btn btn-primary" style="padding:3px 10px;font-size:11px;">跟进</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div v-if="renewalPagination.total > 0" class="px-4 py-3 border-t flex items-center justify-between" style="flex-shrink:0;background:#fff;">
                 <span class="text-xs text-gray-400">共 {{ renewalPagination.total }} 条，第 {{ renewalPagination.page }} / {{ renewalPagination.pages }} 页</span>
                 <div class="flex items-center gap-1">
-                    <button class="pagination-btn" :disabled="renewalPagination.page<=1" @click="gotoRenewalPage(renewalPagination.page-1)">上一页</button>
-                    <button class="pagination-btn" :disabled="renewalPagination.page>=renewalPagination.pages" @click="gotoRenewalPage(renewalPagination.page+1)">下一页</button>
+                    <button class="pagination-btn" style="width:auto;padding:0 12px;white-space:nowrap;" :disabled="renewalPagination.page<=1" @click="gotoRenewalPage(renewalPagination.page-1)">上一页</button>
+                    <button class="pagination-btn" style="width:auto;padding:0 12px;white-space:nowrap;" :disabled="renewalPagination.page>=renewalPagination.pages" @click="gotoRenewalPage(renewalPagination.page+1)">下一页</button>
                 </div>
             </div>
         </div>
+        </div>
+    </main>
+
+
+    <!-- ========== 公户车盖章跟进 Tab ========== -->
+    <main v-if="pageTab === 'seal' && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-4">
+        <!-- 统计卡 -->
+        <div class="grid grid-cols-2 gap-3" style="max-width:420px;">
+            <div class="bg-orange-50 border border-orange-200 rounded-xl p-3 text-center">
+                <div class="text-2xl font-bold text-orange-600">{{ sealStats.unpaid }}</div>
+                <div class="text-xs text-orange-400 mt-1">未付</div>
+            </div>
+            <div class="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+                <div class="text-2xl font-bold text-green-600">{{ sealStats.paid }}</div>
+                <div class="text-xs text-green-400 mt-1">已付</div>
+            </div>
+        </div>
+        <!-- 筛选行 -->
+        <div class="card p-3 flex items-center gap-2 flex-wrap">
+            <div class="flex items-center gap-1">
+                <button v-for="opt in [{v:'0',l:'未付'},{v:'1',l:'已付'},{v:'',l:'全部'}]" :key="opt.v"
+                        @click="sealFilter.paid=opt.v; loadSealTasks(1)"
+                        class="text-xs px-3 py-1.5 rounded-full cursor-pointer"
+                        :style="sealFilter.paid===opt.v ? 'background:#fff7ed;border:1px solid #fb923c;color:#ea580c;font-weight:600;' : 'background:#fff;border:1px solid #e5e7eb;color:#6b7280;'">
+                    {{ opt.l }}</button>
+            </div>
+            <input type="text" v-model="sealFilter.keyword" @keyup.enter="loadSealTasks(1)" placeholder="搜索车牌/被保险人/保单号..."
+                   class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-orange-400" style="min-width:220px;">
+            <button @click="loadSealTasks(1)" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">搜索</button>
+            <div v-if="isSuperAdmin" style="display:flex;align-items:center;gap:6px;">
+                <span class="text-xs text-gray-500" style="white-space:nowrap;">企业：</span>
+                <select v-model="sealFilter.enterprise_id" @change="loadSealTasks(1)"
+                        class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 outline-none focus:border-orange-400" style="max-width:170px;min-width:110px;">
+                    <option value="">全部企业</option>
+                    <option v-for="e in dashboardEnterprises" :key="e.id" :value="e.id">{{ e.name }}</option>
+                </select>
+            </div>
+            <span class="text-xs text-gray-400" style="margin-left:auto;">公户车 = 被保险人为公司的保单</span>
+        </div>
+        <!-- 列表 -->
+        <div class="card" style="overflow:hidden;">
+            <div style="overflow-x:auto;">
+                <table class="w-full text-sm" style="min-width:900px;">
+                    <thead>
+                        <tr class="text-left text-gray-500 text-xs" style="background:#fafaf9;">
+                            <th class="px-3 py-2.5">车牌号</th><th>被保险人</th><th>承保公司</th><th>险种</th><th>保单号</th>
+                            <th>签单日期</th><th>保费</th><th>是否已付</th><th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template v-for="t in sealTasks" :key="t.record_id">
+                        <tr class="border-t border-gray-50">
+                            <td class="px-3 py-2.5 font-medium text-gray-800 whitespace-nowrap">{{ t.plate_no || '—' }}
+                                <span v-if="t.policy_count > 1" @click="t._expanded = !t._expanded" class="text-xs px-1.5 py-0.5 rounded cursor-pointer" style="background:#eff6ff;color:#3b82f6;" title="点击展开明细">{{ t.policy_count }}单</span>
+                            </td>
+                            <td class="text-gray-700">{{ t.insured || '—' }}</td>
+                            <td class="whitespace-nowrap">{{ t.company_short || '—' }}</td>
+                            <td>
+                                <span v-if="t.policy_count > 1" class="text-gray-400">共 {{ t.policy_count }} 个险种</span>
+                                <template v-else>{{ t.policy_type || '—' }}</template>
+                            </td>
+                            <td class="text-xs text-gray-600" style="font-family:ui-monospace,Menlo,monospace;">
+                                <button v-if="t.policy_count > 1" @click="t._expanded = !t._expanded" class="btn btn-outline whitespace-nowrap" style="padding:2px 8px;font-size:11px;">
+                                    {{ t._expanded ? '收起' : '展开' }} {{ t.policy_count }} 条
+                                </button>
+                                <template v-else>{{ (t.policy_nos && t.policy_nos[0]) || '—' }}</template>
+                            </td>
+                            <td class="whitespace-nowrap">{{ t.sign_date || '—' }}</td>
+                            <td class="whitespace-nowrap">{{ t.total_premium || '—' }}<span v-if="t.policy_count > 1" class="text-xs text-gray-300">（合计）</span></td>
+                            <td>
+                                <span v-if="t.seal_paid" class="text-xs px-2 py-0.5 rounded-full" style="background:#f0fdf4;color:#16a34a;"
+                                      :title="(t.seal_paid_by ? t.seal_paid_by + ' ' : '') + (t.seal_paid_at || '')">已付</span>
+                                <span v-else class="text-xs px-2 py-0.5 rounded-full" style="background:#fff7ed;color:#ea580c;">未付</span>
+                            </td>
+                            <td class="py-2">
+                                <button v-if="!t.seal_paid" @click="markSealPaid(t, 1)" class="btn btn-primary" style="padding:3px 10px;font-size:11px;margin-right:4px;">标记已付</button>
+                                <button v-else @click="markSealPaid(t, 0)" class="btn btn-outline" style="padding:3px 10px;font-size:11px;margin-right:4px;">取消已付</button>
+                                <button @click="previewRenewalTaskFile(t.record_id)" class="btn btn-outline" style="padding:3px 10px;font-size:11px;">预览</button>
+                            </td>
+                        </tr>
+                        <!-- 合并组展开：逐条保单明细 -->
+                        <tr v-if="t.policy_count > 1 && t._expanded" :key="t.record_id + '_detail'" style="background:#fafaf9;">
+                            <td colspan="9" class="px-3 py-2">
+                                <table class="w-full text-xs" style="border-collapse:collapse;">
+                                    <thead>
+                                        <tr class="text-left text-gray-400">
+                                            <th class="py-1 pl-1" style="width:40%;">险种</th>
+                                            <th style="width:32%;">保单号</th>
+                                            <th style="width:14%;">承保公司</th>
+                                            <th style="width:14%;">保费</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="c in t.children" :key="c.record_id" class="border-t border-gray-100">
+                                            <td class="py-1.5 pl-1 text-gray-700">{{ c.policy_type || '—' }}</td>
+                                            <td class="text-gray-600" style="font-family:ui-monospace,Menlo,monospace;">{{ c.policy_no || '—' }}</td>
+                                            <td class="text-gray-600">{{ c.company_short || '—' }}</td>
+                                            <td class="text-gray-600">{{ c.total_premium || '—' }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </td>
+                        </tr>
+                        </template>
+                        <tr v-if="!sealTasks.length"><td colspan="9" class="px-4 py-10 text-center text-gray-300 text-sm">{{ isSuperAdmin && !sealFilter.enterprise_id ? '请先在上方选择要查看的企业' : '暂无公户车保单' }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div v-if="sealPagination.total > 0" class="px-4 py-3 border-t flex items-center justify-between">
+                <span class="text-xs text-gray-400">共 {{ sealPagination.total }} 条，第 {{ sealPagination.page }} / {{ sealPagination.pages }} 页</span>
+                <div class="flex items-center gap-1">
+                    <button class="pagination-btn" :disabled="sealPagination.page<=1" @click="loadSealTasks(sealPagination.page-1)">上一页</button>
+                    <button class="pagination-btn" :disabled="sealPagination.page>=sealPagination.pages" @click="loadSealTasks(sealPagination.page+1)">下一页</button>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -3046,7 +3220,7 @@
                     </thead>
                     <tbody>
                         <!-- 数据行 -->
-                        <template v-for="record in filteredRecords" :key="record.id">
+                        <template v-for="record in pagedRecords" :key="record.id">
                         <tr>
                             <!-- 选择框 -->
                             <td class="sticky-col-check">
@@ -3091,7 +3265,7 @@
                                         <input type="file" accept=".pdf" style="display:none;" @change="reuploadRecord(record, $event)" :disabled="record._reuploading">
                                     </label>
                                     <!-- 标记正常（需人工补充记录） -->
-                                    <button v-if="record.is_abnormal && !record.abnormal_override_reason"
+                                    <button v-if="record.is_abnormal && !record.abnormal_override_reason && !record._merged"
                                             @click="openMarkNormal(record)"
                                             class="btn" style="padding:3px 8px;font-size:11px;background:#fef3c7;border:1px solid #fbbf24;color:#92400e;">
                                         标记正常
@@ -3122,6 +3296,10 @@
                                         报错
                                     </button>
                                     </template>
+                                    <!-- 需人工补充：缺失字段提示（跟在按钮后同一行，作为 flex item；合并行/普通行都显示） -->
+                                    <div v-if="record.is_abnormal && !record.abnormal_override_reason && record.hint"
+                                         class="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 px-1.5 py-0.5 rounded inline-block"
+                                         style="white-space:nowrap;line-height:1.35;">⚠ {{ record.hint }}</div>
                                 </div>
                             </td>
                             <!-- 动态列（按列配置渲染） -->
@@ -3264,7 +3442,7 @@
                             <!-- 内部管理备注（仅超管） -->
                             <td v-if="isSuperAdmin" class="text-sm" style="min-width:220px;max-width:280px;">
                                 <div class="flex flex-col gap-1" style="align-items:flex-start;">
-                                    <span v-if="record.is_abnormal"
+                                    <span v-if="record.is_abnormal && !record._merged"
                                           class="inline-flex items-center gap-1 text-xs"
                                           :style="{color:(record.internal_note && record.internal_note.reviewed_today)?'#16a34a':'#ef4444'}">
                                         <span style="width:6px;height:6px;border-radius:50%;display:inline-block;"
@@ -3444,7 +3622,7 @@
                             </button>
                         </template>
                         <template v-else>
-                            <button v-if="record.is_abnormal && !record.abnormal_override_reason" class="mrc-btn mrc-btn-mark" @click="openMarkNormal(record)">标记正常</button>
+                            <button v-if="record.is_abnormal && !record.abnormal_override_reason && !record._merged" class="mrc-btn mrc-btn-mark" @click="openMarkNormal(record)">标记正常</button>
                             <button v-else-if="record.status === 'failed' && record.cos_url" class="mrc-btn mrc-btn-primary" :disabled="record._reocring" @click="reocrRecord(record)">{{ record._reocring ? '识别中...' : '重新识别' }}</button>
                             <button v-else-if="record.cos_url" class="mrc-btn mrc-btn-view" @click="previewRecord(record)">预览</button>
                             <label v-if="record.status === 'failed' && !record.cos_url" class="mrc-btn mrc-btn-primary" style="cursor:pointer;">
@@ -3586,6 +3764,25 @@
 
     <!-- 续保任务详情弹窗 -->
     <transition name="fade">
+        <!-- 暂不考虑 · 原因框 -->
+        <div v-if="renewalHoldVisible" class="fixed inset-0 modal-mask flex items-center justify-center" style="z-index:70;" @click.self="renewalHoldVisible = false">
+            <div class="bg-white rounded-xl shadow-2xl p-5" style="width:420px;max-width:92vw;" @click.stop>
+                <h3 class="text-base font-semibold text-gray-800 mb-1">暂不考虑 · 填写原因</h3>
+                <p class="text-xs text-gray-400 mb-3">方便后续二次跟进、了解客户流失原因</p>
+                <div class="flex flex-wrap gap-2 mb-3">
+                    <button v-for="p in RENEWAL_HOLD_PRESETS" :key="p" @click="pickRenewalHoldPreset(p)"
+                            class="text-xs px-2.5 py-1 rounded-full border cursor-pointer"
+                            :style="renewalHoldReason === p ? 'background:#ea580c;color:#fff;border-color:#ea580c;' : 'background:#fff;color:#6b7280;border-color:#e5e7eb;'">{{ p }}</button>
+                </div>
+                <textarea v-model="renewalHoldReason" rows="2" placeholder="也可自己输入原因..."
+                          class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"></textarea>
+                <div class="flex justify-end gap-2 mt-3">
+                    <button @click="renewalHoldVisible = false" class="btn btn-outline" style="padding:6px 16px;font-size:13px;">取消</button>
+                    <button @click="submitRenewalHold" :disabled="!renewalHoldReason.trim()" class="btn btn-primary" style="padding:6px 16px;font-size:13px;">确定</button>
+                </div>
+            </div>
+        </div>
+
         <div v-if="renewalDetailVisible" class="fixed inset-0 modal-mask flex items-center justify-center" style="z-index:60;"
              @click.self="renewalDetailVisible = false">
             <div class="bg-white rounded-xl shadow-2xl" style="width:600px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column;" @click.stop>
@@ -3598,26 +3795,27 @@
                 </div>
 
                 <div v-if="renewalDetailTask.hint_record_id" class="mx-5 mt-3 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-between text-sm flex-wrap gap-2">
-                    <span class="text-blue-700">🔔 检测到疑似续保新单（止期 {{ renewalDetailTask.hint_end_date }}），是否标记已成交？</span>
+                    <span class="text-blue-700">🔔 检测到接续新单（止期 {{ renewalDetailTask.hint_end_date }}），{{ renewalDetailTask.status === 'transfer_pending' ? '承保公司不同、疑似转保' : '承保公司相同、疑似续保' }}，请确认</span>
                     <div class="flex gap-2 flex-shrink-0">
-                        <button @click="changeRenewalStatus('won', '检测到续保新单，确认已成交')" class="text-xs px-2 py-1 rounded bg-blue-600 text-white cursor-pointer">标记已成交</button>
+                        <button @click="previewRenewalTaskFile(renewalDetailTask.hint_record_id)" class="text-xs px-2 py-1 rounded border border-blue-300 text-blue-700 cursor-pointer">📄 查看新保单</button>
+                        <button v-if="renewalDetailTask.status === 'transfer_pending'" @click="changeRenewalStatus('transfer', '确认转保')" class="text-xs px-2 py-1 rounded bg-blue-600 text-white cursor-pointer">确认转保</button>
+                        <button v-else @click="changeRenewalStatus('renewed', '确认续保')" class="text-xs px-2 py-1 rounded bg-blue-600 text-white cursor-pointer">确认续保</button>
                         <button @click="dismissRenewalHint()" class="text-xs px-2 py-1 rounded border border-gray-300 text-gray-500 cursor-pointer">忽略</button>
                     </div>
                 </div>
 
                 <div class="px-5 pt-3 flex items-center gap-2 flex-wrap">
                     <span class="text-xs px-2 py-0.5 rounded-full" :style="renewalStatusStyle(renewalDetailTask.status)">{{ renewalStatusLabel(renewalDetailTask.status) }}</span>
-                    <button v-if="renewalDetailTask.status !== 'won'" @click="changeRenewalStatus('won')"
-                            class="text-xs px-2.5 py-1 rounded border border-green-300 text-green-700 hover:bg-green-50 cursor-pointer">标记已成交</button>
-                    <button v-if="renewalDetailTask.status !== 'lost'" @click="changeRenewalStatus('lost')"
-                            class="text-xs px-2.5 py-1 rounded border border-gray-300 text-gray-500 hover:bg-gray-50 cursor-pointer">标记已流失</button>
-                    <span class="flex-1"></span>
-                    <select v-if="isSuperAdmin || currentUser.role === 'enterprise'" v-model="renewalDetailAssignee" @change="assignRenewalDetail()"
-                            class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white cursor-pointer">
-                        <option value="">分配跟进人...</option>
-                        <option v-for="a in renewalAssigneesList" :key="a.id" :value="a.id">{{ a.name || a.id }}</option>
-                    </select>
+                    <button v-if="renewalDetailTask.status !== 'transfer'" @click="changeRenewalStatus('transfer')"
+                            class="text-xs px-2.5 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-50 cursor-pointer">转保成功</button>
+                    <button v-if="renewalDetailTask.status !== 'renewed'" @click="changeRenewalStatus('renewed')"
+                            class="text-xs px-2.5 py-1 rounded border border-green-300 text-green-700 hover:bg-green-50 cursor-pointer">续保成功</button>
+                    <button v-if="renewalDetailTask.status !== 'stopped'" @click="changeRenewalStatus('stopped')"
+                            class="text-xs px-2.5 py-1 rounded border border-gray-300 text-gray-500 hover:bg-gray-50 cursor-pointer">停保</button>
+                    <button v-if="renewalDetailTask.status !== 'hold'" @click="openRenewalHold()"
+                            class="text-xs px-2.5 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer">暂不考虑</button>
                 </div>
+                <div v-if="renewalDetailTask.status === 'hold' && renewalDetailTask.hold_reason" class="px-5 pt-1.5 text-xs text-orange-600">暂不考虑原因：{{ renewalDetailTask.hold_reason }}</div>
 
                 <div class="px-5 py-3 border-b">
                     <h5 class="text-sm font-semibold text-gray-600 mb-2">📋 历史保单（{{ renewalHistory.length }}）</h5>
@@ -5819,6 +6017,23 @@
             </svg>
             <span style="font-size:10px;font-weight:500;">数据看板</span>
         </button>
+        <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role) && !notActivated" @click="pageTab='sales';loadSalesDash()"
+                style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;"
+                :style="pageTab==='sales'?'color:#ea580c;':'color:#9ca3af;'">
+            <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+            </svg>
+            <span style="font-size:10px;font-weight:500;">业绩看板</span>
+        </button>
+        <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role) && !notActivated" @click="openRenewalTab()"
+                style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;position:relative;"
+                :style="pageTab==='renewal'?'color:#ea580c;':'color:#9ca3af;'">
+            <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            <span v-if="renewalBadgeCount > 0" style="position:absolute;top:2px;right:calc(50% - 20px);min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:#dc2626;color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
+            <span style="font-size:10px;font-weight:500;">企业工作台</span>
+        </button>
         <button @click="mobileMenuOpen=true"
                 style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;color:#9ca3af;">
             <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -5827,6 +6042,51 @@
             <span style="font-size:10px;font-weight:500;">更多</span>
         </button>
     </div>
+
+    <!-- ========== 企业工作台未上线模块占位弹窗 ========== -->
+    <teleport to="body">
+      <div v-if="wbComingName" @click.self="wbComingName=''"
+           style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px;">
+        <div style="background:#fff;border-radius:18px;padding:30px 28px;width:360px;max-width:95vw;box-shadow:0 24px 70px rgba(0,0,0,0.25);text-align:center;">
+          <div style="width:60px;height:60px;margin:0 auto 16px;border-radius:16px;background:linear-gradient(135deg,#fb923c,#ea580c);display:flex;align-items:center;justify-content:center;font-size:30px;">🚧</div>
+          <div style="font-size:17px;font-weight:800;color:#1f2937;margin-bottom:8px;">「{{ wbComingName }}」即将上线</div>
+          <div style="font-size:13px;color:#6b7280;line-height:1.8;margin-bottom:20px;">功能正在开发中，上线后会第一时间在这里通知您，敬请期待。</div>
+          <button @click="wbComingName=''" class="btn btn-primary" style="padding:8px 26px;font-size:13px;">我知道了</button>
+        </div>
+      </div>
+    </teleport>
+
+    <!-- ========== 续保功能引导弹窗（每会话首次进入续保页弹出） ========== -->
+    <teleport to="body">
+      <div v-if="renewalPromoVisible" @click.self="renewalPromoVisible=false"
+           style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px;">
+        <div style="background:#fff;border-radius:18px;padding:30px 28px;width:410px;max-width:95vw;box-shadow:0 24px 70px rgba(0,0,0,0.25);text-align:center;">
+          <div style="width:60px;height:60px;margin:0 auto 16px;border-radius:16px;background:linear-gradient(135deg,#fb923c,#ea580c);display:flex;align-items:center;justify-content:center;font-size:30px;">⏰</div>
+          <div style="font-size:17px;font-weight:800;color:#1f2937;margin-bottom:10px;">续保管理 · 限时免费</div>
+          <!-- 未开启功能：只引导开启 -->
+          <template v-if="!isSuperAdmin && !renewalInfoRevealed">
+            <div style="font-size:13px;color:#6b7280;line-height:1.9;text-align:left;margin-bottom:20px;">
+              系统会根据台账保单的到期时间自动生成续保提醒，帮您提前跟进客户，不错过每一单续保。<br>
+              功能限时免费开放，点击「立即开启」即可使用。
+            </div>
+            <div style="display:flex;gap:10px;justify-content:center;">
+              <button @click="renewalPromoVisible=false; enableRenewalFeature()" class="btn btn-primary" style="padding:8px 22px;font-size:13px;">立即开启</button>
+              <button @click="renewalPromoVisible=false" class="btn btn-outline" style="padding:8px 18px;font-size:13px;">暂不开启</button>
+            </div>
+          </template>
+          <!-- 已开启功能：只引导导入往年保单 -->
+          <template v-else>
+            <div style="font-size:13px;color:#6b7280;line-height:1.9;text-align:left;margin-bottom:20px;">
+              想让往年的客户也纳入续保提醒？把往年台账或保单导入进来统一管理——点击「导入往年保单」，客服将协助您完成导入，历史客户的续保一单不漏。
+            </div>
+            <div style="display:flex;gap:10px;justify-content:center;">
+              <button @click="renewalPromoVisible=false; openRenewalQr()" class="btn btn-primary" style="padding:8px 22px;font-size:13px;">导入往年保单</button>
+              <button @click="renewalPromoVisible=false" class="btn btn-outline" style="padding:8px 18px;font-size:13px;">我知道了</button>
+            </div>
+          </template>
+        </div>
+      </div>
+    </teleport>
 
     <!-- ========== 账号待激活提示弹窗 ========== -->
     <teleport to="body">
@@ -6163,6 +6423,64 @@ const _app = createApp({
         // ========== 移动端菜单 ==========
         const mobileMenuOpen = ref(false);
         const moreMenuOpen = ref(false);
+        // 企业工作台级联下拉 + 未上线模块占位提示
+        const workbenchOpen = ref(false);
+        const wbSealOpen = ref(false);
+        const wbComingName = ref('');
+        function wbComingSoon(name) { wbComingName.value = name; }
+        // ===== 公户车盖章跟进 =====
+        const sealTasks = ref([]);
+        const sealStats = reactive({ unpaid: 0, paid: 0 });
+        const sealFilter = reactive({ paid: '0', keyword: '', enterprise_id: '' });
+        const sealPagination = reactive({ total: 0, page: 1, pages: 1 });
+        let _sealReqSeq = 0;
+        async function loadSealTasks(page) {
+            if (page) sealPagination.page = page;
+            // 超管未选企业：不发全库大查询，清空并提示先选企业（避免慢的全库响应覆盖过滤结果）
+            if (isSuperAdmin.value && !sealFilter.enterprise_id) {
+                _sealReqSeq++; // 让在途的过期响应作废
+                sealTasks.value = [];
+                Object.assign(sealStats, { unpaid: 0, paid: 0 });
+                sealPagination.total = 0; sealPagination.pages = 1; sealPagination.page = 1;
+                return;
+            }
+            const seq = ++_sealReqSeq;
+            try {
+                const params = new URLSearchParams({ page: sealPagination.page, page_size: 20 });
+                if (sealFilter.paid !== '') params.set('paid', sealFilter.paid);
+                if (sealFilter.keyword) params.set('keyword', sealFilter.keyword);
+                if (isSuperAdmin.value && sealFilter.enterprise_id) params.set('enterprise_id', sealFilter.enterprise_id);
+                const r = await authFetch(`/api/insurance/seal-tasks?${params}`);
+                const j = await r.json();
+                if (seq !== _sealReqSeq) return; // 过期响应（已有更新的请求发出），丢弃不覆盖
+                if (j.code === 0) {
+                    sealTasks.value = (j.data.tasks || []).map(t => ({ ...t, _expanded: false }));
+                    Object.assign(sealStats, j.data.stats || {});
+                    sealPagination.total = j.data.total; sealPagination.pages = j.data.pages; sealPagination.page = j.data.page;
+                }
+            } catch (e) { console.error('加载公户车列表失败', e); }
+        }
+        async function openSealTab() {
+            pageTab.value = 'seal';
+            if (isSuperAdmin.value) { try { await sdEnsureEnterprises(); } catch (e) {} }
+            loadSealTasks(1);
+        }
+        async function markSealPaid(t, paid) {
+            try {
+                const r = await authFetch('/api/insurance/seal-tasks/mark-paid', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ record_ids: t.record_ids || [t.record_id], paid }) });
+                const j = await r.json();
+                if (j.code === 0) { await loadSealTasks(); }
+                else alert(j.msg || '操作失败');
+            } catch (e) { alert('操作失败'); }
+        }
+
+        // 三级面板延时关闭：鼠标短暂离开（如斜向移入面板）不至于闪没
+        let _wbSealTimer = null;
+        function wbSealEnter() { clearTimeout(_wbSealTimer); wbSealOpen.value = true; }
+        function wbSealLeave() { _wbSealTimer = setTimeout(() => { wbSealOpen.value = false; }, 200); }
+        document.addEventListener('click', () => { workbenchOpen.value = false; wbSealOpen.value = false; });
         // 点击下拉外部区域自动关闭（按钮/下拉内容自身用 @click.stop 阻止冒泡到这里）
         document.addEventListener('click', () => { moreMenuOpen.value = false; });
 
@@ -9264,6 +9582,16 @@ const _app = createApp({
         // 筛选已移至服务端，前端直接返回列表数据
         const filteredRecords = computed(() => records.value);
 
+        // 桌面表格分页：非合并模式服务端已分页，直接用 filteredRecords；
+        // 合并模式下 records 是「全量合并行」(拉全量后前端合并)，需前端按 pageSize 切片分页，
+        // 否则所有合并行会全挤在第 1 页（totalPages 恒为 1）。移动端仍用 filteredRecords 全量滚动展示。
+        const pagedRecords = computed(() => {
+            if (!pageMergeByPlate.value) return filteredRecords.value;
+            const ps = recordPagination.pageSize;
+            const start = (recordPagination.page - 1) * ps;
+            return filteredRecords.value.slice(start, start + ps);
+        });
+
         // 保司和文档类型筛选
         const recordCompanyFilter = ref('');
         // 点击「接入保司」总览中的保司：切换筛选（再次点击同一保司则取消），
@@ -10687,13 +11015,10 @@ const _app = createApp({
                     if (recordEnterpriseFilter.value) params.set('enterprise_id', recordEnterpriseFilter.value);
                     _appendDateParams(params);
                     if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');
-                    // 导出排序：用户手动选过排序则跟随页面所选；否则优先用所选命名导出模板的
-                    // 默认排序，未配置时用当前模板「导出列配置」里的默认排序
-                    const _exportSort = sortTouched.value
-                        ? { sort_by: recordFilter.sort_by, sort_order: recordFilter.sort_order }
-                        : (exportTemplateSort.value || exportDefaultSort);
-                    if (_exportSort.sort_by) params.set('sort_by', _exportSort.sort_by);
-                    if (_exportSort.sort_order) params.set('sort_order', _exportSort.sort_order);
+                    // 导出严格跟随列表：排序参数与列表页 loadRecords 完全一致（直接用 recordFilter），
+                    // 不再使用命名导出模板 / 导出列配置的独立排序，避免导出顺序与页面所见不一致
+                    if (recordFilter.sort_by) params.set('sort_by', recordFilter.sort_by);  // 客户设置的排序为主排序(最高优先级)；后端再追加车牌+险种作为次级
+                    if (recordFilter.sort_order) params.set('sort_order', recordFilter.sort_order);
                     _appendAdvancedParams(params);
 
                     const listResp = await authFetch(`/api/insurance/records?${params.toString()}`);
@@ -10706,24 +11031,8 @@ const _app = createApp({
                     allRecords = allRecords.filter(r => !r.doc_category || r.doc_category === '保单');
                 }
 
-                // 不合并模式：同一辆车的多份保单按险种排序（商业险→交强险→非车险），
-                // 车与车之间保持用户所选排序（如签单日期升序）的先后顺序，不再强制按上传时间倒序
-                if (!exportMergeByPlate.value) {
-                    const _w = (r) => {
-                        const t = ((r.display_fields || {})['险种'] || '') + '';
-                        if (t.includes('商业')) return 1;
-                        if (t.includes('交强') || t.includes('强制')) return 2;
-                        return 3;
-                    };
-                    const _plate = (r) => ((r.display_fields || {})['车牌'] || r.file_md5 || ('#' + r.id));
-                    const _grpIdx = {};
-                    allRecords.forEach((r, i) => { const k = _plate(r); if (!(k in _grpIdx)) _grpIdx[k] = i; });
-                    allRecords = [...allRecords].sort((a, b) => {
-                        const ga = _grpIdx[_plate(a)], gb = _grpIdx[_plate(b)];
-                        if (ga !== gb) return ga - gb;   // 车与车：按已排序结果中首次出现的先后
-                        return _w(a) - _w(b);            // 车内：险种顺序
-                    });
-                }
+                // 导出严格跟随列表：不合并模式不再做「同车按险种聚合」二次重排，
+                // 直接保持服务端按列表同一排序参数返回的顺序，确保导出顺序 = 识别记录页所见顺序
 
                 const extraMap = (r) => ({
                     '文件名': r.filename || '',
@@ -10921,7 +11230,7 @@ const _app = createApp({
         function statusLabel(s) { return STATUS_MAP[s] || s || '—'; }
         const recordPagination = reactive({
             page: 1,
-            pageSize: 20,
+            pageSize: 100,
             total: 0,
             totalPages: 0,
         });
@@ -11008,6 +11317,22 @@ const _app = createApp({
 
         // 加载识别记录
         const pageMergeByPlate = ref(false);  // 识别记录页"按车牌合并显示"开关
+        // 「保单排序」配置（跟模板绑定，后端随列表接口一并返回）：合并展开时子保单按险种顺序排
+        const pagePolicySort = ref({ enabled: false, order: ['交强险', '商业险', '非车险'] });
+        // 险种归类（与后端 classify_policy_category / get_policy_type_code 一致：交强→交强；含"商业"→商业；其余兜底→非车险）
+        function policyCategory(pt) {
+            pt = pt || '';
+            if (pt.includes('交强') || pt.includes('交通事故责任强制') || pt.includes('交通事故强制保险')) return '交强险';
+            if (pt.includes('商业') || pt.includes('机动车辆保险') || pt.includes('机动车辆综合险')) return '商业险';
+            return '非车险';
+        }
+        function policySortRank(rec) {
+            const df = (rec && rec.display_fields) || {};
+            const pt = df['险种'] || df['险种类型'] || (rec && rec.policy_type) || '';
+            const order = (pagePolicySort.value && pagePolicySort.value.order) || ['交强险', '商业险', '非车险'];
+            const i = order.indexOf(policyCategory(pt));
+            return i < 0 ? order.length : i;
+        }
         // 把当前全量原始记录按车牌合并成"伪记录"（display_fields=合并行），
         // 复用导出接口的合并算法（return_json），保证页面与导出 Excel 完全一致。
         async function _applyMerge(rawOverride) {
@@ -11065,6 +11390,13 @@ const _app = createApp({
                 const p = mergeKey(row) || ('__ROW__' + i);
                 const srcIds = Array.isArray(row._src_ids) ? row._src_ids : null;
                 const children = srcIds ? srcIds.map(id => byId[id]).filter(Boolean) : (byPlate[p] || []);
+                // 「保单排序」启用时，展开的子保单按险种大类顺序排（交强→商业→非车险，或配置的顺序），稳定排序
+                if (pagePolicySort.value && pagePolicySort.value.enabled && children.length > 1) {
+                    children
+                        .map((c, _i) => [c, _i])
+                        .sort((a, b) => (policySortRank(a[0]) - policySortRank(b[0])) || (a[1] - b[1]))
+                        .forEach((pair, _i) => { children[_i] = pair[0]; });
+                }
                 return {
                     id: '__merge_' + (p || i),
                     display_fields: row,
@@ -11073,11 +11405,14 @@ const _app = createApp({
                     // 合并行是前端拼出来的"伪记录"，原始字段(所属企业等)不会自动带过来，
                     // 要显式从子记录里取——不然超管列表页合并显示时"所属企业"列永远是空的
                     enterprise_name: (children[0] && children[0].enterprise_name) || '',
+                    // 需人工补充的缺失提示也要从子记录汇总——否则合并视图下看不到缺了什么
+                    is_abnormal: children.some(c => c.is_abnormal && !c.abnormal_override_reason) ? 1 : 0,
+                    hint: [...new Set(children.map(c => (c.is_abnormal && !c.abnormal_override_reason) ? c.hint : '').filter(Boolean))].join('；'),
                 };
             });
             recordPagination.total = records.value.length;
-            recordPagination.totalPages = 1;
-            recordPagination.page = 1;
+            recordPagination.totalPages = Math.ceil(records.value.length / recordPagination.pageSize) || 1;
+            if (recordPagination.page < 1 || recordPagination.page > recordPagination.totalPages) recordPagination.page = 1;
         }
         // 切换"按车牌合并"开关
         function togglePageMerge() {
@@ -11135,7 +11470,7 @@ const _app = createApp({
                 if (recordPolicyTypeFilter.value) params.set('policy_type', recordPolicyTypeFilter.value);
                 if (recordEnterpriseFilter.value) params.set('enterprise_id', recordEnterpriseFilter.value);
                 // 排序
-                if (recordFilter.sort_by) params.set('sort_by', recordFilter.sort_by);
+                if (recordFilter.sort_by) params.set('sort_by', recordFilter.sort_by);  // 客户设置的排序为主排序(最高优先级)；后端再追加车牌+险种作为次级
                 if (recordFilter.sort_order) params.set('sort_order', recordFilter.sort_order);
                 _appendDateParams(params);
                 // 失败/待处理 tab 下不去重，避免记录被过滤掉
@@ -11161,6 +11496,9 @@ const _app = createApp({
                 }
                 if (data.column_config && data.column_config.columns) {
                     listColumnConfig.value = data.column_config.columns;
+                }
+                if (data.policy_sort) {
+                    pagePolicySort.value = data.policy_sort;
                 }
                 if (!_mergeSilently) {
                     recordPagination.total = data.total || 0;
@@ -11195,6 +11533,8 @@ const _app = createApp({
         async function gotoRecordPage(page) {
             if (page < 1 || page > recordPagination.totalPages) return;
             recordPagination.page = page;
+            // 合并模式：全量已在内存，pagedRecords 计算属性按新页码自动切片，无需重新请求+重新合并
+            if (pageMergeByPlate.value) return;
             await loadRecords(false);
         }
 
@@ -11426,7 +11766,7 @@ const _app = createApp({
 
         // ===== 续保提醒（CRM式续保任务管理） =====
         // 敏感信息默认打码，用户每次进入页面需自行打开开关才显示完整信息（不记忆，刷新重置为隐藏）
-        const renewalInfoRevealed = ref(false);
+        const renewalInfoRevealed = ref(true);  // 续保信息直接显示，不再磨砂遮罩/打码
         function maskPersonName(v) {
             if (!v) return v;
             return v.charAt(0) + '**';
@@ -11436,12 +11776,12 @@ const _app = createApp({
             if (v.length <= 3) return v.charAt(0) + '*'.repeat(v.length - 1);
             return v.slice(0, 2) + '*'.repeat(v.length - 3) + v.slice(-1);
         }
-        const renewalStats = ref({ overdue: 0, due_7d: 0, due_30d: 0, due_this_month: 0, due_next_month: 0, won_this_month: 0 });
+        const renewalStats = ref({ overdue: 0, due_30d: 0, renewed_this_month: 0, pending_total: 0 });
         const renewalBadgeCount = computed(() => (renewalStats.value.overdue || 0) + (renewalStats.value.due_30d || 0));
         const renewalTasks = ref([]);
         const renewalLoading = ref(false);
-        const renewalFilter = ref({ status: '', assignee: '', date_start: '', date_end: '', keyword: '' });
-        const renewalPagination = ref({ page: 1, page_size: 20, total: 0, pages: 1 });
+        const renewalFilter = ref({ status: '', assignee: '', date_start: '', date_end: '', keyword: '', enterprise_id: '' });
+        const renewalPagination = ref({ page: 1, page_size: 10, total: 0, pages: 1 });
         const renewalSelectedIds = ref([]);
         const renewalAssigneesList = ref([]);
         const renewalScanning = ref(false);
@@ -11456,6 +11796,7 @@ const _app = createApp({
         const renewalBatchAssignVisible = ref(false);
         const renewalBatchAssignee = ref('');
         const renewalQrVisible = ref(false);
+        const renewalImportVisible = ref(false);  // 导入往年保单·引导添加客服弹窗
         const renewalQrUrl = ref('');
         const renewalConfigVisible = ref(false);
         const renewalWindowDaysInput = ref(90);
@@ -11464,18 +11805,22 @@ const _app = createApp({
             renewalTasks.value.length > 0 && renewalTasks.value.every(t => renewalSelectedIds.value.includes(t.id))
         );
 
+        const renewalPromoVisible = ref(false);
         function openRenewalTab() {
             pageTab.value = 'renewal';
+            if (isSuperAdmin.value) { sdEnsureEnterprises(); }
             loadRenewalStats();
             loadRenewalList();
             if (currentUser.value && currentUser.value.role === 'enterprise') {
                 loadRenewalAssignees(currentUser.value.id);
             }
+            // 引导弹窗已取消：进入续保管理不再弹「限时免费」提示
         }
 
         async function loadRenewalStats() {
             try {
-                const resp = await authFetch('/api/renewal/stats');
+                const _eid = (isSuperAdmin.value && renewalFilter.value.enterprise_id) ? renewalFilter.value.enterprise_id : '';
+                const resp = await authFetch(`/api/renewal/stats?enterprise_id=${_eid}`);
                 const data = await resp.json();
                 if (data.code === 0) {
                     renewalStats.value = data.data;
@@ -11512,6 +11857,7 @@ const _app = createApp({
                     date_start: renewalFilter.value.date_start,
                     date_end: renewalFilter.value.date_end,
                     keyword: renewalFilter.value.keyword,
+                    enterprise_id: (isSuperAdmin.value && renewalFilter.value.enterprise_id) ? renewalFilter.value.enterprise_id : '',
                 });
                 const resp = await authFetch(`/api/renewal/list?${params}`);
                 const data = await resp.json();
@@ -11571,7 +11917,7 @@ const _app = createApp({
         }
 
         function renewalDaysLeftClass(t) {
-            if (t.status === 'won' || t.status === 'lost') return 'text-gray-400';
+            if (t.status === 'renewed' || t.status === 'stopped' || t.status === 'transfer') return 'text-gray-400';
             const days = Math.ceil((new Date(t.end_date) - new Date()) / 86400000);
             if (days < 0) return 'text-red-600 font-semibold';
             if (days <= 7) return 'text-orange-600 font-semibold';
@@ -11585,15 +11931,30 @@ const _app = createApp({
             return `距到期还剩${days}天`;
         }
 
+        // 卡片逾期/临期判定与徽标样式（仅 pending 未决定的任务标红/橙）
+        function renewalDaysNum(t) { return Math.ceil((new Date(t.end_date) - new Date()) / 86400000); }
+        function renewalOverdue(t) { return t.status === 'pending' && renewalDaysNum(t) < 0; }
+        function renewalSoon(t) { const d = renewalDaysNum(t); return t.status === 'pending' && d >= 0 && d <= 30; }
+        function renewalDaysBadgeStyle(t) {
+            if (t.status !== 'pending') return 'background:#f3f4f6;color:#6b7280;';
+            const d = renewalDaysNum(t);
+            if (d < 0) return 'background:#fee2e2;color:#b91c1c;';
+            if (d <= 30) return 'background:#ffedd5;color:#c2410c;';
+            return 'background:#f3f4f6;color:#6b7280;';
+        }
+
         const RENEWAL_STATUS_STYLES = {
             pending: 'background:#fef3c7;color:#b45309;',
-            following: 'background:#dbeafe;color:#1d4ed8;',
-            won: 'background:#dcfce7;color:#15803d;',
-            lost: 'background:#f3f4f6;color:#6b7280;',
-            expired: 'background:#fee2e2;color:#b91c1c;',
+            renew_pending: 'background:#dbeafe;color:#1d4ed8;',
+            transfer_pending: 'background:#ede9fe;color:#6d28d9;',
+            renewed: 'background:#dcfce7;color:#15803d;',
+            transfer: 'background:#dcfce7;color:#15803d;',
+            stopped: 'background:#f3f4f6;color:#6b7280;',
+            hold: 'background:#ffedd5;color:#c2410c;',
         };
         const RENEWAL_STATUS_LABELS = {
-            pending: '待跟进', following: '跟进中', won: '已成交', lost: '已流失', expired: '已过期',
+            pending: '待跟进', renew_pending: '续保待确认', transfer_pending: '转保待确认',
+            renewed: '续保成功', transfer: '转保成功', stopped: '停保', hold: '暂不考虑',
         };
         function renewalStatusStyle(status) { return RENEWAL_STATUS_STYLES[status] || ''; }
         function renewalStatusLabel(status) { return RENEWAL_STATUS_LABELS[status] || status; }
@@ -11671,11 +12032,11 @@ const _app = createApp({
             }
         }
 
-        async function changeRenewalStatus(status, remark) {
+        async function changeRenewalStatus(status, remark, holdReason) {
             try {
                 const resp = await authFetch('/api/renewal/status', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ task_id: renewalDetailTask.value.id, status, remark: remark || '' }),
+                    body: JSON.stringify({ task_id: renewalDetailTask.value.id, status, remark: remark || '', hold_reason: holdReason || '' }),
                 });
                 const data = await resp.json();
                 if (data.code === 0) {
@@ -11692,7 +12053,18 @@ const _app = createApp({
         }
 
         function dismissRenewalHint() {
-            changeRenewalStatus(renewalDetailTask.value.status, '忽略续保检测提示');
+            changeRenewalStatus('pending', '忽略续保检测提示');
+        }
+
+        // 暂不考虑原因框（快捷选项 + 手动输入）
+        const renewalHoldVisible = ref(false);
+        const renewalHoldReason = ref('');
+        const RENEWAL_HOLD_PRESETS = ['嫌贵在比价', '过两个月再说', '车在外地', '已在别处投保', '车辆闲置/待售', '暂时不想续'];
+        function openRenewalHold() { renewalHoldReason.value = ''; renewalHoldVisible.value = true; }
+        function pickRenewalHoldPreset(p) { renewalHoldReason.value = p; }
+        async function submitRenewalHold() {
+            await changeRenewalStatus('hold', '', renewalHoldReason.value.trim());
+            renewalHoldVisible.value = false;
         }
 
         async function assignRenewalDetail() {
@@ -11769,6 +12141,7 @@ const _app = createApp({
                     date_start: renewalFilter.value.date_start,
                     date_end: renewalFilter.value.date_end,
                     keyword: renewalFilter.value.keyword,
+                    enterprise_id: (isSuperAdmin.value && renewalFilter.value.enterprise_id) ? renewalFilter.value.enterprise_id : '',
                 });
                 const resp = await authFetch(`/api/renewal/export?${params}`);
                 if (!resp.ok) {
@@ -12358,6 +12731,7 @@ const _app = createApp({
 
         async function loadSalesDash() {
             if (currentUser.value && currentUser.value.role === 'employee') return;  // 员工仅展示锁定提示，不请求数据
+            salesTab.value = 'board';  // 无论从哪个入口/页签触发，回到看板视图
             await sdEnsureEnterprises();
             if (sdNeedEnterprise()) return;
             const [ds, de] = sdRange();
@@ -12720,33 +13094,105 @@ const _app = createApp({
             return Math.round(v).toLocaleString('zh-CN');
         }
         function sdFullNum(v) { return Math.round(v).toLocaleString('zh-CN'); }
+        // 环形图悬停提示：全局单例 tooltip + 每个图记录扇区角度做命中检测
+        let _sdTipEl = null;
+        function _sdTip() {
+            if (!_sdTipEl) {
+                _sdTipEl = document.createElement('div');
+                _sdTipEl.style.cssText = 'display:none;position:fixed;z-index:9999;background:rgba(30,30,30,0.88);color:#fff;padding:7px 12px;border-radius:8px;font-size:12px;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.18);line-height:1.7';
+                document.body.appendChild(_sdTipEl);
+            }
+            return _sdTipEl;
+        }
+        const _sdEsc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+        // 「!」说明气泡贴近屏幕左右边缘时自动改为边缘对齐，避免被截断（手机上常见）
+        document.addEventListener('mouseover', (e) => {
+            const qi = e.target && e.target.closest ? e.target.closest('.sd-qi') : null;
+            if (!qi) return;
+            const tip = qi.querySelector('.sd-qtip');
+            if (!tip) return;
+            tip.classList.remove('tip-left', 'tip-right');
+            const r = qi.getBoundingClientRect();
+            const tw = Math.min(250, window.innerWidth - 24);
+            const centerLeft = r.left + r.width / 2 - tw / 2;
+            if (centerLeft < 8) tip.classList.add('tip-left');
+            else if (centerLeft + tw > window.innerWidth - 8) tip.classList.add('tip-right');
+        }, true);
         function drawSdDonut(id, ch) {
+            const c0 = document.getElementById(id);
+            if (!c0 || !ch.items.length) return;
+            // 窄屏（手机）改上下布局：圆环居中在上、图例单列在下，画布高度按条目数撑开
+            const narrow = c0.clientWidth < 480;
+            const lhN = 22, donutH = 168;
+            c0.setAttribute('height', narrow ? donutH + 16 + ch.items.length * lhN + 8 : 250);
             const env = sdCanvasCtx(id);
-            if (!env || !ch.items.length) return;
+            if (!env) return;
             const { x, w, h } = env;
             const total = ch.total || 1;
-            const cx = w * 0.30, cy = h / 2, r1 = Math.min(h / 2 - 14, 84), r2 = r1 * 0.62;
+            const cx = narrow ? w / 2 : w * 0.30;
+            const cy = narrow ? donutH / 2 : h / 2;
+            const r1 = narrow ? 64 : Math.min(h / 2 - 14, 84), r2 = r1 * 0.62;
             let a = -Math.PI / 2;
+            const arcs = [];
             ch.items.forEach((it, i) => {
                 const frac = total ? it.value / total : 0;
                 const a2 = a + Math.PI * 2 * frac;
                 x.beginPath(); x.arc(cx, cy, r1, a, a2); x.arc(cx, cy, r2, a2, a, true); x.closePath();
-                x.fillStyle = SD_PIE[i % SD_PIE.length]; x.fill(); a = a2;
+                x.fillStyle = SD_PIE[i % SD_PIE.length]; x.fill();
+                arcs.push({ start: a, end: a2, it });
+                a = a2;
             });
+            // 悬停扇区显示 名称/数值/占比
+            const canvasEl = document.getElementById(id);
+            canvasEl.onmousemove = (e) => {
+                const rect = canvasEl.getBoundingClientRect();
+                const dx = e.clientX - rect.left - cx, dy = e.clientY - rect.top - cy;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const tip = _sdTip();
+                if (dist < r2 || dist > r1) { tip.style.display = 'none'; return; }
+                let ang = Math.atan2(dy, dx);
+                if (ang < -Math.PI / 2) ang += Math.PI * 2;  // 归一到扇区角度区间 [-π/2, 3π/2)
+                const hit = arcs.find(s => ang >= s.start && ang < s.end);
+                if (!hit) { tip.style.display = 'none'; return; }
+                const pct = total ? (hit.it.value / total * 100).toFixed(1) : 0;
+                const val = ch.is_count ? Number(hit.it.value).toLocaleString('zh-CN') + ' 单'
+                    : '¥' + Number(hit.it.value).toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+                tip.innerHTML = `<b>${_sdEsc(hit.it.name)}</b><br>${val}（${pct}%）`;
+                tip.style.display = 'block';
+                tip.style.left = (e.clientX + 12) + 'px';
+                tip.style.top = (e.clientY + 12) + 'px';
+            };
+            canvasEl.onmouseleave = () => { _sdTip().style.display = 'none'; };
             x.fillStyle = '#1c1410'; x.font = 'bold 15px sans-serif'; x.textAlign = 'center';
             x.fillText(ch.is_count ? total.toLocaleString('zh-CN') + '单' : sdFullNum(total), cx, cy + 1);
             x.font = '11px sans-serif'; x.fillStyle = '#9ca3af'; x.fillText('合计', cx, cy + 18);
-            // 图例行距/字号随条目数自适应，保司全量展示时不溢出画布
-            const lh = Math.min(24, Math.max(14, Math.floor((h - 24) / ch.items.length)));
-            const legendFont = lh < 19 ? '11px sans-serif' : '12px sans-serif';
-            let ly = Math.max(cy - ch.items.length * lh / 2 + lh / 2, 14);
-            ch.items.forEach((it, i) => {
-                x.fillStyle = SD_PIE[i % SD_PIE.length]; x.fillRect(w * 0.56, ly - 8, 11, 11);
-                x.fillStyle = '#6b7280'; x.font = legendFont; x.textAlign = 'left';
-                const pct = total ? (it.value / total * 100).toFixed(1) : 0;
-                x.fillText(`${it.name}  ${sdFullNum(it.value)} (${pct}%)`, w * 0.56 + 17, ly + 1);
-                ly += lh;
-            });
+            if (narrow) {
+                // 窄屏：图例单列排在圆环下方，超宽的长保司名截断加省略号
+                x.font = '12px sans-serif'; x.textAlign = 'left';
+                const maxTextW = w - 40 - 17;
+                let ly = donutH + 24;
+                ch.items.forEach((it, i) => {
+                    x.fillStyle = SD_PIE[i % SD_PIE.length]; x.fillRect(20, ly - 8, 11, 11);
+                    x.fillStyle = '#6b7280';
+                    const pct = total ? (it.value / total * 100).toFixed(1) : 0;
+                    let txt = `${it.name}  ${sdFullNum(it.value)} (${pct}%)`;
+                    while (x.measureText(txt).width > maxTextW && txt.length > 8) txt = txt.slice(0, -4) + '…';
+                    x.fillText(txt, 37, ly + 1);
+                    ly += lhN;
+                });
+            } else {
+                // 宽屏：图例在右侧，行距/字号随条目数自适应，保司全量展示时不溢出画布
+                const lh = Math.min(24, Math.max(14, Math.floor((h - 24) / ch.items.length)));
+                const legendFont = lh < 19 ? '11px sans-serif' : '12px sans-serif';
+                let ly = Math.max(cy - ch.items.length * lh / 2 + lh / 2, 14);
+                ch.items.forEach((it, i) => {
+                    x.fillStyle = SD_PIE[i % SD_PIE.length]; x.fillRect(w * 0.56, ly - 8, 11, 11);
+                    x.fillStyle = '#6b7280'; x.font = legendFont; x.textAlign = 'left';
+                    const pct = total ? (it.value / total * 100).toFixed(1) : 0;
+                    x.fillText(`${it.name}  ${sdFullNum(it.value)} (${pct}%)`, w * 0.56 + 17, ly + 1);
+                    ly += lh;
+                });
+            }
         }
         function drawSdBar(id, ch) {
             const env = sdCanvasCtx(id);
@@ -12832,7 +13278,7 @@ const _app = createApp({
             // 重复保单
             duplicateVisible, duplicateList, confirmSyncSkipDuplicates, confirmSyncUpdateDuplicates, cancelSync,
             // 识别记录
-            records, filteredRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
+            records, filteredRecords, pagedRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
             isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask, collapseDownloadTask, expandDownloadTask, retryDownloadTask, batchFailModal, manualKeptModal, manualKeptToggleAll, applyManualOverwrite, batchFailRetry, batchFailUpload,
             aiCheckBatchProcessing, aiCheckBatchProgress, batchAiCheckSync,
             // AI质检（仅超管）
@@ -12865,12 +13311,14 @@ const _app = createApp({
             internalNoteQuickPhrases, appendInternalNotePhrase,
             renewalInfoRevealed, maskPersonName, maskPlateNo, enableRenewalFeature,
             renewalStats, renewalBadgeCount, renewalTasks, renewalLoading, renewalFilter, renewalPagination, renewalSelectedIds,
-            renewalAssigneesList, renewalScanning, renewalAllSelected, openRenewalTab, loadRenewalStats, loadRenewalList, gotoRenewalPage,
+            renewalAssigneesList, renewalScanning, renewalAllSelected, openRenewalTab, loadRenewalStats, loadRenewalList, gotoRenewalPage, renewalPromoVisible,
             toggleRenewalSelectAll, renewalDaysLeftClass, renewalDaysLeftText, renewalStatusStyle, renewalStatusLabel, renewalActionLabel,
+            renewalOverdue, renewalSoon, renewalDaysBadgeStyle,
             renewalDetailVisible, renewalDetailTask, renewalDetailAssignee, renewalHistory, renewalFollowups, renewalNoteContent,
             renewalNextRemindAt, renewalNoteSaving, openRenewalDetail, submitRenewalFollowup, changeRenewalStatus, dismissRenewalHint, assignRenewalDetail,
+            renewalHoldVisible, renewalHoldReason, RENEWAL_HOLD_PRESETS, openRenewalHold, pickRenewalHoldPreset, submitRenewalHold,
             renewalBatchAssignVisible, renewalBatchAssignee, openBatchAssign, submitBatchAssign, triggerRenewalScan, exportRenewalList,
-            renewalQrVisible, renewalQrUrl, renewalConfigVisible, renewalWindowDaysInput, openRenewalQr, openRenewalConfig, saveRenewalConfig, uploadRenewalQrcode, previewRenewalTaskFile,
+            renewalQrVisible, renewalImportVisible, renewalQrUrl, renewalConfigVisible, renewalWindowDaysInput, openRenewalQr, openRenewalConfig, saveRenewalConfig, uploadRenewalQrcode, previewRenewalTaskFile,
             deleteRecordVisible, deleteRecordTarget, deleteRecordSaving, openDeleteRecord, confirmDeleteRecord,
             editingField, editingValue, fieldSaving, startEditField, cancelEditField, saveEditField, isManualField, fieldSource, publicFields, isDateField,
             listEditing, startListEdit, cancelListEdit, saveListEdit,
@@ -12894,7 +13342,7 @@ const _app = createApp({
             errorReportMsg, errorReportOk, openErrorReport, submitErrorReport,
             // 通知面板
             // 移动端菜单
-            mobileMenuOpen, moreMenuOpen,
+            mobileMenuOpen, moreMenuOpen, workbenchOpen, wbSealOpen, wbComingName, wbComingSoon, wbSealEnter, wbSealLeave, sealTasks, sealStats, sealFilter, sealPagination, loadSealTasks, openSealTab, markSealPaid,
             // 识别记录移动端卡片视图
             mobileFilterOpen, mSheetRecord, mLoadingMore,
             mField, mHasPlate, mCardTitle, mPolicyChipClass, mIsLong,

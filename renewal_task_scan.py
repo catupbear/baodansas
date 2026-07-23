@@ -32,16 +32,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 WINDOW_PAST_DAYS = 30
-WINDOW_FUTURE_DAYS = 90
+WINDOW_FUTURE_DAYS = 30  # 方案：页面/提醒只关注逾期+30天内到期，未来窗口收窄到30天
 EXPIRE_AFTER_DAYS = 30  # 到期后超过这么多天未成交/未流失，自动标记 expired
 
 
 def _fetch_window_records(db, today):
     """
     查窗口内(今天-30, 今天+90)的保单记录，含企业/车牌/VIN等聚合所需字段。
-    只处理 users.renewal_enabled=1 的账号跟单的保单——续保提醒功能按个人账号自助开启，
-    不是按企业；同企业下没开的员工，他跟单的保单不参与扫描/推送（2026-07-15 从企业级
-    改为账号级，几个人开就只影响这几个人自己的数据）。
+    企业级口径：企业的全部保单参与扫描生成任务，不看个人 renewal_enabled 开关
+    （2026-07-22 与用户确认改回企业级——账号级口径下几乎没人自助开启，列表长期缺数据；
+    个人开关仍用于到期提醒推送 policy_expiry_reminder 的收敛，互不影响）。
     """
     conn = db.pool.connection()
     try:
@@ -49,15 +49,13 @@ def _fetch_window_records(db, today):
         cursor.execute("""
             SELECT r.id AS record_id, r.enterprise_id, r.sender, r.sender_name,
                    pf.plate_no, pf.vin, pf.insured, pf.applicant, pf.company_short,
-                   pf.policy_type, pf.end_date_iso, pf.total_premium
+                   pf.policy_type, pf.policy_no, pf.sign_date_iso, pf.end_date_iso, pf.total_premium
             FROM insurance_records r
             JOIN insurance_policy_fields pf ON r.id = pf.record_id
-            JOIN users u ON u.id = r.user_id
             WHERE r.deleted_at IS NULL
               AND r.status = 'done'
               AND r.doc_category = '保单'
               AND r.enterprise_id IS NOT NULL
-              AND u.renewal_enabled = 1
               AND pf.end_date_iso IS NOT NULL
               AND pf.end_date_iso BETWEEN %s AND %s
             ORDER BY r.id DESC
@@ -68,7 +66,8 @@ def _fetch_window_records(db, today):
 
 
 def _group_by_customer(rows):
-    """按 (customer_key, enterprise_id) 聚合；车牌优先，否则VIN(归一化大写)；两者都空跳过。"""
+    """按 (customer_key, 险种, enterprise_id) 聚合——每险种一条任务；
+    车牌优先，否则VIN(归一化大写)；两者都空跳过。险种截断到64字符与唯一键列宽一致。"""
     groups = {}
     for row in rows:
         plate = (row.get("plate_no") or "").strip()
@@ -76,7 +75,8 @@ def _group_by_customer(rows):
         customer_key = plate if plate else vin
         if not customer_key:
             continue
-        key = (customer_key, row["enterprise_id"])
+        policy_type = ((row.get("policy_type") or "").strip())[:64]
+        key = (customer_key, policy_type, row["enterprise_id"])
         groups.setdefault(key, []).append(row)
     return groups
 
@@ -97,17 +97,15 @@ def _resolve_default_assignee(db, sender, enterprise_id):
     return None, ""
 
 
-def _build_task_payload(db, customer_key, enterprise_id, rows):
-    """把同一客户的多条保单记录聚合成一条 renewal_tasks 的 upsert payload。"""
+def _build_task_payload(db, customer_key, enterprise_id, rows, policy_type=None):
+    """把同一客户同一险种的多条保单记录聚合成一条 renewal_tasks 的 upsert payload。
+    rows 应为同险种记录（每险种一条任务）；policy_type 不传时取组内第一条的险种。"""
     rows_sorted = sorted(rows, key=lambda r: r["end_date_iso"])
     soonest = rows_sorted[0]
     latest_record = max(rows, key=lambda r: r["record_id"])  # 最新上传的一条，用于解析默认跟进人
 
-    policy_types = []
-    for r in rows_sorted:
-        pt = (r.get("policy_type") or "").strip()
-        if pt and pt not in policy_types:
-            policy_types.append(pt)
+    if policy_type is None:
+        policy_type = ((rows_sorted[0].get("policy_type") or "").strip())[:64]
 
     assignee, assignee_name = _resolve_default_assignee(db, latest_record.get("sender"), enterprise_id)
 
@@ -122,8 +120,10 @@ def _build_task_payload(db, customer_key, enterprise_id, rows):
         "insured": soonest.get("insured") or "",
         "applicant": soonest.get("applicant") or "",
         "company_short": soonest.get("company_short") or "",
-        "policy_type": "、".join(policy_types),
+        "policy_type": policy_type,
+        "policy_no": soonest.get("policy_no") or "",
         "end_date": soonest["end_date_iso"],
+        "sign_date": soonest.get("sign_date_iso") or None,
         "total_premium": soonest.get("total_premium") or "",
         "policy_record_ids": [r["record_id"] for r in rows],
         "primary_record_id": soonest["record_id"],
@@ -135,9 +135,10 @@ def _build_task_payload(db, customer_key, enterprise_id, rows):
 
 def _detect_renewal_hints(db, enterprise_id_scope=None):
     """
-    续保检测提示（非全自动）：对状态在 pending/following 的存量任务，查一次「同客户 +
+    续保检测提示（半自动）：对状态为 pending 的存量任务，查一次「同客户 + 同险种 +
     不在该任务当前 policy_record_ids 里 + 起保日期紧接着当前任务到期日」的保单记录，
-    命中写入 hint 字段，不改变任务状态；由人工在页面上确认「标记已成交」或「忽略」。
+    命中写入 hint，并按新旧承保公司异同自动置 renew_pending(续保待确认)/transfer_pending(转保待确认)；
+    由人工在页面确认成交或忽略。
 
     两层过滤缺一不可：
     1) 排除 policy_record_ids 里已有的记录——否则同一辆车交强+商业两份保单到期日不同，
@@ -150,8 +151,8 @@ def _detect_renewal_hints(db, enterprise_id_scope=None):
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute(
-            "SELECT id, customer_key, enterprise_id, end_date, policy_record_ids FROM renewal_tasks "
-            "WHERE status IN ('pending','following')"
+            "SELECT id, customer_key, enterprise_id, policy_type, company_short, end_date, policy_record_ids FROM renewal_tasks "
+            "WHERE status = 'pending'"
         )
         tasks = cursor.fetchall()
     finally:
@@ -175,21 +176,27 @@ def _detect_renewal_hints(db, enterprise_id_scope=None):
             cursor = conn.cursor(pymysql.cursors.DictCursor)
             ph = ",".join(["%s"] * len(known_ids))
             cursor.execute(f"""
-                SELECT r.id AS record_id, pf.end_date_iso
+                SELECT r.id AS record_id, pf.end_date_iso, pf.company_short
                 FROM insurance_records r JOIN insurance_policy_fields pf ON r.id = pf.record_id
                 WHERE (pf.plate_no = %s OR pf.vin = %s)
                   AND r.enterprise_id = %s AND r.deleted_at IS NULL
                   AND r.status = 'done' AND r.doc_category = '保单'
+                  AND pf.policy_type = %s
                   AND r.id NOT IN ({ph})
                   AND pf.start_date_iso BETWEEN %s AND %s
                 ORDER BY pf.end_date_iso DESC LIMIT 1
-            """, [t["customer_key"], t["customer_key"], t["enterprise_id"]] + known_ids
+            """, [t["customer_key"], t["customer_key"], t["enterprise_id"], t.get("policy_type") or ""] + known_ids
                  + [start_window_from, start_window_to])
             hit = cursor.fetchone()
         finally:
             conn.close()
         if hit:
+            # 比对新旧承保公司：都识别到且不同 → 转保待确认；否则(相同或信息缺失) → 续保待确认
+            old_co = (t.get("company_short") or "").strip()
+            new_co = (hit.get("company_short") or "").strip()
+            new_status = "transfer_pending" if (old_co and new_co and old_co != new_co) else "renew_pending"
             rdb.set_hint(db, t["id"], hit["record_id"], hit["end_date_iso"])
+            rdb.update_status(db, t["id"], new_status)
             hint_count += 1
     return hint_count
 
@@ -214,18 +221,11 @@ def sync_customer_task(db, plate_no, vin, enterprise_id, user_id=None):
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        # 续保提醒按个人账号自助开关，不是按企业(与批量扫描的过滤口径保持一致)——触发这次
-        # 同步的那条记录如果没有绑定跟单人、或跟单人没开，不参与实时同步
-        if not user_id:
-            return
-        cursor.execute("SELECT renewal_enabled FROM users WHERE id = %s", (user_id,))
-        _u = cursor.fetchone()
-        if not _u or not _u.get("renewal_enabled"):
-            return
+        # 企业级口径(2026-07-22)：不再按个人 renewal_enabled 过滤，与全量扫描一致
         cursor.execute("""
             SELECT r.id AS record_id, r.enterprise_id, r.sender, r.sender_name,
                    pf.plate_no, pf.vin, pf.insured, pf.applicant, pf.company_short,
-                   pf.policy_type, pf.end_date_iso, pf.total_premium
+                   pf.policy_type, pf.policy_no, pf.sign_date_iso, pf.end_date_iso, pf.total_premium
             FROM insurance_records r
             JOIN insurance_policy_fields pf ON r.id = pf.record_id
             WHERE r.deleted_at IS NULL AND r.status = 'done' AND r.doc_category = '保单'
@@ -249,8 +249,14 @@ def sync_customer_task(db, plate_no, vin, enterprise_id, user_id=None):
     else:
         source_rows = window_rows
 
-    payload = _build_task_payload(db, customer_key, enterprise_id, source_rows)
-    rdb.upsert_task(db, payload)
+    # 每险种一条任务：按险种分组逐条 upsert
+    by_type = {}
+    for r in source_rows:
+        pt = ((r.get("policy_type") or "").strip())[:64]
+        by_type.setdefault(pt, []).append(r)
+    for pt, type_rows in by_type.items():
+        payload = _build_task_payload(db, customer_key, enterprise_id, type_rows, pt)
+        rdb.upsert_task(db, payload)
 
 
 def run_scan(db) -> dict:
@@ -260,8 +266,8 @@ def run_scan(db) -> dict:
     groups = _group_by_customer(rows)
 
     upserted = 0
-    for (customer_key, enterprise_id), group_rows in groups.items():
-        payload = _build_task_payload(db, customer_key, enterprise_id, group_rows)
+    for (customer_key, policy_type, enterprise_id), group_rows in groups.items():
+        payload = _build_task_payload(db, customer_key, enterprise_id, group_rows, policy_type)
         rdb.upsert_task(db, payload)
         upserted += 1
 

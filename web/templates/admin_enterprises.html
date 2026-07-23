@@ -240,10 +240,10 @@
                                 <th style="min-width:55px;text-align:center;">企业编号</th>
                                 <th style="min-width:120px;">企业名称</th>
                                 <th style="min-width:95px;">套餐</th>
-                                <th style="min-width:95px;">套餐到期</th>
                                 <th style="min-width:110px;text-align:center;">本月识别量</th>
                                 <th style="min-width:105px;text-align:center;">人员管理</th>
                                 <th style="min-width:105px;text-align:center;">监控设置</th>
+                                <th style="min-width:105px;text-align:center;">续保推送群</th>
                                 <th style="min-width:170px;">AI质检</th>
                                                                 <th style="min-width:50px;">状态</th>
                                 <th style="min-width:90px;">创建时间</th>
@@ -270,7 +270,7 @@
                                         </template>
                                         <span v-else class="badge" style="white-space:nowrap;background:#f3f4f6;color:#9ca3af;border:1px solid #e5e7eb;">未开通</span>
                                     </div>
-                                    <!-- 下一个套餐（叠加续费）：仅显示类型+时长，日期统一在"套餐到期"列 -->
+                                    <!-- 下一个套餐（叠加续费）：仅显示类型+时长，到期日已移至客户管理页展示 -->
                                     <template v-if="ent.next_plan_type">
                                         <div style="display:flex;align-items:center;gap:4px;margin-top:4px;">
                                             <span style="font-size:10px;color:#9ca3af;">续费:</span>
@@ -279,24 +279,6 @@
                                                 {{ ent.next_plan_type==='enterprise' ? '企业版' : ent.next_plan_type==='enterprise_trial' ? '企业试用' : '标准版' }}
                                             </span>
                                             <span style="font-size:10px;color:#9ca3af;">{{ ent.next_plan_months }}个月</span>
-                                        </div>
-                                    </template>
-                                </td>
-
-                                <!-- 套餐到期 -->
-                                <td style="vertical-align:middle;">
-                                    <template v-if="planExpiryStr(ent)">
-                                        <div style="font-size:13px;font-weight:600;"
-                                            :style="{color: planDaysLeft(ent) <= 0 ? '#dc2626' : planDaysLeft(ent) <= 7 ? '#d97706' : '#059669'}">
-                                            {{ planDaysLeft(ent) <= 0 ? '已到期' : planDaysLeft(ent) + ' 天后到期' }}
-                                        </div>
-                                        <div style="font-size:12px;color:#9ca3af;margin-top:2px;">{{ planExpiryStr(ent) }}</div>
-                                    </template>
-                                    <span v-else style="font-size:12px;color:#d1d5db;">未设置</span>
-                                    <!-- 续费套餐的生效时间 -->
-                                    <template v-if="ent.next_plan_type">
-                                        <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #e5e7eb;font-size:11px;color:#9ca3af;">
-                                            续费 {{ nextPlanExpiryStr(ent) }} 起生效
                                         </div>
                                     </template>
                                 </td>
@@ -336,6 +318,10 @@
                                         <button @click="gotoMonitor(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#ea580c;border-color:#fed7aa;font-weight:600;white-space:nowrap;">监控设置</button>
                                         <span style="font-size:12px;color:#9ca3af;white-space:nowrap;">{{ ent.monitor_count || 0 }} 个群</span>
                                     </div>
+                                </td>
+                                <!-- 续保推送群 -->
+                                <td style="vertical-align:middle;text-align:center;">
+                                    <button @click="openPushModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#2563eb;border-color:#bfdbfe;font-weight:600;white-space:nowrap;">推送群绑定</button>
                                 </td>
 
                                 <!-- AI质检（仅超管；本页整体已限超管访问） -->
@@ -379,8 +365,10 @@
                                     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;row-gap:6px;max-width:210px;">
                                         <button @click="openReportModal(ent)" class="op-btn blue">导出报告</button>
                                         <button @click="openPlanModal(ent)" class="op-btn orange">开通</button>
+                                        <button @click="openBoostModal(ent)" class="op-btn amber" title="识别加油包：99元/1200次/3个月，可叠加">⛽ 加油包</button>
                                         <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled ? 'amber' : 'green']">{{ ent.enabled ? '禁用' : '启用' }}</button>
                                         <button @click="toggleMerge(ent)" :class="['op-btn', ent.merge_by_plate ? 'orange on' : 'gray']" title="开启后该企业识别记录默认按车牌合并显示">车牌合并{{ ent.merge_by_plate ? '✓' : '' }}</button>
+                                        <button @click="toggleSeal(ent)" :class="['op-btn', ent.seal_tracking_enabled ? 'orange on' : 'gray']" title="开启后该企业可使用「公户车盖章跟进」功能">公户盖章{{ ent.seal_tracking_enabled ? '✓' : '' }}</button>
                                                                             </div>
                                 </td>
                             </tr>
@@ -399,10 +387,6 @@
                                     <span v-if="ent.plan_type">{{ ent.plan_type==='enterprise'?'企业版':ent.plan_type==='enterprise_trial'?'企业试用':'标准版' }} · {{ ent.plan_months||1 }}个月</span>
                                     <span v-else style="color:#9ca3af;">未开通</span>
                                 </div></div>
-                                <div class="ec-item"><div class="k">套餐到期</div>
-                                    <div class="vv" v-if="planExpiryStr(ent)" :style="{color: planDaysLeft(ent)<=0?'#dc2626':planDaysLeft(ent)<=7?'#d97706':'#059669'}">{{ planDaysLeft(ent)<=0?'已到期':planDaysLeft(ent)+' 天后' }}</div>
-                                    <div class="vv" v-else style="color:#d1d5db;">未设置</div>
-                                </div>
                                 <div class="ec-item"><div class="k">本月识别</div><div class="vv">{{ ent.plan_type ? (ent.monthly_pdf_usage || 0) + ' 次' : '暂未开通套餐' }}</div></div>
                                 <div class="ec-item"><div class="k">状态</div><div class="vv"><span :style="{color: ent.enabled?'#059669':'#dc2626'}">{{ ent.enabled?'启用':'禁用' }}</span></div></div>
                                 <div class="ec-item"><div class="k">人员 / 群</div><div class="vv">{{ ent.member_count||0 }} 人 · {{ ent.monitor_count||0 }} 群</div></div>
@@ -433,10 +417,13 @@
                             <div class="ec-ops">
                                 <button @click="gotoMembers(ent)" class="op-btn orange">人员管理</button>
                                 <button @click="gotoMonitor(ent)" class="op-btn orange">监控设置</button>
+                                <button @click="openPushModal(ent)" class="op-btn blue">续保推送群</button>
                                 <button @click="openReportModal(ent)" class="op-btn blue">导出报告</button>
                                 <button @click="openPlanModal(ent)" class="op-btn orange">开通</button>
+                                <button @click="openBoostModal(ent)" class="op-btn amber" title="识别加油包：99元/1200次/3个月，可叠加">⛽ 加油包</button>
                                 <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled?'amber':'green']">{{ ent.enabled?'禁用':'启用' }}</button>
                                 <button @click="toggleMerge(ent)" :class="['op-btn', ent.merge_by_plate?'orange on':'gray']">车牌合并{{ ent.merge_by_plate?'✓':'' }}</button>
+                                <button @click="toggleSeal(ent)" :class="['op-btn', ent.seal_tracking_enabled?'orange on':'gray']">公户盖章{{ ent.seal_tracking_enabled?'✓':'' }}</button>
                                                             </div>
                         </div>
                     </div>
@@ -529,6 +516,60 @@
 
         <!-- 开通套餐弹窗 -->
         <transition name="fade">
+            <!-- 加油包管理弹窗 -->
+            <div v-if="showBoostModal" class="modal-mask" @click.self="showBoostModal=false">
+                <div class="modal-content" style="max-width:560px;">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-1">⛽ 识别加油包</h3>
+                    <p style="font-size:13px;color:#9ca3af;margin-bottom:14px;">{{ boostEnt ? boostEnt.name : '' }} · ¥99 / 1,200次 / 3个月有效 · 可叠加</p>
+                    <div v-if="boostBalance" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#9a3412;">
+                        当前余量 <b style="color:#ea580c;">{{ boostBalance.remaining }}</b> 次
+                        <span v-if="boostBalance.nearest_expire" style="color:#9ca3af;margin-left:8px;">最近到期 {{ String(boostBalance.nearest_expire).slice(0,10) }}</span>
+                    </div>
+                    <div style="max-height:260px;overflow-y:auto;margin-bottom:14px;">
+                        <table style="width:100%;font-size:12px;border-collapse:collapse;">
+                            <thead><tr style="color:#9ca3af;text-align:left;"><th style="padding:6px 8px;">购买时间</th><th>已用/总数</th><th>到期时间</th><th>状态</th><th></th></tr></thead>
+                            <tbody>
+                                <tr v-for="p in boostPacks" :key="p.id" style="border-top:1px solid #f3f4f6;">
+                                    <td style="padding:7px 8px;color:#374151;">{{ String(p.purchased_at).slice(0,10) }}</td>
+                                    <td style="color:#374151;">{{ p.used_count }} / {{ p.total_count }}</td>
+                                    <td style="color:#374151;">{{ String(p.expire_at).slice(0,10) }}</td>
+                                    <td><span :style="{color: p.active ? (p.used_count >= p.total_count ? '#9ca3af' : '#16a34a') : '#dc2626'}">{{ !p.active ? '已过期' : (p.used_count >= p.total_count ? '已用完' : '生效中') }}</span></td>
+                                    <td style="text-align:right;"><button @click="removeBoostPack(p)" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:12px;">删除</button></td>
+                                </tr>
+                                <tr v-if="!boostPacks.length"><td colspan="5" style="padding:14px;text-align:center;color:#d1d5db;">暂无加油包</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;gap:10px;">
+                        <button @click="showBoostModal=false" class="btn-secondary" style="padding:8px 16px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:13px;">关闭</button>
+                        <button @click="addBoostPack" :disabled="boostSubmitting" style="padding:8px 16px;border-radius:8px;border:none;background:#ea580c;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">{{ boostSubmitting ? '开通中...' : '+ 开通一个加油包' }}</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 续保推送群绑定弹窗 -->
+            <div v-if="showPushModal" class="modal-mask" @click.self="showPushModal=false">
+                <div class="modal-content" style="max-width:480px;">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-1">📣 续保推送群绑定</h3>
+                    <p style="font-size:13px;color:#9ca3af;margin-bottom:12px;">{{ pushEnt ? pushEnt.name : '' }} · 勾选的群将接收该企业的续保到期提醒</p>
+                    <input v-model="pushRoomSearch" placeholder="搜索群名..." style="width:100%;padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
+                    <div style="max-height:300px;overflow-y:auto;border:1px solid #f3f4f6;border-radius:8px;padding:4px 0;margin-bottom:14px;">
+                        <label v-for="room in filteredPushRooms" :key="room.id" style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:13px;">
+                            <input type="checkbox" :value="room.id" v-model="pushSelectedIds" style="cursor:pointer;">
+                            <span>{{ room.name }}</span>
+                        </label>
+                        <div v-if="!filteredPushRooms.length" style="padding:14px;text-align:center;color:#d1d5db;font-size:13px;">无群可选</div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:12px;color:#9ca3af;">已选 {{ pushSelectedIds.length }} 个群</span>
+                        <div style="display:flex;gap:10px;">
+                            <button @click="showPushModal=false" class="btn-secondary" style="padding:8px 16px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:13px;">取消</button>
+                            <button @click="savePushRooms" :disabled="pushSaving" style="padding:8px 16px;border-radius:8px;border:none;background:#2563eb;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">{{ pushSaving ? '保存中...' : '保存' }}</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div v-if="showPlanModal" class="modal-mask" @click.self="closePlanModal">
                 <div class="modal-content">
                     <h3 class="text-lg font-semibold text-gray-800 mb-1">开通套餐</h3>
@@ -1171,6 +1212,48 @@ createApp({
             showModal.value = false;
         }
 
+        // ===== 识别加油包管理 =====
+        const showBoostModal = ref(false);
+        const boostEnt = ref(null);
+        const boostPacks = ref([]);
+        const boostBalance = ref(null);
+        const boostSubmitting = ref(false);
+        async function loadBoostPacks() {
+            if (!boostEnt.value) return;
+            try {
+                const res = await authFetch(`/api/auth/enterprises/${boostEnt.value.id}/boost-packs`);
+                const data = await res.json();
+                if (data.code === 0) { boostPacks.value = data.data.packs || []; boostBalance.value = data.data.balance || null; }
+            } catch (e) {}
+        }
+        function openBoostModal(ent) {
+            boostEnt.value = ent; boostPacks.value = []; boostBalance.value = null;
+            showBoostModal.value = true;
+            loadBoostPacks();
+        }
+        async function addBoostPack() {
+            if (!boostEnt.value) return;
+            if (!confirm(`确定为「${boostEnt.value.name}」开通一个加油包？\n¥99 / 1,200次 / 自今日起3个月有效`)) return;
+            boostSubmitting.value = true;
+            try {
+                const res = await authFetch(`/api/auth/enterprises/${boostEnt.value.id}/boost-packs`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                const data = await res.json();
+                if (data.code === 0) { showToast('加油包已开通'); await loadBoostPacks(); }
+                else showToast(data.msg || '开通失败', 'error');
+            } catch (e) { showToast('开通失败', 'error'); }
+            finally { boostSubmitting.value = false; }
+        }
+        async function removeBoostPack(p) {
+            if (!confirm(`确定删除这个加油包？（已用 ${p.used_count}/${p.total_count}）删除后余量立即失效`)) return;
+            try {
+                const res = await authFetch(`/api/auth/boost-packs/${p.id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.code === 0) { showToast('已删除'); await loadBoostPacks(); }
+                else showToast(data.msg || '删除失败', 'error');
+            } catch (e) { showToast('删除失败', 'error'); }
+        }
+
         function openPlanModal(ent) {
             planEditEnt.value = ent;
             planForm.plan_type = ent.plan_type || 'standard';
@@ -1317,6 +1400,23 @@ createApp({
             }
         }
 
+        async function toggleSeal(ent) {
+            const nv = ent.seal_tracking_enabled ? 0 : 1;
+            try {
+                const resp = await authFetch('/api/auth/enterprises/' + ent.id, {
+                    method: 'PUT',
+                    body: JSON.stringify({ seal_tracking_enabled: nv }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    ent.seal_tracking_enabled = nv;
+                    showToast((nv ? '已开启' : '已关闭') + '「' + ent.name + '」公户车盖章跟进');
+                } else {
+                    showToast(data.msg || '操作失败', 'error');
+                }
+            } catch (e) { showToast('操作失败', 'error'); }
+        }
+
         async function toggleMerge(ent) {
             const nv = ent.merge_by_plate ? 0 : 1;
             try {
@@ -1346,6 +1446,54 @@ createApp({
             window.location.href = `/monitor-config?enterprise_id=${ent.id}&enterprise_name=${encodeURIComponent(ent.name || '')}`;
         }
 
+        // ===== 续保推送群绑定 =====
+        const showPushModal = ref(false);
+        const pushEnt = ref(null);
+        const pushRoomOptions = ref([]);
+        const pushSelectedIds = ref([]);
+        const pushRoomSearch = ref('');
+        const pushSaving = ref(false);
+        const filteredPushRooms = computed(() => {
+            const kw = pushRoomSearch.value.trim();
+            return kw ? pushRoomOptions.value.filter(r => (r.name || '').includes(kw)) : pushRoomOptions.value;
+        });
+        async function openPushModal(ent) {
+            pushEnt.value = ent;
+            pushSelectedIds.value = [];
+            pushRoomSearch.value = '';
+            showPushModal.value = true;
+            if (!pushRoomOptions.value.length) {
+                try {
+                    const res = await authFetch('/api/insurance/rooms');
+                    const data = await res.json();
+                    const rooms = (data.data && data.data.rooms) || data.rooms || [];
+                    pushRoomOptions.value = rooms.map(x => ({ id: x.id || x.roomid, name: x.name || x.roomid }));
+                } catch (e) {}
+            }
+            try {
+                const res = await authFetch(`/api/renewal/push-rooms?enterprise_id=${ent.id}`);
+                const data = await res.json();
+                pushSelectedIds.value = ((data.data && data.data.rooms) || []).map(x => x.roomid);
+            } catch (e) {}
+        }
+        async function savePushRooms() {
+            if (!pushEnt.value) return;
+            pushSaving.value = true;
+            const rooms = pushSelectedIds.value.map(id => {
+                const opt = pushRoomOptions.value.find(o => o.id === id);
+                return { roomid: id, room_name: opt ? opt.name : '' };
+            });
+            try {
+                const res = await authFetch('/api/renewal/push-rooms', {
+                    method: 'POST', body: JSON.stringify({ enterprise_id: pushEnt.value.id, rooms })
+                });
+                const data = await res.json();
+                if (data.code === 0) { showToast('已保存'); showPushModal.value = false; }
+                else showToast(data.msg || '保存失败', 'error');
+            } catch (e) { showToast('保存失败', 'error'); }
+            finally { pushSaving.value = false; }
+        }
+
         onMounted(() => {
             if (checkAuth()) {
                 ready.value = true;
@@ -1364,7 +1512,9 @@ createApp({
             openCreateModal, openEditModal, closeModal, submitForm,
             showPlanModal, planEditEnt, planForm, planFormError, planSubmitting, planCurrentExpiry,
             openPlanModal, closePlanModal, submitPlanForm,
-            toggleEnabled, toggleMerge, logout, toast, formatTime, gotoMembers, gotoMonitor,
+            showBoostModal, boostEnt, boostPacks, boostBalance, boostSubmitting, openBoostModal, addBoostPack, removeBoostPack,
+            toggleEnabled, toggleMerge, toggleSeal, logout, toast, formatTime, gotoMembers, gotoMonitor,
+            showPushModal, pushEnt, pushRoomOptions, pushSelectedIds, pushRoomSearch, pushSaving, filteredPushRooms, openPushModal, savePushRooms,
             showReportModal, reportTarget, reportRange, reportStart, reportEnd, reportSubmitting,
             reportLink, reportCopied, copyReportLink,
             openReportModal, doExportReport,

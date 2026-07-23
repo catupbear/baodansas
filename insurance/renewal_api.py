@@ -18,6 +18,7 @@ from flask import Blueprint, g, jsonify, request, send_file
 from auth.decorators import login_required, admin_required
 from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, ROLE_EMPLOYEE
 from insurance import renewal_db as rdb
+from insurance import renewal_push_db as rpdb
 from insurance.db import get_insurance_config, set_insurance_config
 
 logger = logging.getLogger(__name__)
@@ -57,10 +58,15 @@ def _get_user_ids_filter():
 
 
 def _get_enterprise_id_filter():
-    """返回当前用户的 enterprise_id，超管返回 None（不过滤），其他角色按企业过滤"""
+    """返回当前用户的 enterprise_id 过滤值。其他角色按自己企业过滤；
+    超管默认 None（全部企业），可通过 ?enterprise_id= 指定只看某企业。"""
     role = g.current_user["role"]
     if role == ROLE_SUPER_ADMIN:
-        return None
+        eid = request.args.get("enterprise_id")
+        try:
+            return int(eid) if eid else None
+        except (TypeError, ValueError):
+            return None
     parent_id = g.current_user.get("parent_id")
     return parent_id if parent_id else g.current_user["user_id"]
 
@@ -191,8 +197,9 @@ def get_list():
     return jsonify({"code": 0, "data": result})
 
 
-def _query_history(customer_key: str, enterprise_id):
-    """按车牌或VIN查该客户的全部历史保单（不限90天窗口，实时查询保证完整性）。"""
+def _query_history(customer_key: str, enterprise_id, policy_type: str = ""):
+    """按车牌或VIN查该客户的历史保单（不限90天窗口，实时查询保证完整性）。
+    传 policy_type 时只查该险种（与任务按险种拆分的口径一致）。"""
     conn = _db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -205,6 +212,9 @@ def _query_history(customer_key: str, enterprise_id):
             "AND r.deleted_at IS NULL AND r.status = 'done' AND r.doc_category = '保单'"
         )
         params = [customer_key, customer_key]
+        if policy_type:
+            sql += " AND pf.policy_type = %s"
+            params.append(policy_type)
         if enterprise_id is not None:
             sql += " AND r.enterprise_id = %s"
             params.append(enterprise_id)
@@ -228,7 +238,7 @@ def get_detail(task_id):
         return jsonify({"code": 404, "msg": "任务不存在"}), 404
     if not _can_operate_task(task):
         return jsonify({"code": 403, "msg": "权限不足"}), 403
-    history = _query_history(task["customer_key"], task.get("enterprise_id"))
+    history = _query_history(task["customer_key"], task.get("enterprise_id"), task.get("policy_type"))
     followups = rdb.get_followups(_db, task_id)
     task["created_at"] = str(task["created_at"])
     task["updated_at"] = str(task["updated_at"])
@@ -360,7 +370,8 @@ def change_status():
     task_id = body.get("task_id")
     status = (body.get("status") or "").strip()
     remark = (body.get("remark") or "").strip()
-    if status not in ("pending", "following", "won", "lost"):
+    hold_reason = (body.get("hold_reason") or "").strip()
+    if status not in ("pending", "renew_pending", "transfer_pending", "transfer", "renewed", "stopped", "hold"):
         return jsonify({"code": 400, "msg": "非法状态"}), 400
 
     task = rdb.get_task(_db, task_id)
@@ -369,11 +380,19 @@ def change_status():
     if not _can_operate_task(task):
         return jsonify({"code": 403, "msg": "权限不足"}), 403
 
-    rdb.update_status(_db, task_id, status)
-    rdb.set_hint(_db, task_id, None, None)  # 状态变更（尤其标won/忽略提示）清空续保检测提示
+    # 暂不考虑(hold)写入原因；改为其他状态时清空原因
+    rdb.update_status(_db, task_id, status, hold_reason=(hold_reason if status == "hold" else ""))
+    # 成交(续保成功/转保成功)保留续保检测提示 hint 供"查看新保单"；其余状态变更清空提示
+    if status not in ("renewed", "transfer"):
+        rdb.set_hint(_db, task_id, None, None)
+    _labels = {"pending": "待跟进", "renew_pending": "续保待确认", "transfer_pending": "转保待确认", "renewed": "续保成功", "transfer": "转保成功", "stopped": "停保", "hold": "暂不考虑"}
+    _content = remark or (
+        f"暂不考虑：{hold_reason}" if (status == "hold" and hold_reason)
+        else f"状态变更为：{_labels.get(status, status)}"
+    )
     rdb.add_followup(
         _db, task_id, g.current_user["user_id"], _operator_name(), "status_change",
-        content=remark or f"状态变更为：{status}",
+        content=_content,
     )
     return jsonify({"code": 0, "msg": "状态已更新"})
 
@@ -446,10 +465,10 @@ def upload_qrcode():
 _EXPORT_HEADERS = [
     ("plate_no", "车牌号"), ("vin", "车架号"), ("insured", "被保险人"),
     ("applicant", "投保人"), ("company_short", "承保公司"), ("policy_type", "险种"),
-    ("end_date", "到期日"), ("total_premium", "上期保费"),
-    ("assignee_name", "跟进人"), ("status", "状态"), ("remark", "备注"),
+    ("sign_date", "签单日期"), ("end_date", "到期日"), ("total_premium", "上期保费"),
+    ("assignee_name", "跟进人"), ("status", "续保状态"), ("hold_reason", "暂不考虑原因"), ("remark", "备注"),
 ]
-_STATUS_LABEL = {"pending": "待跟进", "following": "跟进中", "won": "已成交", "lost": "已流失", "expired": "已过期"}
+_STATUS_LABEL = {"pending": "待跟进", "renew_pending": "续保待确认", "transfer_pending": "转保待确认", "renewed": "续保成功", "transfer": "转保成功", "stopped": "停保", "hold": "暂不考虑"}
 
 
 @renewal_bp.route("/export", methods=["GET"])
@@ -466,7 +485,7 @@ def export():
         _db, page=1, page_size=_EXPORT_ROW_LIMIT + 1, enterprise_id=enterprise_id,
         assignee_ids=assignee_ids, status=filters["status"],
         date_start=filters["date_start"], date_end=filters["date_end"],
-        keyword=filters["keyword"],
+        keyword=filters["keyword"], only_actionable=False,  # 导出续保台账导全量(含已续保/停保)供主管核对
     )
     tasks = result["tasks"]
     if len(tasks) > _EXPORT_ROW_LIMIT:
@@ -522,3 +541,34 @@ def export():
         download_name=filename,
     )
     return resp
+
+
+# ============================================================
+# 续保推送群绑定（超管在企业管理页配置：每个企业绑定若干群，到期提醒推送到这些群）
+# ============================================================
+
+@renewal_bp.route("/push-rooms", methods=["GET"])
+@admin_required
+def get_push_rooms_api():
+    eid = request.args.get("enterprise_id")
+    if not eid:
+        return jsonify({"code": 400, "msg": "缺少 enterprise_id"}), 400
+    try:
+        rooms = rpdb.get_push_rooms(_db, int(eid))
+    except (TypeError, ValueError):
+        return jsonify({"code": 400, "msg": "enterprise_id 非法"}), 400
+    return jsonify({"code": 0, "data": {"rooms": rooms}})
+
+
+@renewal_bp.route("/push-rooms", methods=["POST"])
+@admin_required
+def save_push_rooms_api():
+    body = request.get_json(force=True) or {}
+    eid = body.get("enterprise_id")
+    if not eid:
+        return jsonify({"code": 400, "msg": "缺少 enterprise_id"}), 400
+    try:
+        rpdb.set_push_rooms(_db, int(eid), body.get("rooms") or [])
+    except (TypeError, ValueError):
+        return jsonify({"code": 400, "msg": "enterprise_id 非法"}), 400
+    return jsonify({"code": 0, "msg": "已保存"})

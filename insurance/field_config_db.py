@@ -24,7 +24,34 @@ _ACTIVE_TPL_TTL = 60
 # 支持的 config_type 类型
 CONFIG_TYPES = ["company_alias", "policy_type_alias", "date_format", "fee_formula",
                 "list_columns", "export_columns", "remark_selector", "group_fill_keywords",
-                "ratio_rule"]
+                "ratio_rule", "policy_sort", "fill_proposer"]
+
+# 保单排序：同一车牌下按险种大类排序，顺序可由用户在页面列配置里拖动调整、跟模板绑定。
+# 「同一车牌排在一起」是默认行为（常驻，无开关），用户只调险种大类的先后顺序。
+# 三大类固定，默认顺序 交强险 > 商业险 > 非车险。enabled 恒为 True（保留字段兼容存储结构）。
+POLICY_SORT_CATEGORIES = ["交强险", "商业险", "非车险"]
+DEFAULT_POLICY_SORT = {"enabled": True, "order": list(POLICY_SORT_CATEGORIES)}
+
+
+def classify_policy_category(policy_type: str) -> str:
+    """把具体险种名归到三大类之一：交强险 / 商业险 / 非车险。
+    与系统规范分类 get_policy_type_code 一致：交强→交强险；含"商业"等→商业险；
+    其余(驾乘/意外/尊享等非标准产品名)兜底→非车险。"""
+    pt = policy_type or ""
+    if "交强" in pt or "交通事故责任强制" in pt or "交通事故强制保险" in pt:
+        return "交强险"
+    if "商业" in pt or "机动车辆保险" in pt or "机动车辆综合险" in pt:
+        return "商业险"
+    return "非车险"
+
+
+def policy_sort_rank(policy_type: str, order: list) -> int:
+    """按配置顺序返回险种大类的排序序号（越小越靠前）；未知归到末尾。"""
+    cat = classify_policy_category(policy_type)
+    try:
+        return order.index(cat)
+    except (ValueError, AttributeError):
+        return len(POLICY_SORT_CATEGORIES)
 
 # 默认模板名
 DEFAULT_TEMPLATE_NAME = "默认模板"
@@ -789,6 +816,12 @@ def get_effective_config(db, user_id: int, role: str, parent_id=None) -> dict:
             config = {}
         config["plate_format_pingan"] = True
 
+    # 注入模板级开关：投保人为空时用被保人补充
+    if get_fill_proposer(db, user_id, role, parent_id):
+        if config is None:
+            config = {}
+        config["fill_proposer"] = True
+
     # 注入「百分比」标记字段集合：列配置中勾选了 is_percent 的自定义字段
     # 用于 apply_user_config_to_fields 把用户填的百分数（10）按 10% 处理
     percent_keys = get_percent_fields(db, user_id, role, parent_id)
@@ -975,6 +1008,163 @@ def get_column_config(db, config_type: str, user_id: int, role: str, parent_id=N
         conn.close()
 
 
+def get_policy_sort(db, user_id: int, role: str, parent_id=None) -> dict:
+    """
+    获取「保单排序」配置（跟当前活跃模板绑定），按 user → enterprise → global 优先级查找。
+    返回 {"enabled": bool, "order": [三大类顺序]}；未配置时返回 DEFAULT_POLICY_SORT。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        active = get_active_template(db, user_id)
+        active_tpl = active.get("template_name", DEFAULT_TEMPLATE_NAME)
+        active_source = active.get("source", "own")
+
+        search_order = []
+        if active_source == "system":
+            search_order.append(("global", None))
+        elif active_source == "enterprise" and parent_id is not None:
+            search_order.append(("enterprise", parent_id))
+        else:
+            if role == "employee" and parent_id is not None:
+                search_order.append(("user", user_id))
+                search_order.append(("enterprise", parent_id))
+            elif role == "enterprise":
+                search_order.append(("enterprise", parent_id or user_id))
+            elif role == "super_admin":
+                search_order.append(("global", None))
+
+        for scope, scope_id in search_order:
+            sid_cond, sid_params = _scope_id_condition(scope_id)
+            for tpl in ([active_tpl, DEFAULT_TEMPLATE_NAME] if active_tpl != DEFAULT_TEMPLATE_NAME else [DEFAULT_TEMPLATE_NAME]):
+                cursor.execute(
+                    f"SELECT config_value FROM user_field_config "
+                    f"WHERE scope = %s AND {sid_cond} AND config_type = 'policy_sort' "
+                    f"AND config_key = 'config' AND template_name = %s LIMIT 1",
+                    [scope] + sid_params + [tpl]
+                )
+                row = cursor.fetchone()
+                if row:
+                    break
+            else:
+                row = None
+            if row:
+                try:
+                    cfg = json.loads(row["config_value"])
+                    order = [c for c in (cfg.get("order") or []) if c in POLICY_SORT_CATEGORIES]
+                    # 补齐缺失的大类（保持在末尾），保证三类都在
+                    for c in POLICY_SORT_CATEGORIES:
+                        if c not in order:
+                            order.append(c)
+                    return {"enabled": True, "order": order}  # 常驻生效，忽略旧存储的 enabled
+                except (TypeError, json.JSONDecodeError):
+                    pass
+        return dict(DEFAULT_POLICY_SORT)
+    finally:
+        conn.close()
+
+
+def get_policy_sort_for_template(db, scope: str, scope_id, template_name: str) -> dict:
+    """直接读指定模板的「保单排序」配置（设置态用，不走活跃模板优先级搜索）。"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        sid_cond, sid_params = _scope_id_condition(scope_id)
+        cursor.execute(
+            f"SELECT config_value FROM user_field_config WHERE scope = %s AND {sid_cond} "
+            f"AND config_type = 'policy_sort' AND config_key = 'config' AND template_name = %s LIMIT 1",
+            [scope] + sid_params + [template_name]
+        )
+        row = cursor.fetchone()
+        if row:
+            try:
+                cfg = json.loads(row["config_value"])
+                order = [c for c in (cfg.get("order") or []) if c in POLICY_SORT_CATEGORIES]
+                for c in POLICY_SORT_CATEGORIES:
+                    if c not in order:
+                        order.append(c)
+                return {"enabled": True, "order": order}  # 常驻生效，忽略旧存储的 enabled
+            except (TypeError, json.JSONDecodeError):
+                pass
+        return dict(DEFAULT_POLICY_SORT)
+    finally:
+        conn.close()
+
+
+def save_policy_sort(db, scope: str, scope_id, template_name: str, enabled: bool, order: list, visible: bool = False):
+    """保存「保单排序」配置到指定模板（config_type=policy_sort, config_key=config）。"""
+    order = [c for c in (order or []) if c in POLICY_SORT_CATEGORIES]
+    for c in POLICY_SORT_CATEGORIES:
+        if c not in order:
+            order.append(c)
+    payload = json.dumps({"enabled": bool(enabled), "order": order}, ensure_ascii=False)
+    save_template_config(db, scope, scope_id, template_name, "policy_sort",
+                         [{"key": "config", "value": payload}], visible=visible)
+
+
+def _fill_proposer_search_order(db, user_id, role, parent_id):
+    active = get_active_template(db, user_id)
+    active_source = active.get("source", "own")
+    order = []
+    if active_source == "system":
+        order.append(("global", None))
+    elif active_source == "enterprise" and parent_id is not None:
+        order.append(("enterprise", parent_id))
+    else:
+        if role == "employee" and parent_id is not None:
+            order.append(("user", user_id)); order.append(("enterprise", parent_id))
+        elif role == "enterprise":
+            order.append(("enterprise", parent_id or user_id))
+        elif role == "super_admin":
+            order.append(("global", None))
+    return order, active.get("template_name", DEFAULT_TEMPLATE_NAME)
+
+
+def get_fill_proposer(db, user_id: int, role: str, parent_id=None) -> bool:
+    """获取「投保人为空时用被保人补充」开关（跟当前活跃模板绑定），默认关闭。"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        search_order, active_tpl = _fill_proposer_search_order(db, user_id, role, parent_id)
+        for scope, scope_id in search_order:
+            sid_cond, sid_params = _scope_id_condition(scope_id)
+            for tpl in ([active_tpl, DEFAULT_TEMPLATE_NAME] if active_tpl != DEFAULT_TEMPLATE_NAME else [DEFAULT_TEMPLATE_NAME]):
+                cursor.execute(
+                    f"SELECT config_value FROM user_field_config WHERE scope = %s AND {sid_cond} "
+                    f"AND config_type = 'fill_proposer' AND config_key = 'enabled' AND template_name = %s LIMIT 1",
+                    [scope] + sid_params + [tpl]
+                )
+                row = cursor.fetchone()
+                if row:
+                    return str(row["config_value"]) in ("1", "true", "True")
+        return False
+    finally:
+        conn.close()
+
+
+def get_fill_proposer_for_template(db, scope: str, scope_id, template_name: str) -> bool:
+    """直接读指定模板的「投保人补充」开关（设置态用）。"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        sid_cond, sid_params = _scope_id_condition(scope_id)
+        cursor.execute(
+            f"SELECT config_value FROM user_field_config WHERE scope = %s AND {sid_cond} "
+            f"AND config_type = 'fill_proposer' AND config_key = 'enabled' AND template_name = %s LIMIT 1",
+            [scope] + sid_params + [template_name]
+        )
+        row = cursor.fetchone()
+        return bool(row) and str(row["config_value"]) in ("1", "true", "True")
+    finally:
+        conn.close()
+
+
+def save_fill_proposer(db, scope: str, scope_id, template_name: str, enabled: bool, visible: bool = False):
+    """保存「投保人补充」开关到指定模板。"""
+    save_template_config(db, scope, scope_id, template_name, "fill_proposer",
+                         [{"key": "enabled", "value": "1" if enabled else "0"}], visible=visible)
+
+
 def get_percent_fields(db, user_id: int, role: str, parent_id=None) -> set:
     """
     返回被标记为「百分比」的自定义字段 key 集合。
@@ -1066,51 +1256,50 @@ def _normalize_sort_config(val) -> dict:
 
 def get_default_sort(db, config_type: str, user_id: int, role: str, parent_id=None) -> dict:
     """
-    获取列配置的默认排序（config_key='default_sort'）。
-    查找优先级与 get_column_config 一致：按当前启用模板决定 scope，
-    活跃模板找不到再查默认模板，全部未配置返回 DEFAULT_SORT_CONFIG。
+    获取默认排序（config_key='default_sort'）。
+
+    默认排序不是「模板属性」，而是每个用户可自行更改的「初始项」，与当前启用的是
+    哪个模板无关。因此这里按【作用域】回退、且【不绑定模板】查找：
+      - 员工：永远优先取本人（scope=user）保存过的排序——不管当前启用的是自己的模板
+        还是企业/系统模板；本人没设置过再回退企业 → 全局的初始默认。
+      - 企业管理员：取企业级设置。
+      - 超管：取全局设置。
+    全部未配置时返回 DEFAULT_SORT_CONFIG。
     """
     if config_type not in ("list_columns", "export_columns"):
         return dict(DEFAULT_SORT_CONFIG)
 
+    # 仅按作用域回退（default_sort 是作用域级的单一初始项，不随模板变化）
+    search_order = []
+    if role == "employee":
+        search_order.append(("user", user_id))
+        if parent_id is not None:
+            search_order.append(("enterprise", parent_id))
+        search_order.append(("global", None))
+    elif role == "enterprise":
+        search_order.append(("enterprise", parent_id or user_id))
+        search_order.append(("global", None))
+    else:  # super_admin
+        search_order.append(("global", None))
+
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-        active = get_active_template(db, user_id)
-        active_tpl = active.get("template_name", DEFAULT_TEMPLATE_NAME)
-        active_source = active.get("source", "own")
-
-        # 搜索顺序与 get_column_config 保持一致
-        search_order = []
-        if active_source == "system":
-            search_order.append(("global", None))
-        elif active_source == "enterprise" and parent_id is not None:
-            search_order.append(("enterprise", parent_id))
-        else:
-            if role == "employee" and parent_id is not None:
-                search_order.append(("user", user_id))
-                search_order.append(("enterprise", parent_id))
-            elif role == "enterprise":
-                search_order.append(("enterprise", parent_id or user_id))
-            elif role == "super_admin":
-                search_order.append(("global", None))
-
         for scope, scope_id in search_order:
             sid_cond, sid_params = _scope_id_condition(scope_id)
-            for tpl in ([active_tpl, DEFAULT_TEMPLATE_NAME] if active_tpl != DEFAULT_TEMPLATE_NAME else [DEFAULT_TEMPLATE_NAME]):
-                cursor.execute(
-                    f"SELECT config_value FROM user_field_config "
-                    f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'default_sort' "
-                    f"AND template_name = %s LIMIT 1",
-                    [scope] + sid_params + [config_type, tpl]
-                )
-                row = cursor.fetchone()
-                if row:
-                    try:
-                        return _normalize_sort_config(json.loads(row["config_value"]))
-                    except (TypeError, json.JSONDecodeError):
-                        pass
+            # 不按 template_name 过滤；历史上可能按模板存过多行，取最近一次为准
+            cursor.execute(
+                f"SELECT config_value FROM user_field_config "
+                f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'default_sort' "
+                f"ORDER BY updated_at DESC LIMIT 1",
+                [scope] + sid_params + [config_type]
+            )
+            row = cursor.fetchone()
+            if row:
+                try:
+                    return _normalize_sort_config(json.loads(row["config_value"]))
+                except (TypeError, json.JSONDecodeError):
+                    pass
         return dict(DEFAULT_SORT_CONFIG)
     finally:
         conn.close()
@@ -1119,38 +1308,43 @@ def get_default_sort(db, config_type: str, user_id: int, role: str, parent_id=No
 def save_default_sort(db, config_type: str, scope: str, scope_id, sort_config: dict,
                       template_name: str = None):
     """
-    保存列配置的默认排序（config_key='default_sort'），与 save_column_config 同作用域同模板。
+    保存默认排序（config_key='default_sort'）。
+
+    默认排序是「作用域级的单一初始项」，与模板无关，因此忽略 template_name：
+    同一 (scope, scope_id, config_type) 只保留一行，保存前先清掉该作用域下所有
+    历史行（含早期按模板名存的多行），保证每个用户/企业只有一个当前生效值。
     """
-    tpl_name = template_name or DEFAULT_TEMPLATE_NAME
-    visible_val = 0 if template_name else 1
     value = json.dumps(_normalize_sort_config(sort_config), ensure_ascii=False)
+    # 固定模板名占位（表结构 template_name NOT NULL），读取端不再依赖它
+    tpl_name = DEFAULT_TEMPLATE_NAME
     conn = db.pool.connection()
     try:
         cursor = conn.cursor()
         sid_cond, sid_params = _scope_id_condition(scope_id)
 
+        # 清掉该作用域该类型下的所有旧排序行（不限模板）
         cursor.execute(
             f"DELETE FROM user_field_config "
-            f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'default_sort' "
-            f"AND template_name = %s",
-            [scope] + sid_params + [config_type, tpl_name]
+            f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'default_sort'",
+            [scope] + sid_params + [config_type]
         )
         if scope_id is None:
             cursor.execute(
                 "INSERT INTO user_field_config "
                 "(scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
-                "VALUES (%s, NULL, %s, %s, 'default_sort', %s, %s)",
-                [scope, tpl_name, config_type, value, visible_val]
+                "VALUES (%s, NULL, %s, %s, 'default_sort', %s, 1)",
+                [scope, tpl_name, config_type, value]
             )
         else:
             cursor.execute(
                 "INSERT INTO user_field_config "
                 "(scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
-                "VALUES (%s, %s, %s, %s, 'default_sort', %s, %s)",
-                [scope, scope_id, tpl_name, config_type, value, visible_val]
+                "VALUES (%s, %s, %s, %s, 'default_sort', %s, 1)",
+                [scope, scope_id, tpl_name, config_type, value]
             )
         conn.commit()
-        logger.debug("默认排序已保存: scope=%s config_type=%s value=%s", scope, config_type, value)
+        logger.debug("默认排序已保存: scope=%s scope_id=%s config_type=%s value=%s",
+                     scope, scope_id, config_type, value)
     finally:
         conn.close()
 
@@ -2238,5 +2432,12 @@ def apply_user_config_to_fields(config: dict, fields: dict, formula_only: bool =
                     result["车牌号"] = formatted
                 if "车牌" in result and "车牌" not in manual_fields:
                     result["车牌"] = formatted
+
+    # 7. 投保人为空时用被保人补充（模板开关，逐条判断）：只在投保人无值且被保人有值时补
+    if config.get("fill_proposer") and "投保人" not in manual_fields:
+        if not str(result.get("投保人") or "").strip():
+            _insured = str(result.get("被保人") or result.get("被保险人") or "").strip()
+            if _insured:
+                result["投保人"] = _insured
 
     return result

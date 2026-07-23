@@ -205,6 +205,8 @@
                                 <th>企业名称</th>
                                 <th>跟进状态</th>
                                 <th>接入时间</th>
+                                <th>套餐到期</th>
+                                <th>账号密码</th>
                                 <th>操作</th>
                             </tr>
                         </thead>
@@ -218,9 +220,32 @@
                                         <option value="正常使用">正常使用</option>
                                         <option value="待使用">待使用</option>
                                         <option value="无使用（体量太小）">无使用（体量太小）</option>
+                                        <option value="暂不需要">暂不需要</option>
                                     </select>
                                 </td>
-                                <td class="text-gray-400">{{ c.onboarded_at ? formatTime(c.onboarded_at) : '未接入' }}</td>
+                                <td class="text-gray-400">{{ (c.follow_status === '正常使用' && c.onboarded_at) ? formatTime(c.onboarded_at) : '未接入' }}</td>
+                                <td>
+                                    <template v-if="planExpiryStr(c)">
+                                        <div style="font-size:13px;font-weight:600;"
+                                            :style="{color: planDaysLeft(c) <= 0 ? '#dc2626' : planDaysLeft(c) <= 7 ? '#d97706' : '#059669'}">
+                                            {{ planDaysLeft(c) <= 0 ? '已到期' : planDaysLeft(c) + ' 天后到期' }}
+                                        </div>
+                                        <div style="font-size:12px;color:#9ca3af;margin-top:2px;">{{ planExpiryStr(c) }}</div>
+                                    </template>
+                                    <span v-else style="font-size:12px;color:#d1d5db;">未设置</span>
+                                    <template v-if="c.next_plan_type">
+                                        <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #e5e7eb;font-size:11px;color:#9ca3af;">
+                                            续费 {{ nextPlanExpiryStr(c) }} 起生效
+                                        </div>
+                                    </template>
+                                </td>
+                                <td>
+                                    <template v-if="c.admin_password">
+                                        <div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;font-weight:600;color:#1c1410;letter-spacing:0.5px;user-select:all;">{{ c.admin_password }}</div>
+                                        <div style="font-size:11px;color:#9ca3af;margin-top:2px;">账号 {{ c.admin_account }}</div>
+                                    </template>
+                                    <span v-else style="font-size:12px;color:#d1d5db;" title="该账号未存明文密码，覆盖为随机密码后即显示">—</span>
+                                </td>
                                 <td>
                                     <button class="op-btn orange" @click="gotoManage(c)">客户系统配置</button>
                                     <button class="op-btn" @click="openProfile(c)">客户档案</button>
@@ -246,7 +271,22 @@
                                     <option value="正常使用">正常使用</option>
                                     <option value="待使用">待使用</option>
                                     <option value="无使用（体量太小）">无使用（体量太小）</option>
+                                    <option value="暂不需要">暂不需要</option>
                                 </select>
+                            </div></div>
+                            <div class="cc-item"><div class="k">套餐到期</div><div class="vv">
+                                <template v-if="planExpiryStr(c)">
+                                    <span :style="{color: planDaysLeft(c) <= 0 ? '#dc2626' : planDaysLeft(c) <= 7 ? '#d97706' : '#059669', fontWeight:600}">{{ planDaysLeft(c) <= 0 ? '已到期' : planDaysLeft(c) + ' 天后到期' }}</span>
+                                    <span style="color:#9ca3af;margin-left:4px;">{{ planExpiryStr(c) }}</span>
+                                </template>
+                                <span v-else style="color:#d1d5db;">未设置</span>
+                            </div></div>
+                            <div class="cc-item"><div class="k">账号密码</div><div class="vv">
+                                <template v-if="c.admin_password">
+                                    <span style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600;color:#1c1410;letter-spacing:0.5px;user-select:all;">{{ c.admin_password }}</span>
+                                    <span style="color:#9ca3af;margin-left:4px;">账号 {{ c.admin_account }}</span>
+                                </template>
+                                <span v-else style="color:#d1d5db;">—</span>
                             </div></div>
                         </div>
                         <div class="cc-ops">
@@ -272,7 +312,7 @@
                     <div><div style="color:#9ca3af;font-size:11px;margin-bottom:3px;">企业联系人</div><div>{{ profileTarget.contact_person || '未填' }}</div></div>
                     <div><div style="color:#9ca3af;font-size:11px;margin-bottom:3px;">负责人联系电话</div><div>{{ profileTarget.contact_phone || '未填' }}</div></div>
                     <div><div style="color:#9ca3af;font-size:11px;margin-bottom:3px;">推荐人</div><div>{{ profileTarget.referrer_name || '无' }}</div></div>
-                    <div><div style="color:#9ca3af;font-size:11px;margin-bottom:3px;">接入时间</div><div>{{ profileTarget.onboarded_at ? formatTime(profileTarget.onboarded_at) : '未接入' }}</div></div>
+                    <div><div style="color:#9ca3af;font-size:11px;margin-bottom:3px;">接入时间</div><div>{{ (profileTarget.follow_status === '正常使用' && profileTarget.onboarded_at) ? formatTime(profileTarget.onboarded_at) : '未接入' }}</div></div>
                 </div>
                 <div style="font-size:12px;color:#6b7280;margin-bottom:6px;">跟进记录</div>
                 <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px;">
@@ -511,6 +551,31 @@ createApp({
         function formatTime(t) {
             if (!t) return '-';
             return t.replace('T', ' ').substring(0, 16);
+        }
+
+        // 套餐到期计算（与企业管理页 admin_enterprises.html 逻辑一致）
+        function planExpiry(c) {
+            if (!c.plan_start_at) return null;
+            const start = new Date(String(c.plan_start_at).replace(' ', 'T'));
+            if (isNaN(start.getTime())) return null;
+            const months = c.plan_months || (c.plan_type === 'trial' ? 2 : 1);
+            const d = new Date(start);
+            d.setMonth(d.getMonth() + months);
+            return d;
+        }
+        function planDaysLeft(c) {
+            const exp = planExpiry(c);
+            if (!exp) return null;
+            return Math.ceil((exp - Date.now()) / 86400000);
+        }
+        function planExpiryStr(c) {
+            const exp = planExpiry(c);
+            if (!exp || isNaN(exp.getTime())) return '';
+            return exp.toISOString().slice(0, 10);
+        }
+        function nextPlanExpiryStr(c) {
+            if (!c.next_plan_start_at) return '';
+            return String(c.next_plan_start_at).slice(0, 10);
         }
 
         async function fetchCustomers() {
@@ -788,7 +853,7 @@ createApp({
             ready, noPermission, currentUser, loading, customers, custSearch, filteredCustomers,
             activeGroup, groupedCustomers, sidebarGroups, displayedCustomers,
             mobileMenuOpen,
-            formatTime, updateStatus, gotoManage, logout,
+            formatTime, planExpiryStr, planDaysLeft, nextPlanExpiryStr, updateStatus, gotoManage, logout,
             profileTarget, profileFollowups, newFollowupDate, newFollowupContent, profileSaving,
             openProfile, closeProfile, saveProfile, addFollowup,
             deleteTarget, deleting, confirmDelete, doDelete,

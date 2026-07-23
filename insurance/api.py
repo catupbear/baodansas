@@ -42,6 +42,8 @@ from .field_config_db import (
     get_active_template, set_active_template,
     get_effective_config, apply_user_config_to_fields, match_fee_formulas, _format_date,
     get_column_config, save_column_config, delete_column_config,
+    get_policy_sort, save_policy_sort,
+    get_fill_proposer, save_fill_proposer, get_fill_proposer_for_template,
     get_default_sort, save_default_sort,
     get_user_fixed_values, save_user_fixed_values,
     get_remark_selector_config, save_remark_selector_config,
@@ -543,6 +545,16 @@ def list_records():
             effective_enterprise_id = _get_enterprise_id_filter()
             effective_user_ids = _get_user_ids_filter()
 
+        # 「保单排序」配置（跟当前活跃模板绑定）：查询前解析，用于列表按车牌分组+险种排序。
+        # 超管带企业筛选时按被查看企业的管理员账号解析配置（与下方列展示配置一致）。
+        _ps_uid = g.current_user["user_id"]; _ps_role = g.current_user["role"]; _ps_pid = g.current_user.get("parent_id")
+        if _ps_role == ROLE_SUPER_ADMIN and effective_enterprise_id:
+            from auth.db import get_enterprise_admin_user
+            _pa = get_enterprise_admin_user(_db, effective_enterprise_id)
+            if _pa:
+                _ps_uid, _ps_role, _ps_pid = _pa["id"], _pa["role"], _pa["parent_id"]
+        policy_sort_cfg = get_policy_sort(_db, _ps_uid, _ps_role, _ps_pid)
+
         result = query_insurance_records(
             _db,
             page=page,
@@ -581,6 +593,7 @@ def list_records():
             review_status=review_status,
             sort_by=sort_by,
             sort_order=sort_order,
+            policy_sort=policy_sort_cfg,
         )
         # 列表返回 display_fields（轻量映射字段）替代 parsed_fields
         # 获取用户字段配置，应用简称/日期格式/公式计算（结果 TTL 缓存 60 秒）
@@ -1040,6 +1053,22 @@ def list_records():
                 if _before_val != _after_val:
                     logger.debug("[DEBUG-列表] record_id=%s apply_user_config前后交强到期时间变化: %s → %s",
                                 record.get("id"), _before_val, _after_val)
+                # 「投保人补充」开启且投保人已被补上：从需人工补充提示里去掉"缺少投保人"，
+                # 若因此不再缺任何字段则清除异常标记（避免"已补投保人却仍提示缺投保人"，合并行同步生效）
+                if user_config.get("fill_proposer") and record.get("is_abnormal") and record.get("hint"):
+                    if str(record["display_fields"].get("投保人") or "").strip():
+                        _hp = []
+                        for _p in str(record["hint"]).split("；"):
+                            if not _p:
+                                continue
+                            if _p.startswith("缺少："):
+                                _fs = [_f for _f in _p[3:].split("、") if _f and not _f.startswith("投保人")]
+                                if _fs:
+                                    _hp.append("缺少：" + "、".join(_fs))
+                            else:
+                                _hp.append(_p)
+                        record["hint"] = "；".join(_hp)
+                        record["is_abnormal"] = 1 if _hp else 0
 
         # 注入交强到期时间（使用格式化前构建的原始终保日期映射，并按其配置格式格式化）
         if _need_compulsory_end:
@@ -1186,6 +1215,7 @@ def list_records():
 
         # 复用已加载的页面列配置
         result["column_config"] = list_col_cfg
+        result["policy_sort"] = policy_sort_cfg
 
         # 用「与列表完全相同的筛选」内联返回 Tab 统计，确保列表与统计同源同时刻、
         # 永不打架（彻底杜绝"记数与实际识别数量对不上"）。statu/doc_category/is_abnormal
@@ -3776,6 +3806,69 @@ def save_remark_selector_config_api():
         return jsonify({"code": 0, "msg": "已保存"})
     except Exception as e:
         logger.exception("保存备注快捷选择配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/policy-sort/config", methods=["GET"])
+@login_required
+def get_policy_sort_config_api():
+    """读取「保单排序」配置（跟模板绑定）。带 template 参数=设置态读指定模板；否则运行态读当前启用模板。"""
+    try:
+        from insurance.field_config_db import get_policy_sort_for_template
+        if request.args.get("template") or request.args.get("template_name"):
+            scope, scope_id, template_name = _resolve_remark_settings_target()
+        else:
+            scope, scope_id, template_name = _resolve_remark_runtime_target()
+        cfg = get_policy_sort_for_template(_db, scope, scope_id, template_name)
+        return jsonify({"code": 0, "data": {"config": cfg, "template_name": template_name}})
+    except Exception as e:
+        logger.exception("读取保单排序配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/policy-sort/config", methods=["PUT"])
+@login_required
+def save_policy_sort_config_api():
+    """保存指定模板的「保单排序」配置（支持超管代管）。"""
+    try:
+        body = request.get_json(force=True) or {}
+        scope, scope_id, template_name = _resolve_remark_settings_target(extra=body)
+        cfg = body.get("config", body)
+        save_policy_sort(_db, scope, scope_id, template_name,
+                         bool(cfg.get("enabled")), cfg.get("order") or [])
+        return jsonify({"code": 0, "msg": "已保存"})
+    except Exception as e:
+        logger.exception("保存保单排序配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/fill-proposer/config", methods=["GET"])
+@login_required
+def get_fill_proposer_config_api():
+    """读取「投保人为空时用被保人补充」开关（跟模板绑定）。"""
+    try:
+        if request.args.get("template") or request.args.get("template_name"):
+            scope, scope_id, template_name = _resolve_remark_settings_target()
+        else:
+            scope, scope_id, template_name = _resolve_remark_runtime_target()
+        enabled = get_fill_proposer_for_template(_db, scope, scope_id, template_name)
+        return jsonify({"code": 0, "data": {"enabled": enabled, "template_name": template_name}})
+    except Exception as e:
+        logger.exception("读取投保人补充开关失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/fill-proposer/config", methods=["PUT"])
+@login_required
+def save_fill_proposer_config_api():
+    """保存指定模板的「投保人补充」开关（支持超管代管）。"""
+    try:
+        body = request.get_json(force=True) or {}
+        scope, scope_id, template_name = _resolve_remark_settings_target(extra=body)
+        save_fill_proposer(_db, scope, scope_id, template_name, bool(body.get("enabled")))
+        return jsonify({"code": 0, "msg": "已保存"})
+    except Exception as e:
+        logger.exception("保存投保人补充开关失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 
@@ -7608,3 +7701,199 @@ def sales_dashboard_salesmen():
         return err
     from insurance import dashboard_db
     return jsonify({"code": 0, "data": dashboard_db.get_salesmen(_db, eid)})
+
+
+# ============================================================
+# 公户车盖章跟进：被保险人为公司（非个人）的保单列表 + 「是否已付」标记
+# ============================================================
+
+# 公户（企业被保险人）判定关键词
+_CORP_INSURED_REGEXP = ("公司|有限|集团|物流|贸易|运输|租赁|车队|工厂|商行|中心|合作社|服务部|"
+                        "经营部|事务所|门市|建筑|工程|科技|实业|电子|商贸|银行|医院|学校|幼儿园|合伙")
+
+
+def _seal_enterprise_scope():
+    """返回 (enterprise_id, err)。超管可传 enterprise_id 筛选（不传=全部）；企业侧固定本企业。"""
+    role = g.current_user.get("role")
+    if role == ROLE_SUPER_ADMIN:
+        eid = request.args.get("enterprise_id") or (request.get_json(silent=True) or {}).get("enterprise_id")
+        return (int(eid) if eid else None), None
+    eid = g.current_user.get("parent_id")
+    if not eid:
+        return None, (jsonify({"code": 403, "msg": "无企业归属"}), 403)
+    # 企业级开关：超管在企业管理里开启后客户才能用
+    try:
+        from auth.db import get_enterprise_by_id
+        _ent = get_enterprise_by_id(_db, int(eid))
+        if not _ent or not _ent.get("seal_tracking_enabled"):
+            return None, (jsonify({"code": 403, "msg": "公户车盖章跟进功能未开通，请联系客服", "seal_disabled": True}), 403)
+    except Exception:
+        pass
+    return int(eid), None
+
+
+@insurance_bp.route("/api/insurance/seal-tasks", methods=["GET"])
+@login_required
+def seal_tasks_list():
+    """公户车盖章跟进列表。参数：paid=''/0/1，keyword，page，page_size。
+    企业开了「按车牌合并」时，同车牌+同签单日期的保单合并为一组展示，标记已付按组整体操作。"""
+    eid, err = _seal_enterprise_scope()
+    if err:
+        return err
+    paid = (request.args.get("paid") or "").strip()
+    keyword = (request.args.get("keyword") or "").strip()
+    page = max(1, int(request.args.get("page", 1) or 1))
+    page_size = min(100, max(1, int(request.args.get("page_size", 20) or 20)))
+
+    conds = ["r.deleted_at IS NULL", "r.status = 'done'",
+             "(r.doc_category = '保单' OR r.doc_category = '' OR r.doc_category IS NULL)",
+             "pf.insured REGEXP %s"]
+    params = [_CORP_INSURED_REGEXP]
+    if eid is not None:
+        conds.append("r.enterprise_id = %s")
+        params.append(eid)
+    if keyword:
+        conds.append("(pf.plate_no LIKE %s OR pf.insured LIKE %s OR pf.policy_no LIKE %s)")
+        kw = f"%{keyword}%"
+        params.extend([kw, kw, kw])
+    where = " AND ".join(conds)
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        # 开了「按车牌合并」的企业集合（该企业的组按 车牌+签单日期 合并）
+        cursor.execute("SELECT id FROM enterprises WHERE merge_by_plate = 1")
+        merge_ents = {r["id"] for r in cursor.fetchall()}
+
+        cursor.execute(
+            f"SELECT r.id AS record_id, r.enterprise_id, r.seal_paid, r.seal_paid_at, r.seal_paid_by, "
+            f"       pf.plate_no, pf.insured, pf.company_short, pf.policy_type, pf.policy_no, "
+            f"       pf.sign_date, pf.total_premium "
+            f"FROM insurance_records r JOIN insurance_policy_fields pf ON pf.record_id = r.id "
+            f"WHERE {where} ORDER BY r.id DESC", params)
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
+
+    # 分组：合并企业按 (企业, 车牌|保单号, 签单日期)；未开合并的企业每保单一组
+    groups = {}
+    order = []
+    for r in rows:
+        ent = r["enterprise_id"]
+        plate = (r.get("plate_no") or "").strip()
+        if ent in merge_ents and plate:
+            key = (ent, plate, (r.get("sign_date") or "").strip())
+        else:
+            key = (ent, "__rec__", r["record_id"])
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(r)
+
+    def _prem_sum(items):
+        total = 0.0
+        ok = True
+        for it in items:
+            try:
+                total += float(str(it.get("total_premium") or "0").replace(",", "") or 0)
+            except (TypeError, ValueError):
+                ok = False
+        return (f"{total:.2f}".rstrip("0").rstrip(".") if total else "") if ok else "、".join(
+            str(it.get("total_premium") or "") for it in items)
+
+    merged = []
+    for key in order:
+        items = groups[key]
+        types, nos = [], []
+        for it in items:
+            pt = (it.get("policy_type") or "").strip()
+            if pt and pt not in types:
+                types.append(pt)
+            no = (it.get("policy_no") or "").strip()
+            if no:
+                nos.append(no)
+        all_paid = all(it.get("seal_paid") for it in items)
+        paid_item = next((it for it in items if it.get("seal_paid")), None)
+        merged.append({
+            "record_ids": [it["record_id"] for it in items],
+            "record_id": items[0]["record_id"],
+            "enterprise_id": key[0],
+            "plate_no": items[0].get("plate_no") or "",
+            "insured": items[0].get("insured") or "",
+            "company_short": "、".join(sorted({(it.get("company_short") or "").strip() for it in items if (it.get("company_short") or "").strip()})),
+            "policy_type": "、".join(types),
+            "policy_nos": nos,
+            "policy_no": nos[0] if nos else "",
+            "sign_date": items[0].get("sign_date") or "",
+            "total_premium": _prem_sum(items) if len(items) > 1 else (items[0].get("total_premium") or ""),
+            "seal_paid": 1 if all_paid else 0,
+            "seal_paid_at": str(paid_item["seal_paid_at"]) if all_paid and paid_item and paid_item.get("seal_paid_at") else None,
+            "seal_paid_by": paid_item.get("seal_paid_by") if all_paid and paid_item else "",
+            "policy_count": len(items),
+            # 多单合并组的逐条明细，供前端「展开 N 条」查看
+            "children": [{
+                "record_id": it["record_id"],
+                "policy_type": (it.get("policy_type") or "").strip(),
+                "policy_no": (it.get("policy_no") or "").strip(),
+                "company_short": (it.get("company_short") or "").strip(),
+                "total_premium": it.get("total_premium") or "",
+                "sign_date": it.get("sign_date") or "",
+                "seal_paid": 1 if it.get("seal_paid") else 0,
+            } for it in items] if len(items) > 1 else [],
+        })
+
+    stats = {"unpaid": sum(1 for m in merged if not m["seal_paid"]),
+             "paid": sum(1 for m in merged if m["seal_paid"])}
+    if paid in ("0", "1"):
+        merged = [m for m in merged if m["seal_paid"] == int(paid)]
+    # 未付在前
+    merged.sort(key=lambda m: (m["seal_paid"], -max(m["record_ids"])))
+    total = len(merged)
+    pages = max(1, (total + page_size - 1) // page_size)
+    offset = (page - 1) * page_size
+    return jsonify({"code": 0, "data": {
+        "stats": stats, "total": total, "pages": pages, "page": page,
+        "tasks": merged[offset:offset + page_size],
+    }})
+
+
+@insurance_bp.route("/api/insurance/seal-tasks/mark-paid", methods=["POST"])
+@login_required
+def seal_task_mark_paid():
+    """批量标记/取消「已付」。body: {record_ids: [...], paid: 1/0}"""
+    eid, err = _seal_enterprise_scope()
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    paid = 1 if body.get("paid") else 0
+    ids = [int(i) for i in (body.get("record_ids") or []) if i]
+    if not ids:
+        return jsonify({"code": 400, "msg": "缺少 record_ids"}), 400
+    operator = ""
+    try:
+        from auth.db import get_user_by_id
+        _u = get_user_by_id(_db, g.current_user["user_id"])
+        operator = (_u or {}).get("name") or (_u or {}).get("phone") or ""
+    except Exception:
+        pass
+
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        ph = ",".join(["%s"] * len(ids))
+        cursor.execute(f"SELECT id, enterprise_id FROM insurance_records WHERE id IN ({ph}) AND deleted_at IS NULL", ids)
+        recs = cursor.fetchall()
+        if not recs:
+            return jsonify({"code": 404, "msg": "记录不存在"}), 404
+        if g.current_user.get("role") != ROLE_SUPER_ADMIN:
+            if any(r.get("enterprise_id") != eid for r in recs):
+                return jsonify({"code": 403, "msg": "无权限"}), 403
+        if paid:
+            cursor.execute(f"UPDATE insurance_records SET seal_paid=1, seal_paid_at=NOW(), seal_paid_by=%s WHERE id IN ({ph})",
+                           [operator[:64]] + ids)
+        else:
+            cursor.execute(f"UPDATE insurance_records SET seal_paid=0, seal_paid_at=NULL, seal_paid_by='' WHERE id IN ({ph})", ids)
+        conn.commit()
+        return jsonify({"code": 0, "msg": "已标记为已付" if paid else "已取消已付"})
+    finally:
+        conn.close()

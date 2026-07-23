@@ -19,6 +19,7 @@ from storage.db import Database  # noqa: E402
 from core.contacts import ContactsManager  # noqa: E402
 from insurance.db import get_insurance_config  # noqa: E402
 from insurance.flowbot_notify import send_flowbot_group_message  # noqa: E402
+from insurance import renewal_push_db  # noqa: E402
 from auth.jwt_utils import generate_token, init_jwt  # noqa: E402
 from auth.db import get_user_by_id  # noqa: E402
 
@@ -57,7 +58,8 @@ def ensure_reminder_log_table(db):
 
 def fetch_expiring_records(db):
     """
-    查未来 REMIND_WINDOW_DAYS 天内(含今天)到期、今天还没提醒过的保单。
+    查逾期 REMIND_WINDOW_DAYS 天内 ~ 未来 REMIND_WINDOW_DAYS 天内到期、今天还没提醒过的保单，
+    并排除 renewal_tasks 中已闭环(续保/停保/暂不考虑)的任务对应保单（只保留 pending 或尚无任务的）。
     同一 policy_no 只保留 record_id 最大(最新，覆盖"重新识别"产生的旧记录)的一条；
     空 policy_no 各自独立，不参与去重（与台账去重口径一致）。
     只推送 users.renewal_enabled=1 的账号跟单(insurance_records.user_id)的保单——续保提醒
@@ -68,24 +70,28 @@ def fetch_expiring_records(db):
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute("""
-            SELECT r.id AS record_id, r.roomid, r.sender, r.sender_name, r.user_id,
+            SELECT r.id AS record_id, r.enterprise_id, r.roomid, r.sender, r.sender_name, r.user_id,
                    pf.plate_no, pf.policy_no, pf.policy_type, pf.end_date_iso
             FROM insurance_records r
             JOIN insurance_policy_fields pf ON r.id = pf.record_id
             JOIN users u ON u.id = r.user_id
+            LEFT JOIN renewal_tasks rt
+                ON (rt.customer_key = pf.plate_no OR rt.customer_key = UPPER(pf.vin))
+               AND rt.policy_type = pf.policy_type
+               AND rt.enterprise_id = r.enterprise_id
             WHERE r.deleted_at IS NULL
               AND r.status = 'done'
               AND r.doc_category = '保单'
-              AND r.roomid IS NOT NULL AND r.roomid != ''
               AND u.renewal_enabled = 1
               AND pf.end_date_iso IS NOT NULL
-              AND pf.end_date_iso BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
+              AND pf.end_date_iso BETWEEN DATE_SUB(CURDATE(), INTERVAL %s DAY) AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
+              AND (rt.id IS NULL OR rt.status = 'pending')
               AND NOT EXISTS (
                   SELECT 1 FROM insurance_reminder_log rl
                   WHERE rl.record_id = r.id AND rl.remind_date = CURDATE()
               )
             ORDER BY r.id DESC
-        """, (REMIND_WINDOW_DAYS,))
+        """, (REMIND_WINDOW_DAYS, REMIND_WINDOW_DAYS))
         rows = cursor.fetchall()
     finally:
         conn.close()
@@ -201,15 +207,16 @@ def main():
         return
 
     today = date.today()
-    by_room = {}
+    by_enterprise = {}
     for r in records:
-        by_room.setdefault(r["roomid"], []).append(r)
+        by_enterprise.setdefault(r.get("enterprise_id"), []).append(r)
 
     total_sent_record_ids = []
-    for roomid, items in by_room.items():
-        room_name = _resolve_room_name(contacts_instances, roomid)
-        if not room_name:
-            logger.warning("群名解析为空，跳过 roomid=%s（%d条待提醒）", roomid, len(items))
+    for eid, items in by_enterprise.items():
+        # 该企业在企业管理页绑定的续保推送群（一企业可多群）
+        push_rooms = renewal_push_db.get_enabled_rooms_by_enterprise(db, eid) if eid else []
+        if not push_rooms:
+            logger.info("企业 %s 未配置续保推送群，跳过 %d 条待提醒", eid, len(items))
             continue
 
         # 按发送人分组，组内按剩余天数升序（越紧急越靠前）
@@ -217,20 +224,31 @@ def main():
         for r in items:
             by_sender.setdefault(r["sender"], []).append(r)
 
-        lines = ["【保单到期提醒】以下保单即将到期，请及时续保：", ""]
+        lines = ["【今日续保提醒】以下保单需尽快跟进续保：", ""]
         at_names = []
         for sender, plist in by_sender.items():
             plist.sort(key=lambda x: x["end_date_iso"])
             sender_name = _resolve_sender_name(contacts_instances, sender, plist[0].get("sender_name") or "")
             at_names.append(sender_name)
             lines.append(f"@{sender_name}")
+            # 按逾期🔴 / 即将到期🟠 分组展示
+            overdue_lines, soon_lines = [], []
             for r in plist:
                 days_left = (r["end_date_iso"] - today).days
                 plate = r.get("plate_no") or "未知车牌"
                 ptype = r.get("policy_type") or "保单"
                 end_str = r["end_date_iso"].strftime("%Y-%m-%d")
-                due_str = "今天到期" if days_left == 0 else f"还{days_left}天到期"
-                lines.append(f"{plate} {ptype} {due_str}({end_str})")
+                if days_left < 0:
+                    overdue_lines.append(f"· {plate} {ptype} —— 已逾期{-days_left}天({end_str})")
+                else:
+                    due_str = "今天到期" if days_left == 0 else f"还剩{days_left}天到期"
+                    soon_lines.append(f"· {plate} {ptype} —— {due_str}({end_str})")
+            if overdue_lines:
+                lines.append("🔴 已逾期：")
+                lines.extend(overdue_lines)
+            if soon_lines:
+                lines.append("🟠 即将到期：")
+                lines.extend(soon_lines)
             # 免登录直达链接：带这个跟单人自己账号的登录token，点开直接进续保管理系统页面
             _uid = plist[0].get("user_id")
             if _uid:
@@ -244,14 +262,20 @@ def main():
             lines.append("")
 
         message = "\n".join(lines).rstrip()
-        ok = send_flowbot_group_message(room_name, at_names, message, robot_id)
-        if ok:
-            ids = [r["record_id"] for r in items]
-            total_sent_record_ids.extend(ids)
-            logger.info("到期提醒已发送 room=%s(%s) 涉及%d条保单 @%s",
-                        room_name, roomid, len(items), at_names)
-        else:
-            logger.warning("到期提醒发送失败 room=%s(%s)，本轮不标记已提醒，明天会重试", room_name, roomid)
+        # 发到该企业绑定的每个续保推送群
+        sent_any = False
+        for pr in push_rooms:
+            room_name = _resolve_room_name(contacts_instances, pr["roomid"]) or pr.get("room_name") or pr["roomid"]
+            ok = send_flowbot_group_message(room_name, at_names, message, robot_id)
+            if ok:
+                sent_any = True
+                logger.info("续保提醒已发送 企业=%s room=%s(%s) 涉及%d条 @%s",
+                            eid, room_name, pr["roomid"], len(items), at_names)
+            else:
+                logger.warning("续保提醒发送失败 企业=%s room=%s(%s)，本轮不标记，明天重试",
+                               eid, room_name, pr["roomid"])
+        if sent_any:
+            total_sent_record_ids.extend([r["record_id"] for r in items])
 
     mark_reminded(db, total_sent_record_ids)
     logger.info("本次到期提醒完成，共%d个群命中，成功发送%d个群，%d条保单",

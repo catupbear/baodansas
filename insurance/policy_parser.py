@@ -72,6 +72,7 @@ COMPANY_SHORT_MAP = {
     "太平洋财产": "太平洋",
     "大家财产": "大家财险",
     "阳光财产": "阳光",
+    "阳光农业": "阳光农险",
     "太平财产": "太平",
     "国寿财产": "国寿财产",
     "人寿财产": "国寿财产",
@@ -610,7 +611,7 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "",
     _fill_same_party_id_number(fields)
 
     # ===== 车辆信息 =====
-    _extract_vehicle_info(text, fields, company_short, from_ocr)
+    _extract_vehicle_info(text, fields, company_short, from_ocr, policy_type)
 
     # ===== 费用信息 =====
     _extract_premium(text, fields, company_short)
@@ -1930,6 +1931,19 @@ def _extract_insured(text: str, text_merged: str, fields: dict, company_short: s
         if "被保险人" in fields:
             return
 
+    # ===== 华安商业险竖排表格：标签"被保/险人"被竖排拆成两行，姓名在"被保"行的上一行 =====
+    # "名 称 孙世利 联系电话 …\n被保\n证件号码 …\n险人\n地 址 …"（2026-07-22实测）
+    if company_short == "华安" and "被保险人" not in fields:
+        lines = text.split('\n')
+        for i, ln in enumerate(lines):
+            if ln.strip() == '被保' and i > 0:
+                m = re.match(r'\s*名\s*称\s*(\S{2,30})', lines[i - 1])
+                if m and _is_valid_person(m.group(1)):
+                    fields["被保险人"] = m.group(1)
+                break
+        if "被保险人" in fields:
+            return
+
     # ===== 紫金被保险人清单格式 =====
     # "被保险人清单" → 表头含"被保险人姓名" → 数据行"序号 姓名 ..."，可能多人
     if company_short == "紫金":
@@ -2830,7 +2844,7 @@ def _normalize_plate(plate: str) -> str:
     return plate[:2] + seq
 
 
-def _extract_vehicle_info(text: str, fields: dict, company_short: str, from_ocr: bool = False):
+def _extract_vehicle_info(text: str, fields: dict, company_short: str, from_ocr: bool = False, policy_type: str = ""):
     """提取车牌号、车架号、发动机号等"""
 
     # 车牌号
@@ -3300,6 +3314,10 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str, from_ocr:
         m = re.search(p, text)
         if m:
             val = m.group(1)
+            # 华安等表格压平：使用性质标签后串了"初登日期"的值（如 2018-08-16），
+            # 值成了日期。使用性质绝不是日期，命中日期格式则跳过，落到下方枚举兜底（营业货车等）。
+            if re.match(r'^\d{2,4}\s*[-/.年]\s*\d{1,2}\s*[-/.月]', val):
+                continue
             # 中华联合的"使1用1性1质"清理
             val = re.sub(r'1', '', val)
             # 表格被 OCR 压平时"使用性质"标签后直接跟下一个表头词（如安诚驾乘险"核定载客人数"），避免误把标签当值
@@ -3307,14 +3325,25 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str, from_ocr:
                 continue
             # 浙商等：车辆信息用"营业性质"无"使用性质"字段，标签命中的是条款"使用性质变更通知义务/改变使用性质"，
             # 值成了"变更通知义务"等条款文字。命中条款词则跳过，落到下方枚举兜底（非营业/家庭自用等）。
-            if re.search(r'变更|通知|义务|条款|责任|告知|说明|批改|批单|事故|导致', val):
+            # 众安驾乘险：使用性质仅出现在条款"标的车辆使用性质不符合上述约定或车辆核定载客量超过…"，
+            # 值被抓成"不符合上述约定或车辆"，补充条款专有词（约定/符合/标的/超过/载明，真实使用性质值绝不含）。
+            if re.search(r'变更|通知|义务|条款|责任|告知|说明|批改|批单|事故|导致|约定|符合|标的|超过|载明', val):
                 continue
-            if len(val) <= 10:
+            # 永安交强险等表格竖排压平：使用性质标签后跟到"机动车"竖排的"机"单字，
+            # 单字绝不是有效使用性质，跳过落到枚举兜底（家庭自用汽车等）
+            if 2 <= len(val) <= 10:
                 fields["使用性质"] = val
                 break
-    # 兜底：表格式保单（驾乘险等）使用性质值与标签错行、无标签锚点，按固定枚举词兜底
+    # 兜底：表格式保单（驾乘险等）使用性质值与标签错行、无标签锚点，按固定枚举词兜底。
     if "使用性质" not in fields:
-        m = re.search(r"(?<![一-鿿A-Za-z])(非营业|非营运|营业货车|营业客车|营运货车|营运客车|家庭自用|党政机关|出租租赁|城市公交|公路客运)(?![一-鿿])", text)
+        # 交强险车辆信息里使用性质可能是"家庭自用汽车/非营业客车"等全称，且交强险条款正文
+        # 不含这些全称词，可安全用带车型后缀（汽车/客车/货车）的枚举全文兜底；
+        # 商业险等则不能——这些全称词大量出现在通用条款（如"附加法定节假日限额翻倍险 投保了…
+        # 的家庭自用汽车"），带后缀全文搜会误抓条款，只用原枚举（不带后缀）。
+        if "强制" in (policy_type or ""):
+            m = re.search(r"(?<![一-鿿A-Za-z])((?:非营业|非营运|营业货车|营业客车|营运货车|营运客车|家庭自用|党政机关|出租租赁|城市公交|公路客运)(?:汽车|客车|货车)?)(?![一-鿿])", text)
+        else:
+            m = re.search(r"(?<![一-鿿A-Za-z])(非营业|非营运|营业货车|营业客车|营运货车|营运客车|家庭自用|党政机关|出租租赁|城市公交|公路客运)(?![一-鿿])", text)
         if m:
             fields["使用性质"] = m.group(1)
 
@@ -3643,6 +3672,17 @@ def _extract_premium(text: str, fields: dict, company_short: str):
                 fields["保费合计"] = val
                 break
 
+    # 阳光商车无忧驾乘险等：表格严重压平，保费无"保险费合计/总保险费"标签，金额与保额粘连，
+    # 但税额拆分是可靠信号——总含税保费 = 不含税保费 + 增值税，
+    # 如"…100000300.00 (不含税保费:285.85 元,增值税:14.15元)"（税保费/增值税跨行且与保额粘连）
+    if "保费合计" not in fields and company_short == "阳光":
+        _m1 = re.search(r"税保费[:：]\s*(\d+\.\d{1,2})", text)
+        _m2 = re.search(r"增值税[:：][\s\S]{0,60}?(\d{1,4}\.\d{2})\s*元[)）]", text)
+        if _m1 and _m2:
+            _total = float(_m1.group(1)) + float(_m2.group(1))
+            if _total > 0:
+                fields["保费合计"] = f"{_total:.2f}"
+
     # 鼎和等格式：跨行"含税总保险费 人民币：贰佰陆拾\nCNY: 268.00 元"
     if "保费合计" not in fields:
         m = re.search(r"总保险费[\s\S]{0,50}?CNY[：:\s]*([\d,]+\.\d{2})", text)
@@ -3753,6 +3793,13 @@ def _extract_premium(text: str, fields: dict, company_short: str):
                 if m:
                     fields["保费合计"] = m.group(2)
                     break
+
+    # 华安"安车保臻享版"等格式："保单总保费 CNY225.00，人民币贰佰贰拾伍元整"
+    # 标签明确，直接取标签后的金额（跨过 CNY/￥ 等币种前缀）
+    if "保费合计" not in fields:
+        m = re.search(r"保单总保费[^\d]{0,8}(\d{1,7}(?:\.\d{1,2})?)", text)
+        if m:
+            fields["保费合计"] = m.group(1)
 
     # 华安"安车保"驾乘险等格式：保障项目表中保额带"元"、与保费空格分隔（非粘连），
     # 整单仅一行带保费："意外伤害自费医疗补偿保险（全车共享） 30000元 330.0"。
@@ -4166,7 +4213,7 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
             return
 
     # 渤海等格式：两个 YYYY-MM-DD 日期拼接在同一行（无分隔符），附近有保险期间关键词
-    # "2026-05-112027-05-10" 或 "2026-05-1100:00:002027-05-1024:00:00"
+    # "2026-05-112027-05-10" 或 "2026-05-1100:00:002026-05-1024:00:00"
     for i, line in enumerate(lines):
         _m = re.search(r'(\d{4}-\d{2}-\d{2})(?:\d{2}:\d{2}(?::\d{2})?)?\s*(\d{4}-\d{2}-\d{2})', line)
         if _m:
@@ -4175,6 +4222,26 @@ def _extract_period(text: str, text_merged: str, fields: dict, company_short: st
                 fields["保险起期"] = _m.group(1)
                 fields["保险止期"] = _m.group(2)
                 fields["保险期间"] = f"{_m.group(1)} 至 {_m.group(2)}"
+                return
+
+    # 最终兜底：OCR 列错位导致"至<终保>…止"在前、"自<起保>"在后（华泰驾乘险实测：
+    # "保险期间\n:00:00时起(北京时间)至2027年07月23日23:59:59时止(北京时间)自2026年07月24日00"）。
+    # 不依赖先后顺序，在"保险期间"标签后 200 字内各自独立提取"自<日期>"与"[至到]<日期>…止"，
+    # 并校验起保早于终保，防止乱序误配
+    _m_label = re.search(r"保险期间", period_text)
+    if _m_label:
+        _seg = period_text[_m_label.end():_m_label.end() + 200]
+        _m_s = re.search(r"自\s*(\d{4}年\d{1,2}月\d{1,2}日?)", _seg)
+        _m_e = re.search(r"[至到]\s*(\d{4}年\d{1,2}月\d{1,2}日?)[\s\d:时分秒]*止", _seg)
+        if _m_s and _m_e:
+            def _ymd(s):
+                mm = re.match(r"(\d{4})年(\d{1,2})月(\d{1,2})", s)
+                return (int(mm.group(1)), int(mm.group(2)), int(mm.group(3))) if mm else None
+            _ds, _de = _ymd(_m_s.group(1)), _ymd(_m_e.group(1))
+            if _ds and _de and _ds < _de:
+                fields["保险起期"] = _m_s.group(1)
+                fields["保险止期"] = _m_e.group(1)
+                fields["保险期间"] = f"{_m_s.group(1)} 至 {_m_e.group(1)}"
                 return
 
 

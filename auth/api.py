@@ -4,6 +4,7 @@
 """
 
 import logging
+import secrets
 
 from flask import Blueprint, jsonify, request, g
 
@@ -127,6 +128,13 @@ def get_me():
     user = get_user_by_id(_db, g.current_user["user_id"])
     if not user:
         return jsonify({"code": 404, "msg": "用户不存在"}), 404
+    # 附带企业级功能开关（前端入口显示控制用）
+    if user.get("role") != ROLE_SUPER_ADMIN and user.get("parent_id"):
+        try:
+            _ent = get_enterprise_by_id(_db, user["parent_id"])
+            user["seal_tracking_enabled"] = int((_ent or {}).get("seal_tracking_enabled") or 0)
+        except Exception:
+            user["seal_tracking_enabled"] = 0
     return jsonify({"code": 0, "data": user})
 
 
@@ -159,13 +167,46 @@ def get_my_quota():
     monthly_usage = get_enterprise_monthly_pdf_usage(_db, enterprise_id)
     monthly_limit = None if plan_type in ("enterprise", "enterprise_trial") else 3000
 
+    from .db import get_boost_balance
+    _boost = get_boost_balance(_db, enterprise_id)
     return jsonify({"code": 0, "data": {
         "plan_type": plan_type,
         "plan_months": plan_months,
         "plan_start_at": plan_start_at,
         "monthly_usage": monthly_usage,
         "monthly_limit": monthly_limit,
+        "boost_remaining": _boost["remaining"],
+        "boost_nearest_expire": _boost["nearest_expire"],
     }})
+
+
+# ============================================================
+# 识别加油包（99元/1200次/3个月，可叠加；超管开通管理）
+# ============================================================
+
+@auth_bp.route("/api/auth/enterprises/<int:eid>/boost-packs", methods=["GET", "POST"])
+@admin_required
+def api_enterprise_boost_packs(eid):
+    from .db import list_boost_packs, create_boost_pack, get_boost_balance
+    if request.method == "GET":
+        return jsonify({"code": 0, "data": {
+            "packs": list_boost_packs(_db, eid),
+            "balance": get_boost_balance(_db, eid),
+        }})
+    body = request.get_json(silent=True) or {}
+    pack_id = create_boost_pack(
+        _db, eid,
+        created_by=g.current_user["user_id"],
+        remark=(body.get("remark") or "").strip()[:200])
+    return jsonify({"code": 0, "msg": "加油包已开通", "data": {"id": pack_id}})
+
+
+@auth_bp.route("/api/auth/boost-packs/<int:pack_id>", methods=["DELETE"])
+@admin_required
+def api_delete_boost_pack(pack_id):
+    from .db import delete_boost_pack
+    n = delete_boost_pack(_db, pack_id)
+    return jsonify({"code": 0, "msg": "已删除" if n else "记录不存在"})
 
 
 # ============================================================
@@ -211,15 +252,19 @@ def api_list_users():
     if limit:
         try: users = users[:int(limit)]
         except: pass
-    # 填充所属企业名称
+    # 填充所属企业名称 + 标记自动创建的企业管理员账号（登录名=企业编号）
     ent_cache = {}
     for u in users:
         pid = u.get("parent_id")
+        u["is_auto_admin"] = False
         if pid:
             if pid not in ent_cache:
-                ent = get_enterprise_by_id(_db, pid)
-                ent_cache[pid] = ent["name"] if ent else ""
-            u["parent_name"] = ent_cache[pid]
+                ent_cache[pid] = get_enterprise_by_id(_db, pid)
+            ent = ent_cache[pid]
+            u["parent_name"] = ent["name"] if ent else ""
+            _no = (ent.get("enterprise_no") or "").strip() if ent else ""
+            if _no and u.get("role") == ROLE_ENTERPRISE and (u.get("phone") or "") == _no.lower().replace("-", ""):
+                u["is_auto_admin"] = True
         else:
             u["parent_name"] = ""
 
@@ -476,6 +521,15 @@ def api_list_enterprises():
         ent["member_count"] = member_map.get(ent["id"], 0)
         ent["monitor_count"] = monitor_map.get(ent["id"], 0)
         ent["referrer_name"] = referrer_map.get(ent.get("referrer_id"), "")
+        # 附带该企业自动创建的管理员账号(登录名=企业编号小写去横线)的密码明文，供客户管理页展示
+        ent["admin_account"] = ""
+        ent["admin_password"] = ""
+        no = (ent.get("enterprise_no") or "").strip()
+        if no:
+            au = get_user_by_phone(_db, no.lower().replace("-", ""))
+            if au:
+                ent["admin_account"] = au.get("phone") or ""
+                ent["admin_password"] = au.get("plain_password") or ""
     return jsonify({"code": 0, "data": enterprises})
 
 
@@ -501,8 +555,9 @@ def api_create_enterprise():
     try:
         eid = create_enterprise(_db, name, contact_person, contact_phone)
         update_enterprise(_db, eid, {"enterprise_no": enterprise_no})
-        # 同步创建该企业的管理员账号：登录账号=企业编号(小写去横线)，姓名=企业管理员，初始密码=wuhu2025
-        create_user(_db, admin_phone, "wuhu2025", ROLE_ENTERPRISE, eid, "企业管理员", activated=1)
+        # 同步创建该企业的管理员账号：登录账号=企业编号(小写去横线)，姓名=企业管理员，初始密码=4位随机数
+        admin_password = f"{secrets.randbelow(10000):04d}"
+        create_user(_db, admin_phone, admin_password, ROLE_ENTERPRISE, eid, "企业管理员", activated=1)
         # 初始化企业默认导出列配置：包含全部识别字段（都勾选导出）
         try:
             from insurance.field_config_db import init_enterprise_default_template

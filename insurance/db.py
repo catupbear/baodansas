@@ -11,7 +11,7 @@ import pymysql
 import pymysql.cursors
 
 from .field_mapping import apply_mapping
-from .field_config_db import get_column_config
+from .field_config_db import get_column_config, get_fill_proposer
 
 import re as _re
 
@@ -417,6 +417,9 @@ def init_insurance_tables(db):
             ("ocr_text", "LONGTEXT COMMENT 'OCR识别原文（pdfplumber+ocr模式下保存OCR文本）'"),
             ("deleted_at", "DATETIME DEFAULT NULL COMMENT '软删除时间（非NULL表示已删除，列表/统计默认过滤）'"),
             ("first_recognized_at", "DATETIME DEFAULT NULL COMMENT '首次识别成功完成时间（重新识别不覆盖，updated_at会被重新识别刷新）'"),
+            ("seal_paid", "TINYINT NOT NULL DEFAULT 0 COMMENT '公户车盖章跟进：是否已付（0未付/1已付）'"),
+            ("seal_paid_at", "DATETIME DEFAULT NULL COMMENT '公户车盖章跟进：标记已付时间'"),
+            ("seal_paid_by", "VARCHAR(64) DEFAULT '' COMMENT '公户车盖章跟进：标记已付操作人姓名'"),
         ]
         for col_name, col_def in new_columns:
             try:
@@ -599,6 +602,7 @@ def init_insurance_tables(db):
                 """)
                 rows = bc.fetchall()
                 _visible_cache = {}
+                _fp_cache = {}
                 updated = 0
                 for row in rows:
                     pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
@@ -609,11 +613,13 @@ def init_insurance_tables(db):
                     uid = row.get("user_id") if isinstance(row, dict) else row[4]
                     if uid not in _visible_cache:
                         _visible_cache[uid] = _get_visible_export_keys(db_ref, uid)
+                        _fp_cache[uid] = _get_fill_proposer_flag(db_ref, uid)
                     abnormal, hint = _compute_abnormal(
                         pf,
                         row.get("status") if isinstance(row, dict) else row[2],
                         row.get("doc_category") if isinstance(row, dict) else row[3],
                         visible_export_keys=_visible_cache[uid],
+                        fill_proposer_on=_fp_cache.get(uid, False),
                     )
                     if abnormal:
                         rid = row.get("id") if isinstance(row, dict) else row[0]
@@ -641,6 +647,7 @@ def init_insurance_tables(db):
                 """)
                 abnormal_rows = bc.fetchall()
                 _visible_cache_rev = {}
+                _fp_cache_rev = {}
                 reverted = 0
                 for row in abnormal_rows:
                     pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
@@ -651,6 +658,7 @@ def init_insurance_tables(db):
                     uid = row.get("user_id") if isinstance(row, dict) else row[4]
                     if uid not in _visible_cache_rev:
                         _visible_cache_rev[uid] = _get_visible_export_keys(db_ref, uid)
+                        _fp_cache_rev[uid] = _get_fill_proposer_flag(db_ref, uid)
                     override = row.get("abnormal_override_reason") if isinstance(row, dict) else row[5]
                     abnormal, hint = _compute_abnormal(
                         pf,
@@ -658,6 +666,7 @@ def init_insurance_tables(db):
                         row.get("doc_category") if isinstance(row, dict) else row[3],
                         abnormal_override_reason=override,
                         visible_export_keys=_visible_cache_rev[uid],
+                        fill_proposer_on=_fp_cache_rev.get(uid, False),
                     )
                     if not abnormal:
                         rid = row.get("id") if isinstance(row, dict) else row[0]
@@ -920,9 +929,25 @@ def _get_visible_export_keys(db, user_id) -> set:
         return None
 
 
+def _get_fill_proposer_flag(db, user_id) -> bool:
+    """根据 user_id 查其「投保人为空时用被保人补充」开关，默认关闭。"""
+    if not user_id:
+        return False
+    try:
+        from auth.db import get_user_by_id
+        user = get_user_by_id(db, user_id)
+        if not user:
+            return False
+        return get_fill_proposer(db, user["id"], user["role"], user.get("parent_id"))
+    except Exception:
+        logger.debug("获取用户 %s 投保人补充开关失败", user_id, exc_info=True)
+        return False
+
+
 def _compute_abnormal(parsed_fields: dict, status: str, doc_category: str,
                       abnormal_override_reason: str = None,
-                      visible_export_keys: set = None) -> tuple:
+                      visible_export_keys: set = None,
+                      fill_proposer_on: bool = False) -> tuple:
     """
     计算记录是否异常，返回 (is_abnormal: bool, hint: str)。
     逻辑与前端 isRecordAbnormal / getRecordHint 保持一致。
@@ -956,6 +981,10 @@ def _compute_abnormal(parsed_fields: dict, status: str, doc_category: str,
         if any(fields.get(k) for k in ocr_keys):
             continue
         missing.append(col)
+
+    # 投保人补充：开启且投保人缺失、但被保人有值时，投保人可由被保人补上，不计入需人工补充
+    if fill_proposer_on and '投保人' in missing and '被保人' not in missing:
+        missing.remove('投保人')
 
     # 日期完整性校验：日期不全（如"2026/05/"缺日）视为异常
     _DATE_FIELDS = {'保险起期': '起保日期', '保险止期': '终保日期', '签单日期': '签单日期'}
@@ -1135,11 +1164,13 @@ def save_insurance_record(db, record: dict) -> int:
         except (TypeError, json.JSONDecodeError):
             pf = {}
     visible_keys = _get_visible_export_keys(db, data.get("user_id"))
+    fp_on = _get_fill_proposer_flag(db, data.get("user_id"))
     abnormal, hint = _compute_abnormal(
         pf if isinstance(pf, dict) else {},
         data.get("status", "pending"),
         data.get("doc_category", ""),
         visible_export_keys=visible_keys,
+        fill_proposer_on=fp_on,
     )
     data["is_abnormal"] = 1 if abnormal else 0
     data["hint"] = hint
@@ -1186,9 +1217,25 @@ def save_insurance_record(db, record: dict) -> int:
 
         conn.commit()
         logger.debug("保单记录已插入, id=%d", record_id)
-        return record_id
     finally:
         conn.close()
+
+    # 加油包消费：标准版企业当月用量超出月额度(3000)后，每新增一条识别记录
+    # 从加油包扣1次（最早到期的包先扣）。企业版无限额度不扣。失败不影响主流程
+    try:
+        _eid = data.get("enterprise_id")
+        if _eid:
+            from auth.db import (get_enterprise_by_id, get_enterprise_monthly_pdf_usage,
+                                 consume_boost_pack)
+            _ent = get_enterprise_by_id(db, _eid)
+            if _ent and _ent.get("plan_type") not in ("enterprise", "enterprise_trial"):
+                # 本条已计入当月用量，>3000 即本条属于超额部分
+                if get_enterprise_monthly_pdf_usage(db, _eid) > 3000:
+                    if consume_boost_pack(db, _eid):
+                        logger.info("企业 %s 月额度已超，本条识别消费加油包1次", _eid)
+    except Exception as e:
+        logger.debug("加油包消费检查失败: %s", e)
+    return record_id
 
 
 def update_insurance_record(db, record_id: int, updates: dict):
@@ -1290,12 +1337,14 @@ def update_insurance_record(db, record_id: int, updates: dict):
             override_reason = updates.get("abnormal_override_reason",
                                           existing.get("abnormal_override_reason"))
             visible_keys = _get_visible_export_keys(db, existing.get("user_id"))
+            fp_on = _get_fill_proposer_flag(db, existing.get("user_id"))
             abnormal, hint = _compute_abnormal(
                 pf_raw if isinstance(pf_raw, dict) else {},
                 updates.get("status") or existing.get("status", ""),
                 updates.get("doc_category") or existing.get("doc_category", ""),
                 abnormal_override_reason=override_reason,
                 visible_export_keys=visible_keys,
+                fill_proposer_on=fp_on,
             )
             data["is_abnormal"] = 1 if abnormal else 0
             data["hint"] = hint
@@ -1842,6 +1891,7 @@ def query_insurance_records(
     sort_by: str = "",
     sort_order: str = "desc",
     exclude_nonpolicy: bool = False,
+    policy_sort: dict = None,
 ) -> dict:
     """
     分页查询保单识别记录，支持按群、状态、关键词、来源、识别方式、文档类型筛选。
@@ -1857,10 +1907,14 @@ def query_insurance_records(
     """
     conditions = []
     params = []
+    # 「保单排序」：客户设置的排序(sort_by)为最高优先级(主排序，前端始终传入)；
+    # 保单排序作为「次级排序」追加在主排序之后——同一主排序值(如同一签单日期)下，
+    # 把同车牌的保单按险种大类排在一起(下方 ORDER BY 追加 车牌+险种)。因追加了车牌/险种列，需 JOIN。
+    _policy_sort_on = bool(policy_sort and policy_sort.get("enabled"))
     # 动态判断是否需要 JOIN 关联表：
     # dedup 始终需要（按 pf.policy_no 分组）；有关联表搜索/日期/险种/排序字段时才 JOIN
     _JOIN_SORT_FIELDS = {"plate_no", "sign_date", "start_date", "end_date", "policy_no"}
-    need_join = dedup or bool(
+    need_join = dedup or _policy_sort_on or bool(
         policy_type or
         search_company or search_policy_no or search_plate_no or
         search_applicant or search_insured or search_salesperson or
@@ -2097,6 +2151,32 @@ def query_insurance_records(
         id_order = f"{_sort_map_id[_sort_key]} {_dir}, r.id DESC"
         dedup_order = f"{_sort_map_id_dedup[_sort_key]} {_dir}, t.id DESC"
         final_order = f"{_sort_map_final[_sort_key]} {_dir}, r2.id DESC"
+
+        # 「保单排序」启用：在主排序(客户设置的 sort_by，最高优先级)之后，追加 车牌+险种 作为次级排序。
+        # 同一主排序值(如同一签单日期)下，同车牌的保单按险种大类排在一起。
+        # 险种大类 rank 由前端传入的 order 决定；CASE 里的 % 需写成 %% 供 pymysql 参数化转义。
+        if _policy_sort_on:
+            _order = policy_sort.get("order") or ["交强险", "商业险", "非车险"]
+            _rk = {c: i for i, c in enumerate(_order)}
+            _jq, _sy, _fc = _rk.get("交强险", 0), _rk.get("商业险", 1), _rk.get("非车险", 2)
+
+            # 险种大类与系统规范分类 get_policy_type_code 一致：交强→交强险；含"商业"等→商业险；
+            # 其余(驾乘/意外/尊享/各类非标准产品名)兜底→非车险（不能默认商业，否则如"平安车主尊享保障"会误判）
+            def _rank_case(alias):
+                col = f"{alias}.policy_type"
+                return (
+                    f"CASE WHEN {col} LIKE '%%交强%%' OR {col} LIKE '%%交通事故责任强制%%' OR {col} LIKE '%%交通事故强制保险%%' THEN {_jq} "
+                    f"WHEN {col} LIKE '%%商业%%' OR {col} LIKE '%%机动车辆保险%%' OR {col} LIKE '%%机动车辆综合险%%' THEN {_sy} "
+                    f"ELSE {_fc} END"
+                )
+            # 锚点排序：同一车牌用该车主排序列的锚点值 MAX(...) OVER(PARTITION BY 车牌) 参与主排序，
+            # 让同车所有险种保单绑在一起、不被主排序(如创建日期)按各自时间拆散；再按 车牌ASC + 险种rank 组内排。
+            _anchor_id = f"MAX({_sort_map_id[_sort_key]}) OVER (PARTITION BY {_sort_map_id['plate_no']})"
+            _anchor_dedup = f"MAX({_sort_map_id_dedup[_sort_key]}) OVER (PARTITION BY {_sort_map_id_dedup['plate_no']})"
+            _anchor_final = f"MAX({_sort_map_final[_sort_key]}) OVER (PARTITION BY {_sort_map_final['plate_no']})"
+            id_order = f"{_anchor_id} {_dir}, {_sort_map_id['plate_no']} ASC, {_rank_case('pf')} ASC, r.id DESC"
+            dedup_order = f"{_anchor_dedup} {_dir}, {_sort_map_id_dedup['plate_no']} ASC, {_rank_case('pf2')} ASC, t.id DESC"
+            final_order = f"{_anchor_final} {_dir}, {_sort_map_final['plate_no']} ASC, {_rank_case('pf3')} ASC, r2.id DESC"
 
         # 延迟关联：先查 id（轻量排序），再用 id 取完整数据
         offset = (page - 1) * page_size

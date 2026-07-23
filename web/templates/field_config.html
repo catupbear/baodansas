@@ -514,7 +514,7 @@
     <!-- 代管提示条 -->
     <div v-if="adminTarget" style="background:#fef3c7; border-bottom:1px solid #fcd34d; padding:8px 24px; display:flex; align-items:center; justify-content:center; gap:12px;">
         <span style="font-size:13px; color:#92400e;">正在代管编辑：<b>{{ adminTarget.label }}</b> 的「{{ activeTemplateName }}」模板（{{ adminTarget.scope === 'enterprise' ? '企业级' : '员工级' }}），修改将直接保存到对方配置</span>
-        <button @click="adminTarget = null; loadTemplates(); loadConfig(); loadColumnConfig('list_columns'); loadColumnConfig('export_columns'); loadMergeConfig(); loadPlateFormatConfig(); loadRemarkCfg(); loadGroupFillTargets();" style="font-size:12px; padding:3px 12px; background:#fff; border:1px solid #fcd34d; border-radius:4px; cursor:pointer; color:#92400e;">退出代管</button>
+        <button @click="adminTarget = null; loadTemplates(); loadConfig(); loadColumnConfig('list_columns'); loadColumnConfig('export_columns'); loadMergeConfig(); loadPlateFormatConfig(); loadRemarkCfg(); loadPolicySort(); loadFillProposer(); loadGroupFillTargets();" style="font-size:12px; padding:3px 12px; background:#fff; border:1px solid #fcd34d; border-radius:4px; cursor:pointer; color:#92400e;">退出代管</button>
     </div>
 
     <!-- 主内容区 -->
@@ -791,6 +791,29 @@
                     </select>
                     <span style="font-size:11px; color:var(--text-muted);">打开识别记录页时列表默认按此排序，用户仍可在页面上临时切换</span>
                 </div>
+                <!-- 保单排序（同一车牌按险种顺序，常驻默认；用户只调险种顺序） -->
+                <div style="margin-bottom:12px; padding:10px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
+                    <div style="font-size:13px; font-weight:500; cursor:pointer; user-select:none;" @click="policySortExpanded = !policySortExpanded">
+                        <span style="display:inline-block; width:14px; color:var(--text-muted);">{{ policySortExpanded ? '▾' : '▸' }}</span>📋 保单排序<span style="font-weight:400; color:var(--text-muted); margin-left:6px;">同一车牌的保单默认排在一起，你只需调整组内的险种顺序</span>
+                    </div>
+                    <div v-show="policySortExpanded" style="margin-top:10px; display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">
+                        <span style="font-size:12px; color:var(--text-muted); padding-top:6px;">险种优先级（越靠上越靠前，点箭头调整）：</span>
+                        <div style="display:inline-flex; flex-direction:column; gap:5px;">
+                            <div v-for="(cat, i) in policySort.order" :key="cat"
+                                 style="display:flex; align-items:center; gap:6px; background:#fff; border:1px solid var(--border); border-radius:6px; padding:5px 12px; font-size:12px; width:230px;">
+                                <span style="color:var(--text-muted); width:16px; text-align:center;">{{ i+1 }}</span>
+                                <span style="flex:1; font-weight:500;">{{ cat }}</span>
+                                <button @click="movePolicyCat(i,-1)" :disabled="i===0 || activeSource==='enterprise'"
+                                        style="border:none;background:none;cursor:pointer;color:var(--primary);padding:0 3px;font-size:13px;line-height:1;" :style="(i===0||activeSource==='enterprise')?'opacity:.3;cursor:not-allowed;':''">▲</button>
+                                <button @click="movePolicyCat(i,1)" :disabled="i===policySort.order.length-1 || activeSource==='enterprise'"
+                                        style="border:none;background:none;cursor:pointer;color:var(--primary);padding:0 3px;font-size:13px;line-height:1;" :style="(i===policySort.order.length-1||activeSource==='enterprise')?'opacity:.3;cursor:not-allowed;':''">▼</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-show="policySortExpanded" style="font-size:11px; color:var(--text-muted); margin-top:8px;">
+                        识别记录列表会把同一车牌的保单排在一起（车牌组按车牌排），组内按上面的险种顺序（默认 交强险 → 商业险 → 非车险）。在列表点某列表头可临时改按该列排序。此顺序跟当前模板绑定，随「保存」一起生效。
+                    </div>
+                </div>
                 <!-- 列头预览 -->
                 <div style="margin-bottom:16px; border:1px solid var(--border-light); border-radius:8px; overflow:hidden;">
                     <div style="padding:6px 12px; background:var(--surface-secondary); font-size:11px; color:var(--text-muted); border-bottom:1px solid var(--border-light);">列头预览（{{ listColItems.filter(c => c.visible).length }} 列，{{ listColItems.filter(c => c.visible && c.frozen).length }} 列冻结）</div>
@@ -884,28 +907,43 @@
                 <div v-if="activeSource==='enterprise' || activeSource==='system'" style="margin-bottom:12px; padding:10px 16px; background:#fffbeb; border:1px solid #fcd34d; border-radius:8px; font-size:13px; color:#92400e; display:flex; align-items:center; gap:8px;">
                     <span>⚠</span> 当前使用{{ activeSource==='enterprise' ? '企业' : '系统' }}模板（只读），如需修改请切换到「我的模板」或另存为新模板
                 </div>
-                <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; padding:12px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
-                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500;"
-                           :style="{cursor: activeSource === 'enterprise' || activeSource === 'system' ? 'not-allowed' : 'pointer', opacity: activeSource === 'enterprise' || activeSource === 'system' ? 0.5 : 1}"
-                           @click="activeSource !== 'enterprise' && activeSource !== 'system' && toggleMergeByPlate()">
-                        <div style="position:relative; width:36px; height:20px; flex-shrink:0;">
-                            <div style="position:absolute; inset:0; border-radius:10px; transition:background 0.2s;" :style="{ background: mergeByPlate ? 'var(--primary)' : '#d1d5db' }"></div>
-                            <div style="position:absolute; width:16px; height:16px; top:2px; border-radius:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); transition:left 0.2s;" :style="{ left: mergeByPlate ? '18px' : '2px' }"></div>
-                        </div>
-                        按车牌合并导出
-                    </label>
-                    <span style="font-size:11px; color:var(--text-muted);">开启后，同车牌的多条保单合并为一行，保费/保单号等按险种拆分为独立列</span>
-                    <div style="width:1px; height:20px; background:var(--border-light); margin:0 4px;"></div>
-                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500;"
-                           :style="{cursor: activeSource === 'enterprise' || activeSource === 'system' ? 'not-allowed' : 'pointer', opacity: activeSource === 'enterprise' || activeSource === 'system' ? 0.5 : 1}"
-                           @click="activeSource !== 'enterprise' && activeSource !== 'system' && togglePlateFormatPingan()">
-                        <div style="position:relative; width:36px; height:20px; flex-shrink:0;">
-                            <div style="position:absolute; inset:0; border-radius:10px; transition:background 0.2s;" :style="{ background: plateFormatPingan ? 'var(--primary)' : '#d1d5db' }"></div>
-                            <div style="position:absolute; width:16px; height:16px; top:2px; border-radius:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); transition:left 0.2s;" :style="{ left: plateFormatPingan ? '18px' : '2px' }"></div>
-                        </div>
-                        平安车牌格式化
-                    </label>
-                    <span style="font-size:11px; color:var(--text-muted);">开启后，平安保单车牌自动添加连字符（如 粤BB446T → 粤B-B446T）</span>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 24px; margin-bottom:16px; padding:12px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; white-space:nowrap;"
+                               :style="{cursor: activeSource === 'enterprise' || activeSource === 'system' ? 'not-allowed' : 'pointer', opacity: activeSource === 'enterprise' || activeSource === 'system' ? 0.5 : 1}"
+                               @click="activeSource !== 'enterprise' && activeSource !== 'system' && toggleMergeByPlate()">
+                            <div style="position:relative; width:36px; height:20px; flex-shrink:0;">
+                                <div style="position:absolute; inset:0; border-radius:10px; transition:background 0.2s;" :style="{ background: mergeByPlate ? 'var(--primary)' : '#d1d5db' }"></div>
+                                <div style="position:absolute; width:16px; height:16px; top:2px; border-radius:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); transition:left 0.2s;" :style="{ left: mergeByPlate ? '18px' : '2px' }"></div>
+                            </div>
+                            按车牌合并导出
+                        </label>
+                        <span style="font-size:11px; color:var(--text-muted);">开启后，同车牌的多条保单合并为一行，保费/保单号等按险种拆分为独立列</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; white-space:nowrap;"
+                               :style="{cursor: activeSource === 'enterprise' || activeSource === 'system' ? 'not-allowed' : 'pointer', opacity: activeSource === 'enterprise' || activeSource === 'system' ? 0.5 : 1}"
+                               @click="activeSource !== 'enterprise' && activeSource !== 'system' && togglePlateFormatPingan()">
+                            <div style="position:relative; width:36px; height:20px; flex-shrink:0;">
+                                <div style="position:absolute; inset:0; border-radius:10px; transition:background 0.2s;" :style="{ background: plateFormatPingan ? 'var(--primary)' : '#d1d5db' }"></div>
+                                <div style="position:absolute; width:16px; height:16px; top:2px; border-radius:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); transition:left 0.2s;" :style="{ left: plateFormatPingan ? '18px' : '2px' }"></div>
+                            </div>
+                            平安车牌格式化
+                        </label>
+                        <span style="font-size:11px; color:var(--text-muted);">开启后，平安保单车牌自动添加连字符（如 粤BB446T → 粤B-B446T）</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; white-space:nowrap;"
+                               :style="{cursor: activeSource === 'enterprise' || activeSource === 'system' ? 'not-allowed' : 'pointer', opacity: activeSource === 'enterprise' || activeSource === 'system' ? 0.5 : 1}"
+                               @click="activeSource !== 'enterprise' && activeSource !== 'system' && toggleFillProposer()">
+                            <div style="position:relative; width:36px; height:20px; flex-shrink:0;">
+                                <div style="position:absolute; inset:0; border-radius:10px; transition:background 0.2s;" :style="{ background: fillProposer ? 'var(--primary)' : '#d1d5db' }"></div>
+                                <div style="position:absolute; width:16px; height:16px; top:2px; border-radius:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); transition:left 0.2s;" :style="{ left: fillProposer ? '18px' : '2px' }"></div>
+                            </div>
+                            投保人补充
+                        </label>
+                        <span style="font-size:11px; color:var(--text-muted);">开启后，某条保单只有被保人、没有投保人时，自动用被保人补充投保人</span>
+                    </div>
                 </div>
                 <!-- 默认排序 -->
                 <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px; padding:10px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
@@ -1840,6 +1878,59 @@ createApp({
             } catch (e) { alert('保存失败: ' + e.message); }
             finally { remarkSaving.value = false; }
         }
+
+        // === 保单排序（同一车牌按险种顺序，跟模板绑定） ===
+        const policySort = reactive({ enabled: false, order: ['交强险', '商业险', '非车险'] });
+        const policySortExpanded = ref(false);  // 默认折叠
+        function movePolicyCat(i, dir) {
+            if (activeSource.value === 'enterprise') return;
+            const j = i + dir;
+            if (j < 0 || j >= policySort.order.length) return;
+            const arr = policySort.order;
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        async function loadPolicySort() {
+            try {
+                const resp = await authFetch('/api/insurance/policy-sort/config?' + remarkQuery());
+                const json = await resp.json();
+                if (json.code === 0 && json.data && json.data.config) {
+                    policySort.enabled = true;  // 常驻，无开关
+                    const order = (json.data.config.order || []).filter(c => ['交强险','商业险','非车险'].includes(c));
+                    ['交强险','商业险','非车险'].forEach(c => { if (!order.includes(c)) order.push(c); });
+                    policySort.order = order;
+                }
+            } catch (e) { /* 静默 */ }
+        }
+        async function savePolicySort() {
+            try {
+                await authFetch('/api/insurance/policy-sort/config', {
+                    method: 'PUT',
+                    body: JSON.stringify(remarkInjectTarget({ config: { enabled: true, order: policySort.order } }))
+                });
+            } catch (e) { /* 与列配置一起保存，失败不单独打断 */ }
+        }
+
+        // === 投保人补充开关（投保人为空时用被保人补充，跟模板绑定） ===
+        const fillProposer = ref(false);
+        async function loadFillProposer() {
+            try {
+                const resp = await authFetch('/api/insurance/fill-proposer/config?' + remarkQuery());
+                const json = await resp.json();
+                if (json.code === 0 && json.data) fillProposer.value = !!json.data.enabled;
+            } catch (e) { /* 静默 */ }
+        }
+        async function saveFillProposer() {
+            try {
+                await authFetch('/api/insurance/fill-proposer/config', {
+                    method: 'PUT',
+                    body: JSON.stringify(remarkInjectTarget({ enabled: fillProposer.value }))
+                });
+            } catch (e) { console.error('保存投保人补充开关失败', e); }
+        }
+        function toggleFillProposer() {
+            fillProposer.value = !fillProposer.value;
+            saveFillProposer();  // 点击即存，与「按车牌合并导出/平安车牌格式化」一致
+        }
         function onRemarkFile(e) {
             remarkFile = e.target.files[0];
             remarkSheets.value = []; remarkSheet.value = '';
@@ -1867,7 +1958,7 @@ createApp({
                 alert(j.msg || '完成');
                 remarkSheets.value = []; remarkSheet.value = ''; remarkFile = null;
                 if (remarkFileEl.value) remarkFileEl.value.value = '';
-                await loadRemarkCfg();
+                await loadRemarkCfg(); loadPolicySort(); loadFillProposer();
             } catch (e) { alert('导入失败: ' + e.message); }
             finally { remarkImporting.value = false; }
         }
@@ -1878,7 +1969,7 @@ createApp({
                 const r = await authFetch('/api/insurance/remark-options?' + remarkQuery(), { method:'DELETE' });
                 const j = await r.json();
                 alert(j.msg || '已清空');
-                await loadRemarkCfg();
+                await loadRemarkCfg(); loadPolicySort(); loadFillProposer();
             } catch (e) { alert('清空失败: ' + e.message); }
         }
 
@@ -2021,6 +2112,10 @@ createApp({
                     if (configType === 'export_columns') {
                         await saveMergeConfig();
                         await savePlateFormatConfig();
+                    }
+                    // 页面列配置保存时同时保存「保单排序」（跟模板绑定）
+                    if (configType === 'list_columns') {
+                        await savePolicySort();
                     }
                 }
             } catch (e) {
@@ -3303,7 +3398,7 @@ createApp({
                 await loadConfig(name, source);
                 // 切换模板时同步重载列配置和合并开关
                 await Promise.all([loadColumnConfig('list_columns'), loadColumnConfig('export_columns'), loadMergeConfig(), loadPlateFormatConfig()]);
-                loadRemarkCfg();
+                loadRemarkCfg(); loadPolicySort(); loadFillProposer();
                 loadGroupFillTargets();
                 if (source === 'system') {
                     showToast('已切换到系统模板「' + name + '」（只读）', 'warning');
@@ -3331,7 +3426,7 @@ createApp({
                 loadColumnConfig('export_columns'),
                 loadMergeConfig(), loadPlateFormatConfig(),
             ]);
-            loadRemarkCfg();
+            loadRemarkCfg(); loadPolicySort(); loadFillProposer();
             loadGroupFillTargets();
             configLoaded = true;
             showToast('正在代管编辑：' + label + ' 的「' + name + '」模板', 'warning');
@@ -3510,7 +3605,7 @@ createApp({
                 applyMergeHidden();
             });
             // 加载备注快捷选择配置
-            loadRemarkCfg();
+            loadRemarkCfg(); loadPolicySort(); loadFillProposer();
             // 加载群内补充目标字段候选 + 全局跳过关键词（仅超管）
             loadGroupFillTargets();
             loadSkipKeywords();
@@ -3568,6 +3663,7 @@ createApp({
             groupFillTargetOptions, onGroupFillTargetChange, addGroupFillKeyword, addGroupFillRule, importCustomFieldsAsRules,
             saveGroupFillRules, groupFillCopyText, copyGroupFillFormat,
             skipKeywords, skipKeywordInput, skipKeywordsSaving, addSkipKeyword, saveSkipKeywords,
+            policySort, movePolicyCat, policySortExpanded, fillProposer, toggleFillProposer,
         };
     }
 }).mount('#app');
