@@ -432,6 +432,10 @@
             body { padding-bottom: 60px; overflow-x: clip; }
             #app { overflow-x: clip; max-width: 100vw; }
             .mobile-bottom-nav { display: flex !important; }
+            /* 续保筛选栏移动端整齐：下拉/搜索各占一行，日期并排，去掉撑开空隙 */
+            .renewal-filter-bar > select { width: 100%; max-width: none !important; }
+            .renewal-filter-bar > input[type="text"] { width: 100%; flex: none; min-width: 0; }
+            .renewal-filter-bar .rf-spacer { display: none; }
             /* 状态Tab行在移动端换行 */
             .record-tab-row { flex-wrap: wrap !important; gap: 0 !important; }
             .record-tab-row .record-actions { width: 100%; border-top: 1px solid #f3f4f6; padding: 8px 12px; justify-content: flex-end; }
@@ -2588,7 +2592,7 @@
 
         <!-- 筛选栏 -->
         <div class="card p-3">
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2 renewal-filter-bar">
                 <select v-model="renewalFilter.status" @change="loadRenewalList()"
                         class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white cursor-pointer">
                     <option value="">需跟进（逾期+30天内）</option>
@@ -2618,7 +2622,7 @@
                 <input type="text" v-model="renewalFilter.keyword" @keyup.enter="loadRenewalList()" placeholder="搜索车牌/被保人/投保人/保单号..."
                        class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 flex-1 min-w-[180px]">
                 <button @click="loadRenewalList()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">筛选</button>
-                <span class="flex-1"></span>
+                <span class="flex-1 rf-spacer"></span>
                 <button v-if="(isSuperAdmin || currentUser.role === 'enterprise') && renewalSelectedIds.length"
                         @click="openBatchAssign()" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">
                     批量分配({{ renewalSelectedIds.length }})
