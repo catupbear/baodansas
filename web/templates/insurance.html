@@ -10958,13 +10958,10 @@ const _app = createApp({
                     if (recordEnterpriseFilter.value) params.set('enterprise_id', recordEnterpriseFilter.value);
                     _appendDateParams(params);
                     if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');
-                    // 导出排序：用户手动选过排序则跟随页面所选；否则优先用所选命名导出模板的
-                    // 默认排序，未配置时用当前模板「导出列配置」里的默认排序
-                    const _exportSort = sortTouched.value
-                        ? { sort_by: recordFilter.sort_by, sort_order: recordFilter.sort_order }
-                        : (exportTemplateSort.value || exportDefaultSort);
-                    if (_exportSort.sort_by) params.set('sort_by', _exportSort.sort_by);
-                    if (_exportSort.sort_order) params.set('sort_order', _exportSort.sort_order);
+                    // 导出严格跟随列表：排序参数与列表页 loadRecords 完全一致（直接用 recordFilter），
+                    // 不再使用命名导出模板 / 导出列配置的独立排序，避免导出顺序与页面所见不一致
+                    if (recordFilter.sort_by) params.set('sort_by', recordFilter.sort_by);
+                    if (recordFilter.sort_order) params.set('sort_order', recordFilter.sort_order);
                     _appendAdvancedParams(params);
 
                     const listResp = await authFetch(`/api/insurance/records?${params.toString()}`);
@@ -10977,24 +10974,8 @@ const _app = createApp({
                     allRecords = allRecords.filter(r => !r.doc_category || r.doc_category === '保单');
                 }
 
-                // 不合并模式：同一辆车的多份保单按险种排序（商业险→交强险→非车险），
-                // 车与车之间保持用户所选排序（如签单日期升序）的先后顺序，不再强制按上传时间倒序
-                if (!exportMergeByPlate.value) {
-                    const _w = (r) => {
-                        const t = ((r.display_fields || {})['险种'] || '') + '';
-                        if (t.includes('商业')) return 1;
-                        if (t.includes('交强') || t.includes('强制')) return 2;
-                        return 3;
-                    };
-                    const _plate = (r) => ((r.display_fields || {})['车牌'] || r.file_md5 || ('#' + r.id));
-                    const _grpIdx = {};
-                    allRecords.forEach((r, i) => { const k = _plate(r); if (!(k in _grpIdx)) _grpIdx[k] = i; });
-                    allRecords = [...allRecords].sort((a, b) => {
-                        const ga = _grpIdx[_plate(a)], gb = _grpIdx[_plate(b)];
-                        if (ga !== gb) return ga - gb;   // 车与车：按已排序结果中首次出现的先后
-                        return _w(a) - _w(b);            // 车内：险种顺序
-                    });
-                }
+                // 导出严格跟随列表：不合并模式不再做「同车按险种聚合」二次重排，
+                // 直接保持服务端按列表同一排序参数返回的顺序，确保导出顺序 = 识别记录页所见顺序
 
                 const extraMap = (r) => ({
                     '文件名': r.filename || '',
