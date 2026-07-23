@@ -34,17 +34,15 @@ DEFAULT_POLICY_SORT = {"enabled": True, "order": list(POLICY_SORT_CATEGORIES)}
 
 
 def classify_policy_category(policy_type: str) -> str:
-    """把具体险种名归到三大类之一：交强险 / 商业险 / 非车险。"""
+    """把具体险种名归到三大类之一：交强险 / 商业险 / 非车险。
+    与系统规范分类 get_policy_type_code 一致：交强→交强险；含"商业"等→商业险；
+    其余(驾乘/意外/尊享等非标准产品名)兜底→非车险。"""
     pt = policy_type or ""
-    if "交强" in pt or "交通事故责任强制" in pt:
+    if "交强" in pt or "交通事故责任强制" in pt or "交通事故强制保险" in pt:
         return "交强险"
-    # 非车险：驾乘/驾意/意外/人身等（不含"机动车…责任"这类车险）
-    if any(k in pt for k in ("驾乘", "驾意", "意外", "人身", "健康", "医疗", "出行", "无忧")) and "机动车" not in pt:
-        return "非车险"
-    if any(k in pt for k in ("驾乘", "驾意", "意外伤害", "出行")):
-        return "非车险"
-    # 其余（机动车商业保险、商业险、车损、三者等）归商业
-    return "商业险"
+    if "商业" in pt or "机动车辆保险" in pt or "机动车辆综合险" in pt:
+        return "商业险"
+    return "非车险"
 
 
 def policy_sort_rank(policy_type: str, order: list) -> int:

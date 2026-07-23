@@ -11272,12 +11272,12 @@ const _app = createApp({
         const pageMergeByPlate = ref(false);  // 识别记录页"按车牌合并显示"开关
         // 「保单排序」配置（跟模板绑定，后端随列表接口一并返回）：合并展开时子保单按险种顺序排
         const pagePolicySort = ref({ enabled: false, order: ['交强险', '商业险', '非车险'] });
-        // 险种归类（与后端 classify_policy_category 保持一致）
+        // 险种归类（与后端 classify_policy_category / get_policy_type_code 一致：交强→交强；含"商业"→商业；其余兜底→非车险）
         function policyCategory(pt) {
             pt = pt || '';
-            if (pt.includes('交强') || pt.includes('交通事故责任强制')) return '交强险';
-            if ((pt.includes('驾乘') || pt.includes('驾意') || pt.includes('意外') || pt.includes('出行') || pt.includes('人身')) && !pt.includes('机动车')) return '非车险';
-            return '商业险';
+            if (pt.includes('交强') || pt.includes('交通事故责任强制') || pt.includes('交通事故强制保险')) return '交强险';
+            if (pt.includes('商业') || pt.includes('机动车辆保险') || pt.includes('机动车辆综合险')) return '商业险';
+            return '非车险';
         }
         function policySortRank(rec) {
             const df = (rec && rec.display_fields) || {};

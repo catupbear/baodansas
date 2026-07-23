@@ -2131,13 +2131,14 @@ def query_insurance_records(
             _rk = {c: i for i, c in enumerate(_order)}
             _jq, _sy, _fc = _rk.get("交强险", 0), _rk.get("商业险", 1), _rk.get("非车险", 2)
 
+            # 险种大类与系统规范分类 get_policy_type_code 一致：交强→交强险；含"商业"等→商业险；
+            # 其余(驾乘/意外/尊享/各类非标准产品名)兜底→非车险（不能默认商业，否则如"平安车主尊享保障"会误判）
             def _rank_case(alias):
                 col = f"{alias}.policy_type"
                 return (
-                    f"CASE WHEN {col} LIKE '%%交强%%' OR {col} LIKE '%%交通事故责任强制%%' THEN {_jq} "
-                    f"WHEN ({col} LIKE '%%驾乘%%' OR {col} LIKE '%%驾意%%' OR {col} LIKE '%%意外%%' "
-                    f"OR {col} LIKE '%%出行%%' OR {col} LIKE '%%人身%%') AND {col} NOT LIKE '%%机动车%%' THEN {_fc} "
-                    f"ELSE {_sy} END"
+                    f"CASE WHEN {col} LIKE '%%交强%%' OR {col} LIKE '%%交通事故责任强制%%' OR {col} LIKE '%%交通事故强制保险%%' THEN {_jq} "
+                    f"WHEN {col} LIKE '%%商业%%' OR {col} LIKE '%%机动车辆保险%%' OR {col} LIKE '%%机动车辆综合险%%' THEN {_sy} "
+                    f"ELSE {_fc} END"
                 )
             id_order = f"{_sort_map_id['plate_no']} ASC, {_rank_case('pf')} ASC, r.id DESC"
             dedup_order = f"{_sort_map_id_dedup['plate_no']} ASC, {_rank_case('pf2')} ASC, t.id DESC"
