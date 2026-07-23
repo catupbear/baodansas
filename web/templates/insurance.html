@@ -2589,7 +2589,6 @@
         <!-- 筛选栏 -->
         <div class="card p-3">
             <div class="flex flex-wrap items-center gap-2">
-                <button @click="renewalImportVisible = true" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">📥 导入往年保单</button>
                 <select v-model="renewalFilter.status" @change="loadRenewalList()"
                         class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white cursor-pointer">
                     <option value="">需跟进（逾期+30天内）</option>
@@ -2619,6 +2618,7 @@
                         @click="openBatchAssign()" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">
                     批量分配({{ renewalSelectedIds.length }})
                 </button>
+                <button @click="renewalImportVisible = true" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">📥 导入往年保单</button>
                 <button v-if="isSuperAdmin" @click="triggerRenewalScan()" :disabled="renewalScanning"
                         class="btn btn-outline" style="padding:6px 14px;font-size:13px;">
                     {{ renewalScanning ? '扫描中...' : '手动扫描' }}
