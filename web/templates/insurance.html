@@ -2634,7 +2634,7 @@
                                 <span class="text-xs px-1.5 py-0.5 rounded-full font-semibold" :style="renewalDaysBadgeStyle(t)">{{ renewalDaysLeftText(t) }}</span>
                                 <span v-if="t.hint_record_id" class="text-xs px-1.5 py-0.5 rounded-full" style="background:#dbeafe;color:#1d4ed8;">🔔 疑似已续保</span>
                             </div>
-                            <div class="grid gap-x-5 gap-y-1 mt-2 text-xs" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5 mt-2 text-xs" style="max-width:760px;">
                                 <div><span class="text-gray-400">投保人：</span><span class="text-gray-700 font-medium">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.applicant || '—') : (maskPersonName(t.applicant) || '—') }}</span></div>
                                 <div><span class="text-gray-400">被保人：</span><span class="text-gray-700 font-medium">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.insured || '—') : (maskPersonName(t.insured) || '—') }}</span></div>
                                 <div><span class="text-gray-400">签单：</span><span class="text-gray-700 font-medium">{{ t.sign_date || '—' }}</span></div>
