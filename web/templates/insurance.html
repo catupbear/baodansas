@@ -849,6 +849,16 @@
         </div>
     </div>
 
+    <!-- ========== 导入往年保单·引导添加客服弹窗 ========== -->
+    <div v-if="renewalImportVisible" class="pm-qr-overlay" @click.self="renewalImportVisible=false">
+        <div class="pm-qr-modal">
+            <button class="pm-qr-close" @click="renewalImportVisible=false">✕</button>
+            <div style="font-size:17px;font-weight:700;color:#111827;margin-bottom:6px;">导入往年保单</div>
+            <div style="font-size:13px;color:#6b7280;margin-bottom:18px;">扫码添加客服微信，由客服协助把往年台账/保单导入续保管理</div>
+            <img src="/static/img/wechat_qr.png?v=2" alt="客服二维码" style="width:200px;height:200px;border-radius:14px;background:#fff;padding:6px;border:1px solid #eceef1;display:block;margin:0 auto;">
+        </div>
+    </div>
+
     <!-- ========== 移动端侧滑菜单 ========== -->
     <div v-if="mobileMenuOpen" class="sm:hidden" style="position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.4);" @click.self="mobileMenuOpen=false">
         <div style="position:absolute;top:0;right:0;bottom:0;width:260px;background:#fff;overflow-y:auto;box-shadow:-4px 0 24px rgba(0,0,0,0.2);">
@@ -2576,9 +2586,6 @@
             </div>
         </div>
 
-        <!-- 导入往年保单提示 -->
-        <div class="text-center text-xs text-gray-400 py-1">如需导入往年保单，请联系客服协助</div>
-
         <!-- 筛选栏 -->
         <div class="card p-3">
             <div class="flex flex-wrap items-center gap-2">
@@ -2615,6 +2622,7 @@
                         class="btn btn-outline" style="padding:6px 14px;font-size:13px;">
                     {{ renewalScanning ? '扫描中...' : '手动扫描' }}
                 </button>
+                <button @click="renewalImportVisible = true" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">导入往年保单</button>
                 <button @click="exportRenewalList()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">导出Excel</button>
             </div>
         </div>
@@ -11770,6 +11778,7 @@ const _app = createApp({
         const renewalBatchAssignVisible = ref(false);
         const renewalBatchAssignee = ref('');
         const renewalQrVisible = ref(false);
+        const renewalImportVisible = ref(false);  // 导入往年保单·引导添加客服弹窗
         const renewalQrUrl = ref('');
         const renewalConfigVisible = ref(false);
         const renewalWindowDaysInput = ref(90);
@@ -13294,7 +13303,7 @@ const _app = createApp({
             renewalNextRemindAt, renewalNoteSaving, openRenewalDetail, submitRenewalFollowup, changeRenewalStatus, dismissRenewalHint, assignRenewalDetail,
             renewalHoldVisible, renewalHoldReason, RENEWAL_HOLD_PRESETS, openRenewalHold, pickRenewalHoldPreset, submitRenewalHold,
             renewalBatchAssignVisible, renewalBatchAssignee, openBatchAssign, submitBatchAssign, triggerRenewalScan, exportRenewalList,
-            renewalQrVisible, renewalQrUrl, renewalConfigVisible, renewalWindowDaysInput, openRenewalQr, openRenewalConfig, saveRenewalConfig, uploadRenewalQrcode, previewRenewalTaskFile,
+            renewalQrVisible, renewalImportVisible, renewalQrUrl, renewalConfigVisible, renewalWindowDaysInput, openRenewalQr, openRenewalConfig, saveRenewalConfig, uploadRenewalQrcode, previewRenewalTaskFile,
             deleteRecordVisible, deleteRecordTarget, deleteRecordSaving, openDeleteRecord, confirmDeleteRecord,
             editingField, editingValue, fieldSaving, startEditField, cancelEditField, saveEditField, isManualField, fieldSource, publicFields, isDateField,
             listEditing, startListEdit, cancelListEdit, saveListEdit,
