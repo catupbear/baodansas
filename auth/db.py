@@ -5,6 +5,7 @@
 
 import json
 import logging
+import re
 import secrets
 import string
 from datetime import datetime
@@ -335,6 +336,31 @@ def get_enterprise_by_id(db, enterprise_id: int) -> dict | None:
                 if row.get(f) and not isinstance(row[f], str):
                     row[f] = str(row[f])
         return row
+    finally:
+        conn.close()
+
+
+def get_enterprise_by_no(db, enterprise_no: str) -> dict | None:
+    """按企业编号归一化查企业（去除非字母数字字符后转大写比较）。
+    如传入 'TZ050' 可命中 enterprise_no 存为 'TZ-050'/'TZ050'/'tz 050' 的企业。
+    多条匹配时返回 id 最小的一条（最早创建）；无匹配或编号为空返回 None。
+    归一化规则与 insurance/db.py::get_tz008_enterprise_ids 保持一致。
+    """
+    target = re.sub(r"[^A-Za-z0-9]", "", enterprise_no or "").upper()
+    if not target:
+        return None
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT * FROM enterprises WHERE enterprise_no != '' ORDER BY id ASC")
+        for row in cursor.fetchall():
+            norm = re.sub(r"[^A-Za-z0-9]", "", (row.get("enterprise_no") or "")).upper()
+            if norm == target:
+                for f in ("created_at", "updated_at", "plan_start_at", "next_plan_start_at", "onboarded_at"):
+                    if row.get(f) and not isinstance(row[f], str):
+                        row[f] = str(row[f])
+                return row
+        return None
     finally:
         conn.close()
 

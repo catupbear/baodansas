@@ -11,8 +11,9 @@ from flask import Flask, redirect, render_template, request
 
 from callback.crypto import WXBizMsgCrypt
 from callback.server import callback_bp, init_callback, create_callback_blueprint
+from callback.event_callback import init_event_callback, create_event_callback_blueprint
 from web.api import (api_bp, init_api, register_extra_sdk, register_extra_contacts,
-                     register_enterprises, register_corpid_cursor)
+                     register_enterprises, register_corpid_cursor, get_contacts_for_corp)
 from core.contacts import ContactsManager
 from core.decryptor import MessageDecryptor
 from core.fetcher import MessageFetcher
@@ -465,6 +466,22 @@ def create_app(config: dict) -> Flask:
                     "name": cb_conf.get("name", cb_conf["corpid"]),
                 })
         register_enterprises(enterprise_list)
+
+        # 客户联系事件回调（change_external_chat 群变更 → 识别群自动匹配），可选
+        # 复用 extra_callbacks 已注册的 ContactsManager（按 corpid 从 _contacts_map 取），
+        # 因此必须放在 register_extra_contacts 之后
+        ev_cfg = config.get("event_callback", {}) or {}
+        if ev_cfg.get("enabled"):
+            ev_corpid = ev_cfg.get("corpid", main_corpid)
+            ev_path = ev_cfg.get("path", "/callback/event")
+            ev_crypto = WXBizMsgCrypt(
+                token=ev_cfg["token"],
+                encoding_aes_key=ev_cfg["encoding_aes_key"],
+                corp_id=ev_corpid,
+            )
+            init_event_callback(ev_crypto, db, ev_corpid, get_contacts_for_corp)
+            app.register_blueprint(create_event_callback_blueprint(ev_path))
+            logger.info("客户联系事件回调已注册: %s (corpid=%s)", ev_path, ev_corpid)
 
         # 更新保单识别的 SDK 引用
         insurance_handler.finance_sdk = finance_sdk

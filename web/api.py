@@ -58,6 +58,14 @@ def register_extra_contacts(corpid: str, contacts):
     _contacts_map[corpid] = contacts
 
 
+def get_contacts_for_corp(corpid: str):
+    """按 corpid 取已注册的 ContactsManager，找不到回退主企业通讯录。
+    供事件回调等按消息实际所属企业复用已建实例，避免重复创建/重复存 secret。"""
+    if corpid and corpid in _contacts_map:
+        return _contacts_map[corpid]
+    return _contacts
+
+
 # 企业列表（前端切换用）
 _enterprises = []
 

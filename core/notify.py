@@ -208,6 +208,34 @@ def notify_fill_pending_miss(room_desc: str, sender_desc: str, plate: str):
     ).start()
 
 
+def notify_new_enterprise_placeholder(name: str, enterprise_no: str, roomid: str, group_name: str):
+    """识别群自动匹配时 TZ 编号未匹配到已有企业，自动创建「预备群」占位企业后通知人工补充资料。
+
+    复用系统错误告警的钉钉机器人；同一 title（含占位企业名）15 分钟内去重。
+    """
+    if not _notifier:
+        return
+
+    title = f"🆕 自动创建占位企业 {name}"
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    lines = [
+        "### 🆕 识别群自动匹配·新建占位企业",
+        f"- **时间**: {ts}",
+        f"- **占位企业**: {name}",
+        f"- **企业编号**: {enterprise_no}",
+        f"- **触发群名**: {group_name}",
+        f"- **群ID**: `{roomid}`",
+        "",
+        "> 群名命中「识别群 + TZ编号」规则，但该编号未匹配到已有企业，"
+        "已自动创建占位企业并把该群加入其识别群监控配置。请人工补充正式企业名称、联系人等信息。",
+    ]
+    content = "\n".join(lines)
+
+    threading.Thread(
+        target=_notifier.send, args=(title, content), daemon=True
+    ).start()
+
+
 def notify_new_company(company: str, detail: str = "", webhook: str = "", secret: str = ""):
     """
     发现规则外的新保司时通知（钉钉，新保司专用群）。
