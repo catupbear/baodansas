@@ -321,9 +321,10 @@
                                 </td>
                                 <!-- 续保推送群 -->
                                 <td style="vertical-align:middle;text-align:center;">
-                                    <div style="display:inline-flex;align-items:center;gap:6px;">
+                                    <div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;max-width:210px;">
                                         <button @click="openPushModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#2563eb;border-color:#bfdbfe;font-weight:600;white-space:nowrap;">推送群绑定</button>
-                                        <span style="font-size:12px;color:#9ca3af;white-space:nowrap;">{{ ent.renewal_push_count || 0 }} 个群</span>
+                                        <span v-if="ent.renewal_push_count" style="font-size:11px;color:#6b7280;line-height:1.45;" :title="(ent.renewal_push_rooms||[]).join('、')">{{ (ent.renewal_push_rooms||[]).join('、') }}</span>
+                                        <span v-else style="font-size:12px;color:#d1d5db;">未绑定</span>
                                     </div>
                                 </td>
 

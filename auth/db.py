@@ -1227,16 +1227,19 @@ def get_member_count_batch(db) -> dict:
         conn.close()
 
 
-def get_renewal_push_count_batch(db) -> dict:
-    """批量获取各企业续保推送群数(enabled)，返回 {enterprise_id: 群数}"""
+def get_renewal_push_rooms_batch(db) -> dict:
+    """批量获取各企业续保推送群名列表(enabled)，返回 {enterprise_id: [room_name,...]}"""
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute(
-            "SELECT enterprise_id, COUNT(*) AS cnt FROM renewal_push_configs "
-            "WHERE enterprise_id IS NOT NULL AND enabled=1 GROUP BY enterprise_id"
+            "SELECT enterprise_id, roomid, room_name FROM renewal_push_configs "
+            "WHERE enterprise_id IS NOT NULL AND enabled=1 ORDER BY id"
         )
-        return {row["enterprise_id"]: row["cnt"] for row in cursor.fetchall()}
+        result = {}
+        for row in cursor.fetchall():
+            result.setdefault(row["enterprise_id"], []).append(row["room_name"] or row["roomid"])
+        return result
     except Exception:
         return {}
     finally:
