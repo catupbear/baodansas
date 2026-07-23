@@ -10974,8 +10974,8 @@ const _app = createApp({
                     if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');
                     // 导出严格跟随列表：排序参数与列表页 loadRecords 完全一致（直接用 recordFilter），
                     // 不再使用命名导出模板 / 导出列配置的独立排序，避免导出顺序与页面所见不一致
-                    if (sortTouched.value && recordFilter.sort_by) params.set('sort_by', recordFilter.sort_by);  // 默认不发→后端按车牌分组+险种；手动点列头才按该列排
-                    if (sortTouched.value && recordFilter.sort_order) params.set('sort_order', recordFilter.sort_order);
+                    if (recordFilter.sort_by) params.set('sort_by', recordFilter.sort_by);  // 客户设置的排序为主排序(最高优先级)；后端再追加车牌+险种作为次级
+                    if (recordFilter.sort_order) params.set('sort_order', recordFilter.sort_order);
                     _appendAdvancedParams(params);
 
                     const listResp = await authFetch(`/api/insurance/records?${params.toString()}`);
@@ -11427,8 +11427,8 @@ const _app = createApp({
                 if (recordPolicyTypeFilter.value) params.set('policy_type', recordPolicyTypeFilter.value);
                 if (recordEnterpriseFilter.value) params.set('enterprise_id', recordEnterpriseFilter.value);
                 // 排序
-                if (sortTouched.value && recordFilter.sort_by) params.set('sort_by', recordFilter.sort_by);  // 默认不发→后端按车牌分组+险种；手动点列头才按该列排
-                if (sortTouched.value && recordFilter.sort_order) params.set('sort_order', recordFilter.sort_order);
+                if (recordFilter.sort_by) params.set('sort_by', recordFilter.sort_by);  // 客户设置的排序为主排序(最高优先级)；后端再追加车牌+险种作为次级
+                if (recordFilter.sort_order) params.set('sort_order', recordFilter.sort_order);
                 _appendDateParams(params);
                 // 失败/待处理 tab 下不去重，避免记录被过滤掉
                 if (recordFilter.dedup && tab !== 'failed' && tab !== 'pending') params.set('dedup', '1');

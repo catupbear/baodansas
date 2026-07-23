@@ -1877,16 +1877,14 @@ def query_insurance_records(
     """
     conditions = []
     params = []
-    # 「保单排序」：启用且用户没有显式点列排序时，改为按车牌分组（车牌为主排序，触发 JOIN），
-    # 组内再按险种大类顺序（下方 ORDER BY 插入二级排序）。用户显式点了某列排序则以用户为准。
+    # 「保单排序」：客户设置的排序(sort_by)为最高优先级(主排序，前端始终传入)；
+    # 保单排序作为「次级排序」追加在主排序之后——同一主排序值(如同一签单日期)下，
+    # 把同车牌的保单按险种大类排在一起(下方 ORDER BY 追加 车牌+险种)。因追加了车牌/险种列，需 JOIN。
     _policy_sort_on = bool(policy_sort and policy_sort.get("enabled"))
-    if _policy_sort_on and not sort_by:
-        sort_by = "plate_no"
-        sort_order = "asc"
     # 动态判断是否需要 JOIN 关联表：
     # dedup 始终需要（按 pf.policy_no 分组）；有关联表搜索/日期/险种/排序字段时才 JOIN
     _JOIN_SORT_FIELDS = {"plate_no", "sign_date", "start_date", "end_date", "policy_no"}
-    need_join = dedup or bool(
+    need_join = dedup or _policy_sort_on or bool(
         policy_type or
         search_company or search_policy_no or search_plate_no or
         search_applicant or search_insured or search_salesperson or
@@ -2124,7 +2122,8 @@ def query_insurance_records(
         dedup_order = f"{_sort_map_id_dedup[_sort_key]} {_dir}, t.id DESC"
         final_order = f"{_sort_map_final[_sort_key]} {_dir}, r2.id DESC"
 
-        # 「保单排序」启用：车牌为主排序，组内插入险种大类顺序作为二级排序。
+        # 「保单排序」启用：在主排序(客户设置的 sort_by，最高优先级)之后，追加 车牌+险种 作为次级排序。
+        # 同一主排序值(如同一签单日期)下，同车牌的保单按险种大类排在一起。
         # 险种大类 rank 由前端传入的 order 决定；CASE 里的 % 需写成 %% 供 pymysql 参数化转义。
         if _policy_sort_on:
             _order = policy_sort.get("order") or ["交强险", "商业险", "非车险"]
@@ -2140,9 +2139,10 @@ def query_insurance_records(
                     f"WHEN {col} LIKE '%%商业%%' OR {col} LIKE '%%机动车辆保险%%' OR {col} LIKE '%%机动车辆综合险%%' THEN {_sy} "
                     f"ELSE {_fc} END"
                 )
-            id_order = f"{_sort_map_id['plate_no']} ASC, {_rank_case('pf')} ASC, r.id DESC"
-            dedup_order = f"{_sort_map_id_dedup['plate_no']} ASC, {_rank_case('pf2')} ASC, t.id DESC"
-            final_order = f"{_sort_map_final['plate_no']} ASC, {_rank_case('pf3')} ASC, r2.id DESC"
+            # 主排序在前(客户设置)，其后 车牌ASC + 险种rank，最后 id
+            id_order = f"{_sort_map_id[_sort_key]} {_dir}, {_sort_map_id['plate_no']} ASC, {_rank_case('pf')} ASC, r.id DESC"
+            dedup_order = f"{_sort_map_id_dedup[_sort_key]} {_dir}, {_sort_map_id_dedup['plate_no']} ASC, {_rank_case('pf2')} ASC, t.id DESC"
+            final_order = f"{_sort_map_final[_sort_key]} {_dir}, {_sort_map_final['plate_no']} ASC, {_rank_case('pf3')} ASC, r2.id DESC"
 
         # 延迟关联：先查 id（轻量排序），再用 id 取完整数据
         offset = (page - 1) * page_size
