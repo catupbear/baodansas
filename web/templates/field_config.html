@@ -793,8 +793,10 @@
                 </div>
                 <!-- 保单排序（同一车牌按险种顺序，常驻默认；用户只调险种顺序） -->
                 <div style="margin-bottom:12px; padding:10px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
-                    <div style="font-size:13px; font-weight:500;">📋 保单排序<span style="font-weight:400; color:var(--text-muted); margin-left:6px;">同一车牌的保单默认排在一起，你只需调整组内的险种顺序</span></div>
-                    <div style="margin-top:10px; display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">
+                    <div style="font-size:13px; font-weight:500; cursor:pointer; user-select:none;" @click="policySortExpanded = !policySortExpanded">
+                        <span style="display:inline-block; width:14px; color:var(--text-muted);">{{ policySortExpanded ? '▾' : '▸' }}</span>📋 保单排序<span style="font-weight:400; color:var(--text-muted); margin-left:6px;">同一车牌的保单默认排在一起，你只需调整组内的险种顺序</span>
+                    </div>
+                    <div v-show="policySortExpanded" style="margin-top:10px; display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">
                         <span style="font-size:12px; color:var(--text-muted); padding-top:6px;">险种优先级（越靠上越靠前，点箭头调整）：</span>
                         <div style="display:inline-flex; flex-direction:column; gap:5px;">
                             <div v-for="(cat, i) in policySort.order" :key="cat"
@@ -808,7 +810,7 @@
                             </div>
                         </div>
                     </div>
-                    <div style="font-size:11px; color:var(--text-muted); margin-top:8px;">
+                    <div v-show="policySortExpanded" style="font-size:11px; color:var(--text-muted); margin-top:8px;">
                         识别记录列表会把同一车牌的保单排在一起（车牌组按车牌排），组内按上面的险种顺序（默认 交强险 → 商业险 → 非车险）。在列表点某列表头可临时改按该列排序。此顺序跟当前模板绑定，随「保存」一起生效。
                     </div>
                 </div>
@@ -1864,6 +1866,7 @@ createApp({
 
         // === 保单排序（同一车牌按险种顺序，跟模板绑定） ===
         const policySort = reactive({ enabled: false, order: ['交强险', '商业险', '非车险'] });
+        const policySortExpanded = ref(false);  // 默认折叠
         function movePolicyCat(i, dir) {
             if (activeSource.value === 'enterprise') return;
             const j = i + dir;
@@ -3623,7 +3626,7 @@ createApp({
             groupFillTargetOptions, onGroupFillTargetChange, addGroupFillKeyword, addGroupFillRule, importCustomFieldsAsRules,
             saveGroupFillRules, groupFillCopyText, copyGroupFillFormat,
             skipKeywords, skipKeywordInput, skipKeywordsSaving, addSkipKeyword, saveSkipKeywords,
-            policySort, movePolicyCat,
+            policySort, movePolicyCat, policySortExpanded,
         };
     }
 }).mount('#app');
