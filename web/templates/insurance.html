@@ -2659,8 +2659,8 @@
                                 <div class="col-span-2"><span class="text-gray-400">保单号：</span><span class="text-gray-600" style="font-family:ui-monospace,Menlo,monospace;">{{ t.policy_no || '—' }}</span></div>
                             </div>
                         </div>
-                        <!-- 右区：状态 + 操作 -->
-                        <div class="flex flex-col items-end gap-2" style="min-width:150px;">
+                        <!-- 右区：状态 + 操作（移动端横排一行，桌面竖排） -->
+                        <div class="flex flex-row sm:flex-col w-full sm:w-auto justify-between sm:justify-start items-center sm:items-end gap-2" style="min-width:150px;">
                             <span class="text-xs px-2 py-0.5 rounded-full" :style="renewalStatusStyle(t.status)">{{ renewalStatusLabel(t.status) }}</span>
                             <div class="flex gap-1.5 flex-wrap justify-end">
                                 <button v-if="t.hint_record_id" @click="previewRenewalTaskFile(t.hint_record_id)" class="btn" style="padding:3px 10px;font-size:11px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;">📄 查看新保单</button>
@@ -6020,6 +6020,15 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
             </svg>
             <span style="font-size:10px;font-weight:500;">业绩看板</span>
+        </button>
+        <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role) && !notActivated" @click="openRenewalTab()"
+                style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;position:relative;"
+                :style="pageTab==='renewal'?'color:#ea580c;':'color:#9ca3af;'">
+            <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            <span v-if="renewalBadgeCount > 0" style="position:absolute;top:2px;right:calc(50% - 20px);min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:#dc2626;color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
+            <span style="font-size:10px;font-weight:500;">企业工作台</span>
         </button>
         <button @click="mobileMenuOpen=true"
                 style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;color:#9ca3af;">
@@ -11768,7 +11777,7 @@ const _app = createApp({
         const renewalTasks = ref([]);
         const renewalLoading = ref(false);
         const renewalFilter = ref({ status: '', assignee: '', date_start: '', date_end: '', keyword: '', enterprise_id: '' });
-        const renewalPagination = ref({ page: 1, page_size: 20, total: 0, pages: 1 });
+        const renewalPagination = ref({ page: 1, page_size: 10, total: 0, pages: 1 });
         const renewalSelectedIds = ref([]);
         const renewalAssigneesList = ref([]);
         const renewalScanning = ref(false);
