@@ -5275,16 +5275,23 @@ def export_excel():
                     # （或同类两份），合并前只取第一条会把另一份的保费直接丢掉，应该是两份
                     # 相加（2026-07-21反馈）。保单号/费率类字段不是金额，仍按第一条有值的取
                     _MERGE_SUM_FIELDS = {"保费", "佣金", "公司利润", "跟单人利润"}
+                    _summed_policy = set()  # 同一保单号只累加一次金额，避免客户重复发送同一张保单导致保费叠加
                     for record in group:
                         policy_type = record.get("险种", "") or record.get("险种类型", "")
                         type_code, _ = get_policy_type_code(policy_type)
                         prefix = MERGE_PREFIXES.get(type_code, "非车险")
+                        _pno = (record.get("保单号", "") or "").strip()
+                        _dup_amount = bool(_pno) and _pno in _summed_policy  # 该保单号金额已累加过
+                        if _pno:
+                            _summed_policy.add(_pno)
                         for f in MERGE_SPLIT_FIELDS:
                             col_name = f"{prefix}{f}"
                             val = record.get(f, "")
                             if not val:
                                 continue
                             if f in _MERGE_SUM_FIELDS:
+                                if _dup_amount:
+                                    continue  # 重复保单号，金额不再叠加
                                 try:
                                     num = float(str(val).replace(",", ""))
                                     merged[col_name] = f"{float(merged.get(col_name) or 0) + num:.2f}"
