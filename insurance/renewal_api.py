@@ -597,6 +597,15 @@ def push_room_options_api():
                 if rid and rid not in seen:
                     seen.add(rid)
                     rooms.append({"id": rid, "name": name})
+        # 用 wecom_groups 的权威群名覆盖（monitor_configs 存的 name 可能为空/仅roomid）
+        if rooms:
+            _rids = [r["id"] for r in rooms]
+            _ph = ",".join(["%s"] * len(_rids))
+            cursor.execute(f"SELECT roomid, name FROM wecom_groups WHERE roomid IN ({_ph})", _rids)
+            _nm = {row["roomid"]: row["name"] for row in cursor.fetchall() if row.get("name")}
+            for r in rooms:
+                if _nm.get(r["id"]):
+                    r["name"] = _nm[r["id"]]
     except (TypeError, ValueError):
         return jsonify({"code": 400, "msg": "enterprise_id 非法"}), 400
     finally:
