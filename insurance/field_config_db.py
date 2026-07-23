@@ -1256,51 +1256,50 @@ def _normalize_sort_config(val) -> dict:
 
 def get_default_sort(db, config_type: str, user_id: int, role: str, parent_id=None) -> dict:
     """
-    获取列配置的默认排序（config_key='default_sort'）。
-    查找优先级与 get_column_config 一致：按当前启用模板决定 scope，
-    活跃模板找不到再查默认模板，全部未配置返回 DEFAULT_SORT_CONFIG。
+    获取默认排序（config_key='default_sort'）。
+
+    默认排序不是「模板属性」，而是每个用户可自行更改的「初始项」，与当前启用的是
+    哪个模板无关。因此这里按【作用域】回退、且【不绑定模板】查找：
+      - 员工：永远优先取本人（scope=user）保存过的排序——不管当前启用的是自己的模板
+        还是企业/系统模板；本人没设置过再回退企业 → 全局的初始默认。
+      - 企业管理员：取企业级设置。
+      - 超管：取全局设置。
+    全部未配置时返回 DEFAULT_SORT_CONFIG。
     """
     if config_type not in ("list_columns", "export_columns"):
         return dict(DEFAULT_SORT_CONFIG)
 
+    # 仅按作用域回退（default_sort 是作用域级的单一初始项，不随模板变化）
+    search_order = []
+    if role == "employee":
+        search_order.append(("user", user_id))
+        if parent_id is not None:
+            search_order.append(("enterprise", parent_id))
+        search_order.append(("global", None))
+    elif role == "enterprise":
+        search_order.append(("enterprise", parent_id or user_id))
+        search_order.append(("global", None))
+    else:  # super_admin
+        search_order.append(("global", None))
+
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-        active = get_active_template(db, user_id)
-        active_tpl = active.get("template_name", DEFAULT_TEMPLATE_NAME)
-        active_source = active.get("source", "own")
-
-        # 搜索顺序与 get_column_config 保持一致
-        search_order = []
-        if active_source == "system":
-            search_order.append(("global", None))
-        elif active_source == "enterprise" and parent_id is not None:
-            search_order.append(("enterprise", parent_id))
-        else:
-            if role == "employee" and parent_id is not None:
-                search_order.append(("user", user_id))
-                search_order.append(("enterprise", parent_id))
-            elif role == "enterprise":
-                search_order.append(("enterprise", parent_id or user_id))
-            elif role == "super_admin":
-                search_order.append(("global", None))
-
         for scope, scope_id in search_order:
             sid_cond, sid_params = _scope_id_condition(scope_id)
-            for tpl in ([active_tpl, DEFAULT_TEMPLATE_NAME] if active_tpl != DEFAULT_TEMPLATE_NAME else [DEFAULT_TEMPLATE_NAME]):
-                cursor.execute(
-                    f"SELECT config_value FROM user_field_config "
-                    f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'default_sort' "
-                    f"AND template_name = %s LIMIT 1",
-                    [scope] + sid_params + [config_type, tpl]
-                )
-                row = cursor.fetchone()
-                if row:
-                    try:
-                        return _normalize_sort_config(json.loads(row["config_value"]))
-                    except (TypeError, json.JSONDecodeError):
-                        pass
+            # 不按 template_name 过滤；历史上可能按模板存过多行，取最近一次为准
+            cursor.execute(
+                f"SELECT config_value FROM user_field_config "
+                f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'default_sort' "
+                f"ORDER BY updated_at DESC LIMIT 1",
+                [scope] + sid_params + [config_type]
+            )
+            row = cursor.fetchone()
+            if row:
+                try:
+                    return _normalize_sort_config(json.loads(row["config_value"]))
+                except (TypeError, json.JSONDecodeError):
+                    pass
         return dict(DEFAULT_SORT_CONFIG)
     finally:
         conn.close()
@@ -1309,38 +1308,43 @@ def get_default_sort(db, config_type: str, user_id: int, role: str, parent_id=No
 def save_default_sort(db, config_type: str, scope: str, scope_id, sort_config: dict,
                       template_name: str = None):
     """
-    保存列配置的默认排序（config_key='default_sort'），与 save_column_config 同作用域同模板。
+    保存默认排序（config_key='default_sort'）。
+
+    默认排序是「作用域级的单一初始项」，与模板无关，因此忽略 template_name：
+    同一 (scope, scope_id, config_type) 只保留一行，保存前先清掉该作用域下所有
+    历史行（含早期按模板名存的多行），保证每个用户/企业只有一个当前生效值。
     """
-    tpl_name = template_name or DEFAULT_TEMPLATE_NAME
-    visible_val = 0 if template_name else 1
     value = json.dumps(_normalize_sort_config(sort_config), ensure_ascii=False)
+    # 固定模板名占位（表结构 template_name NOT NULL），读取端不再依赖它
+    tpl_name = DEFAULT_TEMPLATE_NAME
     conn = db.pool.connection()
     try:
         cursor = conn.cursor()
         sid_cond, sid_params = _scope_id_condition(scope_id)
 
+        # 清掉该作用域该类型下的所有旧排序行（不限模板）
         cursor.execute(
             f"DELETE FROM user_field_config "
-            f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'default_sort' "
-            f"AND template_name = %s",
-            [scope] + sid_params + [config_type, tpl_name]
+            f"WHERE scope = %s AND {sid_cond} AND config_type = %s AND config_key = 'default_sort'",
+            [scope] + sid_params + [config_type]
         )
         if scope_id is None:
             cursor.execute(
                 "INSERT INTO user_field_config "
                 "(scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
-                "VALUES (%s, NULL, %s, %s, 'default_sort', %s, %s)",
-                [scope, tpl_name, config_type, value, visible_val]
+                "VALUES (%s, NULL, %s, %s, 'default_sort', %s, 1)",
+                [scope, tpl_name, config_type, value]
             )
         else:
             cursor.execute(
                 "INSERT INTO user_field_config "
                 "(scope, scope_id, template_name, config_type, config_key, config_value, visible_to_employees) "
-                "VALUES (%s, %s, %s, %s, 'default_sort', %s, %s)",
-                [scope, scope_id, tpl_name, config_type, value, visible_val]
+                "VALUES (%s, %s, %s, %s, 'default_sort', %s, 1)",
+                [scope, scope_id, tpl_name, config_type, value]
             )
         conn.commit()
-        logger.debug("默认排序已保存: scope=%s config_type=%s value=%s", scope, config_type, value)
+        logger.debug("默认排序已保存: scope=%s scope_id=%s config_type=%s value=%s",
+                     scope, scope_id, config_type, value)
     finally:
         conn.close()
 
