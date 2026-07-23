@@ -2641,6 +2641,7 @@
                                 <div><span class="text-gray-400">往年保费：</span><span class="text-gray-700 font-medium">{{ t.total_premium || '—' }}</span></div>
                                 <div><span class="text-gray-400">险种：</span><span class="text-gray-700 font-medium">{{ t.policy_type || '—' }}</span></div>
                                 <div><span class="text-gray-400">承保公司：</span><span class="text-gray-700 font-medium">{{ t.company_short || '—' }}</span></div>
+                                <div class="col-span-2"><span class="text-gray-400">保单号：</span><span class="text-gray-600" style="font-family:ui-monospace,Menlo,monospace;">{{ t.policy_no || '—' }}</span></div>
                                 <div><span class="text-gray-400">跟进人：</span><span class="text-gray-700 font-medium">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.assignee_name || '未分配') : (t.assignee_name ? maskPersonName(t.assignee_name) : '未分配') }}</span></div>
                             </div>
                         </div>
