@@ -24,7 +24,35 @@ _ACTIVE_TPL_TTL = 60
 # 支持的 config_type 类型
 CONFIG_TYPES = ["company_alias", "policy_type_alias", "date_format", "fee_formula",
                 "list_columns", "export_columns", "remark_selector", "group_fill_keywords",
-                "ratio_rule"]
+                "ratio_rule", "policy_sort"]
+
+# 保单排序：同一车牌下按险种大类排序，顺序可由用户在页面列配置里拖动调整、跟模板绑定。
+# 三大类固定，默认顺序 交强险 > 商业险 > 非车险；enabled=False 时行为与现在完全一致。
+POLICY_SORT_CATEGORIES = ["交强险", "商业险", "非车险"]
+DEFAULT_POLICY_SORT = {"enabled": False, "order": list(POLICY_SORT_CATEGORIES)}
+
+
+def classify_policy_category(policy_type: str) -> str:
+    """把具体险种名归到三大类之一：交强险 / 商业险 / 非车险。"""
+    pt = policy_type or ""
+    if "交强" in pt or "交通事故责任强制" in pt:
+        return "交强险"
+    # 非车险：驾乘/驾意/意外/人身等（不含"机动车…责任"这类车险）
+    if any(k in pt for k in ("驾乘", "驾意", "意外", "人身", "健康", "医疗", "出行", "无忧")) and "机动车" not in pt:
+        return "非车险"
+    if any(k in pt for k in ("驾乘", "驾意", "意外伤害", "出行")):
+        return "非车险"
+    # 其余（机动车商业保险、商业险、车损、三者等）归商业
+    return "商业险"
+
+
+def policy_sort_rank(policy_type: str, order: list) -> int:
+    """按配置顺序返回险种大类的排序序号（越小越靠前）；未知归到末尾。"""
+    cat = classify_policy_category(policy_type)
+    try:
+        return order.index(cat)
+    except (ValueError, AttributeError):
+        return len(POLICY_SORT_CATEGORIES)
 
 # 默认模板名
 DEFAULT_TEMPLATE_NAME = "默认模板"
@@ -973,6 +1001,100 @@ def get_column_config(db, config_type: str, user_id: int, role: str, parent_id=N
         return {"source": "default", "columns": list(DEFAULT_COLUMNS)}
     finally:
         conn.close()
+
+
+def get_policy_sort(db, user_id: int, role: str, parent_id=None) -> dict:
+    """
+    获取「保单排序」配置（跟当前活跃模板绑定），按 user → enterprise → global 优先级查找。
+    返回 {"enabled": bool, "order": [三大类顺序]}；未配置时返回 DEFAULT_POLICY_SORT。
+    """
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        active = get_active_template(db, user_id)
+        active_tpl = active.get("template_name", DEFAULT_TEMPLATE_NAME)
+        active_source = active.get("source", "own")
+
+        search_order = []
+        if active_source == "system":
+            search_order.append(("global", None))
+        elif active_source == "enterprise" and parent_id is not None:
+            search_order.append(("enterprise", parent_id))
+        else:
+            if role == "employee" and parent_id is not None:
+                search_order.append(("user", user_id))
+                search_order.append(("enterprise", parent_id))
+            elif role == "enterprise":
+                search_order.append(("enterprise", parent_id or user_id))
+            elif role == "super_admin":
+                search_order.append(("global", None))
+
+        for scope, scope_id in search_order:
+            sid_cond, sid_params = _scope_id_condition(scope_id)
+            for tpl in ([active_tpl, DEFAULT_TEMPLATE_NAME] if active_tpl != DEFAULT_TEMPLATE_NAME else [DEFAULT_TEMPLATE_NAME]):
+                cursor.execute(
+                    f"SELECT config_value FROM user_field_config "
+                    f"WHERE scope = %s AND {sid_cond} AND config_type = 'policy_sort' "
+                    f"AND config_key = 'config' AND template_name = %s LIMIT 1",
+                    [scope] + sid_params + [tpl]
+                )
+                row = cursor.fetchone()
+                if row:
+                    break
+            else:
+                row = None
+            if row:
+                try:
+                    cfg = json.loads(row["config_value"])
+                    order = [c for c in (cfg.get("order") or []) if c in POLICY_SORT_CATEGORIES]
+                    # 补齐缺失的大类（保持在末尾），保证三类都在
+                    for c in POLICY_SORT_CATEGORIES:
+                        if c not in order:
+                            order.append(c)
+                    return {"enabled": bool(cfg.get("enabled")), "order": order}
+                except (TypeError, json.JSONDecodeError):
+                    pass
+        return dict(DEFAULT_POLICY_SORT)
+    finally:
+        conn.close()
+
+
+def get_policy_sort_for_template(db, scope: str, scope_id, template_name: str) -> dict:
+    """直接读指定模板的「保单排序」配置（设置态用，不走活跃模板优先级搜索）。"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        sid_cond, sid_params = _scope_id_condition(scope_id)
+        cursor.execute(
+            f"SELECT config_value FROM user_field_config WHERE scope = %s AND {sid_cond} "
+            f"AND config_type = 'policy_sort' AND config_key = 'config' AND template_name = %s LIMIT 1",
+            [scope] + sid_params + [template_name]
+        )
+        row = cursor.fetchone()
+        if row:
+            try:
+                cfg = json.loads(row["config_value"])
+                order = [c for c in (cfg.get("order") or []) if c in POLICY_SORT_CATEGORIES]
+                for c in POLICY_SORT_CATEGORIES:
+                    if c not in order:
+                        order.append(c)
+                return {"enabled": bool(cfg.get("enabled")), "order": order}
+            except (TypeError, json.JSONDecodeError):
+                pass
+        return dict(DEFAULT_POLICY_SORT)
+    finally:
+        conn.close()
+
+
+def save_policy_sort(db, scope: str, scope_id, template_name: str, enabled: bool, order: list, visible: bool = False):
+    """保存「保单排序」配置到指定模板（config_type=policy_sort, config_key=config）。"""
+    order = [c for c in (order or []) if c in POLICY_SORT_CATEGORIES]
+    for c in POLICY_SORT_CATEGORIES:
+        if c not in order:
+            order.append(c)
+    payload = json.dumps({"enabled": bool(enabled), "order": order}, ensure_ascii=False)
+    save_template_config(db, scope, scope_id, template_name, "policy_sort",
+                         [{"key": "config", "value": payload}], visible=visible)
 
 
 def get_percent_fields(db, user_id: int, role: str, parent_id=None) -> set:

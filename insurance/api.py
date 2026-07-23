@@ -42,6 +42,7 @@ from .field_config_db import (
     get_active_template, set_active_template,
     get_effective_config, apply_user_config_to_fields, match_fee_formulas, _format_date,
     get_column_config, save_column_config, delete_column_config,
+    get_policy_sort, save_policy_sort,
     get_default_sort, save_default_sort,
     get_user_fixed_values, save_user_fixed_values,
     get_remark_selector_config, save_remark_selector_config,
@@ -543,6 +544,16 @@ def list_records():
             effective_enterprise_id = _get_enterprise_id_filter()
             effective_user_ids = _get_user_ids_filter()
 
+        # 「保单排序」配置（跟当前活跃模板绑定）：查询前解析，用于列表按车牌分组+险种排序。
+        # 超管带企业筛选时按被查看企业的管理员账号解析配置（与下方列展示配置一致）。
+        _ps_uid = g.current_user["user_id"]; _ps_role = g.current_user["role"]; _ps_pid = g.current_user.get("parent_id")
+        if _ps_role == ROLE_SUPER_ADMIN and effective_enterprise_id:
+            from auth.db import get_enterprise_admin_user
+            _pa = get_enterprise_admin_user(_db, effective_enterprise_id)
+            if _pa:
+                _ps_uid, _ps_role, _ps_pid = _pa["id"], _pa["role"], _pa["parent_id"]
+        policy_sort_cfg = get_policy_sort(_db, _ps_uid, _ps_role, _ps_pid)
+
         result = query_insurance_records(
             _db,
             page=page,
@@ -581,6 +592,7 @@ def list_records():
             review_status=review_status,
             sort_by=sort_by,
             sort_order=sort_order,
+            policy_sort=policy_sort_cfg,
         )
         # 列表返回 display_fields（轻量映射字段）替代 parsed_fields
         # 获取用户字段配置，应用简称/日期格式/公式计算（结果 TTL 缓存 60 秒）
@@ -1186,6 +1198,7 @@ def list_records():
 
         # 复用已加载的页面列配置
         result["column_config"] = list_col_cfg
+        result["policy_sort"] = policy_sort_cfg
 
         # 用「与列表完全相同的筛选」内联返回 Tab 统计，确保列表与统计同源同时刻、
         # 永不打架（彻底杜绝"记数与实际识别数量对不上"）。statu/doc_category/is_abnormal
@@ -3776,6 +3789,39 @@ def save_remark_selector_config_api():
         return jsonify({"code": 0, "msg": "已保存"})
     except Exception as e:
         logger.exception("保存备注快捷选择配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/policy-sort/config", methods=["GET"])
+@login_required
+def get_policy_sort_config_api():
+    """读取「保单排序」配置（跟模板绑定）。带 template 参数=设置态读指定模板；否则运行态读当前启用模板。"""
+    try:
+        from insurance.field_config_db import get_policy_sort_for_template
+        if request.args.get("template") or request.args.get("template_name"):
+            scope, scope_id, template_name = _resolve_remark_settings_target()
+        else:
+            scope, scope_id, template_name = _resolve_remark_runtime_target()
+        cfg = get_policy_sort_for_template(_db, scope, scope_id, template_name)
+        return jsonify({"code": 0, "data": {"config": cfg, "template_name": template_name}})
+    except Exception as e:
+        logger.exception("读取保单排序配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/policy-sort/config", methods=["PUT"])
+@login_required
+def save_policy_sort_config_api():
+    """保存指定模板的「保单排序」配置（支持超管代管）。"""
+    try:
+        body = request.get_json(force=True) or {}
+        scope, scope_id, template_name = _resolve_remark_settings_target(extra=body)
+        cfg = body.get("config", body)
+        save_policy_sort(_db, scope, scope_id, template_name,
+                         bool(cfg.get("enabled")), cfg.get("order") or [])
+        return jsonify({"code": 0, "msg": "已保存"})
+    except Exception as e:
+        logger.exception("保存保单排序配置失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 

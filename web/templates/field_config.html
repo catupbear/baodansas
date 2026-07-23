@@ -514,7 +514,7 @@
     <!-- 代管提示条 -->
     <div v-if="adminTarget" style="background:#fef3c7; border-bottom:1px solid #fcd34d; padding:8px 24px; display:flex; align-items:center; justify-content:center; gap:12px;">
         <span style="font-size:13px; color:#92400e;">正在代管编辑：<b>{{ adminTarget.label }}</b> 的「{{ activeTemplateName }}」模板（{{ adminTarget.scope === 'enterprise' ? '企业级' : '员工级' }}），修改将直接保存到对方配置</span>
-        <button @click="adminTarget = null; loadTemplates(); loadConfig(); loadColumnConfig('list_columns'); loadColumnConfig('export_columns'); loadMergeConfig(); loadPlateFormatConfig(); loadRemarkCfg(); loadGroupFillTargets();" style="font-size:12px; padding:3px 12px; background:#fff; border:1px solid #fcd34d; border-radius:4px; cursor:pointer; color:#92400e;">退出代管</button>
+        <button @click="adminTarget = null; loadTemplates(); loadConfig(); loadColumnConfig('list_columns'); loadColumnConfig('export_columns'); loadMergeConfig(); loadPlateFormatConfig(); loadRemarkCfg(); loadPolicySort(); loadGroupFillTargets();" style="font-size:12px; padding:3px 12px; background:#fff; border:1px solid #fcd34d; border-radius:4px; cursor:pointer; color:#92400e;">退出代管</button>
     </div>
 
     <!-- 主内容区 -->
@@ -790,6 +790,30 @@
                         <option value="desc">降序</option>
                     </select>
                     <span style="font-size:11px; color:var(--text-muted);">打开识别记录页时列表默认按此排序，用户仍可在页面上临时切换</span>
+                </div>
+                <!-- 保单排序（同一车牌按险种顺序） -->
+                <div style="margin-bottom:12px; padding:10px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
+                    <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:500;">
+                        <input type="checkbox" v-model="policySort.enabled" :disabled="activeSource === 'enterprise'">
+                        保单排序：把同一车牌的保单排在一起，组内按险种顺序
+                    </label>
+                    <div v-if="policySort.enabled" style="margin-top:10px; display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">
+                        <span style="font-size:12px; color:var(--text-muted); padding-top:6px;">险种优先级（越靠上越靠前，点箭头调整）：</span>
+                        <div style="display:inline-flex; flex-direction:column; gap:5px;">
+                            <div v-for="(cat, i) in policySort.order" :key="cat"
+                                 style="display:flex; align-items:center; gap:6px; background:#fff; border:1px solid var(--border); border-radius:6px; padding:5px 12px; font-size:12px; width:230px;">
+                                <span style="color:var(--text-muted); width:16px; text-align:center;">{{ i+1 }}</span>
+                                <span style="flex:1; font-weight:500;">{{ cat }}</span>
+                                <button @click="movePolicyCat(i,-1)" :disabled="i===0 || activeSource==='enterprise'"
+                                        style="border:none;background:none;cursor:pointer;color:var(--primary);padding:0 3px;font-size:13px;line-height:1;" :style="(i===0||activeSource==='enterprise')?'opacity:.3;cursor:not-allowed;':''">▲</button>
+                                <button @click="movePolicyCat(i,1)" :disabled="i===policySort.order.length-1 || activeSource==='enterprise'"
+                                        style="border:none;background:none;cursor:pointer;color:var(--primary);padding:0 3px;font-size:13px;line-height:1;" :style="(i===policySort.order.length-1||activeSource==='enterprise')?'opacity:.3;cursor:not-allowed;':''">▼</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="font-size:11px; color:var(--text-muted); margin-top:8px;">
+                        开启后，识别记录列表会把同一车牌的保单排在一起，组内按上面的险种顺序（默认 交强险 → 商业险 → 非车险）；不开启时排序不变。此配置跟当前模板绑定，随「保存」一起生效。
+                    </div>
                 </div>
                 <!-- 列头预览 -->
                 <div style="margin-bottom:16px; border:1px solid var(--border-light); border-radius:8px; overflow:hidden;">
@@ -1840,6 +1864,36 @@ createApp({
             } catch (e) { alert('保存失败: ' + e.message); }
             finally { remarkSaving.value = false; }
         }
+
+        // === 保单排序（同一车牌按险种顺序，跟模板绑定） ===
+        const policySort = reactive({ enabled: false, order: ['交强险', '商业险', '非车险'] });
+        function movePolicyCat(i, dir) {
+            if (activeSource.value === 'enterprise') return;
+            const j = i + dir;
+            if (j < 0 || j >= policySort.order.length) return;
+            const arr = policySort.order;
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        async function loadPolicySort() {
+            try {
+                const resp = await authFetch('/api/insurance/policy-sort/config?' + remarkQuery());
+                const json = await resp.json();
+                if (json.code === 0 && json.data && json.data.config) {
+                    policySort.enabled = !!json.data.config.enabled;
+                    const order = (json.data.config.order || []).filter(c => ['交强险','商业险','非车险'].includes(c));
+                    ['交强险','商业险','非车险'].forEach(c => { if (!order.includes(c)) order.push(c); });
+                    policySort.order = order;
+                }
+            } catch (e) { /* 静默 */ }
+        }
+        async function savePolicySort() {
+            try {
+                await authFetch('/api/insurance/policy-sort/config', {
+                    method: 'PUT',
+                    body: JSON.stringify(remarkInjectTarget({ config: { enabled: policySort.enabled, order: policySort.order } }))
+                });
+            } catch (e) { /* 与列配置一起保存，失败不单独打断 */ }
+        }
         function onRemarkFile(e) {
             remarkFile = e.target.files[0];
             remarkSheets.value = []; remarkSheet.value = '';
@@ -1867,7 +1921,7 @@ createApp({
                 alert(j.msg || '完成');
                 remarkSheets.value = []; remarkSheet.value = ''; remarkFile = null;
                 if (remarkFileEl.value) remarkFileEl.value.value = '';
-                await loadRemarkCfg();
+                await loadRemarkCfg(); loadPolicySort();
             } catch (e) { alert('导入失败: ' + e.message); }
             finally { remarkImporting.value = false; }
         }
@@ -1878,7 +1932,7 @@ createApp({
                 const r = await authFetch('/api/insurance/remark-options?' + remarkQuery(), { method:'DELETE' });
                 const j = await r.json();
                 alert(j.msg || '已清空');
-                await loadRemarkCfg();
+                await loadRemarkCfg(); loadPolicySort();
             } catch (e) { alert('清空失败: ' + e.message); }
         }
 
@@ -2021,6 +2075,10 @@ createApp({
                     if (configType === 'export_columns') {
                         await saveMergeConfig();
                         await savePlateFormatConfig();
+                    }
+                    // 页面列配置保存时同时保存「保单排序」（跟模板绑定）
+                    if (configType === 'list_columns') {
+                        await savePolicySort();
                     }
                 }
             } catch (e) {
@@ -3303,7 +3361,7 @@ createApp({
                 await loadConfig(name, source);
                 // 切换模板时同步重载列配置和合并开关
                 await Promise.all([loadColumnConfig('list_columns'), loadColumnConfig('export_columns'), loadMergeConfig(), loadPlateFormatConfig()]);
-                loadRemarkCfg();
+                loadRemarkCfg(); loadPolicySort();
                 loadGroupFillTargets();
                 if (source === 'system') {
                     showToast('已切换到系统模板「' + name + '」（只读）', 'warning');
@@ -3331,7 +3389,7 @@ createApp({
                 loadColumnConfig('export_columns'),
                 loadMergeConfig(), loadPlateFormatConfig(),
             ]);
-            loadRemarkCfg();
+            loadRemarkCfg(); loadPolicySort();
             loadGroupFillTargets();
             configLoaded = true;
             showToast('正在代管编辑：' + label + ' 的「' + name + '」模板', 'warning');
@@ -3510,7 +3568,7 @@ createApp({
                 applyMergeHidden();
             });
             // 加载备注快捷选择配置
-            loadRemarkCfg();
+            loadRemarkCfg(); loadPolicySort();
             // 加载群内补充目标字段候选 + 全局跳过关键词（仅超管）
             loadGroupFillTargets();
             loadSkipKeywords();
@@ -3568,6 +3626,7 @@ createApp({
             groupFillTargetOptions, onGroupFillTargetChange, addGroupFillKeyword, addGroupFillRule, importCustomFieldsAsRules,
             saveGroupFillRules, groupFillCopyText, copyGroupFillFormat,
             skipKeywords, skipKeywordInput, skipKeywordsSaving, addSkipKeyword, saveSkipKeywords,
+            policySort, movePolicyCat,
         };
     }
 }).mount('#app');

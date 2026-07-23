@@ -11270,6 +11270,22 @@ const _app = createApp({
 
         // 加载识别记录
         const pageMergeByPlate = ref(false);  // 识别记录页"按车牌合并显示"开关
+        // 「保单排序」配置（跟模板绑定，后端随列表接口一并返回）：合并展开时子保单按险种顺序排
+        const pagePolicySort = ref({ enabled: false, order: ['交强险', '商业险', '非车险'] });
+        // 险种归类（与后端 classify_policy_category 保持一致）
+        function policyCategory(pt) {
+            pt = pt || '';
+            if (pt.includes('交强') || pt.includes('交通事故责任强制')) return '交强险';
+            if ((pt.includes('驾乘') || pt.includes('驾意') || pt.includes('意外') || pt.includes('出行') || pt.includes('人身')) && !pt.includes('机动车')) return '非车险';
+            return '商业险';
+        }
+        function policySortRank(rec) {
+            const df = (rec && rec.display_fields) || {};
+            const pt = df['险种'] || df['险种类型'] || (rec && rec.policy_type) || '';
+            const order = (pagePolicySort.value && pagePolicySort.value.order) || ['交强险', '商业险', '非车险'];
+            const i = order.indexOf(policyCategory(pt));
+            return i < 0 ? order.length : i;
+        }
         // 把当前全量原始记录按车牌合并成"伪记录"（display_fields=合并行），
         // 复用导出接口的合并算法（return_json），保证页面与导出 Excel 完全一致。
         async function _applyMerge(rawOverride) {
@@ -11327,6 +11343,13 @@ const _app = createApp({
                 const p = mergeKey(row) || ('__ROW__' + i);
                 const srcIds = Array.isArray(row._src_ids) ? row._src_ids : null;
                 const children = srcIds ? srcIds.map(id => byId[id]).filter(Boolean) : (byPlate[p] || []);
+                // 「保单排序」启用时，展开的子保单按险种大类顺序排（交强→商业→非车险，或配置的顺序），稳定排序
+                if (pagePolicySort.value && pagePolicySort.value.enabled && children.length > 1) {
+                    children
+                        .map((c, _i) => [c, _i])
+                        .sort((a, b) => (policySortRank(a[0]) - policySortRank(b[0])) || (a[1] - b[1]))
+                        .forEach((pair, _i) => { children[_i] = pair[0]; });
+                }
                 return {
                     id: '__merge_' + (p || i),
                     display_fields: row,
@@ -11426,6 +11449,9 @@ const _app = createApp({
                 }
                 if (data.column_config && data.column_config.columns) {
                     listColumnConfig.value = data.column_config.columns;
+                }
+                if (data.policy_sort) {
+                    pagePolicySort.value = data.policy_sort;
                 }
                 if (!_mergeSilently) {
                     recordPagination.total = data.total || 0;
