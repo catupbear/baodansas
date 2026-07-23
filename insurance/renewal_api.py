@@ -18,6 +18,7 @@ from flask import Blueprint, g, jsonify, request, send_file
 from auth.decorators import login_required, admin_required
 from auth.db import ROLE_SUPER_ADMIN, ROLE_ENTERPRISE, ROLE_EMPLOYEE
 from insurance import renewal_db as rdb
+from insurance import renewal_push_db as rpdb
 from insurance.db import get_insurance_config, set_insurance_config
 
 logger = logging.getLogger(__name__)
@@ -540,3 +541,34 @@ def export():
         download_name=filename,
     )
     return resp
+
+
+# ============================================================
+# 续保推送群绑定（超管在企业管理页配置：每个企业绑定若干群，到期提醒推送到这些群）
+# ============================================================
+
+@renewal_bp.route("/push-rooms", methods=["GET"])
+@admin_required
+def get_push_rooms_api():
+    eid = request.args.get("enterprise_id")
+    if not eid:
+        return jsonify({"code": 400, "msg": "缺少 enterprise_id"}), 400
+    try:
+        rooms = rpdb.get_push_rooms(_db, int(eid))
+    except (TypeError, ValueError):
+        return jsonify({"code": 400, "msg": "enterprise_id 非法"}), 400
+    return jsonify({"code": 0, "data": {"rooms": rooms}})
+
+
+@renewal_bp.route("/push-rooms", methods=["POST"])
+@admin_required
+def save_push_rooms_api():
+    body = request.get_json(force=True) or {}
+    eid = body.get("enterprise_id")
+    if not eid:
+        return jsonify({"code": 400, "msg": "缺少 enterprise_id"}), 400
+    try:
+        rpdb.set_push_rooms(_db, int(eid), body.get("rooms") or [])
+    except (TypeError, ValueError):
+        return jsonify({"code": 400, "msg": "enterprise_id 非法"}), 400
+    return jsonify({"code": 0, "msg": "已保存"})

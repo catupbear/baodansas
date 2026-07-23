@@ -24,6 +24,7 @@ from insurance.monitor_config_db import init_monitor_config_table, migrate_from_
 from insurance.handler import InsuranceHandler
 from insurance.api import insurance_bp, init_insurance_api
 from insurance.renewal_db import init_renewal_tables
+from insurance.renewal_push_db import init_renewal_push_table
 from insurance.renewal_api import renewal_bp, init_renewal_api
 from quote.handler import QuoteHandler
 from auth.db import init_users_table, init_enterprises_table, init_sender_binding_table, init_sms_verification_table, init_referral_columns, init_is_sales_column, init_enterprise_plan_column, init_wallet_tables, init_activated_column, init_users_renewal_column, init_enterprise_follow_status_column, init_enterprise_remark_column, init_enterprise_onboarded_column, init_boost_pack_table, init_seal_tracking_column, init_users_plain_password_column
@@ -192,6 +193,7 @@ def create_app(config: dict) -> Flask:
 
     # 初始化续保任务模块
     init_renewal_tables(db)
+    init_renewal_push_table(db)
     init_renewal_api(db, cos_storage=cos_storage)
     app.register_blueprint(renewal_bp)
 

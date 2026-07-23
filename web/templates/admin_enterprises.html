@@ -243,6 +243,7 @@
                                 <th style="min-width:110px;text-align:center;">本月识别量</th>
                                 <th style="min-width:105px;text-align:center;">人员管理</th>
                                 <th style="min-width:105px;text-align:center;">监控设置</th>
+                                <th style="min-width:105px;text-align:center;">续保推送群</th>
                                 <th style="min-width:170px;">AI质检</th>
                                                                 <th style="min-width:50px;">状态</th>
                                 <th style="min-width:90px;">创建时间</th>
@@ -317,6 +318,10 @@
                                         <button @click="gotoMonitor(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#ea580c;border-color:#fed7aa;font-weight:600;white-space:nowrap;">监控设置</button>
                                         <span style="font-size:12px;color:#9ca3af;white-space:nowrap;">{{ ent.monitor_count || 0 }} 个群</span>
                                     </div>
+                                </td>
+                                <!-- 续保推送群 -->
+                                <td style="vertical-align:middle;text-align:center;">
+                                    <button @click="openPushModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#2563eb;border-color:#bfdbfe;font-weight:600;white-space:nowrap;">推送群绑定</button>
                                 </td>
 
                                 <!-- AI质检（仅超管；本页整体已限超管访问） -->
@@ -412,6 +417,7 @@
                             <div class="ec-ops">
                                 <button @click="gotoMembers(ent)" class="op-btn orange">人员管理</button>
                                 <button @click="gotoMonitor(ent)" class="op-btn orange">监控设置</button>
+                                <button @click="openPushModal(ent)" class="op-btn blue">续保推送群</button>
                                 <button @click="openReportModal(ent)" class="op-btn blue">导出报告</button>
                                 <button @click="openPlanModal(ent)" class="op-btn orange">开通</button>
                                 <button @click="openBoostModal(ent)" class="op-btn amber" title="识别加油包：99元/1200次/3个月，可叠加">⛽ 加油包</button>
@@ -537,6 +543,29 @@
                     <div style="display:flex;justify-content:flex-end;gap:10px;">
                         <button @click="showBoostModal=false" class="btn-secondary" style="padding:8px 16px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:13px;">关闭</button>
                         <button @click="addBoostPack" :disabled="boostSubmitting" style="padding:8px 16px;border-radius:8px;border:none;background:#ea580c;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">{{ boostSubmitting ? '开通中...' : '+ 开通一个加油包' }}</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 续保推送群绑定弹窗 -->
+            <div v-if="showPushModal" class="modal-mask" @click.self="showPushModal=false">
+                <div class="modal-content" style="max-width:480px;">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-1">📣 续保推送群绑定</h3>
+                    <p style="font-size:13px;color:#9ca3af;margin-bottom:12px;">{{ pushEnt ? pushEnt.name : '' }} · 勾选的群将接收该企业的续保到期提醒</p>
+                    <input v-model="pushRoomSearch" placeholder="搜索群名..." style="width:100%;padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
+                    <div style="max-height:300px;overflow-y:auto;border:1px solid #f3f4f6;border-radius:8px;padding:4px 0;margin-bottom:14px;">
+                        <label v-for="room in filteredPushRooms" :key="room.id" style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:13px;">
+                            <input type="checkbox" :value="room.id" v-model="pushSelectedIds" style="cursor:pointer;">
+                            <span>{{ room.name }}</span>
+                        </label>
+                        <div v-if="!filteredPushRooms.length" style="padding:14px;text-align:center;color:#d1d5db;font-size:13px;">无群可选</div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:12px;color:#9ca3af;">已选 {{ pushSelectedIds.length }} 个群</span>
+                        <div style="display:flex;gap:10px;">
+                            <button @click="showPushModal=false" class="btn-secondary" style="padding:8px 16px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:13px;">取消</button>
+                            <button @click="savePushRooms" :disabled="pushSaving" style="padding:8px 16px;border-radius:8px;border:none;background:#2563eb;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">{{ pushSaving ? '保存中...' : '保存' }}</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1417,6 +1446,54 @@ createApp({
             window.location.href = `/monitor-config?enterprise_id=${ent.id}&enterprise_name=${encodeURIComponent(ent.name || '')}`;
         }
 
+        // ===== 续保推送群绑定 =====
+        const showPushModal = ref(false);
+        const pushEnt = ref(null);
+        const pushRoomOptions = ref([]);
+        const pushSelectedIds = ref([]);
+        const pushRoomSearch = ref('');
+        const pushSaving = ref(false);
+        const filteredPushRooms = computed(() => {
+            const kw = pushRoomSearch.value.trim();
+            return kw ? pushRoomOptions.value.filter(r => (r.name || '').includes(kw)) : pushRoomOptions.value;
+        });
+        async function openPushModal(ent) {
+            pushEnt.value = ent;
+            pushSelectedIds.value = [];
+            pushRoomSearch.value = '';
+            showPushModal.value = true;
+            if (!pushRoomOptions.value.length) {
+                try {
+                    const res = await authFetch('/api/insurance/rooms');
+                    const data = await res.json();
+                    const rooms = (data.data && data.data.rooms) || data.rooms || [];
+                    pushRoomOptions.value = rooms.map(x => ({ id: x.id || x.roomid, name: x.name || x.roomid }));
+                } catch (e) {}
+            }
+            try {
+                const res = await authFetch(`/api/renewal/push-rooms?enterprise_id=${ent.id}`);
+                const data = await res.json();
+                pushSelectedIds.value = ((data.data && data.data.rooms) || []).map(x => x.roomid);
+            } catch (e) {}
+        }
+        async function savePushRooms() {
+            if (!pushEnt.value) return;
+            pushSaving.value = true;
+            const rooms = pushSelectedIds.value.map(id => {
+                const opt = pushRoomOptions.value.find(o => o.id === id);
+                return { roomid: id, room_name: opt ? opt.name : '' };
+            });
+            try {
+                const res = await authFetch('/api/renewal/push-rooms', {
+                    method: 'POST', body: JSON.stringify({ enterprise_id: pushEnt.value.id, rooms })
+                });
+                const data = await res.json();
+                if (data.code === 0) { toast('已保存'); showPushModal.value = false; }
+                else toast(data.msg || '保存失败');
+            } catch (e) { toast('保存失败'); }
+            finally { pushSaving.value = false; }
+        }
+
         onMounted(() => {
             if (checkAuth()) {
                 ready.value = true;
@@ -1437,6 +1514,7 @@ createApp({
             openPlanModal, closePlanModal, submitPlanForm,
             showBoostModal, boostEnt, boostPacks, boostBalance, boostSubmitting, openBoostModal, addBoostPack, removeBoostPack,
             toggleEnabled, toggleMerge, toggleSeal, logout, toast, formatTime, gotoMembers, gotoMonitor,
+            showPushModal, pushEnt, pushRoomOptions, pushSelectedIds, pushRoomSearch, pushSaving, filteredPushRooms, openPushModal, savePushRooms,
             showReportModal, reportTarget, reportRange, reportStart, reportEnd, reportSubmitting,
             reportLink, reportCopied, copyReportLink,
             openReportModal, doExportReport,
