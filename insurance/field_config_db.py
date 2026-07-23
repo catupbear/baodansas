@@ -24,7 +24,7 @@ _ACTIVE_TPL_TTL = 60
 # 支持的 config_type 类型
 CONFIG_TYPES = ["company_alias", "policy_type_alias", "date_format", "fee_formula",
                 "list_columns", "export_columns", "remark_selector", "group_fill_keywords",
-                "ratio_rule", "policy_sort"]
+                "ratio_rule", "policy_sort", "fill_proposer"]
 
 # 保单排序：同一车牌下按险种大类排序，顺序可由用户在页面列配置里拖动调整、跟模板绑定。
 # 「同一车牌排在一起」是默认行为（常驻，无开关），用户只调险种大类的先后顺序。
@@ -816,6 +816,12 @@ def get_effective_config(db, user_id: int, role: str, parent_id=None) -> dict:
             config = {}
         config["plate_format_pingan"] = True
 
+    # 注入模板级开关：投保人为空时用被保人补充
+    if get_fill_proposer(db, user_id, role, parent_id):
+        if config is None:
+            config = {}
+        config["fill_proposer"] = True
+
     # 注入「百分比」标记字段集合：列配置中勾选了 is_percent 的自定义字段
     # 用于 apply_user_config_to_fields 把用户填的百分数（10）按 10% 处理
     percent_keys = get_percent_fields(db, user_id, role, parent_id)
@@ -1094,6 +1100,69 @@ def save_policy_sort(db, scope: str, scope_id, template_name: str, enabled: bool
     payload = json.dumps({"enabled": bool(enabled), "order": order}, ensure_ascii=False)
     save_template_config(db, scope, scope_id, template_name, "policy_sort",
                          [{"key": "config", "value": payload}], visible=visible)
+
+
+def _fill_proposer_search_order(db, user_id, role, parent_id):
+    active = get_active_template(db, user_id)
+    active_source = active.get("source", "own")
+    order = []
+    if active_source == "system":
+        order.append(("global", None))
+    elif active_source == "enterprise" and parent_id is not None:
+        order.append(("enterprise", parent_id))
+    else:
+        if role == "employee" and parent_id is not None:
+            order.append(("user", user_id)); order.append(("enterprise", parent_id))
+        elif role == "enterprise":
+            order.append(("enterprise", parent_id or user_id))
+        elif role == "super_admin":
+            order.append(("global", None))
+    return order, active.get("template_name", DEFAULT_TEMPLATE_NAME)
+
+
+def get_fill_proposer(db, user_id: int, role: str, parent_id=None) -> bool:
+    """获取「投保人为空时用被保人补充」开关（跟当前活跃模板绑定），默认关闭。"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        search_order, active_tpl = _fill_proposer_search_order(db, user_id, role, parent_id)
+        for scope, scope_id in search_order:
+            sid_cond, sid_params = _scope_id_condition(scope_id)
+            for tpl in ([active_tpl, DEFAULT_TEMPLATE_NAME] if active_tpl != DEFAULT_TEMPLATE_NAME else [DEFAULT_TEMPLATE_NAME]):
+                cursor.execute(
+                    f"SELECT config_value FROM user_field_config WHERE scope = %s AND {sid_cond} "
+                    f"AND config_type = 'fill_proposer' AND config_key = 'enabled' AND template_name = %s LIMIT 1",
+                    [scope] + sid_params + [tpl]
+                )
+                row = cursor.fetchone()
+                if row:
+                    return str(row["config_value"]) in ("1", "true", "True")
+        return False
+    finally:
+        conn.close()
+
+
+def get_fill_proposer_for_template(db, scope: str, scope_id, template_name: str) -> bool:
+    """直接读指定模板的「投保人补充」开关（设置态用）。"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        sid_cond, sid_params = _scope_id_condition(scope_id)
+        cursor.execute(
+            f"SELECT config_value FROM user_field_config WHERE scope = %s AND {sid_cond} "
+            f"AND config_type = 'fill_proposer' AND config_key = 'enabled' AND template_name = %s LIMIT 1",
+            [scope] + sid_params + [template_name]
+        )
+        row = cursor.fetchone()
+        return bool(row) and str(row["config_value"]) in ("1", "true", "True")
+    finally:
+        conn.close()
+
+
+def save_fill_proposer(db, scope: str, scope_id, template_name: str, enabled: bool, visible: bool = False):
+    """保存「投保人补充」开关到指定模板。"""
+    save_template_config(db, scope, scope_id, template_name, "fill_proposer",
+                         [{"key": "enabled", "value": "1" if enabled else "0"}], visible=visible)
 
 
 def get_percent_fields(db, user_id: int, role: str, parent_id=None) -> set:
@@ -2359,5 +2428,12 @@ def apply_user_config_to_fields(config: dict, fields: dict, formula_only: bool =
                     result["车牌号"] = formatted
                 if "车牌" in result and "车牌" not in manual_fields:
                     result["车牌"] = formatted
+
+    # 7. 投保人为空时用被保人补充（模板开关，逐条判断）：只在投保人无值且被保人有值时补
+    if config.get("fill_proposer") and "投保人" not in manual_fields:
+        if not str(result.get("投保人") or "").strip():
+            _insured = str(result.get("被保人") or result.get("被保险人") or "").strip()
+            if _insured:
+                result["投保人"] = _insured
 
     return result

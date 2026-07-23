@@ -43,6 +43,7 @@ from .field_config_db import (
     get_effective_config, apply_user_config_to_fields, match_fee_formulas, _format_date,
     get_column_config, save_column_config, delete_column_config,
     get_policy_sort, save_policy_sort,
+    get_fill_proposer, save_fill_proposer, get_fill_proposer_for_template,
     get_default_sort, save_default_sort,
     get_user_fixed_values, save_user_fixed_values,
     get_remark_selector_config, save_remark_selector_config,
@@ -3822,6 +3823,36 @@ def save_policy_sort_config_api():
         return jsonify({"code": 0, "msg": "已保存"})
     except Exception as e:
         logger.exception("保存保单排序配置失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/fill-proposer/config", methods=["GET"])
+@login_required
+def get_fill_proposer_config_api():
+    """读取「投保人为空时用被保人补充」开关（跟模板绑定）。"""
+    try:
+        if request.args.get("template") or request.args.get("template_name"):
+            scope, scope_id, template_name = _resolve_remark_settings_target()
+        else:
+            scope, scope_id, template_name = _resolve_remark_runtime_target()
+        enabled = get_fill_proposer_for_template(_db, scope, scope_id, template_name)
+        return jsonify({"code": 0, "data": {"enabled": enabled, "template_name": template_name}})
+    except Exception as e:
+        logger.exception("读取投保人补充开关失败")
+        return jsonify({"code": 500, "msg": str(e)}), 500
+
+
+@insurance_bp.route("/api/insurance/fill-proposer/config", methods=["PUT"])
+@login_required
+def save_fill_proposer_config_api():
+    """保存指定模板的「投保人补充」开关（支持超管代管）。"""
+    try:
+        body = request.get_json(force=True) or {}
+        scope, scope_id, template_name = _resolve_remark_settings_target(extra=body)
+        save_fill_proposer(_db, scope, scope_id, template_name, bool(body.get("enabled")))
+        return jsonify({"code": 0, "msg": "已保存"})
+    except Exception as e:
+        logger.exception("保存投保人补充开关失败")
         return jsonify({"code": 500, "msg": str(e)}), 500
 
 

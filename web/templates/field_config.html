@@ -514,7 +514,7 @@
     <!-- 代管提示条 -->
     <div v-if="adminTarget" style="background:#fef3c7; border-bottom:1px solid #fcd34d; padding:8px 24px; display:flex; align-items:center; justify-content:center; gap:12px;">
         <span style="font-size:13px; color:#92400e;">正在代管编辑：<b>{{ adminTarget.label }}</b> 的「{{ activeTemplateName }}」模板（{{ adminTarget.scope === 'enterprise' ? '企业级' : '员工级' }}），修改将直接保存到对方配置</span>
-        <button @click="adminTarget = null; loadTemplates(); loadConfig(); loadColumnConfig('list_columns'); loadColumnConfig('export_columns'); loadMergeConfig(); loadPlateFormatConfig(); loadRemarkCfg(); loadPolicySort(); loadGroupFillTargets();" style="font-size:12px; padding:3px 12px; background:#fff; border:1px solid #fcd34d; border-radius:4px; cursor:pointer; color:#92400e;">退出代管</button>
+        <button @click="adminTarget = null; loadTemplates(); loadConfig(); loadColumnConfig('list_columns'); loadColumnConfig('export_columns'); loadMergeConfig(); loadPlateFormatConfig(); loadRemarkCfg(); loadPolicySort(); loadFillProposer(); loadGroupFillTargets();" style="font-size:12px; padding:3px 12px; background:#fff; border:1px solid #fcd34d; border-radius:4px; cursor:pointer; color:#92400e;">退出代管</button>
     </div>
 
     <!-- 主内容区 -->
@@ -813,6 +813,14 @@
                     <div v-show="policySortExpanded" style="font-size:11px; color:var(--text-muted); margin-top:8px;">
                         识别记录列表会把同一车牌的保单排在一起（车牌组按车牌排），组内按上面的险种顺序（默认 交强险 → 商业险 → 非车险）。在列表点某列表头可临时改按该列排序。此顺序跟当前模板绑定，随「保存」一起生效。
                     </div>
+                </div>
+                <!-- 投保人补充开关 -->
+                <div style="margin-bottom:12px; padding:10px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
+                    <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:500; cursor:pointer;">
+                        <input type="checkbox" v-model="fillProposer" :disabled="activeSource === 'enterprise'">
+                        投保人补充<span style="font-weight:400; color:var(--text-muted); margin-left:6px;">开启后，某条保单只有被保人、没有投保人时，自动用被保人补充投保人</span>
+                    </label>
+                    <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">逐条判断：投保人为空且被保人有值才补充；已手动填写过投保人的不动。此开关跟当前模板绑定，随「保存」一起生效。</div>
                 </div>
                 <!-- 列头预览 -->
                 <div style="margin-bottom:16px; border:1px solid var(--border-light); border-radius:8px; overflow:hidden;">
@@ -1894,6 +1902,24 @@ createApp({
                 });
             } catch (e) { /* 与列配置一起保存，失败不单独打断 */ }
         }
+
+        // === 投保人补充开关（投保人为空时用被保人补充，跟模板绑定） ===
+        const fillProposer = ref(false);
+        async function loadFillProposer() {
+            try {
+                const resp = await authFetch('/api/insurance/fill-proposer/config?' + remarkQuery());
+                const json = await resp.json();
+                if (json.code === 0 && json.data) fillProposer.value = !!json.data.enabled;
+            } catch (e) { /* 静默 */ }
+        }
+        async function saveFillProposer() {
+            try {
+                await authFetch('/api/insurance/fill-proposer/config', {
+                    method: 'PUT',
+                    body: JSON.stringify(remarkInjectTarget({ enabled: fillProposer.value }))
+                });
+            } catch (e) { /* 与列配置一起保存 */ }
+        }
         function onRemarkFile(e) {
             remarkFile = e.target.files[0];
             remarkSheets.value = []; remarkSheet.value = '';
@@ -1921,7 +1947,7 @@ createApp({
                 alert(j.msg || '完成');
                 remarkSheets.value = []; remarkSheet.value = ''; remarkFile = null;
                 if (remarkFileEl.value) remarkFileEl.value.value = '';
-                await loadRemarkCfg(); loadPolicySort();
+                await loadRemarkCfg(); loadPolicySort(); loadFillProposer();
             } catch (e) { alert('导入失败: ' + e.message); }
             finally { remarkImporting.value = false; }
         }
@@ -1932,7 +1958,7 @@ createApp({
                 const r = await authFetch('/api/insurance/remark-options?' + remarkQuery(), { method:'DELETE' });
                 const j = await r.json();
                 alert(j.msg || '已清空');
-                await loadRemarkCfg(); loadPolicySort();
+                await loadRemarkCfg(); loadPolicySort(); loadFillProposer();
             } catch (e) { alert('清空失败: ' + e.message); }
         }
 
@@ -2078,7 +2104,7 @@ createApp({
                     }
                     // 页面列配置保存时同时保存「保单排序」（跟模板绑定）
                     if (configType === 'list_columns') {
-                        await savePolicySort();
+                        await savePolicySort(); await saveFillProposer();
                     }
                 }
             } catch (e) {
@@ -3361,7 +3387,7 @@ createApp({
                 await loadConfig(name, source);
                 // 切换模板时同步重载列配置和合并开关
                 await Promise.all([loadColumnConfig('list_columns'), loadColumnConfig('export_columns'), loadMergeConfig(), loadPlateFormatConfig()]);
-                loadRemarkCfg(); loadPolicySort();
+                loadRemarkCfg(); loadPolicySort(); loadFillProposer();
                 loadGroupFillTargets();
                 if (source === 'system') {
                     showToast('已切换到系统模板「' + name + '」（只读）', 'warning');
@@ -3389,7 +3415,7 @@ createApp({
                 loadColumnConfig('export_columns'),
                 loadMergeConfig(), loadPlateFormatConfig(),
             ]);
-            loadRemarkCfg(); loadPolicySort();
+            loadRemarkCfg(); loadPolicySort(); loadFillProposer();
             loadGroupFillTargets();
             configLoaded = true;
             showToast('正在代管编辑：' + label + ' 的「' + name + '」模板', 'warning');
@@ -3568,7 +3594,7 @@ createApp({
                 applyMergeHidden();
             });
             // 加载备注快捷选择配置
-            loadRemarkCfg(); loadPolicySort();
+            loadRemarkCfg(); loadPolicySort(); loadFillProposer();
             // 加载群内补充目标字段候选 + 全局跳过关键词（仅超管）
             loadGroupFillTargets();
             loadSkipKeywords();
@@ -3626,7 +3652,7 @@ createApp({
             groupFillTargetOptions, onGroupFillTargetChange, addGroupFillKeyword, addGroupFillRule, importCustomFieldsAsRules,
             saveGroupFillRules, groupFillCopyText, copyGroupFillFormat,
             skipKeywords, skipKeywordInput, skipKeywordsSaving, addSkipKeyword, saveSkipKeywords,
-            policySort, movePolicyCat, policySortExpanded,
+            policySort, movePolicyCat, policySortExpanded, fillProposer,
         };
     }
 }).mount('#app');
