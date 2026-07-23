@@ -2656,8 +2656,8 @@
             <div v-if="renewalPagination.total > 0" class="px-4 py-3 border-t flex items-center justify-between" style="flex-shrink:0;background:#fff;">
                 <span class="text-xs text-gray-400">共 {{ renewalPagination.total }} 条，第 {{ renewalPagination.page }} / {{ renewalPagination.pages }} 页</span>
                 <div class="flex items-center gap-1">
-                    <button class="pagination-btn" :disabled="renewalPagination.page<=1" @click="gotoRenewalPage(renewalPagination.page-1)">上一页</button>
-                    <button class="pagination-btn" :disabled="renewalPagination.page>=renewalPagination.pages" @click="gotoRenewalPage(renewalPagination.page+1)">下一页</button>
+                    <button class="pagination-btn" style="width:auto;padding:0 12px;white-space:nowrap;" :disabled="renewalPagination.page<=1" @click="gotoRenewalPage(renewalPagination.page-1)">上一页</button>
+                    <button class="pagination-btn" style="width:auto;padding:0 12px;white-space:nowrap;" :disabled="renewalPagination.page>=renewalPagination.pages" @click="gotoRenewalPage(renewalPagination.page+1)">下一页</button>
                 </div>
             </div>
         </div>
