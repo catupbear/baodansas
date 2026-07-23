@@ -611,7 +611,7 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "",
     _fill_same_party_id_number(fields)
 
     # ===== 车辆信息 =====
-    _extract_vehicle_info(text, fields, company_short, from_ocr)
+    _extract_vehicle_info(text, fields, company_short, from_ocr, policy_type)
 
     # ===== 费用信息 =====
     _extract_premium(text, fields, company_short)
@@ -2844,7 +2844,7 @@ def _normalize_plate(plate: str) -> str:
     return plate[:2] + seq
 
 
-def _extract_vehicle_info(text: str, fields: dict, company_short: str, from_ocr: bool = False):
+def _extract_vehicle_info(text: str, fields: dict, company_short: str, from_ocr: bool = False, policy_type: str = ""):
     """提取车牌号、车架号、发动机号等"""
 
     # 车牌号
@@ -3329,12 +3329,21 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str, from_ocr:
             # 值被抓成"不符合上述约定或车辆"，补充条款专有词（约定/符合/标的/超过/载明，真实使用性质值绝不含）。
             if re.search(r'变更|通知|义务|条款|责任|告知|说明|批改|批单|事故|导致|约定|符合|标的|超过|载明', val):
                 continue
-            if len(val) <= 10:
+            # 永安交强险等表格竖排压平：使用性质标签后跟到"机动车"竖排的"机"单字，
+            # 单字绝不是有效使用性质，跳过落到枚举兜底（家庭自用汽车等）
+            if 2 <= len(val) <= 10:
                 fields["使用性质"] = val
                 break
-    # 兜底：表格式保单（驾乘险等）使用性质值与标签错行、无标签锚点，按固定枚举词兜底
+    # 兜底：表格式保单（驾乘险等）使用性质值与标签错行、无标签锚点，按固定枚举词兜底。
     if "使用性质" not in fields:
-        m = re.search(r"(?<![一-鿿A-Za-z])(非营业|非营运|营业货车|营业客车|营运货车|营运客车|家庭自用|党政机关|出租租赁|城市公交|公路客运)(?![一-鿿])", text)
+        # 交强险车辆信息里使用性质可能是"家庭自用汽车/非营业客车"等全称，且交强险条款正文
+        # 不含这些全称词，可安全用带车型后缀（汽车/客车/货车）的枚举全文兜底；
+        # 商业险等则不能——这些全称词大量出现在通用条款（如"附加法定节假日限额翻倍险 投保了…
+        # 的家庭自用汽车"），带后缀全文搜会误抓条款，只用原枚举（不带后缀）。
+        if "强制" in (policy_type or ""):
+            m = re.search(r"(?<![一-鿿A-Za-z])((?:非营业|非营运|营业货车|营业客车|营运货车|营运客车|家庭自用|党政机关|出租租赁|城市公交|公路客运)(?:汽车|客车|货车)?)(?![一-鿿])", text)
+        else:
+            m = re.search(r"(?<![一-鿿A-Za-z])(非营业|非营运|营业货车|营业客车|营运货车|营运客车|家庭自用|党政机关|出租租赁|城市公交|公路客运)(?![一-鿿])", text)
         if m:
             fields["使用性质"] = m.group(1)
 
