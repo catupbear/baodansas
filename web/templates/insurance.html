@@ -2551,10 +2551,7 @@
 
     <!-- ========== 续保提醒 Tab ========== -->
     <main v-if="pageTab === 'renewal' && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5">
-        <!-- 开启功能/导入往年保单入口移入引导弹窗（renewalPromoVisible）；页面仅超管保留设置按钮 -->
-        <div v-if="isSuperAdmin" class="flex items-center justify-end gap-2">
-            <button @click="openRenewalConfig()" class="btn btn-outline" style="padding:6px 14px;font-size:13px;">⚙ 设置</button>
-        </div>
+        <!-- 续保设置按钮已移除（扫描窗口固定，二维码由平台统一配置）；引导入口仍在 renewalPromoVisible 弹窗 -->
 
         <!-- 未显示完整信息时，整个统计/筛选/列表区域磨砂遮罩，只有顶部的开关按钮可正常操作 -->
         <div :style="(renewalInfoRevealed || isSuperAdmin) ? '' : 'filter: blur(6px); pointer-events: none; user-select: none;'"
