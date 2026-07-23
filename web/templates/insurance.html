@@ -11737,7 +11737,7 @@ const _app = createApp({
 
         // ===== 续保提醒（CRM式续保任务管理） =====
         // 敏感信息默认打码，用户每次进入页面需自行打开开关才显示完整信息（不记忆，刷新重置为隐藏）
-        const renewalInfoRevealed = ref(false);
+        const renewalInfoRevealed = ref(true);  // 续保信息直接显示，不再磨砂遮罩/打码
         function maskPersonName(v) {
             if (!v) return v;
             return v.charAt(0) + '**';
