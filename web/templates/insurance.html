@@ -2642,7 +2642,6 @@
                                 <div><span class="text-gray-400">险种：</span><span class="text-gray-700 font-medium">{{ t.policy_type || '—' }}</span></div>
                                 <div><span class="text-gray-400">承保公司：</span><span class="text-gray-700 font-medium">{{ t.company_short || '—' }}</span></div>
                                 <div class="col-span-2"><span class="text-gray-400">保单号：</span><span class="text-gray-600" style="font-family:ui-monospace,Menlo,monospace;">{{ t.policy_no || '—' }}</span></div>
-                                <div><span class="text-gray-400">跟进人：</span><span class="text-gray-700 font-medium">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.assignee_name || '未分配') : (t.assignee_name ? maskPersonName(t.assignee_name) : '未分配') }}</span></div>
                             </div>
                         </div>
                         <!-- 右区：状态 + 操作 -->
@@ -3795,12 +3794,6 @@
                             class="text-xs px-2.5 py-1 rounded border border-gray-300 text-gray-500 hover:bg-gray-50 cursor-pointer">停保</button>
                     <button v-if="renewalDetailTask.status !== 'hold'" @click="openRenewalHold()"
                             class="text-xs px-2.5 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer">暂不考虑</button>
-                    <span class="flex-1"></span>
-                    <select v-if="isSuperAdmin || currentUser.role === 'enterprise'" v-model="renewalDetailAssignee" @change="assignRenewalDetail()"
-                            class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white cursor-pointer">
-                        <option value="">分配跟进人...</option>
-                        <option v-for="a in renewalAssigneesList" :key="a.id" :value="a.id">{{ a.name || a.id }}</option>
-                    </select>
                 </div>
                 <div v-if="renewalDetailTask.status === 'hold' && renewalDetailTask.hold_reason" class="px-5 pt-1.5 text-xs text-orange-600">暂不考虑原因：{{ renewalDetailTask.hold_reason }}</div>
 
