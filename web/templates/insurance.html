@@ -11780,12 +11780,11 @@ const _app = createApp({
             if (currentUser.value && currentUser.value.role === 'enterprise') {
                 loadRenewalAssignees(currentUser.value.id);
             }
-            // 引导提示改为弹窗：每个会话首次进入续保页弹一次；
-            // 未开启功能的用户每次进入都弹（开启入口只在弹窗里，不弹会没有开启途径）
-            const _needEnable = currentUser.value && currentUser.value.role !== 'super_admin' && !renewalInfoRevealed.value;
+            // 引导弹窗：每天最多弹一次（按本地日期去重，localStorage 跨会话保留）
             try {
-                if (_needEnable || !sessionStorage.getItem('renewal_promo_shown')) {
-                    sessionStorage.setItem('renewal_promo_shown', '1');
+                const _today = new Date().toISOString().slice(0, 10);
+                if (localStorage.getItem('renewal_promo_date') !== _today) {
+                    localStorage.setItem('renewal_promo_date', _today);
                     renewalPromoVisible.value = true;
                 }
             } catch (e) {}
