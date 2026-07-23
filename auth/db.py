@@ -1227,6 +1227,22 @@ def get_member_count_batch(db) -> dict:
         conn.close()
 
 
+def get_renewal_push_count_batch(db) -> dict:
+    """批量获取各企业续保推送群数(enabled)，返回 {enterprise_id: 群数}"""
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT enterprise_id, COUNT(*) AS cnt FROM renewal_push_configs "
+            "WHERE enterprise_id IS NOT NULL AND enabled=1 GROUP BY enterprise_id"
+        )
+        return {row["enterprise_id"]: row["cnt"] for row in cursor.fetchall()}
+    except Exception:
+        return {}
+    finally:
+        conn.close()
+
+
 def get_monitor_count_batch(db) -> dict:
     """批量获取各企业监控的群聊数（统计 rooms 内不同群，去重），返回 {enterprise_id: 群数}"""
     conn = db.pool.connection()

@@ -48,6 +48,7 @@ from .db import (
     get_monthly_pdf_usage_batch,
     get_member_count_batch,
     get_monitor_count_batch,
+    get_renewal_push_count_batch,
     get_enterprise_monthly_pdf_usage,
 )
 from .jwt_utils import generate_token
@@ -507,6 +508,7 @@ def api_list_enterprises():
     usage_map = get_monthly_pdf_usage_batch(_db)
     member_map = get_member_count_batch(_db)
     monitor_map = get_monitor_count_batch(_db)
+    renewal_push_map = get_renewal_push_count_batch(_db)
     # 批量查推荐人名称
     referrer_ids = list({e["referrer_id"] for e in enterprises if e.get("referrer_id")})
     referrer_map = {}
@@ -520,6 +522,7 @@ def api_list_enterprises():
         ent["monthly_pdf_usage"] = usage_map.get(ent["id"], 0)
         ent["member_count"] = member_map.get(ent["id"], 0)
         ent["monitor_count"] = monitor_map.get(ent["id"], 0)
+        ent["renewal_push_count"] = renewal_push_map.get(ent["id"], 0)
         ent["referrer_name"] = referrer_map.get(ent.get("referrer_id"), "")
         # 附带该企业自动创建的管理员账号(登录名=企业编号小写去横线)的密码明文，供客户管理页展示
         ent["admin_account"] = ""
