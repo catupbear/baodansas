@@ -11,7 +11,7 @@ import pymysql
 import pymysql.cursors
 
 from .field_mapping import apply_mapping
-from .field_config_db import get_column_config
+from .field_config_db import get_column_config, get_fill_proposer
 
 import re as _re
 
@@ -602,6 +602,7 @@ def init_insurance_tables(db):
                 """)
                 rows = bc.fetchall()
                 _visible_cache = {}
+                _fp_cache = {}
                 updated = 0
                 for row in rows:
                     pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
@@ -612,11 +613,13 @@ def init_insurance_tables(db):
                     uid = row.get("user_id") if isinstance(row, dict) else row[4]
                     if uid not in _visible_cache:
                         _visible_cache[uid] = _get_visible_export_keys(db_ref, uid)
+                        _fp_cache[uid] = _get_fill_proposer_flag(db_ref, uid)
                     abnormal, hint = _compute_abnormal(
                         pf,
                         row.get("status") if isinstance(row, dict) else row[2],
                         row.get("doc_category") if isinstance(row, dict) else row[3],
                         visible_export_keys=_visible_cache[uid],
+                        fill_proposer_on=_fp_cache.get(uid, False),
                     )
                     if abnormal:
                         rid = row.get("id") if isinstance(row, dict) else row[0]
@@ -644,6 +647,7 @@ def init_insurance_tables(db):
                 """)
                 abnormal_rows = bc.fetchall()
                 _visible_cache_rev = {}
+                _fp_cache_rev = {}
                 reverted = 0
                 for row in abnormal_rows:
                     pf_str = row.get("parsed_fields") if isinstance(row, dict) else row[1]
@@ -654,6 +658,7 @@ def init_insurance_tables(db):
                     uid = row.get("user_id") if isinstance(row, dict) else row[4]
                     if uid not in _visible_cache_rev:
                         _visible_cache_rev[uid] = _get_visible_export_keys(db_ref, uid)
+                        _fp_cache_rev[uid] = _get_fill_proposer_flag(db_ref, uid)
                     override = row.get("abnormal_override_reason") if isinstance(row, dict) else row[5]
                     abnormal, hint = _compute_abnormal(
                         pf,
@@ -661,6 +666,7 @@ def init_insurance_tables(db):
                         row.get("doc_category") if isinstance(row, dict) else row[3],
                         abnormal_override_reason=override,
                         visible_export_keys=_visible_cache_rev[uid],
+                        fill_proposer_on=_fp_cache_rev.get(uid, False),
                     )
                     if not abnormal:
                         rid = row.get("id") if isinstance(row, dict) else row[0]
@@ -923,9 +929,25 @@ def _get_visible_export_keys(db, user_id) -> set:
         return None
 
 
+def _get_fill_proposer_flag(db, user_id) -> bool:
+    """根据 user_id 查其「投保人为空时用被保人补充」开关，默认关闭。"""
+    if not user_id:
+        return False
+    try:
+        from auth.db import get_user_by_id
+        user = get_user_by_id(db, user_id)
+        if not user:
+            return False
+        return get_fill_proposer(db, user["id"], user["role"], user.get("parent_id"))
+    except Exception:
+        logger.debug("获取用户 %s 投保人补充开关失败", user_id, exc_info=True)
+        return False
+
+
 def _compute_abnormal(parsed_fields: dict, status: str, doc_category: str,
                       abnormal_override_reason: str = None,
-                      visible_export_keys: set = None) -> tuple:
+                      visible_export_keys: set = None,
+                      fill_proposer_on: bool = False) -> tuple:
     """
     计算记录是否异常，返回 (is_abnormal: bool, hint: str)。
     逻辑与前端 isRecordAbnormal / getRecordHint 保持一致。
@@ -959,6 +981,10 @@ def _compute_abnormal(parsed_fields: dict, status: str, doc_category: str,
         if any(fields.get(k) for k in ocr_keys):
             continue
         missing.append(col)
+
+    # 投保人补充：开启且投保人缺失、但被保人有值时，投保人可由被保人补上，不计入需人工补充
+    if fill_proposer_on and '投保人' in missing and '被保人' not in missing:
+        missing.remove('投保人')
 
     # 日期完整性校验：日期不全（如"2026/05/"缺日）视为异常
     _DATE_FIELDS = {'保险起期': '起保日期', '保险止期': '终保日期', '签单日期': '签单日期'}
@@ -1138,11 +1164,13 @@ def save_insurance_record(db, record: dict) -> int:
         except (TypeError, json.JSONDecodeError):
             pf = {}
     visible_keys = _get_visible_export_keys(db, data.get("user_id"))
+    fp_on = _get_fill_proposer_flag(db, data.get("user_id"))
     abnormal, hint = _compute_abnormal(
         pf if isinstance(pf, dict) else {},
         data.get("status", "pending"),
         data.get("doc_category", ""),
         visible_export_keys=visible_keys,
+        fill_proposer_on=fp_on,
     )
     data["is_abnormal"] = 1 if abnormal else 0
     data["hint"] = hint
@@ -1309,12 +1337,14 @@ def update_insurance_record(db, record_id: int, updates: dict):
             override_reason = updates.get("abnormal_override_reason",
                                           existing.get("abnormal_override_reason"))
             visible_keys = _get_visible_export_keys(db, existing.get("user_id"))
+            fp_on = _get_fill_proposer_flag(db, existing.get("user_id"))
             abnormal, hint = _compute_abnormal(
                 pf_raw if isinstance(pf_raw, dict) else {},
                 updates.get("status") or existing.get("status", ""),
                 updates.get("doc_category") or existing.get("doc_category", ""),
                 abnormal_override_reason=override_reason,
                 visible_export_keys=visible_keys,
+                fill_proposer_on=fp_on,
             )
             data["is_abnormal"] = 1 if abnormal else 0
             data["hint"] = hint
