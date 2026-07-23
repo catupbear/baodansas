@@ -310,7 +310,9 @@ def list_tasks(db, page: int = 1, page_size: int = 20, enterprise_id=None,
         offset = (page - 1) * page_size
         cursor.execute(
             f"SELECT * FROM renewal_tasks {where_clause} "
-            f"ORDER BY priority DESC, end_date ASC LIMIT %s OFFSET %s",
+            # 默认排序：续保待确认(有续保检测提示) → 已过期 → 待跟进；组内按到期日升序
+            f"ORDER BY (hint_record_id IS NOT NULL) DESC, (end_date < CURDATE()) DESC, end_date ASC "
+            f"LIMIT %s OFFSET %s",
             params + [page_size, offset],
         )
         rows = cursor.fetchall()
