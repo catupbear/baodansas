@@ -791,13 +791,10 @@
                     </select>
                     <span style="font-size:11px; color:var(--text-muted);">打开识别记录页时列表默认按此排序，用户仍可在页面上临时切换</span>
                 </div>
-                <!-- 保单排序（同一车牌按险种顺序） -->
+                <!-- 保单排序（同一车牌按险种顺序，常驻默认；用户只调险种顺序） -->
                 <div style="margin-bottom:12px; padding:10px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
-                    <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:500;">
-                        <input type="checkbox" v-model="policySort.enabled" :disabled="activeSource === 'enterprise'">
-                        保单排序：把同一车牌的保单排在一起，组内按险种顺序
-                    </label>
-                    <div v-if="policySort.enabled" style="margin-top:10px; display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">
+                    <div style="font-size:13px; font-weight:500;">📋 保单排序<span style="font-weight:400; color:var(--text-muted); margin-left:6px;">同一车牌的保单默认排在一起，你只需调整组内的险种顺序</span></div>
+                    <div style="margin-top:10px; display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">
                         <span style="font-size:12px; color:var(--text-muted); padding-top:6px;">险种优先级（越靠上越靠前，点箭头调整）：</span>
                         <div style="display:inline-flex; flex-direction:column; gap:5px;">
                             <div v-for="(cat, i) in policySort.order" :key="cat"
@@ -812,7 +809,7 @@
                         </div>
                     </div>
                     <div style="font-size:11px; color:var(--text-muted); margin-top:8px;">
-                        开启后，识别记录列表会把同一车牌的保单排在一起，组内按上面的险种顺序（默认 交强险 → 商业险 → 非车险）；不开启时排序不变。此配置跟当前模板绑定，随「保存」一起生效。
+                        识别记录列表会把同一车牌的保单排在一起（车牌组按车牌排），组内按上面的险种顺序（默认 交强险 → 商业险 → 非车险）。在列表点某列表头可临时改按该列排序。此顺序跟当前模板绑定，随「保存」一起生效。
                     </div>
                 </div>
                 <!-- 列头预览 -->
@@ -1879,7 +1876,7 @@ createApp({
                 const resp = await authFetch('/api/insurance/policy-sort/config?' + remarkQuery());
                 const json = await resp.json();
                 if (json.code === 0 && json.data && json.data.config) {
-                    policySort.enabled = !!json.data.config.enabled;
+                    policySort.enabled = true;  // 常驻，无开关
                     const order = (json.data.config.order || []).filter(c => ['交强险','商业险','非车险'].includes(c));
                     ['交强险','商业险','非车险'].forEach(c => { if (!order.includes(c)) order.push(c); });
                     policySort.order = order;
@@ -1890,7 +1887,7 @@ createApp({
             try {
                 await authFetch('/api/insurance/policy-sort/config', {
                     method: 'PUT',
-                    body: JSON.stringify(remarkInjectTarget({ config: { enabled: policySort.enabled, order: policySort.order } }))
+                    body: JSON.stringify(remarkInjectTarget({ config: { enabled: true, order: policySort.order } }))
                 });
             } catch (e) { /* 与列配置一起保存，失败不单独打断 */ }
         }

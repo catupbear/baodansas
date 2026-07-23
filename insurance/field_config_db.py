@@ -27,9 +27,10 @@ CONFIG_TYPES = ["company_alias", "policy_type_alias", "date_format", "fee_formul
                 "ratio_rule", "policy_sort"]
 
 # 保单排序：同一车牌下按险种大类排序，顺序可由用户在页面列配置里拖动调整、跟模板绑定。
-# 三大类固定，默认顺序 交强险 > 商业险 > 非车险；enabled=False 时行为与现在完全一致。
+# 「同一车牌排在一起」是默认行为（常驻，无开关），用户只调险种大类的先后顺序。
+# 三大类固定，默认顺序 交强险 > 商业险 > 非车险。enabled 恒为 True（保留字段兼容存储结构）。
 POLICY_SORT_CATEGORIES = ["交强险", "商业险", "非车险"]
-DEFAULT_POLICY_SORT = {"enabled": False, "order": list(POLICY_SORT_CATEGORIES)}
+DEFAULT_POLICY_SORT = {"enabled": True, "order": list(POLICY_SORT_CATEGORIES)}
 
 
 def classify_policy_category(policy_type: str) -> str:
@@ -1051,7 +1052,7 @@ def get_policy_sort(db, user_id: int, role: str, parent_id=None) -> dict:
                     for c in POLICY_SORT_CATEGORIES:
                         if c not in order:
                             order.append(c)
-                    return {"enabled": bool(cfg.get("enabled")), "order": order}
+                    return {"enabled": True, "order": order}  # 常驻生效，忽略旧存储的 enabled
                 except (TypeError, json.JSONDecodeError):
                     pass
         return dict(DEFAULT_POLICY_SORT)
@@ -1078,7 +1079,7 @@ def get_policy_sort_for_template(db, scope: str, scope_id, template_name: str) -
                 for c in POLICY_SORT_CATEGORIES:
                     if c not in order:
                         order.append(c)
-                return {"enabled": bool(cfg.get("enabled")), "order": order}
+                return {"enabled": True, "order": order}  # 常驻生效，忽略旧存储的 enabled
             except (TypeError, json.JSONDecodeError):
                 pass
         return dict(DEFAULT_POLICY_SORT)
