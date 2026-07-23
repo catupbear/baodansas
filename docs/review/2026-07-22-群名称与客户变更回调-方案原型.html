@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>企业微信群/客户变更事件回调 · 接入方案（待确认）</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 24px 80px;
+    background: #F7F8FA;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #1E293B;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+
+  /* 顶部标题区 */
+  .doc-header { margin-bottom: 32px; }
+  .doc-header .tag { display:inline-block; background:#FEF3C7; color:#92400E; font-size:12px; font-weight:600; padding:3px 10px; border-radius:20px; margin-bottom:12px; }
+  .doc-header h1 { font-size: 26px; font-weight: 800; margin: 0 0 8px; color:#0F172A; letter-spacing:-.02em; }
+  .doc-header .sub { font-size: 14px; color:#64748B; }
+
+  /* 区块 */
+  .section { background:#fff; border:1px solid #E2E8F0; border-radius:16px; padding:24px 28px; margin-bottom:20px; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+  .section h2 { font-size:17px; font-weight:700; color:#0F172A; margin:0 0 14px; display:flex; align-items:center; gap:8px; }
+  .section h2 .num { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:7px; background:#EEF2FF; color:#4338CA; font-size:13px; font-weight:800; }
+  .section p { font-size:13.5px; line-height:1.8; color:#334155; margin:6px 0; }
+  .section ul, .section ol { margin:8px 0; padding-left:20px; }
+  .section li { font-size:13.5px; line-height:1.85; color:#334155; margin-bottom:4px; }
+  code { background:#F1F5F9; border-radius:4px; padding:1px 6px; font-size:12.5px; color:#BE185D; font-family:"SF Mono",Menlo,Consolas,monospace; }
+  .file-path { color:#0369A1; }
+
+  /* 决策清单 */
+  .decision-list { display:flex; flex-direction:column; gap:8px; }
+  .decision-item { display:flex; gap:10px; align-items:flex-start; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:10px; padding:10px 14px; }
+  .decision-item .check { color:#16A34A; font-weight:800; font-size:14px; flex-shrink:0; }
+  .decision-item .txt { font-size:13.5px; color:#166534; line-height:1.7; }
+  .decision-item .txt b { color:#14532D; }
+
+  /* 流程图（纯CSS，无外部依赖） */
+  .flow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:18px 0; }
+  .flow .box { background:#F8FAFC; border:1.5px solid #CBD5E1; border-radius:10px; padding:10px 14px; font-size:12.5px; color:#334155; text-align:center; line-height:1.5; min-width:110px; }
+  .flow .box.accent { background:#EEF2FF; border-color:#A5B4FC; color:#3730A3; font-weight:600; }
+  .flow .box.warn { background:#FFF7ED; border-color:#FDBA74; color:#9A3412; font-weight:600; }
+  .flow .arrow { color:#94A3B8; font-size:16px; }
+  .flow-branch { display:flex; flex-direction:column; gap:8px; margin-left:6px; }
+
+  .fallback-note { display:flex; gap:10px; align-items:center; background:#F8FAFC; border:1px dashed #CBD5E1; border-radius:10px; padding:10px 14px; margin-top:12px; font-size:12.5px; color:#64748B; }
+
+  /* 表格 */
+  table.spec { width:100%; border-collapse:collapse; font-size:12.5px; margin:10px 0; }
+  table.spec th { background:#F8FAFC; color:#475569; font-weight:600; text-align:left; padding:8px 10px; border-bottom:1.5px solid #E2E8F0; }
+  table.spec td { padding:8px 10px; border-bottom:1px solid #F1F5F9; color:#334155; vertical-align:top; }
+  table.spec tr:last-child td { border-bottom:none; }
+  .badge { display:inline-block; font-size:11px; font-weight:600; padding:1px 7px; border-radius:5px; }
+  .badge.reuse { background:#DBEAFE; color:#1D4ED8; }
+  .badge.new { background:#FEF3C7; color:#92400E; }
+
+  /* 代码块 */
+  pre { background:#0F172A; color:#E2E8F0; border-radius:10px; padding:16px 18px; font-size:12px; line-height:1.7; overflow-x:auto; margin:10px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:inherit; }
+  .cmt { color:#64748B; }
+  .kw { color:#F472B6; }
+  .str { color:#86EFAC; }
+
+  /* 强调提示框 */
+  .callout { border-radius:12px; padding:14px 18px; margin:14px 0; font-size:13px; line-height:1.8; }
+  .callout.action { background:#FEF2F2; border:1px solid #FECACA; color:#991B1B; }
+  .callout.action b { color:#7F1D1D; }
+  .callout.info { background:#EFF6FF; border:1px solid #BFDBFE; color:#1E40AF; }
+  .callout.info b { color:#1E3A8A; }
+
+  /* 待确认问题 */
+  .qa-list { display:flex; flex-direction:column; gap:10px; }
+  .qa-item { background:#FFFBEB; border:1px solid #FDE68A; border-radius:10px; padding:10px 14px; }
+  .qa-item .q { font-size:13px; font-weight:700; color:#92400E; margin-bottom:3px; }
+  .qa-item .a { font-size:12.5px; color:#78350F; line-height:1.7; }
+
+  /* 原型窗口外框规范 */
+  .mock { margin-bottom:8px; }
+  .mock-crumb { display:flex; align-items:flex-start; gap:7px; font-size:13px; color:#475569; margin-bottom:12px; line-height:1.65; }
+  .mock-crumb .pin { flex-shrink:0; }
+  .mock-crumb b { color:#0F172A; }
+  .mock-window { background:#F4F6FB; border:1px solid #E2E8F0; border-radius:14px; overflow:hidden; box-shadow:0 14px 44px -20px rgba(15,23,42,.3); }
+  .mock-bar { display:flex; align-items:center; gap:8px; background:#EDEFF3; border-bottom:1px solid #E2E8F0; padding:10px 16px; }
+  .mock-bar .dots { display:flex; gap:6px; }
+  .mock-bar .dots i { width:11px; height:11px; border-radius:50%; display:block; }
+  .mock-bar .dots i:nth-child(1){ background:#FF5F57; } .mock-bar .dots i:nth-child(2){ background:#FEBC2E; } .mock-bar .dots i:nth-child(3){ background:#28C840; }
+  .mock-bar .mb-title { font-size:12.5px; color:#64748B; margin-left:6px; }
+  .mock-inner { padding:20px 22px; }
+  .mock-head { display:flex; align-items:baseline; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+  .mock-head h3 { font-size:18px; font-weight:700; color:#0F172A; margin:0; letter-spacing:-.01em; }
+  .mock-head .mh-sub { font-size:12.5px; color:#64748B; }
+  .mock-note { background:#FFFBEB; border:1px solid #FDE68A; border-radius:12px; padding:12px 16px; margin-top:14px; font-size:12.5px; color:#92400E; line-height:1.75; }
+  .mock-note b { color:#B45309; }
+  .mock-note code { background:#FEF3C7; border-radius:4px; padding:1px 5px; font-size:12px; color:#B45309; font-family:"SF Mono",Menlo,Consolas,monospace; }
+  table.mock-t { width:100%; border-collapse:collapse; font-size:12.5px; }
+  table.mock-t th { background:#F8FAFC; text-align:left; padding:8px 10px; color:#64748B; font-weight:600; border-bottom:1px solid #E2E8F0; }
+  table.mock-t td { padding:9px 10px; border-bottom:1px solid #F1F5F9; color:#334155; }
+  .tag-mini { font-size:11px; padding:1px 7px; border-radius:5px; font-weight:600; }
+  .tag-mini.group { background:#DBEAFE; color:#1D4ED8; }
+  .tag-mini.contact { background:#FCE7F3; color:#BE185D; }
+  .tag-mini.add { background:#DCFCE7; color:#15803D; }
+  .tag-mini.name { background:#FEF3C7; color:#B45309; }
+  .tag-mini.del { background:#FEE2E2; color:#B91C1C; }
+
+  @media (max-width:768px){ .section{padding:18px;} .mock-inner{padding:14px;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="doc-header">
+    <span class="tag">📋 待确认方案 · docs/review</span>
+    <h1>企业微信「群名称 / 外部联系人」变更事件回调 —— 接入方案</h1>
+    <div class="sub">参考 wuhuApi 项目 change_external_chat / change_external_contact 事件回调实现方式整理 · 2026-07-22</div>
+  </div>
+
+  <!-- 1. 现状 -->
+  <div class="section">
+    <h2><span class="num">1</span>现状调研结论</h2>
+    <ul>
+      <li>wxbot 当前 <code class="file-path">callback/server.py</code> 只识别 <code>msgaudit_notify</code>（会话存档通知）一种事件，没有接入企业微信「通讯录/客户联系」事件回调；其余事件类型会被静默忽略。</li>
+      <li>群名维护依赖 <code class="file-path">task_group_sync.py</code> 定时轮询（覆盖式刷新 <code>wecom_groups</code> 表），客户昵称维护依赖 <code class="file-path">task_contact_sync.py</code> 定时轮询（10分钟增量 + 6小时全量，刷新 <code>wecom_contacts</code> 表），**都不是事件驱动**，存在分钟级延迟。</li>
+      <li>企业微信没有单独的「群名称修改」事件：群信息变化统一走 <code>change_external_chat</code>（<code>ChangeType=create/update</code>），只给 <code>ChatId</code>，不带具体改了哪个字段，需要收到通知后主动拉一次群详情比对。</li>
+      <li>wuhuApi 项目在 <code>wuhu.py</code>（约4.69万行）中已实现同类回调：函数式验签解密（与 wxbot <code>callback/crypto.py</code> 的 <code>WXBizMsgCrypt</code> 类逻辑等价）+ <code>change_external_chat</code> / <code>change_external_contact</code> 双事件分流 + <code>BackgroundTasks</code> 异步落库，可直接参考其事件分发方式，**不需要照搬其整套实现**（wxbot 现有封装更完整）。</li>
+      <li>wxbot 已有 <code class="file-path">storage/group_db.py</code>（<code>wecom_groups</code>）、<code class="file-path">storage/contact_db.py</code>（<code>wecom_contacts</code>）两张「权威名称表」，均已具备 <code>sync_status/fail_count/name_updated_at</code> 字段设计，可直接复用其更新函数。</li>
+    </ul>
+  </div>
+
+  <!-- 2. 已确认范围 -->
+  <div class="section">
+    <h2><span class="num">2</span>已确认的范围与决策</h2>
+    <div class="decision-list">
+      <div class="decision-item"><span class="check">✓</span><span class="txt"><b>监听范围：全量群</b>，不局限于保单识别监控群。</span></div>
+      <div class="decision-item"><span class="check">✓</span><span class="txt"><b>同时覆盖外部联系人（客户）变更事件</b>（新增 / 修改 / 删除），与群变更共用一套回调入口。</span></div>
+      <div class="decision-item"><span class="check">✓</span><span class="txt"><b>新增「变更历史」记录表</b>（审计追溯用，当前系统里不存在同类表）。</span></div>
+      <div class="decision-item"><span class="check">✓</span><span class="txt"><b>保留现有定时轮询作兜底</b>，与事件回调并存、互不冲突；轮询频率不变。</span></div>
+    </div>
+  </div>
+
+  <!-- 3. 整体流程 -->
+  <div class="section">
+    <h2><span class="num">3</span>整体流程</h2>
+    <div class="flow">
+      <div class="box warn">企业微信「客户联系」应用<br>事件回调</div>
+      <div class="arrow">→</div>
+      <div class="box accent">POST /callback/event<br>(新增蓝图)</div>
+      <div class="arrow">→</div>
+      <div class="box">验签 + AES解密<br>(复用 WXBizMsgCrypt)</div>
+      <div class="arrow">→</div>
+      <div class="box accent">事件分发</div>
+    </div>
+    <div class="flow" style="margin-left:40px;">
+      <div class="flow-branch">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span class="arrow">├─</span>
+          <div class="box">change_external_chat<br>create/update</div>
+          <span class="arrow">→</span>
+          <div class="box">拉取群详情<br>（复用 ContactsManager）</div>
+          <span class="arrow">→</span>
+          <div class="box">更新 wecom_groups<br>+ 写入变更历史</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span class="arrow">└─</span>
+          <div class="box">change_external_contact<br>add/edit/del</div>
+          <span class="arrow">→</span>
+          <div class="box">拉取联系人详情<br>（复用 _fetch_external_contact）</div>
+          <span class="arrow">→</span>
+          <div class="box">更新 wecom_contacts<br>+ 写入变更历史</div>
+        </div>
+      </div>
+    </div>
+    <div class="fallback-note">⏱ <b style="color:#475569;">兜底：</b>&nbsp;<code>task_group_sync.py</code> / <code>task_contact_sync.py</code> 定时轮询保持不变，事件丢失/延迟时由下一轮轮询自动纠正。</div>
+  </div>
+
+  <!-- 4. 组件清单 -->
+  <div class="section">
+    <h2><span class="num">4</span>新增 / 复用组件清单</h2>
+    <table class="spec">
+      <tr><th>组件</th><th>说明</th><th></th></tr>
+      <tr><td><code>callback/crypto.py</code>（WXBizMsgCrypt）</td><td>签名校验 + AES 解密/加密，事件回调直接复用，无需重写</td><td><span class="badge reuse">复用</span></td></tr>
+      <tr><td><code>core/contacts.py</code>（_fetch_external_room_info / _fetch_external_contact）</td><td>群详情、联系人详情拉取 + access_token 获取，回调命中后直接调用</td><td><span class="badge reuse">复用</span></td></tr>
+      <tr><td><code>storage/group_db.py</code>（update_group_success）</td><td>群名/成员数写回 wecom_groups，签名与用途完全匹配</td><td><span class="badge reuse">复用</span></td></tr>
+      <tr><td><code>storage/contact_db.py</code></td><td>客户昵称写回 wecom_contacts，复用其写入函数</td><td><span class="badge reuse">复用</span></td></tr>
+      <tr><td><code>callback/event_callback.py</code></td><td>新增独立 Flask Blueprint，处理 URL 验证 + change_external_chat / change_external_contact 事件分发</td><td><span class="badge new">新增</span></td></tr>
+      <tr><td><code>storage/change_history_db.py</code></td><td>新增，负责 <code>wecom_change_history</code> 表的建表与写入</td><td><span class="badge new">新增</span></td></tr>
+      <tr><td><code>config.yaml</code> → <code>event_callback</code> 配置块</td><td>独立 token / encoding_aes_key / corpid / path，不复用 <code>extra_callbacks</code>（语义不同：那是"多企业会话存档"，这里是同企业下"客户联系应用"的另一路事件订阅）</td><td><span class="badge new">新增</span></td></tr>
+      <tr><td><code>main.py</code></td><td>按 <code>event_callback.enabled</code> 判断是否创建 WXBizMsgCrypt 实例并注册新蓝图</td><td><span class="badge new">新增改动</span></td></tr>
+    </table>
+  </div>
+
+  <!-- 5. 数据表设计 -->
+  <div class="section">
+    <h2><span class="num">5</span>数据表设计：wecom_change_history</h2>
+    <p>群变更和客户变更共用一张历史表，靠 <code>entity_type</code> 区分，避免建两张结构相同的表。</p>
+    <pre><code><span class="kw">CREATE TABLE</span> wecom_change_history (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  entity_type VARCHAR(16) NOT NULL          <span class="cmt">-- 'group' / 'contact'</span>
+    COMMENT '变更实体类型',
+  entity_id VARCHAR(128) NOT NULL           <span class="cmt">-- roomid / external_userid</span>
+    COMMENT '实体ID',
+  corpid VARCHAR(64) DEFAULT ''             COMMENT '企业ID',
+  change_type VARCHAR(32) NOT NULL          <span class="cmt">-- name_change/create/add_external_contact/</span>
+    COMMENT '变更类型',                      <span class="cmt">-- del_external_contact/del_follow_user 等</span>
+  old_value VARCHAR(256) DEFAULT ''         COMMENT '变更前值（如旧群名/旧昵称）',
+  new_value VARCHAR(256) DEFAULT ''         COMMENT '变更后值',
+  raw_event TEXT                            COMMENT '原始回调事件JSON，便于排查',
+  event_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '事件发生时间',
+  KEY idx_entity (entity_type, entity_id, event_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='企业微信群/客户变更事件历史（回调驱动，审计追溯用）';</code></pre>
+  </div>
+
+  <!-- 6. 事件分发逻辑 -->
+  <div class="section">
+    <h2><span class="num">6</span>事件分发核心逻辑（伪代码）</h2>
+    <pre><code><span class="cmt"># callback/event_callback.py</span>
+<span class="kw">def</span> receive_event_callback():
+    xml = crypto.decrypt_msg(...)
+    event_type = xml.get(<span class="str">'Event'</span>) <span class="kw">or</span> xml.get(<span class="str">'InfoType'</span>)  <span class="cmt"># 兼容两种命名</span>
+    change_type = xml.get(<span class="str">'ChangeType'</span>)
+
+    <span class="kw">if</span> event_type == <span class="str">'change_external_chat'</span> <span class="kw">and</span> change_type <span class="kw">in</span> (<span class="str">'create'</span>, <span class="str">'update'</span>):
+        chat_id = xml[<span class="str">'ChatId'</span>]
+        threading.Thread(target=_handle_group_change, args=(chat_id, change_type)).start()
+
+    <span class="kw">elif</span> event_type == <span class="str">'change_external_contact'</span>:
+        external_userid = xml[<span class="str">'ExternalUserID'</span>]
+        <span class="kw">if</span> change_type <span class="kw">in</span> (<span class="str">'add_external_contact'</span>, <span class="str">'edit_external_contact'</span>):
+            threading.Thread(target=_handle_contact_change, args=(external_userid, change_type)).start()
+        <span class="kw">elif</span> change_type <span class="kw">in</span> (<span class="str">'del_external_contact'</span>, <span class="str">'del_follow_user'</span>):
+            threading.Thread(target=_handle_contact_delete, args=(external_userid, change_type)).start()
+
+    <span class="kw">return</span> <span class="str">"success"</span>  <span class="cmt"># 未识别事件同样返回 success，不影响企微侧重试策略</span>
+
+<span class="kw">def</span> _handle_group_change(chat_id, change_type):
+    info = contacts_manager._fetch_external_room_info(chat_id)   <span class="cmt"># 复用现有方法</span>
+    old = group_db.get_group(chat_id)
+    <span class="kw">if</span> <span class="kw">not</span> old <span class="kw">or</span> old.name != info[<span class="str">'name'</span>]:
+        change_history_db.insert(<span class="str">'group'</span>, chat_id, change_type, old.name <span class="kw">if</span> old <span class="kw">else</span> <span class="str">''</span>, info[<span class="str">'name'</span>])
+    group_db.update_group_success(db, chat_id, corpid, info[<span class="str">'name'</span>], info[<span class="str">'owner'</span>], info[<span class="str">'member_count'</span>], <span class="str">'external'</span>)</code></pre>
+  </div>
+
+  <!-- 7. 配置变更 -->
+  <div class="section">
+    <h2><span class="num">7</span>配置变更</h2>
+    <pre><code><span class="cmt"># config.yaml 新增</span>
+event_callback:
+  enabled: <span class="kw">true</span>
+  path: <span class="str">"/callback/event"</span>
+  corpid: <span class="str">"..."</span>
+  token: <span class="str">"..."</span>              <span class="cmt"># 客户联系应用单独申请，与会话存档回调不同</span>
+  encoding_aes_key: <span class="str">"..."</span>    <span class="cmt"># 同上，43位</span></code></pre>
+    <p>不复用 <code>extra_callbacks</code> 结构：该配置项语义是"多企业会话存档"（每项对应一套 corpid+secret），而事件回调是同一企业下"客户联系"应用的另一路独立订阅，混用容易在后续排查时产生歧义，单独一个配置块更清晰。</p>
+  </div>
+
+  <!-- 8. 前置依赖 -->
+  <div class="section">
+    <h2><span class="num">8</span>前置依赖（需要在企业微信管理后台操作，非代码层面）</h2>
+    <div class="callout action">
+      <b>⚠ 这部分需要你在企业微信管理后台手动完成，无法通过写代码实现：</b>
+      <ol style="margin-top:8px;">
+        <li>为「客户联系」应用单独开启<b>事件回调</b>订阅（外部联系人变更 change_external_contact、客户群变更 change_external_chat 两类事件）</li>
+        <li>获取该应用独立的 <code>Token</code> + <code>EncodingAESKey</code></li>
+        <li>配置回调 URL 为 <code>https://你的域名/callback/event</code>，企业微信会先发 GET 请求做 URL 验证</li>
+        <li>确认服务器出口/该路径的可信域名校验能通过（与现有 <code>/callback</code> 保持同一域名下即可，无需额外备案）</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- 9. 兼容性说明 -->
+  <div class="section">
+    <h2><span class="num">9</span>兼容性与兜底</h2>
+    <ul>
+      <li>不改动 <code>task_group_sync.py</code> / <code>task_contact_sync.py</code> 现有轮询逻辑，事件回调是「实时补充」而非替代。</li>
+      <li>该功能依赖企业微信 Finance/客户联系 SDK 相关配置，与 <code>callback/server.py</code> 现有回调同属服务器（Linux）专属能力，<b>不需要同步到 <code class="file-path">run_ocr.py</code></b>（本地开发入口本就不含微信 SDK 相关模块）。</li>
+      <li><code>wecom_change_history</code> 是纯新增表，不影响任何现有查询/统计逻辑。</li>
+    </ul>
+  </div>
+
+  <!-- 10. 后台查询页示例 -->
+  <div class="mock">
+    <div class="mock-crumb"><span class="pin">📍</span><span><b>消息监控后台 → 变更历史</b>。展示回调驱动记录下来的群/客户变更事件，供排查和审计用（示例数据）。</span></div>
+    <div class="mock-window">
+      <div class="mock-bar"><span class="dots"><i></i><i></i><i></i></span><span class="mb-title">wxbot 管理后台 · 通讯录 · 变更历史</span></div>
+      <div class="mock-inner">
+        <div class="mock-head"><h3>群 / 客户变更历史</h3><span class="mh-sub">共 128 条 · 近7天</span></div>
+        <table class="mock-t">
+          <tr><th>时间</th><th>类型</th><th>事件</th><th>实体ID</th><th>变更前 → 变更后</th></tr>
+          <tr><td>07-22 14:03</td><td><span class="tag-mini group">群</span></td><td><span class="tag-mini name">改名</span></td><td>wrOAbc...123</td><td>"张三保险交流群" → "张三车险交流群"</td></tr>
+          <tr><td>07-22 11:20</td><td><span class="tag-mini contact">客户</span></td><td><span class="tag-mini add">新增</span></td><td>wmXyz...456</td><td>— → "李四"</td></tr>
+          <tr><td>07-21 09:47</td><td><span class="tag-mini contact">客户</span></td><td><span class="tag-mini del">删除</span></td><td>wmQrs...789</td><td>"王五" → （已删除好友）</td></tr>
+          <tr><td>07-20 16:12</td><td><span class="tag-mini group">群</span></td><td><span class="tag-mini name">改名</span></td><td>wrOAbc...321</td><td>"XX财险7群" → "XX财险7群（已续保）"</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="mock-note"><b>要点：</b>① 仅展示 <code>wecom_change_history</code> 原始记录，不做二次业务判断；② 客户"删除"指对方删除好友或被删除关注，不代表数据被物理删除；③ 该页面是本次方案的可选附加产出，若暂不需要可先只落库不做前端页面。</div>
+  </div>
+
+  <!-- 11. 待确认问题 -->
+  <div class="section">
+    <h2><span class="num">11</span>待确认问题</h2>
+    <div class="qa-list">
+      <div class="qa-item">
+        <div class="q">Q1. 客户改名是否有明确的 ChangeType？</div>
+        <div class="a">企业微信 change_external_contact 的 ChangeType 目前只有 add_external_contact / edit_external_contact / del_external_contact / del_follow_user / transfer_fail 几种，"改名"会落在 edit_external_contact 里，需要拉详情后与旧值比对才能判断具体改了什么，方案中已按此设计。</div>
+      </div>
+      <div class="qa-item">
+        <div class="q">Q2. 上方「变更历史查询页面」是否需要现在一起做？</div>
+        <div class="a">默认先只做后端回调 + 落库，页面作为附加产出；如果你需要，可以在确认本方案后单独排期做前端页面。</div>
+      </div>
+      <div class="qa-item">
+        <div class="q">Q3. 客户被删除后，wecom_contacts 里的记录要不要保留？</div>
+        <div class="a">方案默认保留（只在 wecom_change_history 记录一条删除事件），因为同一客户可能被多个员工添加，删除是"某个员工侧"的关系变化，不代表这个人从系统里彻底消失。</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
