@@ -32,7 +32,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 WINDOW_PAST_DAYS = 30
-WINDOW_FUTURE_DAYS = 90
+WINDOW_FUTURE_DAYS = 30  # 方案：页面/提醒只关注逾期+30天内到期，未来窗口收窄到30天
 EXPIRE_AFTER_DAYS = 30  # 到期后超过这么多天未成交/未流失，自动标记 expired
 
 
@@ -49,7 +49,7 @@ def _fetch_window_records(db, today):
         cursor.execute("""
             SELECT r.id AS record_id, r.enterprise_id, r.sender, r.sender_name,
                    pf.plate_no, pf.vin, pf.insured, pf.applicant, pf.company_short,
-                   pf.policy_type, pf.policy_no, pf.end_date_iso, pf.total_premium
+                   pf.policy_type, pf.policy_no, pf.sign_date_iso, pf.end_date_iso, pf.total_premium
             FROM insurance_records r
             JOIN insurance_policy_fields pf ON r.id = pf.record_id
             WHERE r.deleted_at IS NULL
@@ -123,6 +123,7 @@ def _build_task_payload(db, customer_key, enterprise_id, rows, policy_type=None)
         "policy_type": policy_type,
         "policy_no": soonest.get("policy_no") or "",
         "end_date": soonest["end_date_iso"],
+        "sign_date": soonest.get("sign_date_iso") or None,
         "total_premium": soonest.get("total_premium") or "",
         "policy_record_ids": [r["record_id"] for r in rows],
         "primary_record_id": soonest["record_id"],
@@ -134,9 +135,9 @@ def _build_task_payload(db, customer_key, enterprise_id, rows, policy_type=None)
 
 def _detect_renewal_hints(db, enterprise_id_scope=None):
     """
-    续保检测提示（非全自动）：对状态在 pending/following 的存量任务，查一次「同客户 +
+    续保检测提示（半自动）：对状态为 pending 的存量任务，查一次「同客户 + 同险种 +
     不在该任务当前 policy_record_ids 里 + 起保日期紧接着当前任务到期日」的保单记录，
-    命中写入 hint 字段，不改变任务状态；由人工在页面上确认「标记已成交」或「忽略」。
+    命中写入 hint 字段，不改变任务状态；由人工在页面上确认「续保」或「忽略」。
 
     两层过滤缺一不可：
     1) 排除 policy_record_ids 里已有的记录——否则同一辆车交强+商业两份保单到期日不同，
@@ -149,8 +150,8 @@ def _detect_renewal_hints(db, enterprise_id_scope=None):
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute(
-            "SELECT id, customer_key, enterprise_id, end_date, policy_record_ids FROM renewal_tasks "
-            "WHERE status IN ('pending','following')"
+            "SELECT id, customer_key, enterprise_id, policy_type, end_date, policy_record_ids FROM renewal_tasks "
+            "WHERE status = 'pending'"
         )
         tasks = cursor.fetchall()
     finally:
@@ -179,10 +180,11 @@ def _detect_renewal_hints(db, enterprise_id_scope=None):
                 WHERE (pf.plate_no = %s OR pf.vin = %s)
                   AND r.enterprise_id = %s AND r.deleted_at IS NULL
                   AND r.status = 'done' AND r.doc_category = '保单'
+                  AND pf.policy_type = %s
                   AND r.id NOT IN ({ph})
                   AND pf.start_date_iso BETWEEN %s AND %s
                 ORDER BY pf.end_date_iso DESC LIMIT 1
-            """, [t["customer_key"], t["customer_key"], t["enterprise_id"]] + known_ids
+            """, [t["customer_key"], t["customer_key"], t["enterprise_id"], t.get("policy_type") or ""] + known_ids
                  + [start_window_from, start_window_to])
             hit = cursor.fetchone()
         finally:
@@ -217,7 +219,7 @@ def sync_customer_task(db, plate_no, vin, enterprise_id, user_id=None):
         cursor.execute("""
             SELECT r.id AS record_id, r.enterprise_id, r.sender, r.sender_name,
                    pf.plate_no, pf.vin, pf.insured, pf.applicant, pf.company_short,
-                   pf.policy_type, pf.policy_no, pf.end_date_iso, pf.total_premium
+                   pf.policy_type, pf.policy_no, pf.sign_date_iso, pf.end_date_iso, pf.total_premium
             FROM insurance_records r
             JOIN insurance_policy_fields pf ON r.id = pf.record_id
             WHERE r.deleted_at IS NULL AND r.status = 'done' AND r.doc_category = '保单'

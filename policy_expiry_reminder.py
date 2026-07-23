@@ -57,7 +57,8 @@ def ensure_reminder_log_table(db):
 
 def fetch_expiring_records(db):
     """
-    查未来 REMIND_WINDOW_DAYS 天内(含今天)到期、今天还没提醒过的保单。
+    查逾期 REMIND_WINDOW_DAYS 天内 ~ 未来 REMIND_WINDOW_DAYS 天内到期、今天还没提醒过的保单，
+    并排除 renewal_tasks 中已闭环(续保/停保/暂不考虑)的任务对应保单（只保留 pending 或尚无任务的）。
     同一 policy_no 只保留 record_id 最大(最新，覆盖"重新识别"产生的旧记录)的一条；
     空 policy_no 各自独立，不参与去重（与台账去重口径一致）。
     只推送 users.renewal_enabled=1 的账号跟单(insurance_records.user_id)的保单——续保提醒
@@ -73,19 +74,24 @@ def fetch_expiring_records(db):
             FROM insurance_records r
             JOIN insurance_policy_fields pf ON r.id = pf.record_id
             JOIN users u ON u.id = r.user_id
+            LEFT JOIN renewal_tasks rt
+                ON (rt.customer_key = pf.plate_no OR rt.customer_key = UPPER(pf.vin))
+               AND rt.policy_type = pf.policy_type
+               AND rt.enterprise_id = r.enterprise_id
             WHERE r.deleted_at IS NULL
               AND r.status = 'done'
               AND r.doc_category = '保单'
               AND r.roomid IS NOT NULL AND r.roomid != ''
               AND u.renewal_enabled = 1
               AND pf.end_date_iso IS NOT NULL
-              AND pf.end_date_iso BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
+              AND pf.end_date_iso BETWEEN DATE_SUB(CURDATE(), INTERVAL %s DAY) AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
+              AND (rt.id IS NULL OR rt.status = 'pending')
               AND NOT EXISTS (
                   SELECT 1 FROM insurance_reminder_log rl
                   WHERE rl.record_id = r.id AND rl.remind_date = CURDATE()
               )
             ORDER BY r.id DESC
-        """, (REMIND_WINDOW_DAYS,))
+        """, (REMIND_WINDOW_DAYS, REMIND_WINDOW_DAYS))
         rows = cursor.fetchall()
     finally:
         conn.close()
@@ -217,20 +223,31 @@ def main():
         for r in items:
             by_sender.setdefault(r["sender"], []).append(r)
 
-        lines = ["【保单到期提醒】以下保单即将到期，请及时续保：", ""]
+        lines = ["【今日续保提醒】以下保单需尽快跟进续保：", ""]
         at_names = []
         for sender, plist in by_sender.items():
             plist.sort(key=lambda x: x["end_date_iso"])
             sender_name = _resolve_sender_name(contacts_instances, sender, plist[0].get("sender_name") or "")
             at_names.append(sender_name)
             lines.append(f"@{sender_name}")
+            # 按逾期🔴 / 即将到期🟠 分组展示
+            overdue_lines, soon_lines = [], []
             for r in plist:
                 days_left = (r["end_date_iso"] - today).days
                 plate = r.get("plate_no") or "未知车牌"
                 ptype = r.get("policy_type") or "保单"
                 end_str = r["end_date_iso"].strftime("%Y-%m-%d")
-                due_str = "今天到期" if days_left == 0 else f"还{days_left}天到期"
-                lines.append(f"{plate} {ptype} {due_str}({end_str})")
+                if days_left < 0:
+                    overdue_lines.append(f"· {plate} {ptype} —— 已逾期{-days_left}天({end_str})")
+                else:
+                    due_str = "今天到期" if days_left == 0 else f"还剩{days_left}天到期"
+                    soon_lines.append(f"· {plate} {ptype} —— {due_str}({end_str})")
+            if overdue_lines:
+                lines.append("🔴 已逾期：")
+                lines.extend(overdue_lines)
+            if soon_lines:
+                lines.append("🟠 即将到期：")
+                lines.extend(soon_lines)
             # 免登录直达链接：带这个跟单人自己账号的登录token，点开直接进续保管理系统页面
             _uid = plist[0].get("user_id")
             if _uid:

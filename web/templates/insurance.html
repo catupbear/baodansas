@@ -2560,26 +2560,22 @@
         <div :style="(renewalInfoRevealed || isSuperAdmin) ? '' : 'filter: blur(6px); pointer-events: none; user-select: none;'"
              style="transition: filter 0.15s;" class="space-y-5">
         <!-- 统计卡片 -->
-        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div class="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
                 <div class="text-2xl font-bold text-red-600">{{ renewalStats.overdue }}</div>
-                <div class="text-xs text-red-400 mt-1">已过期未处理</div>
+                <div class="text-xs text-red-400 mt-1">🔴 已逾期</div>
             </div>
             <div class="bg-orange-50 border border-orange-200 rounded-xl p-3 text-center">
-                <div class="text-2xl font-bold text-orange-600">{{ renewalStats.due_7d }}</div>
-                <div class="text-xs text-orange-400 mt-1">7天内到期</div>
-            </div>
-            <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-center">
-                <div class="text-2xl font-bold text-yellow-600">{{ renewalStats.due_this_month }}</div>
-                <div class="text-xs text-yellow-400 mt-1">本月到期</div>
-            </div>
-            <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
-                <div class="text-2xl font-bold text-blue-600">{{ renewalStats.due_next_month }}</div>
-                <div class="text-xs text-blue-400 mt-1">下月到期</div>
+                <div class="text-2xl font-bold text-orange-600">{{ renewalStats.due_30d }}</div>
+                <div class="text-xs text-orange-400 mt-1">🟠 30天内到期</div>
             </div>
             <div class="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
-                <div class="text-2xl font-bold text-green-600">{{ renewalStats.won_this_month }}</div>
-                <div class="text-xs text-green-400 mt-1">本月已成交</div>
+                <div class="text-2xl font-bold text-green-600">{{ renewalStats.renewed_this_month }}</div>
+                <div class="text-xs text-green-400 mt-1">🟢 本月已续保</div>
+            </div>
+            <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center">
+                <div class="text-2xl font-bold text-gray-600">{{ renewalStats.pending_total }}</div>
+                <div class="text-xs text-gray-400 mt-1">待跟进</div>
             </div>
         </div>
 
@@ -2588,12 +2584,12 @@
             <div class="flex flex-wrap items-center gap-2">
                 <select v-model="renewalFilter.status" @change="loadRenewalList()"
                         class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white cursor-pointer">
-                    <option value="">全部状态</option>
+                    <option value="">需跟进（逾期+30天内）</option>
                     <option value="pending">待跟进</option>
-                    <option value="following">跟进中</option>
-                    <option value="won">已成交</option>
-                    <option value="lost">已流失</option>
-                    <option value="expired">已过期</option>
+                    <option value="transfer">转保</option>
+                    <option value="renewed">续保</option>
+                    <option value="stopped">停保</option>
+                    <option value="hold">暂不考虑</option>
                 </select>
                 <select v-if="currentUser.role === 'enterprise'" v-model="renewalFilter.assignee" @change="loadRenewalList()"
                         class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white cursor-pointer">
@@ -2625,41 +2621,40 @@
         <div class="card table-card" style="display:flex;flex-direction:column;max-height:calc(100vh - 340px);">
             <div v-if="renewalLoading" class="text-center py-12 text-gray-400">加载中...</div>
             <div v-else-if="!renewalTasks.length" class="text-center py-12 text-gray-400">暂无续保任务</div>
-            <div v-else class="table-scroll-wrapper" style="flex:1;min-height:0;">
-                <table class="records-table text-left">
-                    <thead>
-                        <tr>
-                            <th v-if="isSuperAdmin || currentUser.role === 'enterprise'" style="min-width:36px;">
-                                <input type="checkbox" :checked="renewalAllSelected" @change="toggleRenewalSelectAll">
-                            </th>
-                            <th>车牌号</th><th>被保险人</th><th>承保公司</th><th>险种</th><th>保单号</th>
-                            <th>到期日</th><th>剩余天数</th><th>上期保费</th><th>跟进人</th><th>状态</th><th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="t in renewalTasks" :key="t.id" :class="t.hint_record_id ? 'bg-blue-50/40' : ''">
-                            <td v-if="isSuperAdmin || currentUser.role === 'enterprise'">
-                                <input type="checkbox" :value="t.id" v-model="renewalSelectedIds">
-                            </td>
-                            <td class="font-medium text-gray-800">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.plate_no || t.vin || '—') : maskPlateNo(t.plate_no || t.vin) || '—' }}</td>
-                            <td>{{ (renewalInfoRevealed || isSuperAdmin) ? (t.insured || '—') : maskPersonName(t.insured) || '—' }}</td>
-                            <td>{{ t.company_short || '—' }}</td>
-                            <td>{{ t.policy_type || '—' }}</td>
-                            <td class="text-xs text-gray-600" style="font-family:ui-monospace,Menlo,monospace;">{{ t.policy_no || '—' }}</td>
-                            <td>{{ t.end_date }}</td>
-                            <td>
-                                <span :class="renewalDaysLeftClass(t)">{{ renewalDaysLeftText(t) }}</span>
-                            </td>
-                            <td>{{ t.total_premium || '—' }}</td>
-                            <td>{{ (renewalInfoRevealed || isSuperAdmin) ? (t.assignee_name || '未分配') : (t.assignee_name ? maskPersonName(t.assignee_name) : '未分配') }}</td>
-                            <td><span class="text-xs px-2 py-0.5 rounded-full" :style="renewalStatusStyle(t.status)">{{ renewalStatusLabel(t.status) }}</span></td>
-                            <td>
-                                <button v-if="t.primary_record_id" @click="previewRenewalTaskFile(t.primary_record_id)" class="btn btn-outline" style="padding:3px 10px;font-size:11px;margin-right:4px;">预览</button>
-                                <button @click="openRenewalDetail(t)" class="btn btn-outline" style="padding:3px 10px;font-size:11px;">跟进</button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div v-else class="table-scroll-wrapper" style="flex:1;min-height:0;overflow-y:auto;">
+                <div class="space-y-3 p-1">
+                    <div v-for="t in renewalTasks" :key="t.id"
+                         class="bg-white border border-gray-100 rounded-xl px-4 py-3 flex justify-between gap-4 flex-wrap"
+                         :style="'border-left:4px solid ' + (renewalOverdue(t) ? '#dc2626' : (renewalSoon(t) ? '#ea580c' : '#e5e7eb')) + ';' + (t.hint_record_id ? 'background:#eff6ff;' : '')">
+                        <!-- 主区：车牌大字 + 关键信息分组 -->
+                        <div style="flex:1;min-width:240px;">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <input v-if="isSuperAdmin || currentUser.role === 'enterprise'" type="checkbox" :value="t.id" v-model="renewalSelectedIds" class="cursor-pointer">
+                                <span class="font-extrabold text-gray-800" style="font-size:18px;letter-spacing:0.5px;">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.plate_no || t.vin || '—') : (maskPlateNo(t.plate_no || t.vin) || '—') }}</span>
+                                <span class="text-xs px-1.5 py-0.5 rounded-full font-semibold" :style="renewalDaysBadgeStyle(t)">{{ renewalDaysLeftText(t) }}</span>
+                                <span v-if="t.hint_record_id" class="text-xs px-1.5 py-0.5 rounded-full" style="background:#dbeafe;color:#1d4ed8;">🔔 疑似已续保</span>
+                            </div>
+                            <div class="grid gap-x-5 gap-y-1 mt-2 text-xs" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
+                                <div><span class="text-gray-400">投保人：</span><span class="text-gray-700 font-medium">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.applicant || '—') : (maskPersonName(t.applicant) || '—') }}</span></div>
+                                <div><span class="text-gray-400">被保人：</span><span class="text-gray-700 font-medium">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.insured || '—') : (maskPersonName(t.insured) || '—') }}</span></div>
+                                <div><span class="text-gray-400">签单：</span><span class="text-gray-700 font-medium">{{ t.sign_date || '—' }}</span></div>
+                                <div><span class="text-gray-400">往年保费：</span><span class="text-gray-700 font-medium">{{ t.total_premium || '—' }}</span></div>
+                                <div><span class="text-gray-400">险种：</span><span class="text-gray-700 font-medium">{{ t.policy_type || '—' }}</span></div>
+                                <div><span class="text-gray-400">承保公司：</span><span class="text-gray-700 font-medium">{{ t.company_short || '—' }}</span></div>
+                                <div><span class="text-gray-400">跟进人：</span><span class="text-gray-700 font-medium">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.assignee_name || '未分配') : (t.assignee_name ? maskPersonName(t.assignee_name) : '未分配') }}</span></div>
+                            </div>
+                        </div>
+                        <!-- 右区：状态 + 操作 -->
+                        <div class="flex flex-col items-end gap-2" style="min-width:150px;">
+                            <span class="text-xs px-2 py-0.5 rounded-full" :style="renewalStatusStyle(t.status)">{{ renewalStatusLabel(t.status) }}</span>
+                            <div class="flex gap-1.5 flex-wrap justify-end">
+                                <button v-if="t.hint_record_id" @click="previewRenewalTaskFile(t.hint_record_id)" class="btn" style="padding:3px 10px;font-size:11px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;">📄 查看新保单</button>
+                                <button v-if="t.primary_record_id" @click="previewRenewalTaskFile(t.primary_record_id)" class="btn btn-outline" style="padding:3px 10px;font-size:11px;">预览</button>
+                                <button @click="openRenewalDetail(t)" class="btn btn-primary" style="padding:3px 10px;font-size:11px;">跟进</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div v-if="renewalPagination.total > 0" class="px-4 py-3 border-t flex items-center justify-between" style="flex-shrink:0;background:#fff;">
                 <span class="text-xs text-gray-400">共 {{ renewalPagination.total }} 条，第 {{ renewalPagination.page }} / {{ renewalPagination.pages }} 页</span>
@@ -3750,6 +3745,25 @@
 
     <!-- 续保任务详情弹窗 -->
     <transition name="fade">
+        <!-- 暂不考虑 · 原因框 -->
+        <div v-if="renewalHoldVisible" class="fixed inset-0 modal-mask flex items-center justify-center" style="z-index:70;" @click.self="renewalHoldVisible = false">
+            <div class="bg-white rounded-xl shadow-2xl p-5" style="width:420px;max-width:92vw;" @click.stop>
+                <h3 class="text-base font-semibold text-gray-800 mb-1">暂不考虑 · 填写原因</h3>
+                <p class="text-xs text-gray-400 mb-3">方便后续二次跟进、了解客户流失原因</p>
+                <div class="flex flex-wrap gap-2 mb-3">
+                    <button v-for="p in RENEWAL_HOLD_PRESETS" :key="p" @click="pickRenewalHoldPreset(p)"
+                            class="text-xs px-2.5 py-1 rounded-full border cursor-pointer"
+                            :style="renewalHoldReason === p ? 'background:#ea580c;color:#fff;border-color:#ea580c;' : 'background:#fff;color:#6b7280;border-color:#e5e7eb;'">{{ p }}</button>
+                </div>
+                <textarea v-model="renewalHoldReason" rows="2" placeholder="也可自己输入原因..."
+                          class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400"></textarea>
+                <div class="flex justify-end gap-2 mt-3">
+                    <button @click="renewalHoldVisible = false" class="btn btn-outline" style="padding:6px 16px;font-size:13px;">取消</button>
+                    <button @click="submitRenewalHold" :disabled="!renewalHoldReason.trim()" class="btn btn-primary" style="padding:6px 16px;font-size:13px;">确定</button>
+                </div>
+            </div>
+        </div>
+
         <div v-if="renewalDetailVisible" class="fixed inset-0 modal-mask flex items-center justify-center" style="z-index:60;"
              @click.self="renewalDetailVisible = false">
             <div class="bg-white rounded-xl shadow-2xl" style="width:600px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column;" @click.stop>
@@ -3762,19 +3776,24 @@
                 </div>
 
                 <div v-if="renewalDetailTask.hint_record_id" class="mx-5 mt-3 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-between text-sm flex-wrap gap-2">
-                    <span class="text-blue-700">🔔 检测到疑似续保新单（止期 {{ renewalDetailTask.hint_end_date }}），是否标记已成交？</span>
+                    <span class="text-blue-700">🔔 检测到疑似续保新单（止期 {{ renewalDetailTask.hint_end_date }}），确认为续保？</span>
                     <div class="flex gap-2 flex-shrink-0">
-                        <button @click="changeRenewalStatus('won', '检测到续保新单，确认已成交')" class="text-xs px-2 py-1 rounded bg-blue-600 text-white cursor-pointer">标记已成交</button>
+                        <button @click="previewRenewalTaskFile(renewalDetailTask.hint_record_id)" class="text-xs px-2 py-1 rounded border border-blue-300 text-blue-700 cursor-pointer">📄 查看新保单</button>
+                        <button @click="changeRenewalStatus('renewed', '检测到续保新单，确认续保')" class="text-xs px-2 py-1 rounded bg-blue-600 text-white cursor-pointer">确认续保</button>
                         <button @click="dismissRenewalHint()" class="text-xs px-2 py-1 rounded border border-gray-300 text-gray-500 cursor-pointer">忽略</button>
                     </div>
                 </div>
 
                 <div class="px-5 pt-3 flex items-center gap-2 flex-wrap">
                     <span class="text-xs px-2 py-0.5 rounded-full" :style="renewalStatusStyle(renewalDetailTask.status)">{{ renewalStatusLabel(renewalDetailTask.status) }}</span>
-                    <button v-if="renewalDetailTask.status !== 'won'" @click="changeRenewalStatus('won')"
-                            class="text-xs px-2.5 py-1 rounded border border-green-300 text-green-700 hover:bg-green-50 cursor-pointer">标记已成交</button>
-                    <button v-if="renewalDetailTask.status !== 'lost'" @click="changeRenewalStatus('lost')"
-                            class="text-xs px-2.5 py-1 rounded border border-gray-300 text-gray-500 hover:bg-gray-50 cursor-pointer">标记已流失</button>
+                    <button v-if="renewalDetailTask.status !== 'transfer'" @click="changeRenewalStatus('transfer')"
+                            class="text-xs px-2.5 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-50 cursor-pointer">转保</button>
+                    <button v-if="renewalDetailTask.status !== 'renewed'" @click="changeRenewalStatus('renewed')"
+                            class="text-xs px-2.5 py-1 rounded border border-green-300 text-green-700 hover:bg-green-50 cursor-pointer">续保</button>
+                    <button v-if="renewalDetailTask.status !== 'stopped'" @click="changeRenewalStatus('stopped')"
+                            class="text-xs px-2.5 py-1 rounded border border-gray-300 text-gray-500 hover:bg-gray-50 cursor-pointer">停保</button>
+                    <button v-if="renewalDetailTask.status !== 'hold'" @click="openRenewalHold()"
+                            class="text-xs px-2.5 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer">暂不考虑</button>
                     <span class="flex-1"></span>
                     <select v-if="isSuperAdmin || currentUser.role === 'enterprise'" v-model="renewalDetailAssignee" @change="assignRenewalDetail()"
                             class="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white cursor-pointer">
@@ -3782,6 +3801,7 @@
                         <option v-for="a in renewalAssigneesList" :key="a.id" :value="a.id">{{ a.name || a.id }}</option>
                     </select>
                 </div>
+                <div v-if="renewalDetailTask.status === 'hold' && renewalDetailTask.hold_reason" class="px-5 pt-1.5 text-xs text-orange-600">暂不考虑原因：{{ renewalDetailTask.hold_reason }}</div>
 
                 <div class="px-5 py-3 border-b">
                     <h5 class="text-sm font-semibold text-gray-600 mb-2">📋 历史保单（{{ renewalHistory.length }}）</h5>
@@ -11733,7 +11753,7 @@ const _app = createApp({
             if (v.length <= 3) return v.charAt(0) + '*'.repeat(v.length - 1);
             return v.slice(0, 2) + '*'.repeat(v.length - 3) + v.slice(-1);
         }
-        const renewalStats = ref({ overdue: 0, due_7d: 0, due_30d: 0, due_this_month: 0, due_next_month: 0, won_this_month: 0 });
+        const renewalStats = ref({ overdue: 0, due_30d: 0, renewed_this_month: 0, pending_total: 0 });
         const renewalBadgeCount = computed(() => (renewalStats.value.overdue || 0) + (renewalStats.value.due_30d || 0));
         const renewalTasks = ref([]);
         const renewalLoading = ref(false);
@@ -11878,7 +11898,7 @@ const _app = createApp({
         }
 
         function renewalDaysLeftClass(t) {
-            if (t.status === 'won' || t.status === 'lost') return 'text-gray-400';
+            if (t.status === 'renewed' || t.status === 'stopped' || t.status === 'transfer') return 'text-gray-400';
             const days = Math.ceil((new Date(t.end_date) - new Date()) / 86400000);
             if (days < 0) return 'text-red-600 font-semibold';
             if (days <= 7) return 'text-orange-600 font-semibold';
@@ -11892,15 +11912,27 @@ const _app = createApp({
             return `距到期还剩${days}天`;
         }
 
+        // 卡片逾期/临期判定与徽标样式（仅 pending 未决定的任务标红/橙）
+        function renewalDaysNum(t) { return Math.ceil((new Date(t.end_date) - new Date()) / 86400000); }
+        function renewalOverdue(t) { return t.status === 'pending' && renewalDaysNum(t) < 0; }
+        function renewalSoon(t) { const d = renewalDaysNum(t); return t.status === 'pending' && d >= 0 && d <= 30; }
+        function renewalDaysBadgeStyle(t) {
+            if (t.status !== 'pending') return 'background:#f3f4f6;color:#6b7280;';
+            const d = renewalDaysNum(t);
+            if (d < 0) return 'background:#fee2e2;color:#b91c1c;';
+            if (d <= 30) return 'background:#ffedd5;color:#c2410c;';
+            return 'background:#f3f4f6;color:#6b7280;';
+        }
+
         const RENEWAL_STATUS_STYLES = {
             pending: 'background:#fef3c7;color:#b45309;',
-            following: 'background:#dbeafe;color:#1d4ed8;',
-            won: 'background:#dcfce7;color:#15803d;',
-            lost: 'background:#f3f4f6;color:#6b7280;',
-            expired: 'background:#fee2e2;color:#b91c1c;',
+            transfer: 'background:#dbeafe;color:#1d4ed8;',
+            renewed: 'background:#dcfce7;color:#15803d;',
+            stopped: 'background:#f3f4f6;color:#6b7280;',
+            hold: 'background:#ffedd5;color:#c2410c;',
         };
         const RENEWAL_STATUS_LABELS = {
-            pending: '待跟进', following: '跟进中', won: '已成交', lost: '已流失', expired: '已过期',
+            pending: '待跟进', transfer: '转保', renewed: '续保', stopped: '停保', hold: '暂不考虑',
         };
         function renewalStatusStyle(status) { return RENEWAL_STATUS_STYLES[status] || ''; }
         function renewalStatusLabel(status) { return RENEWAL_STATUS_LABELS[status] || status; }
@@ -11978,11 +12010,11 @@ const _app = createApp({
             }
         }
 
-        async function changeRenewalStatus(status, remark) {
+        async function changeRenewalStatus(status, remark, holdReason) {
             try {
                 const resp = await authFetch('/api/renewal/status', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ task_id: renewalDetailTask.value.id, status, remark: remark || '' }),
+                    body: JSON.stringify({ task_id: renewalDetailTask.value.id, status, remark: remark || '', hold_reason: holdReason || '' }),
                 });
                 const data = await resp.json();
                 if (data.code === 0) {
@@ -12000,6 +12032,17 @@ const _app = createApp({
 
         function dismissRenewalHint() {
             changeRenewalStatus(renewalDetailTask.value.status, '忽略续保检测提示');
+        }
+
+        // 暂不考虑原因框（快捷选项 + 手动输入）
+        const renewalHoldVisible = ref(false);
+        const renewalHoldReason = ref('');
+        const RENEWAL_HOLD_PRESETS = ['嫌贵在比价', '过两个月再说', '车在外地', '已在别处投保', '车辆闲置/待售', '暂时不想续'];
+        function openRenewalHold() { renewalHoldReason.value = ''; renewalHoldVisible.value = true; }
+        function pickRenewalHoldPreset(p) { renewalHoldReason.value = p; }
+        async function submitRenewalHold() {
+            await changeRenewalStatus('hold', '', renewalHoldReason.value.trim());
+            renewalHoldVisible.value = false;
         }
 
         async function assignRenewalDetail() {
@@ -13247,8 +13290,10 @@ const _app = createApp({
             renewalStats, renewalBadgeCount, renewalTasks, renewalLoading, renewalFilter, renewalPagination, renewalSelectedIds,
             renewalAssigneesList, renewalScanning, renewalAllSelected, openRenewalTab, loadRenewalStats, loadRenewalList, gotoRenewalPage, renewalPromoVisible,
             toggleRenewalSelectAll, renewalDaysLeftClass, renewalDaysLeftText, renewalStatusStyle, renewalStatusLabel, renewalActionLabel,
+            renewalOverdue, renewalSoon, renewalDaysBadgeStyle,
             renewalDetailVisible, renewalDetailTask, renewalDetailAssignee, renewalHistory, renewalFollowups, renewalNoteContent,
             renewalNextRemindAt, renewalNoteSaving, openRenewalDetail, submitRenewalFollowup, changeRenewalStatus, dismissRenewalHint, assignRenewalDetail,
+            renewalHoldVisible, renewalHoldReason, RENEWAL_HOLD_PRESETS, openRenewalHold, pickRenewalHoldPreset, submitRenewalHold,
             renewalBatchAssignVisible, renewalBatchAssignee, openBatchAssign, submitBatchAssign, triggerRenewalScan, exportRenewalList,
             renewalQrVisible, renewalQrUrl, renewalConfigVisible, renewalWindowDaysInput, openRenewalQr, openRenewalConfig, saveRenewalConfig, uploadRenewalQrcode, previewRenewalTaskFile,
             deleteRecordVisible, deleteRecordTarget, deleteRecordSaving, openDeleteRecord, confirmDeleteRecord,

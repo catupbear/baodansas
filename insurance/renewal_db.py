@@ -38,7 +38,7 @@ def init_renewal_tables(db):
                 primary_record_id  INT DEFAULT NULL COMMENT '聚合内最近到期日对应的原始record_id,用于前端预览原件',
                 assignee           INT DEFAULT NULL COMMENT '跟进人 user_id',
                 assignee_name      VARCHAR(128) DEFAULT '',
-                status             VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending/following/won/lost/expired',
+                status             VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending待跟进/transfer转保/renewed续保/stopped停保/hold暂不考虑(逾期为end_date派生,非存储态)',
                 priority           TINYINT NOT NULL DEFAULT 0 COMMENT '0/1/2,纯自动计算,不支持手动覆盖',
                 remark             TEXT,
                 remind_at          DATE DEFAULT NULL COMMENT '与最新一条followup.next_remind_at同步',
@@ -108,6 +108,24 @@ def init_renewal_tables(db):
                 "ALTER TABLE renewal_tasks ADD COLUMN primary_record_id INT DEFAULT NULL "
                 "COMMENT '聚合内最近到期日对应的原始record_id,用于前端预览原件' AFTER policy_record_ids"
             )
+        # 续保改造新增字段（幂等）：签单日期(方案7项信息之一) + 暂不考虑原因
+        _try_alter(
+            "ALTER TABLE renewal_tasks ADD COLUMN sign_date DATE DEFAULT NULL "
+            "COMMENT '签单日期(展示快照)' AFTER end_date"
+        )
+        _try_alter(
+            "ALTER TABLE renewal_tasks ADD COLUMN hold_reason VARCHAR(255) DEFAULT '' "
+            "COMMENT '暂不考虑原因(status=hold时填写)' AFTER remark"
+        )
+        # 一次性状态语义迁移（旧CRM漏斗态 → 方案续保结果态）：
+        # won→renewed(续保)、lost→stopped(停保)、following/expired→pending(待跟进)。
+        # 幂等：迁移完成后旧态已不存在，再次启动执行影响0行。
+        for _old, _new in (("won", "renewed"), ("lost", "stopped"),
+                            ("following", "pending"), ("expired", "pending")):
+            try:
+                cursor.execute("UPDATE renewal_tasks SET status=%s WHERE status=%s", (_new, _old))
+            except pymysql.err.MySQLError:
+                pass
         conn.commit()
         logger.info("renewal_tasks / renewal_followups 表初始化完成")
     finally:
@@ -121,8 +139,8 @@ def init_renewal_tables(db):
 def upsert_task(db, data: dict) -> int:
     """
     按 (customer_key, policy_type, enterprise_id) 原子 upsert 一条续保任务（每险种一条）。
-    已存在且 status IN (won,lost) 时不覆盖任何字段（尊重已关闭状态），
-    仅返回其 id；否则插入或更新 end_date/policy_record_ids/priority 等快照字段。
+    已存在且 status IN (renewed,stopped,transfer) 时不覆盖任何字段（尊重人工终结结论），
+    仅返回其 id；否则插入或更新 end_date/sign_date/policy_record_ids/priority 等快照字段。
 
     data 需含: customer_key, enterprise_id(必须是非空int，MySQL唯一索引对NULL不去重，
                调用方必须先过滤掉没有企业归属的记录，不要传None), plate_no, vin, insured,
@@ -140,22 +158,22 @@ def upsert_task(db, data: dict) -> int:
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        # 已关闭(won/lost)的任务不覆盖：先查现状
+        # 已终结(renewed/stopped/transfer)的任务不覆盖：先查现状
         cursor.execute(
             "SELECT id, status FROM renewal_tasks WHERE customer_key=%s AND policy_type=%s AND enterprise_id=%s",
             (record["customer_key"], record.get("policy_type") or "", record["enterprise_id"]),
         )
         existing = cursor.fetchone()
-        if existing and existing["status"] in ("won", "lost"):
+        if existing and existing["status"] in ("renewed", "stopped", "transfer"):
             return existing["id"]
 
         columns = ["customer_key", "enterprise_id", "plate_no", "vin", "insured", "applicant",
-                   "company_short", "policy_type", "policy_no", "end_date", "total_premium",
+                   "company_short", "policy_type", "policy_no", "end_date", "sign_date", "total_premium",
                    "policy_record_ids", "primary_record_id", "priority"]
         values = [record.get(c) for c in columns]
         update_cols = ["plate_no", "vin", "insured", "applicant", "company_short", "policy_no",
-                       "end_date", "total_premium", "policy_record_ids", "primary_record_id", "priority"]
-        # 新建任务时才写默认跟进人；已存在(pending/following/expired)不覆盖已有 assignee
+                       "end_date", "sign_date", "total_premium", "policy_record_ids", "primary_record_id", "priority"]
+        # 新建任务时才写默认跟进人；已存在(pending/hold)不覆盖已有 assignee
         if not existing:
             columns += ["assignee", "assignee_name", "status"]
             values += [record.get("assignee"), record.get("assignee_name") or "", "pending"]
@@ -163,8 +181,7 @@ def upsert_task(db, data: dict) -> int:
         col_sql = ", ".join(columns)
         ph_sql = ", ".join(["%s"] * len(columns))
         update_sql = ", ".join([f"{c}=VALUES({c})" for c in update_cols])
-        # status 若之前是 expired，遇到窗口内数据重新出现应回退成 pending（重新可跟进）
-        update_sql += ", status=IF(status='expired','pending',status)"
+        # 逾期改为 end_date 派生（无 expired 存储态），此处不再改写 status
 
         cursor.execute(
             f"INSERT INTO renewal_tasks ({col_sql}) VALUES ({ph_sql}) "
@@ -184,19 +201,9 @@ def upsert_task(db, data: dict) -> int:
 
 
 def mark_expired(db, cutoff_date) -> int:
-    """end_date 早于 cutoff_date 且未关闭的任务标记为 expired。返回受影响行数。"""
-    conn = db.pool.connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE renewal_tasks SET status='expired' "
-            "WHERE end_date < %s AND status NOT IN ('won','lost','expired')",
-            (cutoff_date,),
-        )
-        conn.commit()
-        return cursor.rowcount
-    finally:
-        conn.close()
+    """已废弃：逾期改为 end_date < 今天 的派生展示，不再有 expired 存储态。
+    保留空实现以兼容旧调用（扫描/定时任务）。"""
+    return 0
 
 
 def set_hint(db, task_id: int, hint_record_id, hint_end_date):
@@ -252,12 +259,14 @@ def get_task_by_customer(db, customer_key: str, enterprise_id) -> dict:
 
 def list_tasks(db, page: int = 1, page_size: int = 20, enterprise_id=None,
                assignee_ids=None, status: str = "", date_start: str = "",
-               date_end: str = "", keyword: str = "") -> dict:
+               date_end: str = "", keyword: str = "", only_actionable: bool = True) -> dict:
     """
     分页查询续保任务列表。
     enterprise_id: None=不过滤(超管)；否则按企业过滤
     assignee_ids: None=不过滤；[]=空列表返回空结果(员工无可见任务)；[uid,...]=按跟进人过滤
-    status: 空=不过滤，'!expired'等暂不支持排除语法，直接传具体状态值
+    status: 空=按 only_actionable 决定；传具体状态值时按该状态查全部
+    only_actionable: True(默认)且未显式传 status 时，只显示"需跟进"两类——
+        end_date 逾期或 30 天内到期、且 status='pending'(未做续保决定)
     date_start/date_end: 按 end_date 范围过滤（'YYYY-MM-DD'）
     keyword: 车牌/被保人/投保人/保单号模糊搜索
     返回: {"total":N, "pages":N, "page":N, "tasks":[...]}
@@ -276,6 +285,9 @@ def list_tasks(db, page: int = 1, page_size: int = 20, enterprise_id=None,
     if status:
         conditions.append("status = %s")
         params.append(status)
+    elif only_actionable:
+        # 方案：默认只显示需跟进两类（逾期 + 30天内到期）且尚未做续保决定
+        conditions.append("status = 'pending' AND end_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)")
     if date_start:
         conditions.append("end_date >= %s")
         params.append(date_start)
@@ -308,7 +320,7 @@ def list_tasks(db, page: int = 1, page_size: int = 20, enterprise_id=None,
                     r["policy_record_ids"] = json.loads(r["policy_record_ids"])
                 except (TypeError, json.JSONDecodeError):
                     r["policy_record_ids"] = []
-            for f in ("end_date", "remind_at", "hint_end_date", "created_at", "updated_at"):
+            for f in ("end_date", "sign_date", "remind_at", "hint_end_date", "created_at", "updated_at"):
                 if r.get(f) is not None:
                     r[f] = str(r[f])
         return {"total": total, "pages": pages, "page": page, "tasks": rows}
@@ -317,7 +329,8 @@ def list_tasks(db, page: int = 1, page_size: int = 20, enterprise_id=None,
 
 
 def get_stats(db, enterprise_id=None, assignee_ids=None) -> dict:
-    """看板统计：过期未处理/7天内到期/本月到期/下月到期/本月已成交。"""
+    """看板统计（方案4卡）：已逾期 / 30天内到期 / 本月已续保 / 待跟进合计。
+    逾期与到期均只统计 status='pending'（尚未做续保决定）的任务。"""
     base_conditions = []
     params = []
     if enterprise_id is not None:
@@ -325,7 +338,7 @@ def get_stats(db, enterprise_id=None, assignee_ids=None) -> dict:
         params.append(enterprise_id)
     if assignee_ids is not None:
         if not assignee_ids:
-            return {"overdue": 0, "due_7d": 0, "due_30d": 0, "due_this_month": 0, "due_next_month": 0, "won_this_month": 0}
+            return {"overdue": 0, "due_30d": 0, "renewed_this_month": 0, "pending_total": 0}
         ph = ",".join(["%s"] * len(assignee_ids))
         base_conditions.append(f"assignee IN ({ph})")
         params.extend(assignee_ids)
@@ -342,19 +355,14 @@ def get_stats(db, enterprise_id=None, assignee_ids=None) -> dict:
             )
             return cursor.fetchone()["cnt"]
 
-        overdue = _count("end_date < CURDATE() AND status NOT IN ('won','lost')")
-        due_7d = _count("status NOT IN ('won','lost','expired') AND end_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)")
-        due_30d = _count("status NOT IN ('won','lost','expired') AND end_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)")
-        due_this_month = _count("status NOT IN ('won','lost','expired') AND end_date BETWEEN CURDATE() AND LAST_DAY(CURDATE())")
-        due_next_month = _count(
-            "status NOT IN ('won','lost','expired') AND end_date BETWEEN "
-            "DATE_ADD(LAST_DAY(CURDATE()), INTERVAL 1 DAY) AND LAST_DAY(DATE_ADD(CURDATE(), INTERVAL 1 MONTH))"
-        )
-        won_this_month = _count("status='won' AND updated_at >= DATE_FORMAT(CURDATE(), '%%Y-%%m-01')")
+        overdue = _count("status='pending' AND end_date < CURDATE()")
+        due_30d = _count("status='pending' AND end_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)")
+        renewed_this_month = _count("status='renewed' AND updated_at >= DATE_FORMAT(CURDATE(), '%%Y-%%m-01')")
+        pending_total = overdue + due_30d
 
         return {
-            "overdue": overdue, "due_7d": due_7d, "due_30d": due_30d, "due_this_month": due_this_month,
-            "due_next_month": due_next_month, "won_this_month": won_this_month,
+            "overdue": overdue, "due_30d": due_30d,
+            "renewed_this_month": renewed_this_month, "pending_total": pending_total,
         }
     finally:
         conn.close()
@@ -367,8 +375,7 @@ def get_stats(db, enterprise_id=None, assignee_ids=None) -> dict:
 def add_followup(db, task_id: int, operator, operator_name: str, action: str,
                   content: str = "", next_remind_at=None) -> int:
     """
-    追加一条跟进记录；若传 next_remind_at 同步回写 renewal_tasks.remind_at；
-    若 action='followup' 且任务当前状态为 pending，自动置为 following。
+    追加一条跟进记录；若传 next_remind_at 同步回写 renewal_tasks.remind_at。
     返回新记录 id。
     """
     conn = db.pool.connection()
@@ -383,11 +390,6 @@ def add_followup(db, task_id: int, operator, operator_name: str, action: str,
 
         if next_remind_at:
             cursor.execute("UPDATE renewal_tasks SET remind_at=%s WHERE id=%s", (next_remind_at, task_id))
-        if action == "followup":
-            cursor.execute(
-                "UPDATE renewal_tasks SET status='following' WHERE id=%s AND status='pending'",
-                (task_id,),
-            )
         conn.commit()
         return followup_id
     finally:
@@ -413,12 +415,16 @@ def get_followups(db, task_id: int) -> list:
         conn.close()
 
 
-def update_status(db, task_id: int, status: str):
-    """变更任务状态。"""
+def update_status(db, task_id: int, status: str, hold_reason: str = None):
+    """变更任务状态；status='hold' 时可带暂不考虑原因写入 hold_reason。"""
     conn = db.pool.connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE renewal_tasks SET status=%s WHERE id=%s", (status, task_id))
+        if hold_reason is not None:
+            cursor.execute("UPDATE renewal_tasks SET status=%s, hold_reason=%s WHERE id=%s",
+                           (status, hold_reason, task_id))
+        else:
+            cursor.execute("UPDATE renewal_tasks SET status=%s WHERE id=%s", (status, task_id))
         conn.commit()
     finally:
         conn.close()

@@ -360,7 +360,8 @@ def change_status():
     task_id = body.get("task_id")
     status = (body.get("status") or "").strip()
     remark = (body.get("remark") or "").strip()
-    if status not in ("pending", "following", "won", "lost"):
+    hold_reason = (body.get("hold_reason") or "").strip()
+    if status not in ("pending", "transfer", "renewed", "stopped", "hold"):
         return jsonify({"code": 400, "msg": "非法状态"}), 400
 
     task = rdb.get_task(_db, task_id)
@@ -369,11 +370,19 @@ def change_status():
     if not _can_operate_task(task):
         return jsonify({"code": 403, "msg": "权限不足"}), 403
 
-    rdb.update_status(_db, task_id, status)
-    rdb.set_hint(_db, task_id, None, None)  # 状态变更（尤其标won/忽略提示）清空续保检测提示
+    # 暂不考虑(hold)写入原因；改为其他状态时清空原因
+    rdb.update_status(_db, task_id, status, hold_reason=(hold_reason if status == "hold" else ""))
+    # 续保(renewed)保留续保检测提示 hint 供"查看新保单"；其余状态变更清空提示
+    if status != "renewed":
+        rdb.set_hint(_db, task_id, None, None)
+    _labels = {"pending": "待跟进", "transfer": "转保", "renewed": "续保", "stopped": "停保", "hold": "暂不考虑"}
+    _content = remark or (
+        f"暂不考虑：{hold_reason}" if (status == "hold" and hold_reason)
+        else f"状态变更为：{_labels.get(status, status)}"
+    )
     rdb.add_followup(
         _db, task_id, g.current_user["user_id"], _operator_name(), "status_change",
-        content=remark or f"状态变更为：{status}",
+        content=_content,
     )
     return jsonify({"code": 0, "msg": "状态已更新"})
 
@@ -446,10 +455,10 @@ def upload_qrcode():
 _EXPORT_HEADERS = [
     ("plate_no", "车牌号"), ("vin", "车架号"), ("insured", "被保险人"),
     ("applicant", "投保人"), ("company_short", "承保公司"), ("policy_type", "险种"),
-    ("end_date", "到期日"), ("total_premium", "上期保费"),
-    ("assignee_name", "跟进人"), ("status", "状态"), ("remark", "备注"),
+    ("sign_date", "签单日期"), ("end_date", "到期日"), ("total_premium", "上期保费"),
+    ("assignee_name", "跟进人"), ("status", "续保状态"), ("hold_reason", "暂不考虑原因"), ("remark", "备注"),
 ]
-_STATUS_LABEL = {"pending": "待跟进", "following": "跟进中", "won": "已成交", "lost": "已流失", "expired": "已过期"}
+_STATUS_LABEL = {"pending": "待跟进", "transfer": "转保", "renewed": "续保", "stopped": "停保", "hold": "暂不考虑"}
 
 
 @renewal_bp.route("/export", methods=["GET"])
@@ -466,7 +475,7 @@ def export():
         _db, page=1, page_size=_EXPORT_ROW_LIMIT + 1, enterprise_id=enterprise_id,
         assignee_ids=assignee_ids, status=filters["status"],
         date_start=filters["date_start"], date_end=filters["date_end"],
-        keyword=filters["keyword"],
+        keyword=filters["keyword"], only_actionable=False,  # 导出续保台账导全量(含已续保/停保)供主管核对
     )
     tasks = result["tasks"]
     if len(tasks) > _EXPORT_ROW_LIMIT:
