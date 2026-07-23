@@ -11795,14 +11795,7 @@ const _app = createApp({
             if (currentUser.value && currentUser.value.role === 'enterprise') {
                 loadRenewalAssignees(currentUser.value.id);
             }
-            // 引导弹窗：每天最多弹一次（按本地日期去重，localStorage 跨会话保留）
-            try {
-                const _today = new Date().toISOString().slice(0, 10);
-                if (localStorage.getItem('renewal_promo_date') !== _today) {
-                    localStorage.setItem('renewal_promo_date', _today);
-                    renewalPromoVisible.value = true;
-                }
-            } catch (e) {}
+            // 引导弹窗已取消：进入续保管理不再弹「限时免费」提示
         }
 
         async function loadRenewalStats() {
