@@ -3314,6 +3314,10 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str, from_ocr:
         m = re.search(p, text)
         if m:
             val = m.group(1)
+            # 华安等表格压平：使用性质标签后串了"初登日期"的值（如 2018-08-16），
+            # 值成了日期。使用性质绝不是日期，命中日期格式则跳过，落到下方枚举兜底（营业货车等）。
+            if re.match(r'^\d{2,4}\s*[-/.年]\s*\d{1,2}\s*[-/.月]', val):
+                continue
             # 中华联合的"使1用1性1质"清理
             val = re.sub(r'1', '', val)
             # 表格被 OCR 压平时"使用性质"标签后直接跟下一个表头词（如安诚驾乘险"核定载客人数"），避免误把标签当值
