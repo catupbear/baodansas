@@ -57,10 +57,15 @@ def _get_user_ids_filter():
 
 
 def _get_enterprise_id_filter():
-    """返回当前用户的 enterprise_id，超管返回 None（不过滤），其他角色按企业过滤"""
+    """返回当前用户的 enterprise_id 过滤值。其他角色按自己企业过滤；
+    超管默认 None（全部企业），可通过 ?enterprise_id= 指定只看某企业。"""
     role = g.current_user["role"]
     if role == ROLE_SUPER_ADMIN:
-        return None
+        eid = request.args.get("enterprise_id")
+        try:
+            return int(eid) if eid else None
+        except (TypeError, ValueError):
+            return None
     parent_id = g.current_user.get("parent_id")
     return parent_id if parent_id else g.current_user["user_id"]
 

@@ -2600,6 +2600,11 @@
                     <option value="stopped">停保</option>
                     <option value="hold">暂不考虑</option>
                 </select>
+                <select v-if="isSuperAdmin" v-model="renewalFilter.enterprise_id" @change="loadRenewalList(); loadRenewalStats();"
+                        class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white cursor-pointer" style="max-width:170px;">
+                    <option value="">全部企业</option>
+                    <option v-for="e in dashboardEnterprises" :key="e.id" :value="e.id">{{ e.name }}</option>
+                </select>
                 <select v-if="currentUser.role === 'enterprise'" v-model="renewalFilter.assignee" @change="loadRenewalList()"
                         class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white cursor-pointer">
                     <option value="">全部跟进人</option>
@@ -11762,7 +11767,7 @@ const _app = createApp({
         const renewalBadgeCount = computed(() => (renewalStats.value.overdue || 0) + (renewalStats.value.due_30d || 0));
         const renewalTasks = ref([]);
         const renewalLoading = ref(false);
-        const renewalFilter = ref({ status: '', assignee: '', date_start: '', date_end: '', keyword: '' });
+        const renewalFilter = ref({ status: '', assignee: '', date_start: '', date_end: '', keyword: '', enterprise_id: '' });
         const renewalPagination = ref({ page: 1, page_size: 20, total: 0, pages: 1 });
         const renewalSelectedIds = ref([]);
         const renewalAssigneesList = ref([]);
@@ -11790,6 +11795,7 @@ const _app = createApp({
         const renewalPromoVisible = ref(false);
         function openRenewalTab() {
             pageTab.value = 'renewal';
+            if (isSuperAdmin.value) { sdEnsureEnterprises(); }
             loadRenewalStats();
             loadRenewalList();
             if (currentUser.value && currentUser.value.role === 'enterprise') {
@@ -11800,7 +11806,8 @@ const _app = createApp({
 
         async function loadRenewalStats() {
             try {
-                const resp = await authFetch('/api/renewal/stats');
+                const _eid = (isSuperAdmin.value && renewalFilter.value.enterprise_id) ? renewalFilter.value.enterprise_id : '';
+                const resp = await authFetch(`/api/renewal/stats?enterprise_id=${_eid}`);
                 const data = await resp.json();
                 if (data.code === 0) {
                     renewalStats.value = data.data;
@@ -11837,6 +11844,7 @@ const _app = createApp({
                     date_start: renewalFilter.value.date_start,
                     date_end: renewalFilter.value.date_end,
                     keyword: renewalFilter.value.keyword,
+                    enterprise_id: (isSuperAdmin.value && renewalFilter.value.enterprise_id) ? renewalFilter.value.enterprise_id : '',
                 });
                 const resp = await authFetch(`/api/renewal/list?${params}`);
                 const data = await resp.json();
@@ -12120,6 +12128,7 @@ const _app = createApp({
                     date_start: renewalFilter.value.date_start,
                     date_end: renewalFilter.value.date_end,
                     keyword: renewalFilter.value.keyword,
+                    enterprise_id: (isSuperAdmin.value && renewalFilter.value.enterprise_id) ? renewalFilter.value.enterprise_id : '',
                 });
                 const resp = await authFetch(`/api/renewal/export?${params}`);
                 if (!resp.ok) {
