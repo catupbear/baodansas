@@ -814,14 +814,6 @@
                         识别记录列表会把同一车牌的保单排在一起（车牌组按车牌排），组内按上面的险种顺序（默认 交强险 → 商业险 → 非车险）。在列表点某列表头可临时改按该列排序。此顺序跟当前模板绑定，随「保存」一起生效。
                     </div>
                 </div>
-                <!-- 投保人补充开关 -->
-                <div style="margin-bottom:12px; padding:10px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
-                    <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:500; cursor:pointer;">
-                        <input type="checkbox" v-model="fillProposer" :disabled="activeSource === 'enterprise'">
-                        投保人补充<span style="font-weight:400; color:var(--text-muted); margin-left:6px;">开启后，某条保单只有被保人、没有投保人时，自动用被保人补充投保人</span>
-                    </label>
-                    <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">逐条判断：投保人为空且被保人有值才补充；已手动填写过投保人的不动。此开关跟当前模板绑定，随「保存」一起生效。</div>
-                </div>
                 <!-- 列头预览 -->
                 <div style="margin-bottom:16px; border:1px solid var(--border-light); border-radius:8px; overflow:hidden;">
                     <div style="padding:6px 12px; background:var(--surface-secondary); font-size:11px; color:var(--text-muted); border-bottom:1px solid var(--border-light);">列头预览（{{ listColItems.filter(c => c.visible).length }} 列，{{ listColItems.filter(c => c.visible && c.frozen).length }} 列冻结）</div>
@@ -937,6 +929,17 @@
                         平安车牌格式化
                     </label>
                     <span style="font-size:11px; color:var(--text-muted);">开启后，平安保单车牌自动添加连字符（如 粤BB446T → 粤B-B446T）</span>
+                    <div style="width:1px; height:20px; background:var(--border-light); margin:0 4px;"></div>
+                    <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500;"
+                           :style="{cursor: activeSource === 'enterprise' || activeSource === 'system' ? 'not-allowed' : 'pointer', opacity: activeSource === 'enterprise' || activeSource === 'system' ? 0.5 : 1}"
+                           @click="activeSource !== 'enterprise' && activeSource !== 'system' && toggleFillProposer()">
+                        <div style="position:relative; width:36px; height:20px; flex-shrink:0;">
+                            <div style="position:absolute; inset:0; border-radius:10px; transition:background 0.2s;" :style="{ background: fillProposer ? 'var(--primary)' : '#d1d5db' }"></div>
+                            <div style="position:absolute; width:16px; height:16px; top:2px; border-radius:8px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.2); transition:left 0.2s;" :style="{ left: fillProposer ? '18px' : '2px' }"></div>
+                        </div>
+                        投保人补充
+                    </label>
+                    <span style="font-size:11px; color:var(--text-muted);">开启后，某条保单只有被保人、没有投保人时，自动用被保人补充投保人</span>
                 </div>
                 <!-- 默认排序 -->
                 <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px; padding:10px 16px; background:var(--surface-secondary); border-radius:8px; border:1px solid var(--border-light);">
@@ -1918,7 +1921,11 @@ createApp({
                     method: 'PUT',
                     body: JSON.stringify(remarkInjectTarget({ enabled: fillProposer.value }))
                 });
-            } catch (e) { /* 与列配置一起保存 */ }
+            } catch (e) { console.error('保存投保人补充开关失败', e); }
+        }
+        function toggleFillProposer() {
+            fillProposer.value = !fillProposer.value;
+            saveFillProposer();  // 点击即存，与「按车牌合并导出/平安车牌格式化」一致
         }
         function onRemarkFile(e) {
             remarkFile = e.target.files[0];
@@ -2104,7 +2111,7 @@ createApp({
                     }
                     // 页面列配置保存时同时保存「保单排序」（跟模板绑定）
                     if (configType === 'list_columns') {
-                        await savePolicySort(); await saveFillProposer();
+                        await savePolicySort();
                     }
                 }
             } catch (e) {
@@ -3652,7 +3659,7 @@ createApp({
             groupFillTargetOptions, onGroupFillTargetChange, addGroupFillKeyword, addGroupFillRule, importCustomFieldsAsRules,
             saveGroupFillRules, groupFillCopyText, copyGroupFillFormat,
             skipKeywords, skipKeywordInput, skipKeywordsSaving, addSkipKeyword, saveSkipKeywords,
-            policySort, movePolicyCat, policySortExpanded, fillProposer,
+            policySort, movePolicyCat, policySortExpanded, fillProposer, toggleFillProposer,
         };
     }
 }).mount('#app');
