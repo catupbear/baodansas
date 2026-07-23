@@ -1465,15 +1465,15 @@ createApp({
             pushEnt.value = ent;
             pushSelectedIds.value = [];
             pushRoomSearch.value = '';
+            pushRoomOptions.value = [];
             showPushModal.value = true;
-            if (!pushRoomOptions.value.length) {
-                try {
-                    const res = await authFetch('/api/insurance/rooms');
-                    const data = await res.json();
-                    const rooms = (data.data && data.data.rooms) || data.rooms || [];
-                    pushRoomOptions.value = rooms.map(x => ({ id: x.id || x.roomid, name: x.name || x.roomid }));
-                } catch (e) {}
-            }
+            // 可选群 = 该企业监控绑定的群（按企业过滤，每次打开都按当前企业加载）
+            try {
+                const res = await authFetch(`/api/renewal/push-room-options?enterprise_id=${ent.id}`);
+                const data = await res.json();
+                const rooms = (data.data && data.data.rooms) || [];
+                pushRoomOptions.value = rooms.map(x => ({ id: x.id || x.roomid, name: x.name || x.roomid }));
+            } catch (e) {}
             try {
                 const res = await authFetch(`/api/renewal/push-rooms?enterprise_id=${ent.id}`);
                 const data = await res.json();

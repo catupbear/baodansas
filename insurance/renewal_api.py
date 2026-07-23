@@ -572,3 +572,33 @@ def save_push_rooms_api():
     except (TypeError, ValueError):
         return jsonify({"code": 400, "msg": "enterprise_id 非法"}), 400
     return jsonify({"code": 0, "msg": "已保存"})
+
+
+@renewal_bp.route("/push-room-options", methods=["GET"])
+@admin_required
+def push_room_options_api():
+    """续保推送群的可选群 = 该企业在监控设置里绑定的群（避免绑到别的企业的群）。"""
+    eid = request.args.get("enterprise_id")
+    if not eid:
+        return jsonify({"code": 400, "msg": "缺少 enterprise_id"}), 400
+    conn = _db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT rooms FROM monitor_configs WHERE enterprise_id=%s", (int(eid),))
+        seen, rooms = set(), []
+        for row in cursor.fetchall():
+            try:
+                rs = json.loads(row["rooms"]) if row.get("rooms") else []
+            except (TypeError, ValueError):
+                rs = []
+            for r in (rs or []):
+                rid = r.get("id") if isinstance(r, dict) else r
+                name = (r.get("name") if isinstance(r, dict) else r) or rid
+                if rid and rid not in seen:
+                    seen.add(rid)
+                    rooms.append({"id": rid, "name": name})
+    except (TypeError, ValueError):
+        return jsonify({"code": 400, "msg": "enterprise_id 非法"}), 400
+    finally:
+        conn.close()
+    return jsonify({"code": 0, "data": {"rooms": rooms}})
