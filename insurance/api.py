@@ -1053,6 +1053,22 @@ def list_records():
                 if _before_val != _after_val:
                     logger.debug("[DEBUG-列表] record_id=%s apply_user_config前后交强到期时间变化: %s → %s",
                                 record.get("id"), _before_val, _after_val)
+                # 「投保人补充」开启且投保人已被补上：从需人工补充提示里去掉"缺少投保人"，
+                # 若因此不再缺任何字段则清除异常标记（避免"已补投保人却仍提示缺投保人"，合并行同步生效）
+                if user_config.get("fill_proposer") and record.get("is_abnormal") and record.get("hint"):
+                    if str(record["display_fields"].get("投保人") or "").strip():
+                        _hp = []
+                        for _p in str(record["hint"]).split("；"):
+                            if not _p:
+                                continue
+                            if _p.startswith("缺少："):
+                                _fs = [_f for _f in _p[3:].split("、") if _f and not _f.startswith("投保人")]
+                                if _fs:
+                                    _hp.append("缺少：" + "、".join(_fs))
+                            else:
+                                _hp.append(_p)
+                        record["hint"] = "；".join(_hp)
+                        record["is_abnormal"] = 1 if _hp else 0
 
         # 注入交强到期时间（使用格式化前构建的原始终保日期映射，并按其配置格式格式化）
         if _need_compulsory_end:
