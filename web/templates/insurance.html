@@ -3206,7 +3206,7 @@
                     </thead>
                     <tbody>
                         <!-- 数据行 -->
-                        <template v-for="record in filteredRecords" :key="record.id">
+                        <template v-for="record in pagedRecords" :key="record.id">
                         <tr>
                             <!-- 选择框 -->
                             <td class="sticky-col-check">
@@ -9535,6 +9535,16 @@ const _app = createApp({
         // 筛选已移至服务端，前端直接返回列表数据
         const filteredRecords = computed(() => records.value);
 
+        // 桌面表格分页：非合并模式服务端已分页，直接用 filteredRecords；
+        // 合并模式下 records 是「全量合并行」(拉全量后前端合并)，需前端按 pageSize 切片分页，
+        // 否则所有合并行会全挤在第 1 页（totalPages 恒为 1）。移动端仍用 filteredRecords 全量滚动展示。
+        const pagedRecords = computed(() => {
+            if (!pageMergeByPlate.value) return filteredRecords.value;
+            const ps = recordPagination.pageSize;
+            const start = (recordPagination.page - 1) * ps;
+            return filteredRecords.value.slice(start, start + ps);
+        });
+
         // 保司和文档类型筛选
         const recordCompanyFilter = ref('');
         // 点击「接入保司」总览中的保司：切换筛选（再次点击同一保司则取消），
@@ -11331,8 +11341,8 @@ const _app = createApp({
                 };
             });
             recordPagination.total = records.value.length;
-            recordPagination.totalPages = 1;
-            recordPagination.page = 1;
+            recordPagination.totalPages = Math.ceil(records.value.length / recordPagination.pageSize) || 1;
+            if (recordPagination.page < 1 || recordPagination.page > recordPagination.totalPages) recordPagination.page = 1;
         }
         // 切换"按车牌合并"开关
         function togglePageMerge() {
@@ -11450,6 +11460,8 @@ const _app = createApp({
         async function gotoRecordPage(page) {
             if (page < 1 || page > recordPagination.totalPages) return;
             recordPagination.page = page;
+            // 合并模式：全量已在内存，pagedRecords 计算属性按新页码自动切片，无需重新请求+重新合并
+            if (pageMergeByPlate.value) return;
             await loadRecords(false);
         }
 
@@ -13170,7 +13182,7 @@ const _app = createApp({
             // 重复保单
             duplicateVisible, duplicateList, confirmSyncSkipDuplicates, confirmSyncUpdateDuplicates, cancelSync,
             // 识别记录
-            records, filteredRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
+            records, filteredRecords, pagedRecords, isLoadingRecords, selectedRecordIds, batchProcessing,
             isAllSelected, toggleSelectAll, batchReocrSync, batchDownload, batchProgress, downloadTask, closeDownloadTask, collapseDownloadTask, expandDownloadTask, retryDownloadTask, batchFailModal, manualKeptModal, manualKeptToggleAll, applyManualOverwrite, batchFailRetry, batchFailUpload,
             aiCheckBatchProcessing, aiCheckBatchProgress, batchAiCheckSync,
             // AI质检（仅超管）
