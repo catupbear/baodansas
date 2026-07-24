@@ -196,8 +196,10 @@
                 </div>
 
                 <div class="onboard-content">
-                <!-- 跟进手册：占位入口，内容待定 -->
-                <div v-if="activeGroup === 'manual'" style="padding:48px 24px;text-align:center;color:#9ca3af;font-size:14px;">📖 客服跟进手册功能建设中，敬请期待</div>
+                <!-- 客服跟进手册：复用使用手册的富文本页(manual.html ?doc=cs_followup)，iframe 内嵌 -->
+                <div v-if="activeGroup === 'manual'" style="padding:0;">
+                    <iframe src="/help?doc=cs_followup" style="width:100%;height:calc(100vh - 170px);min-height:560px;border:none;border-radius:12px;background:#fff;" title="客服跟进手册"></iframe>
+                </div>
                 <template v-else>
                 <!-- 桌面表格 -->
                 <div class="cust-table-wrap bg-white rounded-2xl border border-gray-100 overflow-x-auto">
