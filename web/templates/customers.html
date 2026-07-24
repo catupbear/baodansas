@@ -520,9 +520,12 @@ createApp({
             const groups = ONBOARD_GROUPS.map(g => ({ ...g, items: [] }));
             const prepQunGroup = { key: 'prepQun', label: '预备群', items: [] };   // 客户名以「预备群」开头
             const notOnboardGroup = { key: 'prep', label: '暂未接入', items: [] };
+            const noNeedGroup = { key: 'noNeed', label: '暂不需要', items: [] };   // 跟进状态=暂不需要，单独成组
             filteredCustomers.value.forEach(c => {
                 // 预备群优先：客户名以「预备群」开头的单独成组，不参与其它分组
                 if ((c.name || '').startsWith('预备群')) { prepQunGroup.items.push(c); return; }
+                // 跟进状态「暂不需要」单独成组（放在暂未接入下面），不再混入暂未接入
+                if (c.follow_status === '暂不需要') { noNeedGroup.items.push(c); return; }
                 if (c.follow_status !== '正常使用') { notOnboardGroup.items.push(c); return; }
                 const d = daysSinceOnboard(c.onboarded_at);
                 if (d === null) return;
@@ -535,8 +538,9 @@ createApp({
                 }
                 if (g) g.items.push(c);
             });
-            // 顺序：各接入周分组 → 暂未接入 → 预备群
+            // 顺序：各接入周分组 → 暂未接入 → 暂不需要 → 预备群
             groups.push(notOnboardGroup);
+            groups.push(noNeedGroup);
             groups.push(prepQunGroup);
             return groups;
         });
