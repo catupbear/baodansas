@@ -227,8 +227,16 @@ class Database:
             conditions = []
             params = []
             if keyword:
-                conditions.append("(summary LIKE %s OR sender LIKE %s OR roomid LIKE %s)")
-                params.extend([f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"])
+                like = f"%{keyword}%"
+                # 群名以 wecom_groups 为权威、contacts_cache 兜底，两者都不在 messages 表里，
+                # 群名是查完后在 API 层才贴上去的。若只搜 summary/sender/roomid，就会出现
+                # 「群确实存在、却按群名搜不到」。这里额外把命中群名的 roomid 一并纳入。
+                conditions.append(
+                    "(summary LIKE %s OR sender LIKE %s OR roomid LIKE %s"
+                    " OR roomid IN (SELECT roomid FROM wecom_groups WHERE name LIKE %s)"
+                    " OR roomid IN (SELECT id FROM contacts_cache WHERE type = 'room' AND name LIKE %s))"
+                )
+                params.extend([like, like, like, like, like])
             if corpid:
                 conditions.append("corpid = %s")
                 params.append(corpid)
