@@ -477,8 +477,8 @@ const ONBOARD_GROUPS = [
     { key: 'week1', label: '接入第一周', test: d => d >= 0 && d < 7 },
     { key: 'week2', label: '接入第二周', test: d => d >= 7 && d < 14 },
     { key: 'week3to6', label: '接入3-6周', test: d => d >= 14 && d < 42 },
-    { key: 'week6trial', label: '接入第六周-试用结束', test: d => d >= 42 && d < 49 },  // 第6周整周(42-48天)
-    { key: 'trialEnded', label: '试用结束', test: d => d >= 49 },                       // 第7周起，试用期彻底结束
+    { key: 'week6trial', label: '接入满6周(试用中)', test: d => d >= 42 },              // 接入满6周、套餐未到期
+    { key: 'trialEnded', label: '试用结束', test: () => false },                        // 套餐已到期(下方分组应用里按套餐到期单独判)
 ];
 function daysSinceOnboard(onboardedAt) {
     if (!onboardedAt) return null;
@@ -524,7 +524,13 @@ createApp({
                 if (c.follow_status !== '正常使用') { notOnboardGroup.items.push(c); return; }
                 const d = daysSinceOnboard(c.onboarded_at);
                 if (d === null) return;
-                const g = groups.find(g => g.test(d));
+                // 套餐已到期 → 试用结束；套餐未到期 → 按接入周数分（不受接入时长影响）
+                let g;
+                if (planDaysLeft(c) <= 0) {
+                    g = groups.find(x => x.key === 'trialEnded');
+                } else {
+                    g = groups.find(x => x.key !== 'trialEnded' && x.test(d));
+                }
                 if (g) g.items.push(c);
             });
             // 顺序：各接入周分组 → 预备群 → 暂未接入
