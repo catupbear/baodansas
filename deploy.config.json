@@ -3,5 +3,5 @@
   "remote_dir": "/home/wxbot",
   "local_dir": ".",
   "backup": false,
-  "exclude": ["*.log", "data/", "config.yaml", "venv/", "docs/"]
+  "exclude": ["*.log", "data/", "config.yaml", "venv/", ".venv/", "docs/", ".claude/", ".playwright-mcp/", "spot-check-skill/", "spot-check.skill", "daily-fix-report.skill", "*.skill"]
 }
