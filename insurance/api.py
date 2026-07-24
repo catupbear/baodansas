@@ -2225,31 +2225,34 @@ def get_dashboard():
         """, (wp + tp) if (wp or tp) else None)
         enterprise_rank = cursor.fetchall() or []
 
-        # 7b. 固定「近7天」每日识别量趋势（补全空缺天，独立于上方时间范围，用于看板左侧主图）
+        # 7b. 每个企业「近7天」每日识别量（补全空缺天，独立于上方时间范围；用于看板左侧：每企业一行+迷你趋势）
         from datetime import datetime as _dt7, timedelta as _td7
-        wh7, wp7 = _where()
+        wh7, wp7 = _where(prefix="r.", with_enterprise=False)
         cursor.execute(f"""
-            SELECT DATE(created_at) AS day, COUNT(*) AS total,
-                   SUM(status='done') AS done, SUM(status='failed') AS failed
-            FROM insurance_records
-            WHERE {wh7} AND DATE(created_at) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-            GROUP BY day ORDER BY day ASC
+            SELECT e.name AS enterprise, DATE(r.created_at) AS day, COUNT(*) AS total
+            FROM insurance_records r
+            JOIN enterprises e ON e.id = r.enterprise_id
+            WHERE {wh7} AND DATE(r.created_at) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+            GROUP BY r.enterprise_id, day
         """, wp7 if wp7 else None)
-        _raw7 = {}
-        for _r in (cursor.fetchall() or []):
-            _d = _r["day"].strftime("%Y-%m-%d") if hasattr(_r.get("day"), "strftime") else str(_r.get("day"))
-            _raw7[_d] = _r
-        trend_7d = []
+        _rows7 = cursor.fetchall() or []
         _today7 = _dt7.now().date()
-        for _i in range(6, -1, -1):
-            _ds = (_today7 - _td7(days=_i)).strftime("%Y-%m-%d")
-            _rr = _raw7.get(_ds)
-            trend_7d.append({
-                "day": _ds, "label": _ds[5:],
-                "total": int(_rr["total"]) if _rr and _rr.get("total") else 0,
-                "done": int(_rr["done"]) if _rr and _rr.get("done") else 0,
-                "failed": int(_rr["failed"]) if _rr and _rr.get("failed") else 0,
+        _days7 = [(_today7 - _td7(days=_i)).strftime("%Y-%m-%d") for _i in range(6, -1, -1)]
+        _ent7 = {}
+        for _r in _rows7:
+            _en = _r["enterprise"] or "未知"
+            _d = _r["day"].strftime("%Y-%m-%d") if hasattr(_r.get("day"), "strftime") else str(_r.get("day"))
+            _ent7.setdefault(_en, {})[_d] = int(_r["total"] or 0)
+        enterprise_trend_7d = []
+        for _en, _dm in _ent7.items():
+            _series = [{"day": _d, "label": _d[5:], "total": _dm.get(_d, 0)} for _d in _days7]
+            enterprise_trend_7d.append({
+                "enterprise": _en,
+                "total": sum(x["total"] for x in _series),
+                "days": _series,
             })
+        enterprise_trend_7d.sort(key=lambda x: x["total"], reverse=True)
+        enterprise_trend_7d = enterprise_trend_7d[:10]
 
         conn.close()
         result = {
@@ -2261,7 +2264,7 @@ def get_dashboard():
             "ocr_dist": ocr_dist,
             "source_dist": source_dist,
             "enterprise_rank": enterprise_rank,
-            "trend_7d": trend_7d,
+            "enterprise_trend_7d": enterprise_trend_7d,
             "period": period,
         }
         # 写入缓存（today/yesterday 缓存 30 秒，其他 2 分钟）
