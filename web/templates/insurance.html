@@ -7366,8 +7366,19 @@ const _app = createApp({
                 style.width = col.width + 'px';
                 style.minWidth = col.width + 'px';
                 style.maxWidth = col.width + 'px';
-            } else if (!isTd) {
-                style.minWidth = (col.key === '创建时间' || col.key === '识别时间') ? '150px' : col.key === '群名' ? '100px' : '80px';
+            } else {
+                // 铺满容器时，短文本列封顶避免被均摊拉宽；「保单号」作为弹性列吸收剩余宽度
+                const FLEX = ['保单号'];                       // 弹性列（不封顶）
+                const MINW = { '创建时间': 150, '识别时间': 150, '群名': 100 };
+                const CAP  = { '承保公司': 100, '险种': 90, '车牌': 120, '车牌号': 120,
+                               '所属企业': 100, '签单日期': 120, '保险起期': 120, '保险止期': 120,
+                               '创建时间': 170, '识别时间': 170, '群名': 130 };
+                if (FLEX.includes(col.key)) {
+                    style.minWidth = '160px';
+                } else {
+                    style.minWidth = (MINW[col.key] || 80) + 'px';
+                    style.maxWidth = (CAP[col.key] || 140) + 'px';
+                }
             }
             return style;
         }
