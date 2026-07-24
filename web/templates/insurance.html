@@ -2799,7 +2799,7 @@
     </main>
 
     <!-- ========== 识别记录 Tab ========== -->
-    <main v-if="pageTab === 'records' && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-4 space-y-4" style="display:flex;flex-direction:column;height:calc(100vh - var(--nav-header-h, 56px));overflow:hidden;box-sizing:border-box;">
+    <main v-if="pageTab === 'records' && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-4 space-y-4">
         <!-- 当前保司筛选提示（从「保司数据」页点击保司跳转而来） -->
         <div v-if="recordCompanyFilter" class="card p-3 flex items-center gap-2">
             <span class="text-xs text-gray-500">当前筛选保司：</span>
@@ -3168,7 +3168,7 @@
         </div>
 
         <!-- 记录表格 -->
-        <div class="card table-card" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+        <div class="card table-card" style="display:flex;flex-direction:column;height:calc(100vh - 175px);min-height:420px;">
             <!-- 加载中 / 空数据提示（独立于表格，不受列宽影响） -->
             <div v-if="isLoadingRecords" class="text-center py-12 text-gray-400">
                 <svg class="w-6 h-6 animate-spin mx-auto mb-2 text-orange-400" fill="none" viewBox="0 0 24 24">
