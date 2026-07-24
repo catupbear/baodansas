@@ -390,7 +390,8 @@ def _require_login():
     if request.path == "/api/insurance/report-feedback":
         return
     # 使用手册查看不需要登录(公开给潜在客户/未注册用户看)，编辑/传图仍需登录+内部超管(各自接口内部再判断)
-    if request.path == "/api/insurance/manual" and request.method == "GET":
+    # 仅「使用手册」(doc=help/缺省)公开；客服跟进手册(doc=cs_followup)是内部内容，需登录
+    if request.path == "/api/insurance/manual" and request.method == "GET" and (request.args.get("doc") or "help") == "help":
         return
 
     auth_header = request.headers.get("Authorization", "")
@@ -2224,6 +2225,37 @@ def get_dashboard():
         """, (wp + tp) if (wp or tp) else None)
         enterprise_rank = cursor.fetchall() or []
 
+        # 7b. 每个企业「近7天」每日识别量（补全空缺天，独立于上方时间范围；用于看板左侧：每企业一行+迷你趋势）
+        from datetime import datetime as _dt7, timedelta as _td7
+        wh7, wp7 = _where(prefix="r.", with_enterprise=False)
+        cursor.execute(f"""
+            SELECT e.name AS enterprise, e.enterprise_no AS ent_no, DATE(r.created_at) AS day, COUNT(*) AS total
+            FROM insurance_records r
+            JOIN enterprises e ON e.id = r.enterprise_id
+            WHERE {wh7} AND DATE(r.created_at) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+            GROUP BY r.enterprise_id, day
+        """, wp7 if wp7 else None)
+        _rows7 = cursor.fetchall() or []
+        _today7 = _dt7.now().date()
+        _days7 = [(_today7 - _td7(days=_i)).strftime("%Y-%m-%d") for _i in range(6, -1, -1)]
+        _ent7 = {}
+        for _r in _rows7:
+            _en = _r["enterprise"] or "未知"
+            _d = _r["day"].strftime("%Y-%m-%d") if hasattr(_r.get("day"), "strftime") else str(_r.get("day"))
+            _e = _ent7.setdefault(_en, {"no": _r.get("ent_no") or "", "days": {}})
+            _e["days"][_d] = int(_r["total"] or 0)
+        enterprise_trend_7d = []
+        for _en, _e in _ent7.items():
+            _series = [{"day": _d, "label": _d[5:], "total": _e["days"].get(_d, 0)} for _d in _days7]
+            enterprise_trend_7d.append({
+                "enterprise": _en,
+                "enterprise_no": _e["no"],
+                "total": sum(x["total"] for x in _series),
+                "days": _series,
+            })
+        enterprise_trend_7d.sort(key=lambda x: x["total"], reverse=True)
+        enterprise_trend_7d = enterprise_trend_7d[:10]
+
         conn.close()
         result = {
             "overview": overview,
@@ -2234,6 +2266,7 @@ def get_dashboard():
             "ocr_dist": ocr_dist,
             "source_dist": source_dist,
             "enterprise_rank": enterprise_rank,
+            "enterprise_trend_7d": enterprise_trend_7d,
             "period": period,
         }
         # 写入缓存（today/yesterday 缓存 30 秒，其他 2 分钟）
@@ -2286,22 +2319,135 @@ _DEFAULT_MANUAL_SECTIONS = [
     },
 ]
 
+# 客服跟进手册默认内容（新客户跟进流程 SOP，内部超管可在页面编辑覆盖）
+_DEFAULT_CS_FOLLOWUP_SECTIONS = [
+    {
+        "id": "cs-overview",
+        "title": "跟进总则",
+        "content": (
+            "<p><strong>所有的跟进，都要 @ 企业对应的负责人</strong>，不 @ 的话有些负责人可能会看不到消息。</p>"
+            "<p>新客户接入后，客服按下面的节奏主动跟进，帮助客户尽快用起来、用顺手，为后续转化套餐打好基础。</p>"
+            "<ul>"
+            "<li><strong>第一周</strong>：每日跟进</li>"
+            "<li><strong>第二周</strong>：每隔两天跟进</li>"
+            "<li><strong>第 3-6 周</strong>：每周一跟进</li>"
+            "<li><strong>第 6 周—试用期结束</strong>：每隔两天跟进，引导选套餐</li>"
+            "</ul>"
+        ),
+    },
+    {
+        "id": "cs-week1",
+        "title": "第一周跟进（每日）",
+        "content": (
+            "<p>每天早上主动联系客户，检查前一天的识别情况。</p>"
+            "<h3>客服自查</h3>"
+            "<ol>"
+            "<li>登录系统，筛选该企业昨天的识别记录</li>"
+            "<li>查看识别成功率（成功数 ÷ 总数）</li>"
+            "<li>重点关注：是否有识别失败、字段提取错误的情况</li>"
+            "</ol>"
+            "<h3>话术（客户已在使用）</h3>"
+            "<blockquote>"
+            "<p>xxx 好！感谢贵司选择了一个降本增效的好工具，助力公司继续发展壮大。</p>"
+            "<p>根据系统对接流程，我们将在前期对贵司进行每日客户跟进。</p>"
+            "<p>根据系统显示，昨天的识别情况：一共识别了 X 份保单，成功率 XX%。</p>"
+            "<p>[如有问题] 其中有 X 份识别结果有些偏差，我已经反馈给技术同事处理了。</p>"
+            "<p>[如无问题] 目前一切正常。</p>"
+            "<p>您这边使用过程中有什么不清楚的或者需要优化的地方，随时告诉我。</p>"
+            "<p>温馨提醒：使用前 7 天可能会出现一些小错误，如果发现有任何问题，请随时联系我们的技术客服，我们将在当天完成所有的问题修复。</p>"
+            "</blockquote>"
+            "<h3>话术（客户还没使用 → 发到客户群和台账识别群）</h3>"
+            "<blockquote>"
+            "<p>xxx 好！感谢贵司选择了一个降本增效的好工具，助力公司继续发展壮大。</p>"
+            "<p>咱们公司的台账系统已经准备好了。</p>"
+            "<p>今天整理台账的时候就可以直接发到台账识别群。</p>"
+            "<p>告别手工整理的繁琐和错误，让 AI 机器人帮咱们整理台账。</p>"
+            "<p>帮助咱们公司降本增效！让团队有更多精力帮公司创造更多利润！</p>"
+            "</blockquote>"
+        ),
+    },
+    {
+        "id": "cs-week2",
+        "title": "第二周跟进（每隔两天）",
+        "content": (
+            "<p>每隔两天主动联系客户。</p>"
+            "<h3>话术</h3>"
+            "<blockquote>"
+            "<p>xxx 好！感谢贵司选择了一个降本增效的好工具，助力公司继续发展壮大。</p>"
+            "<p>这两天保单识别使用得怎么样？有没有遇到什么问题？</p>"
+            "<p>有任何识别错误或者需要优化的地方请随时跟我说，我们第一时间处理。</p>"
+            "</blockquote>"
+        ),
+    },
+    {
+        "id": "cs-week3-6",
+        "title": "第 3-6 周（每周一）",
+        "content": (
+            "<p>每周一主动联系客户。</p>"
+            "<h3>客服自查</h3>"
+            "<ol>"
+            "<li>查看该企业上周识别记录的成功率和识别量</li>"
+            "<li>关注是否有新保司出现但识别效果差的情况</li>"
+            "</ol>"
+            "<h3>话术</h3>"
+            "<blockquote>"
+            "<p>xxx 好！感谢贵司选择了一个降本增效的好工具，助力公司继续发展壮大。</p>"
+            "<p>上周系统一共识别了 X 份保单，成功率 XX%，整体运行正常。</p>"
+            "<p>[如有问题] 有 X 份需要关注，我已安排技术跟进。</p>"
+            "<p>如果有什么问题或优化建议，随时联系我。祝您本周工作顺利！</p>"
+            "</blockquote>"
+        ),
+    },
+    {
+        "id": "cs-week6-end",
+        "title": "第 6 周—试用期结束",
+        "content": (
+            "<p>每隔两天询问企业主管人，对我们的系统是否满意；提醒对方还有 xx 天就试用期结束了。</p>"
+            "<p>根据他们的实际用量，建议对应的套餐，了解客户想要选择什么套餐。</p>"
+            "<h3>话术</h3>"
+            "<blockquote>"
+            "<p>xxx 好！这段时间系统用下来还满意吗？有没有需要我们再优化的地方？</p>"
+            "<p>温馨提醒：贵司的试用期还有 xx 天就结束了。</p>"
+            "<p>根据这段时间的用量（每月约 X 份保单），我这边建议您选择 xxx 套餐，性价比最合适。</p>"
+            "<p>您看更倾向于哪个套餐？我可以帮您安排开通。</p>"
+            "</blockquote>"
+        ),
+    },
+]
+
+# 手册文档映射：doc 参数 -> (存储 key, 默认章节)
+_MANUAL_DOC_MAP = {
+    "help": ("help_manual_sections", _DEFAULT_MANUAL_SECTIONS),
+    "cs_followup": ("cs_followup_sections", _DEFAULT_CS_FOLLOWUP_SECTIONS),
+}
+
+
+def _resolve_manual_doc():
+    """解析手册类型 doc 参数 -> (doc, 存储 key, 默认章节)；非法值退回 help"""
+    doc = (request.args.get("doc") or "help").strip()
+    if doc not in _MANUAL_DOC_MAP:
+        doc = "help"
+    key, default = _MANUAL_DOC_MAP[doc]
+    return doc, key, default
+
 
 @insurance_bp.route("/api/insurance/manual", methods=["GET"])
 def get_manual():
-    """获取使用手册章节内容（登录即可查看，编辑需内部超管权限）"""
-    sections = get_insurance_config(_db, "help_manual_sections", None)
+    """获取手册章节内容（doc=help 使用手册/公开；doc=cs_followup 客服跟进手册/需登录）"""
+    doc, key, default = _resolve_manual_doc()
+    sections = get_insurance_config(_db, key, None)
     if not sections:
-        sections = _DEFAULT_MANUAL_SECTIONS
+        sections = default
     return jsonify({"code": 0, "data": {"sections": sections}})
 
 
 @insurance_bp.route("/api/insurance/manual", methods=["POST"])
 def save_manual():
-    """保存使用手册章节内容（仅内部超级管理员）"""
+    """保存手册章节内容（仅内部超级管理员；doc 区分使用手册/客服跟进手册）"""
     user = g.current_user
     if not user or user.get("role") != "super_admin":
-        return jsonify({"code": 403, "msg": "仅内部超级管理员可编辑使用手册"}), 403
+        return jsonify({"code": 403, "msg": "仅内部超级管理员可编辑手册"}), 403
+    doc, key, default = _resolve_manual_doc()
     data = request.get_json(force=True) or {}
     sections = data.get("sections")
     if not isinstance(sections, list):
@@ -2309,7 +2455,7 @@ def save_manual():
     for s in sections:
         if not isinstance(s, dict) or "title" not in s or "content" not in s:
             return jsonify({"code": 400, "msg": "章节格式错误，需包含 title 和 content"}), 400
-    set_insurance_config(_db, "help_manual_sections", sections)
+    set_insurance_config(_db, key, sections)
     return jsonify({"code": 0, "msg": "保存成功"})
 
 

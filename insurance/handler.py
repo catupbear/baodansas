@@ -366,6 +366,48 @@ class InsuranceHandler:
         except Exception as e:
             logger.warning("识别失败群通知发送失败（不影响主流程）: %s", e)
 
+    def _notify_seal_to_group(self, roomid: str, room_name: str, sender: str,
+                              sender_name: str, parsed_fields: dict,
+                              doc_category: str, enterprise_id):
+        """
+        公户车保单提醒：识别成功、被保险人为公司(公户车)、且该企业开启了「公户车盖章跟进」时，
+        通过 FlowBot 向来源群发送提醒并 @ 发送人，提示及时跟进付费情况。
+        复用「失败通知」的 robot_id（同一台账群机器人）。
+        旁路通知：任何异常只记日志，绝不影响识别主流程。
+        """
+        try:
+            # 只对「保单」提醒（doc_category 为保单/空）
+            if doc_category and doc_category not in ("保单", ""):
+                return
+            if not enterprise_id:
+                return
+            # 企业级开关：需在企业管理里开启「公户车盖章跟进」
+            from auth.db import get_enterprise_by_id
+            ent = get_enterprise_by_id(self.db, int(enterprise_id))
+            if not ent or not ent.get("seal_tracking_enabled"):
+                return
+            # 判断公户车：被保险人匹配公司特征（与 seal-tasks 列表口径一致）
+            import re
+            _corp_re = ("公司|有限|集团|物流|贸易|运输|租赁|车队|工厂|商行|中心|合作社|服务部|"
+                        "经营部|事务所|门市|建筑|工程|科技|实业|电子|商贸|银行|医院|学校|幼儿园|合伙")
+            insured = (parsed_fields.get("被保险人") or "").strip()
+            if not insured or not re.search(_corp_re, insured):
+                return
+            # 群机器人：复用失败通知配置里的 robot_id
+            cfg = get_insurance_config(self.db, "flowbot_fail_notify", {}) or {}
+            robot_id = cfg.get("robot_id")
+            if not robot_id or not room_name:
+                logger.info("公户车提醒跳过：无 robot_id 或群名 roomid=%s", roomid)
+                return
+            plate = (parsed_fields.get("车牌号") or "").strip() or "（无车牌）"
+            from insurance.flowbot_notify import send_flowbot_group_message
+            msg = (f"🏢 公户车保单提醒\n车牌：{plate}\n被保险人：{insured}\n"
+                   f"该车为公户车保单，请及时跟进付费情况")
+            send_flowbot_group_message(room_name, sender_name, msg, robot_id)
+            logger.info("公户车提醒已发送 群=%s 车牌=%s 企业=%s", room_name, plate, enterprise_id)
+        except Exception as e:
+            logger.warning("公户车盖章群提醒发送失败（不影响主流程）: %s", e)
+
     # ------------------------------------------------------------------ #
     # 队列投递
     # ------------------------------------------------------------------ #
@@ -576,6 +618,17 @@ class InsuranceHandler:
                         record_id, seq, sender, _same_enterprise,
                     )
                     self._copy_recognition_result(record_id, existing_full, file_md5, config_user_id, config_enterprise_id)
+                    # 复制识别结果的重发也是一次新发送（尤其不同企业/不同群）→ 照发公户车提醒到当前这次的群
+                    try:
+                        _copied_pf = existing_full.get("parsed_fields") or {}
+                        if isinstance(_copied_pf, str):
+                            _copied_pf = json.loads(_copied_pf or "{}")
+                        self._notify_seal_to_group(
+                            roomid, room_name, sender, sender_name,
+                            _copied_pf, existing_full.get("doc_category", ""), config_enterprise_id,
+                        )
+                    except Exception as e:
+                        logger.warning("公户车盖章群提醒(COPY分支)异常, record_id=%d: %s", record_id, e)
                     return
                 # 同一条消息重复处理，标记为 duplicate
                 logger.info(
@@ -810,6 +863,15 @@ class InsuranceHandler:
                     maybe_enqueue_ai_check(self.db, cur_record_id)
                 except Exception as e:
                     logger.warning("AI质检入队异常, record_id=%d: %s", cur_record_id, e)
+
+                # 11. 公户车保单提醒：被保险人为公司 + 企业开了盖章跟进 → 发来源群提醒跟进付费（旁路，不影响主流程）
+                try:
+                    self._notify_seal_to_group(
+                        roomid, room_name, sender, sender_name,
+                        parsed_fields, doc_category, config_enterprise_id,
+                    )
+                except Exception as e:
+                    logger.warning("公户车盖章群提醒调用异常, record_id=%d: %s", cur_record_id, e)
 
         except Exception as e:
             logger.error("保单处理失败, record_id=%d filename=%s: %s", record_id, filename, e, exc_info=True)

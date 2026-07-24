@@ -328,10 +328,12 @@
         .records-table { font-size: 13px; border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
         .records-table th, .records-table td {
             border-bottom: 1px solid var(--border-light);
+            border-right: 1px solid var(--border-light);
             padding: 8px 12px;
         }
+        .records-table th:last-child, .records-table td:last-child { border-right: none; }
         .records-table th { white-space: nowrap; }
-        .records-table td { white-space: normal; word-break: break-all; }
+        .records-table td { white-space: normal; word-break: break-word; max-width: 240px; }
         .records-table th {
             position: sticky; top: 0; z-index: 12;
             background: var(--surface-secondary);
@@ -1758,114 +1760,104 @@
                 </div>
             </div>
 
-            <!-- 趋势图 + 来源分布（有趋势图时3列，无时2列） -->
-            <div :class="['grid grid-cols-1 gap-4 mb-4', dashboardPeriod === 'today' || dashboardPeriod === 'yesterday' ? 'lg:grid-cols-2' : 'lg:grid-cols-3']">
-                <!-- 趋势折线图（今日/昨日不显示） -->
-                <div v-if="dashboardPeriod !== 'today' && dashboardPeriod !== 'yesterday'" class="lg:col-span-2 bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                    <div class="text-sm font-semibold text-gray-700 mb-4">{{ periodLabel }} 识别趋势</div>
-                    <div style="position:relative">
-                      <canvas ref="trendCanvas" style="width:100%;height:180px;display:block" @mousemove="onChartMouseMove" @mouseleave="onChartMouseLeave"></canvas>
-                      <div ref="trendTooltip" style="display:none;position:absolute;background:rgba(30,30,30,0.88);color:#fff;padding:8px 12px;border-radius:8px;font-size:12px;pointer-events:none;white-space:nowrap;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,0.18);line-height:1.8"></div>
-                    </div>
-                    <div class="flex gap-4 mt-3 text-xs text-gray-500">
-                        <span class="flex items-center gap-1"><span style="display:inline-block;width:16px;height:2px;background:#f97316"></span>总量</span>
-                        <span class="flex items-center gap-1"><span style="display:inline-block;width:16px;height:2px;background:#22c55e"></span>成功</span>
-                        <span class="flex items-center gap-1"><span style="display:inline-block;width:16px;height:0;border-top:2px dashed #f87171"></span>失败</span>
-                    </div>
+            <!-- 识别总量趋势折线图（今日/昨日不显示；切到近7/30/90天/全部时显示） -->
+            <div v-if="dashboardPeriod !== 'today' && dashboardPeriod !== 'yesterday'" class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+                <div class="text-sm font-semibold text-gray-700 mb-4">{{ periodLabel }} 识别趋势</div>
+                <div style="position:relative">
+                  <canvas ref="trendCanvas" style="width:100%;height:180px;display:block" @mousemove="onChartMouseMove" @mouseleave="onChartMouseLeave"></canvas>
+                  <div ref="trendTooltip" style="display:none;position:absolute;background:rgba(30,30,30,0.88);color:#fff;padding:8px 12px;border-radius:8px;font-size:12px;pointer-events:none;white-space:nowrap;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,0.18);line-height:1.8"></div>
                 </div>
-
-                <!-- 今日/昨日：来源分布和OCR各占一列；其他：竖向堆叠在右侧一列 -->
-                <template v-if="dashboardPeriod === 'today' || dashboardPeriod === 'yesterday'">
-                    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                        <div class="text-sm font-semibold text-gray-700 mb-3">来源分布</div>
-                        <div class="space-y-2.5">
-                            <div v-for="item in sourceDist" :key="item.label" class="flex items-center gap-2">
-                                <span class="text-xs text-gray-500 w-16 shrink-0">{{ item.label }}</span>
-                                <div class="flex-1 h-2 rounded-full" :style="{background: `linear-gradient(to right, ${item.color} ${item.pct}%, #e5e7eb ${item.pct}%)`}"></div>
-                                <span class="text-xs font-medium text-gray-700 w-8 text-right">{{ item.val }}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                        <div class="text-sm font-semibold text-gray-700 mb-3">OCR 引擎</div>
-                        <div class="space-y-2.5">
-                            <div v-for="item in dashboardData.ocr_dist" :key="item.ocr_engine" class="flex items-center gap-2">
-                                <span class="text-xs text-gray-500 w-20 shrink-0 truncate">{{ item.ocr_engine || '未知' }}</span>
-                                <div class="flex-1 bg-gray-100 rounded-full h-2">
-                                    <div class="h-2 rounded-full" :style="{background: `linear-gradient(to right, #60a5fa ${barPct(dashboardData.ocr_dist, item)}, #e5e7eb ${barPct(dashboardData.ocr_dist, item)})`}"></div>
-                                </div>
-                                <span class="text-xs font-medium text-gray-700 w-8 text-right">{{ item.total }}</span>
-                            </div>
-                        </div>
-                    </div>
-                </template>
-                <!-- 其他时间范围：来源 + OCR 堆叠在右侧一列 -->
-                <div v-else class="flex flex-col gap-4">
-                    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 flex-1">
-                        <div class="text-sm font-semibold text-gray-700 mb-3">来源分布</div>
-                        <div class="space-y-2.5">
-                            <div v-for="item in sourceDist" :key="item.label" class="flex items-center gap-2">
-                                <span class="text-xs text-gray-500 w-16 shrink-0">{{ item.label }}</span>
-                                <div class="flex-1 h-2 rounded-full" :style="{background: `linear-gradient(to right, ${item.color} ${item.pct}%, #e5e7eb ${item.pct}%)`}"></div>
-                                <span class="text-xs font-medium text-gray-700 w-8 text-right">{{ item.val }}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 flex-1">
-                        <div class="text-sm font-semibold text-gray-700 mb-3">OCR 引擎</div>
-                        <div class="space-y-2.5">
-                            <div v-for="item in dashboardData.ocr_dist" :key="item.ocr_engine" class="flex items-center gap-2">
-                                <span class="text-xs text-gray-500 w-20 shrink-0 truncate">{{ item.ocr_engine || '未知' }}</span>
-                                <div class="flex-1 bg-gray-100 rounded-full h-2">
-                                    <div class="h-2 rounded-full" :style="{background: `linear-gradient(to right, #60a5fa ${barPct(dashboardData.ocr_dist, item)}, #e5e7eb ${barPct(dashboardData.ocr_dist, item)})`}"></div>
-                                </div>
-                                <span class="text-xs font-medium text-gray-700 w-8 text-right">{{ item.total }}</span>
-                            </div>
-                        </div>
-                    </div>
+                <div class="flex gap-4 mt-3 text-xs text-gray-500">
+                    <span class="flex items-center gap-1"><span style="display:inline-block;width:16px;height:2px;background:#f97316"></span>总量</span>
+                    <span class="flex items-center gap-1"><span style="display:inline-block;width:16px;height:2px;background:#22c55e"></span>成功</span>
+                    <span class="flex items-center gap-1"><span style="display:inline-block;width:16px;height:0;border-top:2px dashed #f87171"></span>失败</span>
                 </div>
             </div>
 
-            <!-- 保司排行 + 险种分布 + 企业排行（选定企业时改为2列） -->
-            <div :class="['grid grid-cols-1 gap-4', dashboardEnterprise ? 'lg:grid-cols-2' : 'lg:grid-cols-3']">
-                <!-- 保司识别排行 -->
-                <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                    <div class="text-sm font-semibold text-gray-700 mb-4">保司识别量 Top10</div>
-                    <div class="space-y-2.5">
-                        <div v-for="(item, idx) in dashboardData.company_rank" :key="item.company" class="flex items-center gap-2">
-                            <span class="text-xs font-bold w-5 text-center" :class="idx < 3 ? 'text-orange-500' : 'text-gray-300'">{{ idx+1 }}</span>
-                            <span class="text-xs text-gray-600 flex-1 truncate">{{ item.company }}</span>
-                            <div class="w-20 h-1.5 rounded-full" :style="{background: `linear-gradient(to right, #fb923c ${barPct(dashboardData.company_rank, item)}, #e5e7eb ${barPct(dashboardData.company_rank, item)})`}"></div>
-                            <span class="text-xs font-semibold text-gray-700 w-8 text-right">{{ item.total }}</span>
+            <!-- ===== 左右两栏：左(占2列)=各企业近7天每日识别量(每企业一行+迷你折线)，右(占1列)=占比类(来源/OCR/保司/险种)做小。顶部4卡片见上方不在此列 ===== -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <!-- 左栏(占2列)：各企业近7天每日识别量（每企业一行 + 迷你趋势 sparkline，固定近7天） -->
+                <div class="lg:col-span-2">
+                    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 h-full">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="text-sm font-semibold text-gray-700">各企业近7天每日识别量</div>
+                            <div class="text-xs text-gray-400">折线=每天识别量 · 右侧为7天合计</div>
                         </div>
-                        <div v-if="!dashboardData.company_rank.length" class="text-xs text-gray-300 text-center py-4">暂无数据</div>
+                        <div>
+                            <div v-for="(ent, idx) in (dashboardData.enterprise_trend_7d || [])" :key="ent.enterprise" class="flex items-center gap-3 py-2.5 border-t border-gray-50 first:border-0">
+                                <span class="text-xs w-5 text-center font-bold shrink-0" :class="idx < 3 ? 'text-blue-500' : 'text-gray-300'">{{ idx+1 }}</span>
+                                <span class="text-xs text-gray-400 w-14 shrink-0 truncate">{{ ent.enterprise_no || '-' }}</span>
+                                <span class="text-xs text-gray-700 w-24 shrink-0 truncate">{{ ent.enterprise }}</span>
+                                <div class="flex-1">
+                                    <div class="flex items-end" style="height:36px;">
+                                        <div v-for="d in ent.days" :key="d.day" style="flex:1;display:flex;align-items:flex-end;justify-content:center;height:100%;">
+                                            <div style="width:56%;max-width:18px;min-height:2px;background:linear-gradient(to top,#f97316,#fdba74);border-radius:3px 3px 0 0;transition:height .3s;" :style="{height: entBarH(ent, d)}" :title="d.label + '：' + d.total"></div>
+                                        </div>
+                                    </div>
+                                    <div class="flex" style="margin-top:2px;">
+                                        <span v-for="d in ent.days" :key="d.day" style="flex:1;text-align:center;line-height:1.25;">
+                                            <span style="display:block;font-size:10px;color:#6b7280;font-variant-numeric:tabular-nums;">{{ d.total }}</span>
+                                            <span style="display:block;font-size:9px;color:#cbd5e1;">{{ d.label }}</span>
+                                        </span>
+                                    </div>
+                                </div>
+                                <span class="text-xs font-semibold text-gray-700 w-12 text-right shrink-0">{{ ent.total }}</span>
+                            </div>
+                            <div v-if="!dashboardData.enterprise_trend_7d || !dashboardData.enterprise_trend_7d.length" class="text-xs text-gray-300 text-center py-8">暂无企业数据</div>
+                        </div>
                     </div>
                 </div>
 
-                <!-- 险种分布 -->
-                <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                    <div class="text-sm font-semibold text-gray-700 mb-4">险种分布</div>
-                    <div class="space-y-2.5">
-                        <div v-for="item in dashboardData.policy_type_dist" :key="item.policy_type" class="flex items-center gap-2">
-                            <span class="text-xs text-gray-600 flex-1 truncate">{{ item.policy_type }}</span>
-                            <div class="w-20 h-1.5 rounded-full" :style="{background: `linear-gradient(to right, #c084fc ${barPct(dashboardData.policy_type_dist, item)}, #e5e7eb ${barPct(dashboardData.policy_type_dist, item)})`}"></div>
-                            <span class="text-xs font-semibold text-gray-700 w-8 text-right">{{ item.total }}</span>
+                <!-- 右栏(占1列)：占比类，竖排堆叠、做小 -->
+                <div class="lg:col-span-1 flex flex-col gap-4">
+                    <!-- 来源分布 -->
+                    <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                        <div class="text-xs font-semibold text-gray-700 mb-2.5">来源分布</div>
+                        <div class="space-y-2">
+                            <div v-for="item in sourceDist" :key="item.label" class="flex items-center gap-2">
+                                <span class="text-xs text-gray-500 w-14 shrink-0">{{ item.label }}</span>
+                                <div class="flex-1 h-1.5 rounded-full" :style="{background: `linear-gradient(to right, ${item.color} ${item.pct}%, #e5e7eb ${item.pct}%)`}"></div>
+                                <span class="text-xs font-medium text-gray-700 w-7 text-right">{{ item.val }}</span>
+                            </div>
                         </div>
-                        <div v-if="!dashboardData.policy_type_dist.length" class="text-xs text-gray-300 text-center py-4">暂无数据</div>
                     </div>
-                </div>
-
-                <!-- 企业使用排行（选定企业时隐藏） -->
-                <div v-if="!dashboardEnterprise" class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                    <div class="text-sm font-semibold text-gray-700 mb-4">企业使用量</div>
-                    <div class="space-y-2.5">
-                        <div v-for="(item, idx) in dashboardData.enterprise_rank" :key="item.enterprise" class="flex items-center gap-2">
-                            <span class="text-xs font-bold w-5 text-center" :class="idx < 3 ? 'text-blue-500' : 'text-gray-300'">{{ idx+1 }}</span>
-                            <span class="text-xs text-gray-600 flex-1 truncate">{{ item.enterprise }}</span>
-                            <div class="w-20 h-1.5 rounded-full" :style="{background: `linear-gradient(to right, #60a5fa ${barPct(dashboardData.enterprise_rank, item)}, #e5e7eb ${barPct(dashboardData.enterprise_rank, item)})`}"></div>
-                            <span class="text-xs font-semibold text-gray-700 w-8 text-right">{{ item.total }}</span>
+                    <!-- OCR 引擎 -->
+                    <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                        <div class="text-xs font-semibold text-gray-700 mb-2.5">OCR 引擎</div>
+                        <div class="space-y-2">
+                            <div v-for="item in dashboardData.ocr_dist" :key="item.ocr_engine" class="flex items-center gap-2">
+                                <span class="text-xs text-gray-500 w-16 shrink-0 truncate">{{ item.ocr_engine || '未知' }}</span>
+                                <div class="flex-1 bg-gray-100 rounded-full h-1.5">
+                                    <div class="h-1.5 rounded-full" :style="{background: `linear-gradient(to right, #60a5fa ${barPct(dashboardData.ocr_dist, item)}, #e5e7eb ${barPct(dashboardData.ocr_dist, item)})`}"></div>
+                                </div>
+                                <span class="text-xs font-medium text-gray-700 w-7 text-right">{{ item.total }}</span>
+                            </div>
                         </div>
-                        <div v-if="!dashboardData.enterprise_rank.length" class="text-xs text-gray-300 text-center py-4">暂无企业数据</div>
+                    </div>
+                    <!-- 保司识别量 Top10 -->
+                    <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                        <div class="text-xs font-semibold text-gray-700 mb-2.5">保司识别量 Top10</div>
+                        <div class="space-y-2">
+                            <div v-for="(item, idx) in dashboardData.company_rank" :key="item.company" class="flex items-center gap-2">
+                                <span class="text-xs font-bold w-4 text-center" :class="idx < 3 ? 'text-orange-500' : 'text-gray-300'">{{ idx+1 }}</span>
+                                <span class="text-xs text-gray-600 flex-1 truncate">{{ item.company }}</span>
+                                <div class="w-12 h-1 rounded-full" :style="{background: `linear-gradient(to right, #fb923c ${barPct(dashboardData.company_rank, item)}, #e5e7eb ${barPct(dashboardData.company_rank, item)})`}"></div>
+                                <span class="text-xs font-semibold text-gray-700 w-7 text-right">{{ item.total }}</span>
+                            </div>
+                            <div v-if="!dashboardData.company_rank.length" class="text-xs text-gray-300 text-center py-2">暂无数据</div>
+                        </div>
+                    </div>
+                    <!-- 险种分布 -->
+                    <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                        <div class="text-xs font-semibold text-gray-700 mb-2.5">险种分布</div>
+                        <div class="space-y-2">
+                            <div v-for="item in dashboardData.policy_type_dist" :key="item.policy_type" class="flex items-center gap-2">
+                                <span class="text-xs text-gray-600 flex-1 truncate">{{ item.policy_type }}</span>
+                                <div class="w-12 h-1 rounded-full" :style="{background: `linear-gradient(to right, #c084fc ${barPct(dashboardData.policy_type_dist, item)}, #e5e7eb ${barPct(dashboardData.policy_type_dist, item)})`}"></div>
+                                <span class="text-xs font-semibold text-gray-700 w-7 text-right">{{ item.total }}</span>
+                            </div>
+                            <div v-if="!dashboardData.policy_type_dist.length" class="text-xs text-gray-300 text-center py-2">暂无数据</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -3326,15 +3318,15 @@
                                             预览
                                         </button>
                                     </div>
-                                    <span v-else class="text-gray-600 text-sm truncate block" style="max-width:180px;" :title="record.filename">
+                                    <span v-else class="text-gray-600 text-sm truncate" :class="record._merged ? 'inline-block align-middle' : 'block'" style="max-width:180px;" :title="record.filename">
                                         {{ record.filename || '—' }}
                                     </span>
                                     <span v-if="record.policy_count > 1" class="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">多保单 {{ record.policy_index }}/{{ record.policy_count }}</span>
                                     <span v-if="record.page_range" class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">第{{ record.page_range }}页</span>
                                     <span v-if="record.hint" class="text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">{{ record.hint }}</span>
                                     <span v-if="getFailHint(record)" class="text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">{{ getFailHint(record) }}</span>
-                                    <!-- 操作按钮组：原独立「操作」列已并入此处，统一放在文件名下方（预览由上方文件名旁按钮承担） -->
-                                    <div class="flex items-center gap-1.5 flex-wrap mt-1.5">
+                                    <!-- 操作按钮组：原独立「操作」列已并入此处，统一放在文件名下方（预览由上方文件名旁按钮承担）；合并行时与「X条」同行 -->
+                                    <div class="flex items-center gap-1.5 flex-wrap" :class="record._merged ? '' : 'mt-1.5'" :style="record._merged ? 'display:inline-flex;margin-left:6px;vertical-align:middle;' : ''">
                                         <!-- 合并行：展开/收起该车牌明细 -->
                                         <button v-if="record._merged" @click="record._expanded = !record._expanded"
                                                 class="btn btn-outline" style="padding:3px 8px;font-size:11px;">
@@ -3435,11 +3427,11 @@
                                     </template>
                                     <template v-else>
                                         <span class="cursor-pointer hover:bg-orange-50 px-1 py-0.5 rounded transition-colors select-none"
-                                              style="-webkit-user-select:none;user-select:none;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;"
+                                              style="-webkit-user-select:none;user-select:none;"
                                               @click="startListEdit(record, col.key)"
                                               :title="'点击编辑'">
                                             {{ (record.display_fields || {})[col.key] || '' }}
-                                            <span style="display:inline-flex;align-items:center;gap:2px;color:#f97316;flex-shrink:0;white-space:nowrap;border:1px solid #fdba74;border-radius:4px;padding:4px 6px;">
+                                            <span style="display:inline-flex;align-items:center;gap:2px;color:#f97316;white-space:nowrap;border:1px solid #fdba74;border-radius:4px;padding:2px 5px;margin-left:4px;vertical-align:middle;">
                                                 <svg style="width:11px;height:11px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                                 <span style="font-size:11px;line-height:1;">{{ (record.display_fields || {})[col.key] ? '修改' : '填写' }}</span>
                                             </span>
@@ -6569,6 +6561,12 @@ const _app = createApp({
             const val = parseFloat(item.total) || 0;
             return Math.min(100, val / max * 100).toFixed(1) + '%';
         }
+        // 企业近7天迷你折线图：按该企业自身7天峰值归一，输出 SVG 折线/面积点（viewBox 0 0 100 34）
+        function entBarH(ent, d) {
+            const arr = (ent && ent.days) || [];
+            const max = Math.max(1, ...arr.map(x => Number(x.total) || 0));
+            return Math.round((Number(d.total) || 0) / max * 100) + '%';
+        }
 
         const trendTooltip = Vue.ref(null);
         let _trendData = [], _trendPad = { top:10, bottom:24, left:6, right:6 }, _trendStepX = 0, _trendW = 0;
@@ -7154,7 +7152,7 @@ const _app = createApp({
         const fieldHelp = ref({
             "tab_all": "所有已识别完成的记录（可勾选“过滤非保单”排除非保单文档）",
             "tab_done": "识别成功、必填字段完整、无需人工处理的保单",
-            "tab_abnormal": "保单原件上本身就没有这些必填信息（如投保人、车牌、保费、日期等），并非系统未识别到；需人工补录后这条记录才算完整",
+            "tab_abnormal": "保单原件本身就缺这些信息（如投保人、车牌、日期等），非系统漏识别，需人工补录",
             "tab_nonpolicy": "识别为非保单文档，如电子标志、发票、缴款通知单等",
             "tab_failed": "文件无法解析识别（如文件损坏、非PDF、内容无法读取）",
             "文件名": "保单文件本身的名称（文件上传时的原始文件名）",
@@ -7272,13 +7270,24 @@ const _app = createApp({
         const listColumnConfig = ref([]);
         // 计算实际显示的列（按 order 排序，只取 visible 的）
         const visibleListColumns = computed(() => {
+            let cols;
             if (!listColumnConfig.value.length) {
-                return outputColumns.value.map(col => ({ key: col, display_name: col, frozen: false }));
+                cols = outputColumns.value.map(col => ({ key: col, display_name: col, frozen: false }));
+            } else {
+                cols = listColumnConfig.value
+                    .filter(c => c.visible !== false)
+                    .sort((a, b) => (a.order || 0) - (b.order || 0))
+                    .map(c => ({ key: c.key, display_name: c.display_name || c.key, frozen: !!c.frozen, width: c.width || null, is_mobile: c.is_mobile !== false, is_sum: c.is_sum === true }));
             }
-            return listColumnConfig.value
-                .filter(c => c.visible !== false)
-                .sort((a, b) => (a.order || 0) - (b.order || 0))
-                .map(c => ({ key: c.key, display_name: c.display_name || c.key, frozen: !!c.frozen, width: c.width || null, is_mobile: c.is_mobile !== false, is_sum: c.is_sum === true }));
+            // 内部账号查看某企业时：强制「文件名」列放最前且冻结——保证能定位文件，
+            // 且操作按钮/合并展开（并入「文件名」列下方渲染）不会因企业模板缺文件名列而丢失
+            if (isSuperAdmin.value && recordEnterpriseFilter.value) {
+                let fnCol = cols.find(c => c.key === '文件名');
+                cols = cols.filter(c => c.key !== '文件名');
+                fnCol = fnCol ? { ...fnCol, frozen: true } : { key: '文件名', display_name: '文件名', frozen: true, width: 180, is_mobile: true, is_sum: false };
+                cols.unshift(fnCol);
+            }
+            return cols;
         });
         // 手机端识别记录卡片实际展示的字段：在页面列基础上按「手机端」勾选再筛一层
         // （is_mobile !== false 兼容还没保存过这个新配置的客户，默认跟桌面页面列一致）
@@ -12279,7 +12288,7 @@ const _app = createApp({
         // 内部备注常用语句：点击追加到说明文本框，不覆盖已输入内容
         const internalNoteQuickPhrases = [
             '保单无投保人', '新车无车牌', '保单无被保险人',
-            '文件模糊无法识别', '保单号缺失', '非保单文件',
+            '保单无签单日期', '文件模糊无法识别', '保单号缺失', '非保单文件',
         ];
         function appendInternalNotePhrase(phrase) {
             const cur = internalNoteContent.value.trim();
@@ -12610,6 +12619,10 @@ const _app = createApp({
             // 续保到期提醒推送链接：?tab=renewal 直接跳转到续保管理系统页，不用手动点导航
             if (new URLSearchParams(window.location.search).get('tab') === 'renewal') {
                 openRenewalTab();
+            }
+            // 公户车盖章每日汇总推送链接：?tab=seal 直接跳转到公户车盖章跟进页
+            if (new URLSearchParams(window.location.search).get('tab') === 'seal') {
+                openSealTab();
             }
             // 先拉取列配置里的默认排序（决定列表初始排序），再触发首次加载
             await loadDefaultSorts();
@@ -13263,7 +13276,7 @@ const _app = createApp({
             // 页面Tab
             pageTab,
             // 数据看板
-            dashboardData, dashboardLoading, dashboardDays, dashboardPeriod, periodOptions, periodLabel, loadDashboard, sourceDist, trendCanvas, trendTooltip, onChartMouseMove, onChartMouseLeave, barPct,
+            dashboardData, dashboardLoading, dashboardDays, dashboardPeriod, periodOptions, periodLabel, loadDashboard, sourceDist, trendCanvas, trendTooltip, onChartMouseMove, onChartMouseLeave, barPct, entBarH,
             dashboardEnterprise, dashboardCompany, dashboardEnterprises, dashboardCompanies,
             // 销售看板
             salesTab, salesLoading, salesData, salesEnterprise, salesPeriod, salesDateStart, salesDateEnd,
