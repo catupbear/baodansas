@@ -328,8 +328,10 @@
         .records-table { font-size: 13px; border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
         .records-table th, .records-table td {
             border-bottom: 1px solid var(--border-light);
+            border-right: 1px solid var(--border-light);
             padding: 8px 12px;
         }
+        .records-table th:last-child, .records-table td:last-child { border-right: none; }
         .records-table th { white-space: nowrap; }
         .records-table td { white-space: normal; word-break: break-word; max-width: 240px; }
         .records-table th {
