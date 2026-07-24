@@ -3111,12 +3111,13 @@
                             ? 'text-orange-600'
                             : 'text-gray-500 hover:text-gray-700'"
                         :style="recordActiveTab === tab.key ? 'box-shadow: inset 0 -2px 0 #ea580c;' : ''">
-                    {{ tab.label }}
+                    {{ tab.label }}<span class="field-help-icon" style="vertical-align:super;margin-left:1px;"
+                          @mouseenter="showFieldHelp($event, 'tab_'+tab.key)" @mouseleave="hideFieldHelp()"
+                          @click.stop="pinFieldHelp($event, 'tab_'+tab.key)">!</span>
                     <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full font-semibold"
                           :class="recordActiveTab === tab.key ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-500'">
                         {{ tab.count }}
                     </span>
-                    <span :title="tab.desc" @click.stop style="font-size:10px;color:#c0c4cc;margin-left:2px;vertical-align:super;cursor:help;">ⓘ</span>
                 </button>
                 <!-- 全部 Tab：过滤非保单勾选项（默认勾选，排除已识别为非保单类型的记录） -->
                 <label v-if="recordActiveTab === 'all'" class="flex items-center gap-1.5 ml-3 text-xs text-gray-600 cursor-pointer flex-shrink-0 select-none"
@@ -7151,6 +7152,11 @@ const _app = createApp({
         ]);
         // 字段数据来源说明（鼠标悬停在「?」上查看，面向普通用户）
         const fieldHelp = ref({
+            "tab_all": "所有已识别完成的记录（可勾选“过滤非保单”排除非保单文档）",
+            "tab_done": "识别成功、必填字段完整、无需人工处理的保单",
+            "tab_abnormal": "识别成功但缺少必填字段（如投保人、车牌、保费、日期等），需人工补全后才算完整",
+            "tab_nonpolicy": "识别为非保单文档，如电子标志、发票、缴款通知单等",
+            "tab_failed": "文件无法解析识别（如文件损坏、非PDF、内容无法读取）",
             "文件名": "保单文件本身的名称（文件上传时的原始文件名）",
             "文档类型": "这份文件是\"保单\"还是\"投保单\"（系统根据文件标题自动判断）",
             "状态": "这条记录当前的处理状态（系统处理进度，如已完成、处理中等）",
