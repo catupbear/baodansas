@@ -3265,12 +3265,6 @@
                                         {{ record._reuploading ? '上传中...' : '重新上传' }}
                                         <input type="file" accept=".pdf" style="display:none;" @change="reuploadRecord(record, $event)" :disabled="record._reuploading">
                                     </label>
-                                    <!-- 标记正常（需人工补充记录） -->
-                                    <button v-if="record.is_abnormal && !record.abnormal_override_reason && !record._merged"
-                                            @click="openMarkNormal(record)"
-                                            class="btn" style="padding:3px 8px;font-size:11px;background:#fef3c7;border:1px solid #fbbf24;color:#92400e;">
-                                        标记正常
-                                    </button>
                                     <!-- 已标记正常，显示撤销 -->
                                     <span v-if="record.abnormal_override_reason"
                                           class="inline-flex items-center gap-1 text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
@@ -3623,7 +3617,6 @@
                             </button>
                         </template>
                         <template v-else>
-                            <button v-if="record.is_abnormal && !record.abnormal_override_reason && !record._merged" class="mrc-btn mrc-btn-mark" @click="openMarkNormal(record)">标记正常</button>
                             <button v-else-if="record.status === 'failed' && record.cos_url" class="mrc-btn mrc-btn-primary" :disabled="record._reocring" @click="reocrRecord(record)">{{ record._reocring ? '识别中...' : '重新识别' }}</button>
                             <button v-else-if="record.cos_url" class="mrc-btn mrc-btn-view" @click="previewRecord(record)">预览</button>
                             <label v-if="record.status === 'failed' && !record.cos_url" class="mrc-btn mrc-btn-primary" style="cursor:pointer;">
@@ -3681,8 +3674,6 @@
                     <div v-if="mSheetRecord.cos_url" class="mrc-sheet-item" @click="previewRecord(mSheetRecord); closeMSheet()">👁 预览保单文件</div>
                     <div v-if="mSheetRecord.status === 'done' || mSheetRecord.status === 'success' || mSheetRecord.status === 'failed'"
                          class="mrc-sheet-item" @click="reocrRecord(mSheetRecord); closeMSheet()">🔄 重新识别</div>
-                    <div v-if="mSheetRecord.is_abnormal && !mSheetRecord.abnormal_override_reason"
-                         class="mrc-sheet-item" @click="openMarkNormal(mSheetRecord); closeMSheet()">✅ 标记正常</div>
                     <div v-if="mSheetRecord.abnormal_override_reason"
                          class="mrc-sheet-item" @click="undoMarkNormal(mSheetRecord); closeMSheet()">↩️ 撤销标记正常</div>
                     <div class="mrc-sheet-item" @click="openErrorReport(mSheetRecord); closeMSheet()">⚠️ 报错反馈</div>
