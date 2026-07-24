@@ -197,7 +197,7 @@
 
                 <div class="onboard-content">
                 <!-- 跟进手册：占位入口，内容待定 -->
-                <div v-if="activeGroup === 'manual'" style="padding:48px 24px;text-align:center;color:#9ca3af;font-size:14px;">📖 跟进手册功能建设中，敬请期待</div>
+                <div v-if="activeGroup === 'manual'" style="padding:48px 24px;text-align:center;color:#9ca3af;font-size:14px;">📖 客服跟进手册功能建设中，敬请期待</div>
                 <template v-else>
                 <!-- 桌面表格 -->
                 <div class="cust-table-wrap bg-white rounded-2xl border border-gray-100 overflow-x-auto">
@@ -533,19 +533,19 @@ createApp({
                 }
                 if (g) g.items.push(c);
             });
-            // 顺序：各接入周分组 → 预备群 → 暂未接入
-            groups.push(prepQunGroup);
+            // 顺序：各接入周分组 → 暂未接入 → 预备群
             groups.push(notOnboardGroup);
+            groups.push(prepQunGroup);
             return groups;
         });
 
         const sidebarGroups = Vue.computed(() => {
             const list = [{ key: 'all', label: '全部', count: filteredCustomers.value.length }];
             groupedCustomers.value.forEach(g => {
-                // 在「暂未接入」之前插入「跟进手册」占位入口（暂不筛选客户，内容以后再定）
-                if (g.key === 'prep') list.push({ key: 'manual', label: '跟进手册', count: '' });
                 list.push({ key: g.key, label: g.label, count: g.items.length });
             });
+            // 「客服跟进手册」放最后（暂不筛选客户，内容以后再定）
+            list.push({ key: 'manual', label: '客服跟进手册', count: '' });
             return list;
         });
 
