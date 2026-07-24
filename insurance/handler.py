@@ -771,6 +771,16 @@ class InsuranceHandler:
                 # 6b. TZ-008 专属：车牌为空时用车架号填入车牌号（持久化）
                 from insurance.db import apply_tz008_plate_fallback
                 apply_tz008_plate_fallback(self.db, parsed_fields, config_enterprise_id)
+                # 6c-2. 车牌仍为空时从文件名提取填入（与展示层 api.py 同口径）——让 is_abnormal
+                # 预计算时能用上文件名车牌，不再把"文件名已带车牌"的记录误判为"缺车牌/需人工补充"
+                if not (parsed_fields.get("车牌号") or "").strip():
+                    import re as _re_fn
+                    _pm = _re_fn.search(
+                        r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁夏][A-Z]-?[A-Z0-9]{4,6}',
+                        filename or "")
+                    if _pm:
+                        parsed_fields["车牌号"] = _pm.group(0).replace("-", "")
+                        logger.info("车牌从文件名提取(入库): record_id=%d 车牌=%s", cur_record_id, parsed_fields["车牌号"])
 
                 # 6c. 待匹配池：此前群里发过补充信息但当时车牌无记录 → 自动回填
                 # （只写系统台账记录 parsed_fields，不涉及钉钉多维表同步——该功能已停用）
