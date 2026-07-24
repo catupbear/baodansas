@@ -2722,7 +2722,7 @@
                 <table class="w-full text-sm" style="min-width:900px;">
                     <thead>
                         <tr class="text-left text-gray-500 text-xs" style="background:#fafaf9;">
-                            <th class="px-3 py-2.5">车牌号</th><th>被保险人</th><th>承保公司</th><th>保费</th><th>是否已盖章</th><th>操作</th>
+                            <th class="px-3 py-2.5">车牌号</th><th v-if="isSuperAdmin">所属企业</th><th>被保险人</th><th>承保公司</th><th>保费</th><th>是否已盖章</th><th>操作</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2731,6 +2731,7 @@
                             <td class="px-3 py-2.5 font-medium text-gray-800 whitespace-nowrap">{{ t.plate_no || '—' }}
                                 <span v-if="t.policy_count > 1" @click="t._expanded = !t._expanded" class="text-xs px-1.5 py-0.5 rounded cursor-pointer" style="background:#eff6ff;color:#3b82f6;" title="点击展开明细">{{ t.policy_count }}单</span>
                             </td>
+                            <td v-if="isSuperAdmin" class="text-gray-600 whitespace-nowrap">{{ enterpriseName(t.enterprise_id) }}</td>
                             <td class="text-gray-700">{{ t.insured || '—' }}</td>
                             <td class="whitespace-nowrap">{{ t.company_short || '—' }}</td>
                             <td class="whitespace-nowrap">{{ t.total_premium || '—' }}<span v-if="t.policy_count > 1" class="text-xs text-gray-300">（合计）</span></td>
@@ -2746,7 +2747,7 @@
                         </tr>
                         <!-- 合并组展开：逐条保单明细 -->
                         <tr v-if="t.policy_count > 1 && t._expanded" :key="t.record_id + '_detail'" style="background:#fafaf9;">
-                            <td colspan="6" class="px-3 py-2">
+                            <td :colspan="isSuperAdmin ? 7 : 6" class="px-3 py-2">
                                 <table class="w-full text-xs" style="border-collapse:collapse;">
                                     <thead>
                                         <tr class="text-left text-gray-400">
@@ -2768,7 +2769,7 @@
                             </td>
                         </tr>
                         </template>
-                        <tr v-if="!sealTasks.length"><td colspan="6" class="px-4 py-10 text-center text-gray-300 text-sm">暂无公户车保单</td></tr>
+                        <tr v-if="!sealTasks.length"><td :colspan="isSuperAdmin ? 7 : 6" class="px-4 py-10 text-center text-gray-300 text-sm">暂无公户车保单</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -6485,6 +6486,11 @@ const _app = createApp({
                 if (j.code === 0) { await loadSealTasks(); }
                 else alert(j.msg || '操作失败');
             } catch (e) { alert('操作失败'); }
+        }
+        // 盖章列表「所属企业」列（仅超管）：用企业下拉列表把 enterprise_id 映射成企业名
+        function enterpriseName(id) {
+            const e = (dashboardEnterprises.value || []).find(x => x.id === id);
+            return e ? e.name : (id ? ('企业#' + id) : '—');
         }
 
         // 三级面板延时关闭：鼠标短暂离开（如斜向移入面板）不至于闪没
@@ -13382,7 +13388,7 @@ const _app = createApp({
             errorReportMsg, errorReportOk, openErrorReport, submitErrorReport,
             // 通知面板
             // 移动端菜单
-            mobileMenuOpen, moreMenuOpen, workbenchOpen, wbSealOpen, wbComingName, wbComingSoon, wbSealEnter, wbSealLeave, sealTasks, sealStats, sealFilter, sealPagination, loadSealTasks, openSealTab, markSealPaid,
+            mobileMenuOpen, moreMenuOpen, workbenchOpen, wbSealOpen, wbComingName, wbComingSoon, wbSealEnter, wbSealLeave, sealTasks, sealStats, sealFilter, sealPagination, loadSealTasks, openSealTab, markSealPaid, enterpriseName,
             // 识别记录移动端卡片视图
             mobileFilterOpen, mSheetRecord, mLoadingMore,
             mField, mHasPlate, mCardTitle, mPolicyChipClass, mIsLong,
