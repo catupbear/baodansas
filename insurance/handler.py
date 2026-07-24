@@ -618,6 +618,17 @@ class InsuranceHandler:
                         record_id, seq, sender, _same_enterprise,
                     )
                     self._copy_recognition_result(record_id, existing_full, file_md5, config_user_id, config_enterprise_id)
+                    # 复制识别结果的重发也是一次新发送（尤其不同企业/不同群）→ 照发公户车提醒到当前这次的群
+                    try:
+                        _copied_pf = existing_full.get("parsed_fields") or {}
+                        if isinstance(_copied_pf, str):
+                            _copied_pf = json.loads(_copied_pf or "{}")
+                        self._notify_seal_to_group(
+                            roomid, room_name, sender, sender_name,
+                            _copied_pf, existing_full.get("doc_category", ""), config_enterprise_id,
+                        )
+                    except Exception as e:
+                        logger.warning("公户车盖章群提醒(COPY分支)异常, record_id=%d: %s", record_id, e)
                     return
                 # 同一条消息重复处理，标记为 duplicate
                 logger.info(
