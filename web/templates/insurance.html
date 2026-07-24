@@ -2650,7 +2650,8 @@
                             <div class="flex items-center gap-2 flex-wrap">
                                 <input v-if="isSuperAdmin || currentUser.role === 'enterprise'" type="checkbox" :value="t.id" v-model="renewalSelectedIds" class="cursor-pointer">
                                 <span class="font-extrabold text-gray-800" style="font-size:18px;letter-spacing:0.5px;">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.plate_no || t.vin || '—') : (maskPlateNo(t.plate_no || t.vin) || '—') }}</span>
-                                <span class="text-xs px-1.5 py-0.5 rounded-full font-semibold" :style="renewalDaysBadgeStyle(t)">{{ renewalDaysLeftText(t) }}</span>
+                                <span v-if="t.policy_type" class="text-xs text-gray-500">{{ t.policy_type }}</span>
+                                <span class="text-xs px-1.5 py-0.5 rounded-full font-semibold" :style="renewalDaysBadgeStyle(t)">{{ renewalDaysLeftText(t) }} · 请提醒</span>
                                 <span v-if="t.status === 'renew_pending' || t.status === 'transfer_pending'" class="text-xs px-1.5 py-0.5 rounded-full" :style="renewalStatusStyle(t.status)">🔔 {{ renewalStatusLabel(t.status) }}</span>
                             </div>
                             <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5 mt-2 text-xs" style="max-width:760px;">
