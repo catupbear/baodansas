@@ -2687,11 +2687,11 @@
         <div class="grid grid-cols-2 gap-3" style="max-width:420px;">
             <div class="bg-orange-50 border border-orange-200 rounded-xl p-3 text-center">
                 <div class="text-2xl font-bold text-orange-600">{{ sealStats.unpaid }}</div>
-                <div class="text-xs text-orange-400 mt-1">未付</div>
+                <div class="text-xs text-orange-400 mt-1">未盖章</div>
             </div>
             <div class="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
                 <div class="text-2xl font-bold text-green-600">{{ sealStats.paid }}</div>
-                <div class="text-xs text-green-400 mt-1">已付</div>
+                <div class="text-xs text-green-400 mt-1">已盖章</div>
             </div>
         </div>
         <!-- 筛选行 -->
@@ -2775,8 +2775,8 @@
             <div v-if="sealPagination.total > 0" class="px-4 py-3 border-t flex items-center justify-between">
                 <span class="text-xs text-gray-400">共 {{ sealPagination.total }} 条，第 {{ sealPagination.page }} / {{ sealPagination.pages }} 页</span>
                 <div class="flex items-center gap-1">
-                    <button class="pagination-btn" :disabled="sealPagination.page<=1" @click="loadSealTasks(sealPagination.page-1)">上一页</button>
-                    <button class="pagination-btn" :disabled="sealPagination.page>=sealPagination.pages" @click="loadSealTasks(sealPagination.page+1)">下一页</button>
+                    <button class="pagination-btn" style="width:auto;padding:0 12px;white-space:nowrap;" :disabled="sealPagination.page<=1" @click="loadSealTasks(sealPagination.page-1)">上一页</button>
+                    <button class="pagination-btn" style="width:auto;padding:0 12px;white-space:nowrap;" :disabled="sealPagination.page>=sealPagination.pages" @click="loadSealTasks(sealPagination.page+1)">下一页</button>
                 </div>
             </div>
         </div>
