@@ -92,10 +92,11 @@ def create_event_callback_blueprint(path: str):
 
         try:
             tree = ET.fromstring(xml_content)
-            event = (tree.findtext("Event") or "").strip()
+            # 企业微信「客户联系」数据回调用 <InfoType>，普通应用事件用 <Event>，两者兼容
+            event = (tree.findtext("InfoType") or tree.findtext("Event") or "").strip()
             change_type = (tree.findtext("ChangeType") or "").strip()
             chat_id = (tree.findtext("ChatId") or "").strip()
-            logger.info("[企业微信回调] 事件: Event=%s, ChangeType=%s, ChatId=%s",
+            logger.info("[企业微信回调] 事件: type=%s, ChangeType=%s, ChatId=%s",
                         event, change_type, chat_id)
 
             # 只处理群变更（新建/信息更新），在独立线程里拉详情+落库，避免阻塞回调响应
