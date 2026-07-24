@@ -1773,11 +1773,16 @@
                             <div v-for="(ent, idx) in (dashboardData.enterprise_trend_7d || [])" :key="ent.enterprise" class="flex items-center gap-3 py-2.5 border-t border-gray-50 first:border-0">
                                 <span class="text-xs w-5 text-center font-bold shrink-0" :class="idx < 3 ? 'text-blue-500' : 'text-gray-300'">{{ idx+1 }}</span>
                                 <span class="text-xs text-gray-700 w-24 shrink-0 truncate">{{ ent.enterprise }}</span>
-                                <div class="flex-1" style="height:36px;">
-                                    <svg viewBox="0 0 100 34" preserveAspectRatio="none" style="width:100%;height:100%;display:block;">
-                                        <polygon :points="sparkArea(ent)" fill="#fdba74" opacity="0.35"></polygon>
-                                        <polyline :points="sparkLine(ent)" fill="none" stroke="#f97316" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"></polyline>
-                                    </svg>
+                                <div class="flex-1">
+                                    <div style="height:30px;">
+                                        <svg viewBox="0 0 100 34" preserveAspectRatio="none" style="width:100%;height:100%;display:block;">
+                                            <polygon :points="sparkArea(ent)" fill="#fdba74" opacity="0.35"></polygon>
+                                            <polyline :points="sparkLine(ent)" fill="none" stroke="#f97316" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"></polyline>
+                                        </svg>
+                                    </div>
+                                    <div class="flex" style="margin-top:2px;">
+                                        <span v-for="d in ent.days" :key="d.day" class="text-gray-400" style="flex:1;text-align:center;font-size:10px;font-variant-numeric:tabular-nums;" :title="d.label">{{ d.total }}</span>
+                                    </div>
                                 </div>
                                 <span class="text-xs font-semibold text-gray-700 w-12 text-right shrink-0">{{ ent.total }}</span>
                             </div>
