@@ -2319,6 +2319,15 @@ _DEFAULT_MANUAL_SECTIONS = [
     },
 ]
 
+# 功能手册默认内容（按功能模块说明系统能力；内部超管可在页面编辑覆盖）
+_DEFAULT_FEATURE_SECTIONS = [
+    {
+        "id": "intro",
+        "title": "功能手册",
+        "content": "<p>本手册按功能模块说明系统能力。内部超级管理员可点击右上角「编辑」修改本内容。</p>",
+    },
+]
+
 # 客服跟进手册默认内容（新客户跟进流程 SOP，内部超管可在页面编辑覆盖）
 _DEFAULT_CS_FOLLOWUP_SECTIONS = [
     {
@@ -2419,6 +2428,7 @@ _DEFAULT_CS_FOLLOWUP_SECTIONS = [
 _MANUAL_DOC_MAP = {
     "help": ("help_manual_sections", _DEFAULT_MANUAL_SECTIONS),
     "cs_followup": ("cs_followup_sections", _DEFAULT_CS_FOLLOWUP_SECTIONS),
+    "feature": ("feature_manual_sections", _DEFAULT_FEATURE_SECTIONS),
 }
 
 
@@ -7905,6 +7915,10 @@ def seal_tasks_list():
     if eid is not None:
         conds.append("r.enterprise_id = %s")
         params.append(eid)
+    # 员工只看自己上传的公户车保单（与识别记录页一致）；企业管理员/超管看本企业/全部
+    if g.current_user.get("role") == ROLE_EMPLOYEE:
+        conds.append("r.user_id = %s")
+        params.append(g.current_user["user_id"])
     if keyword:
         conds.append("(pf.plate_no LIKE %s OR pf.insured LIKE %s OR pf.policy_no LIKE %s)")
         kw = f"%{keyword}%"
@@ -7921,7 +7935,7 @@ def seal_tasks_list():
         cursor.execute(
             f"SELECT r.id AS record_id, r.enterprise_id, r.seal_paid, r.seal_paid_at, r.seal_paid_by, "
             f"       pf.plate_no, pf.insured, pf.company_short, pf.policy_type, pf.policy_no, "
-            f"       pf.sign_date, pf.total_premium "
+            f"       pf.sign_date, pf.total_premium, pf.vin "
             f"FROM insurance_records r JOIN insurance_policy_fields pf ON pf.record_id = r.id "
             f"WHERE {where} ORDER BY r.id DESC", params)
         rows = cursor.fetchall()
@@ -7934,8 +7948,12 @@ def seal_tasks_list():
     for r in rows:
         ent = r["enterprise_id"]
         plate = (r.get("plate_no") or "").strip()
-        if ent in merge_ents and plate:
-            key = (ent, plate, (r.get("sign_date") or "").strip())
+        vin = (r.get("vin") or "").strip()
+        # 有真实车牌按车牌合并；车牌为空或「新车」占位时改用车架号(VIN)合并（同一辆未上牌新车），
+        # 避免所有「新车」被当成同一辆车错误合并成一大组
+        _merge_id = plate if (plate and plate != "新车") else (("VIN:" + vin) if vin else "")
+        if ent in merge_ents and _merge_id:
+            key = (ent, _merge_id, (r.get("sign_date") or "").strip())
         else:
             key = (ent, "__rec__", r["record_id"])
         if key not in groups:
@@ -8047,6 +8065,6 @@ def seal_task_mark_paid():
         else:
             cursor.execute(f"UPDATE insurance_records SET seal_paid=0, seal_paid_at=NULL, seal_paid_by='' WHERE id IN ({ph})", ids)
         conn.commit()
-        return jsonify({"code": 0, "msg": "已标记为已付" if paid else "已取消已付"})
+        return jsonify({"code": 0, "msg": "已标记为已盖章" if paid else "已取消盖章"})
     finally:
         conn.close()

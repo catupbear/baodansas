@@ -278,7 +278,7 @@ createApp({
         const currentUser = ref(null);
         const isSuperAdmin = computed(() => currentUser.value && currentUser.value.role === 'super_admin');
         const isCsDoc = IS_CS_DOC;
-        const pageTitle = isCsDoc ? '客服跟进手册' : '使用手册';
+        const pageTitle = DOC === 'cs_followup' ? '客服跟进手册' : DOC === 'feature' ? '系统手册' : '使用手册';
 
         const sections = ref([]);
         const activeId = ref('');

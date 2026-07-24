@@ -76,8 +76,8 @@ def fetch_expiring_records(db):
             JOIN insurance_policy_fields pf ON r.id = pf.record_id
             JOIN users u ON u.id = r.user_id
             LEFT JOIN renewal_tasks rt
-                ON (rt.customer_key = pf.plate_no OR rt.customer_key = UPPER(pf.vin))
-               AND rt.policy_type = pf.policy_type
+                ON (rt.customer_key COLLATE utf8mb4_unicode_ci = pf.plate_no OR rt.customer_key COLLATE utf8mb4_unicode_ci = UPPER(pf.vin))
+               AND rt.policy_type COLLATE utf8mb4_unicode_ci = pf.policy_type
                AND rt.enterprise_id = r.enterprise_id
             WHERE r.deleted_at IS NULL
               AND r.status = 'done'
@@ -266,7 +266,7 @@ def main():
         sent_any = False
         for pr in push_rooms:
             room_name = _resolve_room_name(contacts_instances, pr["roomid"]) or pr.get("room_name") or pr["roomid"]
-            ok = send_flowbot_group_message(room_name, at_names, message, robot_id)
+            ok = send_flowbot_group_message(room_name, ["@all"], message, robot_id)
             if ok:
                 sent_any = True
                 logger.info("续保提醒已发送 企业=%s room=%s(%s) 涉及%d条 @%s",
