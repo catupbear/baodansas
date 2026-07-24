@@ -111,6 +111,8 @@
             font-size: 12px; font-weight: 500;
         }
         .badge-success { background: #ecfdf5; color: #059669; }
+        /* 企业近7天柱状：hover 加深，提供交互反馈 */
+        .ent-bar:hover { background: #f97316 !important; }
         .badge-warning { background: #fffbeb; color: #d97706; }
         .badge-danger { background: #fef2f2; color: #dc2626; }
         .badge-info { background: #fff7ed; color: #c2410c; }
@@ -1781,7 +1783,7 @@
                     <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 h-full">
                         <div class="flex items-center justify-between mb-4">
                             <div class="text-sm font-semibold text-gray-700">各企业近7天每日识别量</div>
-                            <div class="text-xs text-gray-400">折线=每天识别量 · 右侧为7天合计</div>
+                            <div class="text-xs text-gray-400">柱高=每天识别量（按各企业自身峰值） · 右侧为7天合计</div>
                         </div>
                         <div>
                             <div v-for="(ent, idx) in (dashboardData.enterprise_trend_7d || [])" :key="ent.enterprise" class="flex items-center gap-3 py-2.5 border-t border-gray-50 first:border-0">
@@ -1789,9 +1791,9 @@
                                 <span class="text-xs text-gray-400 w-14 shrink-0 truncate">{{ ent.enterprise_no || '-' }}</span>
                                 <span class="text-xs text-gray-700 w-24 shrink-0 truncate">{{ ent.enterprise }}</span>
                                 <div class="flex-1">
-                                    <div class="flex items-end" style="height:36px;">
+                                    <div class="flex items-end" style="height:40px;">
                                         <div v-for="d in ent.days" :key="d.day" style="flex:1;display:flex;align-items:flex-end;justify-content:center;height:100%;">
-                                            <div style="width:56%;max-width:18px;min-height:2px;background:linear-gradient(to top,#f97316,#fdba74);border-radius:3px 3px 0 0;transition:height .3s;" :style="{height: entBarH(ent, d)}" :title="d.label + '：' + d.total"></div>
+                                            <div class="ent-bar" style="width:9px;background:#fb923c;border-radius:4px 4px 0 0;transition:height .3s,background .15s;" :style="{height: entBarH(ent, d)}" :title="d.label + '：' + d.total"></div>
                                         </div>
                                     </div>
                                     <div class="flex" style="margin-top:2px;">
@@ -2720,8 +2722,7 @@
                 <table class="w-full text-sm" style="min-width:900px;">
                     <thead>
                         <tr class="text-left text-gray-500 text-xs" style="background:#fafaf9;">
-                            <th class="px-3 py-2.5">车牌号</th><th>被保险人</th><th>承保公司</th><th>险种</th><th>保单号</th>
-                            <th>签单日期</th><th>保费</th><th>是否已付</th><th>操作</th>
+                            <th class="px-3 py-2.5">车牌号</th><th>被保险人</th><th>承保公司</th><th>保费</th><th>操作</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2732,32 +2733,16 @@
                             </td>
                             <td class="text-gray-700">{{ t.insured || '—' }}</td>
                             <td class="whitespace-nowrap">{{ t.company_short || '—' }}</td>
-                            <td>
-                                <span v-if="t.policy_count > 1" class="text-gray-400">共 {{ t.policy_count }} 个险种</span>
-                                <template v-else>{{ t.policy_type || '—' }}</template>
-                            </td>
-                            <td class="text-xs text-gray-600" style="font-family:ui-monospace,Menlo,monospace;">
-                                <button v-if="t.policy_count > 1" @click="t._expanded = !t._expanded" class="btn btn-outline whitespace-nowrap" style="padding:2px 8px;font-size:11px;">
-                                    {{ t._expanded ? '收起' : '展开' }} {{ t.policy_count }} 条
-                                </button>
-                                <template v-else>{{ (t.policy_nos && t.policy_nos[0]) || '—' }}</template>
-                            </td>
-                            <td class="whitespace-nowrap">{{ t.sign_date || '—' }}</td>
                             <td class="whitespace-nowrap">{{ t.total_premium || '—' }}<span v-if="t.policy_count > 1" class="text-xs text-gray-300">（合计）</span></td>
-                            <td>
-                                <span v-if="t.seal_paid" class="text-xs px-2 py-0.5 rounded-full" style="background:#f0fdf4;color:#16a34a;"
-                                      :title="(t.seal_paid_by ? t.seal_paid_by + ' ' : '') + (t.seal_paid_at || '')">已付</span>
-                                <span v-else class="text-xs px-2 py-0.5 rounded-full" style="background:#fff7ed;color:#ea580c;">未付</span>
-                            </td>
                             <td class="py-2">
-                                <button v-if="!t.seal_paid" @click="markSealPaid(t, 1)" class="btn btn-primary" style="padding:3px 10px;font-size:11px;margin-right:4px;">标记已付</button>
-                                <button v-else @click="markSealPaid(t, 0)" class="btn btn-outline" style="padding:3px 10px;font-size:11px;margin-right:4px;">取消已付</button>
+                                <button v-if="!t.seal_paid" @click="markSealPaid(t, 1)" class="btn btn-primary" style="padding:3px 10px;font-size:11px;margin-right:4px;">标记已盖章</button>
+                                <button v-else @click="markSealPaid(t, 0)" class="btn btn-outline" style="padding:3px 10px;font-size:11px;margin-right:4px;">取消盖章</button>
                                 <button @click="previewRenewalTaskFile(t.record_id)" class="btn btn-outline" style="padding:3px 10px;font-size:11px;">预览</button>
                             </td>
                         </tr>
                         <!-- 合并组展开：逐条保单明细 -->
                         <tr v-if="t.policy_count > 1 && t._expanded" :key="t.record_id + '_detail'" style="background:#fafaf9;">
-                            <td colspan="9" class="px-3 py-2">
+                            <td colspan="5" class="px-3 py-2">
                                 <table class="w-full text-xs" style="border-collapse:collapse;">
                                     <thead>
                                         <tr class="text-left text-gray-400">
@@ -2779,7 +2764,7 @@
                             </td>
                         </tr>
                         </template>
-                        <tr v-if="!sealTasks.length"><td colspan="9" class="px-4 py-10 text-center text-gray-300 text-sm">{{ isSuperAdmin && !sealFilter.enterprise_id ? '请先在上方选择要查看的企业' : '暂无公户车保单' }}</td></tr>
+                        <tr v-if="!sealTasks.length"><td colspan="5" class="px-4 py-10 text-center text-gray-300 text-sm">{{ isSuperAdmin && !sealFilter.enterprise_id ? '请先在上方选择要查看的企业' : '暂无公户车保单' }}</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -6561,11 +6546,14 @@ const _app = createApp({
             const val = parseFloat(item.total) || 0;
             return Math.min(100, val / max * 100).toFixed(1) + '%';
         }
-        // 企业近7天迷你折线图：按该企业自身7天峰值归一，输出 SVG 折线/面积点（viewBox 0 0 100 34）
+        // 企业近7天柱状：按该企业自身7天峰值归一。0 值不出柱（平底一目了然），
+        // 非零值至少给 12% 高度，保证小值也看得见（否则 1、2 这种几乎不可见）
         function entBarH(ent, d) {
             const arr = (ent && ent.days) || [];
             const max = Math.max(1, ...arr.map(x => Number(x.total) || 0));
-            return Math.round((Number(d.total) || 0) / max * 100) + '%';
+            const v = Number(d.total) || 0;
+            if (v <= 0) return '0px';
+            return Math.max(v / max * 100, 12) + '%';
         }
 
         const trendTooltip = Vue.ref(null);
