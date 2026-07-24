@@ -34,6 +34,7 @@ from storage.group_db import (
     update_group_success, update_group_failure, get_sync_stats,
     insert_room_ids, cleanup_pending_external,
 )
+from insurance.auto_monitor_match import check_and_sync_group
 
 logging.basicConfig(
     level=logging.INFO,
@@ -280,6 +281,9 @@ def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False,
                     logger.info("[%d/%d] 群名更新: %s 「%s」->「%s」(%s)",
                                 done, total, g["roomid"],
                                 g.get("name") or "(空)", detail["name"], corp.name)
+                    # 群名变化时检查是否命中「识别群+TZ编号」规则，自动加入监控配置
+                    # （内部已吞异常，不会中断同步循环）
+                    check_and_sync_group(db, g["roomid"], detail["name"], corp.corpid)
                 else:
                     logger.info("[%d/%d] 同步成功: %s 「%s」(%s)",
                                 done, total, g["roomid"], detail["name"], corp.name)
@@ -335,6 +339,11 @@ def run_list_discovery(db, corps: list, api_delay: float, allowed_names: list = 
 def main():
     with open("config.yaml", "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
+
+    # 初始化钉钉通知器（识别群自动匹配新建占位企业时发通知；未配置则静默）
+    from core.notify import init_notifier
+    notify_cfg = config.get("notify", {}) or {}
+    init_notifier(notify_cfg.get("webhook_url", ""), notify_cfg.get("secret", ""))
 
     sync_cfg = config.get("group_sync", {}) or {}
     incremental_interval = sync_cfg.get("incremental_interval", 600)

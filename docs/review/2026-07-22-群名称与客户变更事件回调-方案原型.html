@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>企业微信群变更事件回调 + 识别群自动匹配 · 接入方案（待确认）</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 24px 80px;
+    background: #F7F8FA;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #1E293B;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+
+  /* 顶部标题区 */
+  .doc-header { margin-bottom: 32px; }
+  .doc-header .tag { display:inline-block; background:#FEF3C7; color:#92400E; font-size:12px; font-weight:600; padding:3px 10px; border-radius:20px; margin-bottom:12px; }
+  .doc-header h1 { font-size: 26px; font-weight: 800; margin: 0 0 8px; color:#0F172A; letter-spacing:-.02em; }
+  .doc-header .sub { font-size: 14px; color:#64748B; }
+
+  /* 区块 */
+  .section { background:#fff; border:1px solid #E2E8F0; border-radius:16px; padding:24px 28px; margin-bottom:20px; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+  .section h2 { font-size:17px; font-weight:700; color:#0F172A; margin:0 0 14px; display:flex; align-items:center; gap:8px; }
+  .section h2 .num { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:7px; background:#EEF2FF; color:#4338CA; font-size:13px; font-weight:800; }
+  .section p { font-size:13.5px; line-height:1.8; color:#334155; margin:6px 0; }
+  .section ul, .section ol { margin:8px 0; padding-left:20px; }
+  .section li { font-size:13.5px; line-height:1.85; color:#334155; margin-bottom:4px; }
+  code { background:#F1F5F9; border-radius:4px; padding:1px 6px; font-size:12.5px; color:#BE185D; font-family:"SF Mono",Menlo,Consolas,monospace; }
+  .file-path { color:#0369A1; }
+
+  /* 决策清单 */
+  .decision-list { display:flex; flex-direction:column; gap:8px; }
+  .decision-item { display:flex; gap:10px; align-items:flex-start; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:10px; padding:10px 14px; }
+  .decision-item .check { color:#16A34A; font-weight:800; font-size:14px; flex-shrink:0; }
+  .decision-item .txt { font-size:13.5px; color:#166534; line-height:1.7; }
+  .decision-item .txt b { color:#14532D; }
+
+  /* 变更/收窄说明 */
+  .change-list { display:flex; flex-direction:column; gap:8px; }
+  .change-item { display:flex; gap:10px; align-items:flex-start; background:#FFF7ED; border:1px solid #FDBA74; border-radius:10px; padding:10px 14px; }
+  .change-item .mark { color:#C2410C; font-weight:800; font-size:14px; flex-shrink:0; }
+  .change-item .txt { font-size:13.5px; color:#7C2D12; line-height:1.7; }
+  .change-item .txt b { color:#7C2D12; }
+  .change-item.drop { background:#FEF2F2; border-color:#FECACA; }
+  .change-item.drop .mark { color:#B91C1C; }
+  .change-item.drop .txt { color:#7F1D1D; }
+
+  /* 流程图（纯CSS，无外部依赖） */
+  .flow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:18px 0; }
+  .flow .box { background:#F8FAFC; border:1.5px solid #CBD5E1; border-radius:10px; padding:10px 14px; font-size:12.5px; color:#334155; text-align:center; line-height:1.5; min-width:110px; }
+  .flow .box.accent { background:#EEF2FF; border-color:#A5B4FC; color:#3730A3; font-weight:600; }
+  .flow .box.warn { background:#FFF7ED; border-color:#FDBA74; color:#9A3412; font-weight:600; }
+  .flow .box.new { background:#ECFDF5; border-color:#6EE7B7; color:#065F46; font-weight:600; }
+  .flow .arrow { color:#94A3B8; font-size:16px; }
+  .flow-branch { display:flex; flex-direction:column; gap:8px; margin-left:6px; }
+
+  .fallback-note { display:flex; gap:10px; align-items:center; background:#F8FAFC; border:1px dashed #CBD5E1; border-radius:10px; padding:10px 14px; margin-top:12px; font-size:12.5px; color:#64748B; }
+
+  /* 表格 */
+  table.spec { width:100%; border-collapse:collapse; font-size:12.5px; margin:10px 0; }
+  table.spec th { background:#F8FAFC; color:#475569; font-weight:600; text-align:left; padding:8px 10px; border-bottom:1.5px solid #E2E8F0; }
+  table.spec td { padding:8px 10px; border-bottom:1px solid #F1F5F9; color:#334155; vertical-align:top; }
+  table.spec tr:last-child td { border-bottom:none; }
+  .badge { display:inline-block; font-size:11px; font-weight:600; padding:1px 7px; border-radius:5px; }
+  .badge.reuse { background:#DBEAFE; color:#1D4ED8; }
+  .badge.new { background:#FEF3C7; color:#92400E; }
+
+  /* 代码块 */
+  pre { background:#0F172A; color:#E2E8F0; border-radius:10px; padding:16px 18px; font-size:12px; line-height:1.7; overflow-x:auto; margin:10px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:inherit; }
+  .cmt { color:#64748B; }
+  .kw { color:#F472B6; }
+  .str { color:#86EFAC; }
+
+  /* 强调提示框 */
+  .callout { border-radius:12px; padding:14px 18px; margin:14px 0; font-size:13px; line-height:1.8; }
+  .callout.action { background:#FEF2F2; border:1px solid #FECACA; color:#991B1B; }
+  .callout.action b { color:#7F1D1D; }
+  .callout.info { background:#EFF6FF; border:1px solid #BFDBFE; color:#1E40AF; }
+  .callout.info b { color:#1E3A8A; }
+
+  /* 待确认问题 */
+  .qa-list { display:flex; flex-direction:column; gap:10px; }
+  .qa-item { background:#FFFBEB; border:1px solid #FDE68A; border-radius:10px; padding:10px 14px; }
+  .qa-item .q { font-size:13px; font-weight:700; color:#92400E; margin-bottom:3px; }
+  .qa-item .a { font-size:12.5px; color:#78350F; line-height:1.7; }
+
+  @media (max-width:768px){ .section{padding:18px;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="doc-header">
+    <span class="tag">📋 待确认方案 · docs/review</span>
+    <h1>企业微信「群变更事件回调」+「识别群自动匹配」—— 接入方案</h1>
+    <div class="sub">在 2026-07-22 群/客户变更回调方案基础上收窄范围，并新增 TZ 编号识别群自动匹配能力 · 2026-07-23 更新</div>
+  </div>
+
+  <!-- 0. 本次范围变更说明 -->
+  <div class="section">
+    <h2><span class="num">0</span>本次范围变更（相对 07-22 版本）</h2>
+    <div class="change-list">
+      <div class="change-item"><span class="mark">＋</span><span class="txt"><b>新增需求：</b>群名同时命中「TZ编号」+「识别群」关键词时，自动检查该群是否已配置到对应企业的识别群监控里，未配置则自动补加。两个触发入口：① 定时任务 <code>task_group_sync.py</code>（已有，检测到群名变化时）；② 本方案新建的群变更事件回调（实时检测群名变化）。</span></div>
+      <div class="change-item drop"><span class="mark">－</span><span class="txt"><b>本期不做：</b>客户联系人变更事件 <code>change_external_contact</code>、<code>wecom_change_history</code> 审计表、变更历史查询页面。这三项是 07-22 版本的原始范围，为了让本次「识别群自动匹配」尽快落地先收窄，事件回调蓝图/验签解密骨架预留了后续直接扩展的空间。</span></div>
+    </div>
+  </div>
+
+  <!-- 1. 现状调研结论 -->
+  <div class="section">
+    <h2><span class="num">1</span>现状调研结论</h2>
+    <ul>
+      <li>wxbot 当前 <code class="file-path">callback/server.py</code> 只识别 <code>msgaudit_notify</code>（会话存档通知）一种事件，没有接入企业微信「通讯录/客户联系」事件回调；其余事件类型会被静默忽略。</li>
+      <li>群名维护依赖 <code class="file-path">task_group_sync.py</code> 定时轮询（增量600s / 全量6h，覆盖式刷新 <code>wecom_groups</code> 表），是唯一会写 <code>wecom_groups</code> 的地方；<code class="file-path">core/fetcher.py</code> 消息处理链路只读群名（<code>ContactsManager.get_room_name</code>），不写库、也没有"群名变化"信号，因此不适合作为触发点。</li>
+      <li>企业微信没有单独的「群名称修改」事件：群信息变化统一走 <code>change_external_chat</code>（<code>ChangeType=create/update</code>），只给 <code>ChatId</code>，不带具体改了哪个字段，需要收到通知后主动拉一次群详情比对。</li>
+      <li><code class="file-path">storage/group_db.py::update_group_success</code> 已经内置"新旧群名对比"逻辑，返回 <code>name_changed</code> 布尔值，本次两个触发点都直接复用这个已有返回值，不用重新写比对逻辑。</li>
+      <li>识别群监控配置已经是 <code>insurance/monitor_config_db.py</code> 的 <code>monitor_configs</code> 表（而非旧的 <code>insurance_config</code> key-value 结构），天然带 <code>enterprise_id</code>、<code>rooms</code>（JSON数组 <code>[{"id":"wr...","name":"群名"}]</code>）、<code>enabled</code> 字段，无需新建表或加字段。</li>
+      <li>企业编号「TZ+数字」已有先例：<code class="file-path">insurance/db.py::get_tz008_enterprise_ids</code> 对 <code>enterprises.enterprise_no</code> 做「去除非字母数字字符 + 转大写」归一化后精确比较，本次沿用同一归一化规则，但抽成通用函数（而非像现有代码一样写死 TZ008）。</li>
+    </ul>
+  </div>
+
+  <!-- 2. 已确认的范围与决策 -->
+  <div class="section">
+    <h2><span class="num">2</span>已确认的范围与决策</h2>
+    <div class="decision-list">
+      <div class="decision-item"><span class="check">✓</span><span class="txt"><b>识别群判定规则：</b>群名同时满足「包含字面量"识别群"」+「能提取出 TZ+数字 编号（如 TZ050 / TZ-050）」，两者缺一不满足才触发匹配逻辑。</span></div>
+      <div class="decision-item"><span class="check">✓</span><span class="txt"><b>企业匹配：</b>提取到的编号归一化（去符号转大写）后与 <code>enterprises.enterprise_no</code> 同样归一化的值做精确比较。</span></div>
+      <div class="decision-item"><span class="check">✓</span><span class="txt"><b>判重范围：</b>只要该 roomid 已出现在该企业名下<b>任意一条</b> <code>monitor_configs</code>（不论 enabled 与否）的 <code>rooms</code> 里，视为已配置，不重复添加。</span></div>
+      <div class="decision-item"><span class="check">✓</span><span class="txt"><b>加入目标：</b>需要新增时，加入该企业下 <code>enabled=1</code> 且 <code>id</code> 最大（最新）的一条 <code>monitor_configs</code>；若企业名下不存在任何配置，则自动新建一条（<code>enabled=1</code>，仅填 <code>name</code>/<code>enterprise_id</code>/<code>rooms</code>，钉钉多维表字段留空待人工在前端补配置）。</span></div>
+      <div class="decision-item"><span class="check">✓</span><span class="txt"><b>成功即静默：</b>自动补加成功只记 <code>logger.info</code>，不发钉钉通知（属于正常自动化行为，避免产生噪音）。</span></div>
+      <div class="decision-item"><span class="check">✓</span><span class="txt"><b>企业未匹配时自动建"预备群"占位企业：</b>群名命中规则但 TZ 编号在 <code>enterprises</code> 里找不到对应企业时，不再只是告警跳过，而是自动创建一条占位企业记录（<code>name="预备群"+提取到的编号</code>，如 <code>预备群TZ055</code>；<code>enterprise_no</code> 存带横杠三位补零格式，如 <code>TZ-055</code>），再继续往下走，把该群加入这个新建企业的识别群配置。</span></div>
+      <div class="decision-item"><span class="check">✓</span><span class="txt"><b>建企业动作必须通知：</b>自动建"预备群"占位企业比"往已有配置里加一行"更重大，需要发一条钉钉通知（新增语义化通知函数），提示人工去补充正式企业名称、联系人等信息；而"加入已有配置"这一步本身仍保持静默（只 <code>logger.info</code>）。</span></div>
+      <div class="decision-item"><span class="check">✓</span><span class="txt"><b>触发时机：</b>只在群名变化时触发（新群首次写入 / 已有群改名），不对每条群消息做检测，避免高频群产生不必要的数据库/匹配开销。</span></div>
+    </div>
+  </div>
+
+  <!-- 3. 整体流程 -->
+  <div class="section">
+    <h2><span class="num">3</span>整体流程</h2>
+    <p><b>入口一：事件回调（新建，实时）</b></p>
+    <div class="flow">
+      <div class="box warn">企业微信「客户联系」应用<br>change_external_chat 事件</div>
+      <div class="arrow">→</div>
+      <div class="box accent">POST /callback/event<br>(新增蓝图)</div>
+      <div class="arrow">→</div>
+      <div class="box">验签 + AES解密<br>(复用 WXBizMsgCrypt)</div>
+      <div class="arrow">→</div>
+      <div class="box">拉取群详情<br>（复用 ContactsManager）</div>
+      <div class="arrow">→</div>
+      <div class="box">update_group_success<br>返回 name_changed</div>
+    </div>
+    <p><b>入口二：定时任务（已有，兜底）</b></p>
+    <div class="flow">
+      <div class="box">task_group_sync.py<br>run_sync()（增量600s/全量6h）</div>
+      <div class="arrow">→</div>
+      <div class="box">update_group_success<br>返回 name_changed</div>
+    </div>
+    <p><b>两个入口收敛到同一段新逻辑：</b></p>
+    <div class="flow">
+      <div class="box new">name_changed = True</div>
+      <div class="arrow">→</div>
+      <div class="box new">auto_monitor_match.py<br>check_and_sync_group()</div>
+      <div class="arrow">→</div>
+      <div class="flow-branch">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span class="arrow">├─</span><div class="box">未命中规则 → 直接return</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span class="arrow">├─</span><div class="box">命中但企业未匹配 → 自动建"预备群"占位企业+通知</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span class="arrow">├─</span><div class="box">命中且已配置 → 跳过(no-op)</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span class="arrow">└─</span><div class="box">命中且未配置 → 补加 monitor_configs.rooms<br>+ logger.info</div>
+        </div>
+      </div>
+    </div>
+    <div class="fallback-note">⏱ <b style="color:#475569;">兜底关系：</b>&nbsp;事件回调做实时响应，定时任务 <code>task_group_sync.py</code> 保持不变作为兜底（事件丢失/延迟时由下一轮轮询自动纠正），两者共用同一个 <code>check_and_sync_group</code> 函数，行为完全一致。</div>
+  </div>
+
+  <!-- 4. 识别群自动匹配核心逻辑 -->
+  <div class="section">
+    <h2><span class="num">4</span>新增能力：识别群自动匹配（核心逻辑）</h2>
+    <p>新文件 <code class="file-path">insurance/auto_monitor_match.py</code>，对外只暴露一个函数，两个触发点都调用它：</p>
+    <pre><code><span class="cmt"># insurance/auto_monitor_match.py</span>
+<span class="kw">import</span> re
+
+_TZ_PATTERN = re.compile(<span class="str">r'TZ-?(\d+)'</span>, re.IGNORECASE)
+
+<span class="kw">def</span> check_and_sync_group(db, roomid: <span class="kw">str</span>, name: <span class="kw">str</span>, corpid: <span class="kw">str</span> = <span class="str">""</span>):
+    <span class="cmt"># 1. 关键词 + 编号规则不满足，直接跳过</span>
+    <span class="kw">if</span> <span class="str">"识别群"</span> <span class="kw">not</span> <span class="kw">in</span> name:
+        <span class="kw">return</span>
+    m = _TZ_PATTERN.search(name)
+    <span class="kw">if</span> <span class="kw">not</span> m:
+        <span class="kw">return</span>
+    norm_digits = m.group(<span class="kw">1</span>).zfill(<span class="kw">3</span>)   <span class="cmt"># 数字补齐3位，TZ55/TZ050 归一到同一编号</span>
+    tz_key = <span class="str">"TZ"</span> + norm_digits          <span class="cmt"># 查询用归一化编号，如 TZ050</span>
+
+    <span class="cmt"># 2. 按归一化编号查企业（新增通用函数，见组件清单）</span>
+    enterprise = auth_db.get_enterprise_by_no(db, tz_key)
+    <span class="kw">if</span> <span class="kw">not</span> enterprise:
+        <span class="cmt"># 2.1 未匹配到企业：自动建"预备群"占位企业，而不是告警了事</span>
+        enterprise_no = <span class="str">f"TZ-{norm_digits}"</span>       <span class="cmt"># 三位补零，横杠格式，如 TZ-050</span>
+        placeholder_name = <span class="str">f"预备群{tz_key}"</span>        <span class="cmt"># 如 预备群TZ050</span>
+        eid = auth_db.create_enterprise(db, placeholder_name)
+        auth_db.update_enterprise(db, eid, {<span class="str">"enterprise_no"</span>: enterprise_no})
+        enterprise = {<span class="str">"id"</span>: eid, <span class="str">"name"</span>: placeholder_name}
+        notify_new_enterprise_placeholder(placeholder_name, enterprise_no, roomid, name)
+        <span class="cmt"># 不 return，继续往下走，把这个群加进新建企业的识别群配置</span>
+
+    <span class="cmt"># 3. 判重：该企业名下任意一条配置的 rooms 里已包含该群则跳过</span>
+    configs = monitor_config_db.list_monitor_configs_by_enterprise(db, enterprise[<span class="str">"id"</span>])
+    <span class="kw">if</span> <span class="kw">any</span>(roomid <span class="kw">in</span> {r[<span class="str">"id"</span>] <span class="kw">for</span> r <span class="kw">in</span> (c.get(<span class="str">"rooms"</span>) <span class="kw">or</span> [])} <span class="kw">for</span> c <span class="kw">in</span> configs):
+        <span class="kw">return</span>
+
+    <span class="cmt"># 4. 选目标配置：enabled=1 且 id 最大；没有则新建</span>
+    enabled = [c <span class="kw">for</span> c <span class="kw">in</span> configs <span class="kw">if</span> c.get(<span class="str">"enabled"</span>)]
+    target = <span class="kw">max</span>(enabled, key=<span class="kw">lambda</span> c: c[<span class="str">"id"</span>]) <span class="kw">if</span> enabled <span class="kw">else</span> <span class="kw">None</span>
+
+    <span class="kw">if</span> target:
+        rooms = (target.get(<span class="str">"rooms"</span>) <span class="kw">or</span> []) + [{<span class="str">"id"</span>: roomid, <span class="str">"name"</span>: name}]
+        monitor_config_db.update_monitor_config(db, target[<span class="str">"id"</span>], {<span class="str">"rooms"</span>: rooms})
+    <span class="kw">else</span>:
+        monitor_config_db.create_monitor_config(db, {
+            <span class="str">"name"</span>: <span class="kw">f"</span>{enterprise[<span class="str">'name'</span>]}-自动创建<span class="kw">"</span>,
+            <span class="str">"enabled"</span>: <span class="kw">1</span>, <span class="str">"enterprise_id"</span>: enterprise[<span class="str">"id"</span>],
+            <span class="str">"rooms"</span>: [{<span class="str">"id"</span>: roomid, <span class="str">"name"</span>: name}],
+        })
+    logger.info(<span class="str">f"识别群自动匹配: {name}({roomid}) → 企业{enterprise['name']}({tz_key})"</span>)</code></pre>
+    <p><b>边界情况说明：</b></p>
+    <ul>
+      <li>群名里若出现多个 TZ 编号，只取正则匹配到的第一个。</li>
+      <li>编号匹配与写入统一按<b>数字补齐 3 位</b>（<code>zfill(3)</code>）归一化：群名里的 <code>TZ55</code> 与 <code>TZ050</code> 分别归一为 <code>TZ055</code>/<code>TZ050</code>，查询企业用 <code>TZ+补零数字</code>，写入 <code>enterprise_no</code> 用 <code>TZ-补零数字</code>（如 <code>TZ-055</code>），占位企业名用 <code>预备群TZ+补零数字</code>（如 <code>预备群TZ055</code>）。这样 <code>TZ55</code> 和 <code>TZ055</code> 会归到同一编号、匹配到同一企业，常见的位数书写差异不会再重复建企业。只有数字位数 ≥4 位且存在前导零差异（如 <code>TZ0050</code> vs <code>TZ050</code>）这种极端写法才会被视作不同编号——实际业务编号为固定三位，不受影响。</li>
+      <li>本次不修改已有的 <code>get_tz008_enterprise_ids</code>（TZ008专属车牌兜底逻辑），只新增一个通用查询函数，两者并存，避免不必要的重构范围扩大。</li>
+      <li>自动建企业复用现有 <code>auth/db.py::create_enterprise</code>（唯一现存调用方是后台"创建企业"人工接口 <code>auth/api.py::api_create_enterprise</code>），该函数本身不接受 <code>enterprise_no</code> 参数，所以要紧接着调一次 <code>update_enterprise</code> 补写，与人工创建企业接口的两步顺序保持一致。</li>
+    </ul>
+  </div>
+
+  <!-- 5. 组件清单 -->
+  <div class="section">
+    <h2><span class="num">5</span>新增 / 复用组件清单</h2>
+    <table class="spec">
+      <tr><th>组件</th><th>说明</th><th></th></tr>
+      <tr><td><code>callback/crypto.py</code>（WXBizMsgCrypt）</td><td>签名校验 + AES 解密/加密，事件回调直接复用，无需重写</td><td><span class="badge reuse">复用</span></td></tr>
+      <tr><td><code>core/contacts.py</code>（_fetch_external_room_info）</td><td>群详情拉取 + access_token 获取，回调命中群变更后直接调用</td><td><span class="badge reuse">复用</span></td></tr>
+      <tr><td><code>web/api.py</code> → <code>get_contacts_for_corp(corpid)</code></td><td>新增小函数，封装现有 <code>_contacts_map.get(corpid, _contacts)</code> 查找模式（该模式已在文件内重复出现多次），供 <code>event_callback.py</code> 按 corpid 找到已注册的 <code>ContactsManager</code> 复用，不重复建实例/不重复存 secret</td><td><span class="badge new">新增</span></td></tr>
+      <tr><td><code>storage/group_db.py</code>（update_group_success）</td><td>群名写回 wecom_groups，并已返回 name_changed，两个触发点都直接用它的返回值</td><td><span class="badge reuse">复用</span></td></tr>
+      <tr><td><code>insurance/monitor_config_db.py</code></td><td>识别群配置读写，直接复用其增删改查</td><td><span class="badge reuse">复用</span></td></tr>
+      <tr><td><code>auth/db.py</code>（create_enterprise / update_enterprise）</td><td>自动建"预备群"占位企业时复用现有创建+更新函数（与后台人工创建企业走同一套两步流程）</td><td><span class="badge reuse">复用</span></td></tr>
+      <tr><td><code>callback/event_callback.py</code></td><td>新增 Flask Blueprint，处理 URL 验证 + change_external_chat（create/update）事件，最小实现（不含客户变更分支）</td><td><span class="badge new">新增</span></td></tr>
+      <tr><td><code>insurance/auto_monitor_match.py</code></td><td>新增，识别群自动匹配核心逻辑 <code>check_and_sync_group()</code></td><td><span class="badge new">新增</span></td></tr>
+      <tr><td><code>auth/db.py</code> → <code>get_enterprise_by_no(db, normalized_no)</code></td><td>新增通用函数：按归一化企业编号查企业，供本功能复用（现状是该归一化逻辑只在 <code>get_tz008_enterprise_ids</code> 里写死过一次）</td><td><span class="badge new">新增</span></td></tr>
+      <tr><td><code>insurance/monitor_config_db.py</code> → <code>list_monitor_configs_by_enterprise(db, enterprise_id)</code></td><td>新增查询函数：按企业查其名下全部监控配置（不限 enabled）</td><td><span class="badge new">新增</span></td></tr>
+      <tr><td><code>core/notify.py</code> → <code>notify_new_enterprise_placeholder(name, enterprise_no, roomid, group_name)</code></td><td>新增语义化通知：自动建"预备群"占位企业后钉钉提醒人工补充正式企业信息</td><td><span class="badge new">新增</span></td></tr>
+      <tr><td><code>task_group_sync.py</code>（run_sync）</td><td><code>if name_changed:</code> 分支内追加一行调用 <code>check_and_sync_group</code></td><td><span class="badge new">新增改动</span></td></tr>
+      <tr><td><code>config.yaml</code> → <code>event_callback</code> 配置块</td><td>独立 token / encoding_aes_key / corpid / path，不复用 <code>extra_callbacks</code>（语义不同）</td><td><span class="badge new">新增</span></td></tr>
+      <tr><td><code>main.py</code></td><td>按 <code>event_callback.enabled</code> 判断是否创建 WXBizMsgCrypt 实例并注册新蓝图</td><td><span class="badge new">新增改动</span></td></tr>
+    </table>
+  </div>
+
+  <!-- 6. 事件分发核心逻辑 -->
+  <div class="section">
+    <h2><span class="num">6</span>事件回调分发逻辑（伪代码，最小实现）</h2>
+    <pre><code><span class="cmt"># callback/event_callback.py</span>
+<span class="kw">def</span> receive_event_callback():
+    xml = crypto.decrypt_msg(...)
+    event_type = xml.get(<span class="str">'Event'</span>)
+    change_type = xml.get(<span class="str">'ChangeType'</span>)
+
+    <span class="kw">if</span> event_type == <span class="str">'change_external_chat'</span> <span class="kw">and</span> change_type <span class="kw">in</span> (<span class="str">'create'</span>, <span class="str">'update'</span>):
+        chat_id = xml[<span class="str">'ChatId'</span>]
+        threading.Thread(target=_handle_group_change, args=(chat_id, EVENT_CALLBACK_CORPID)).start()
+
+    <span class="cmt"># 本期不处理 change_external_contact，未识别事件同样返回 success</span>
+    <span class="kw">return</span> <span class="str">"success"</span>
+
+<span class="kw">def</span> _handle_group_change(chat_id, corpid):
+    contacts = get_contacts_for_corp(corpid)   <span class="cmt"># 复用 extra_callbacks 已注册的 ContactsManager，不重建</span>
+    info = contacts._fetch_external_room_info(chat_id)
+    name_changed = group_db.update_group_success(
+        db, chat_id, corpid, info[<span class="str">'name'</span>], info[<span class="str">'owner'</span>], info[<span class="str">'member_count'</span>], <span class="str">'external'</span>)
+    <span class="kw">if</span> name_changed:
+        auto_monitor_match.check_and_sync_group(db, chat_id, info[<span class="str">'name'</span>], corpid)</code></pre>
+  </div>
+
+  <!-- 7. 配置变更 -->
+  <div class="section">
+    <h2><span class="num">7</span>配置变更</h2>
+    <pre><code><span class="cmt"># config.yaml 新增（实际已按午虎科技的真实凭证配置，此处仅示意结构）</span>
+event_callback:
+  enabled: <span class="kw">true</span>
+  path: <span class="str">"/callback/event"</span>
+  corpid: <span class="str">"ww347251b9144b55c2"</span>  <span class="cmt"># 归属企业：午虎科技（extra_callbacks 已有的企业）</span>
+  agent_id: <span class="kw">1000002</span>              <span class="cmt"># 客户联系应用 AgentId，仅记录用，验签不需要</span>
+  token: <span class="str">"..."</span>              <span class="cmt"># 客户联系应用单独申请，与会话存档回调不同</span>
+  encoding_aes_key: <span class="str">"..."</span>    <span class="cmt"># 同上，43位</span></code></pre>
+    <p>不复用 <code>extra_callbacks</code> 结构：该配置项语义是"多企业会话存档"（每项对应一套 corpid+secret），而事件回调是同一企业下"客户联系"应用的另一路独立订阅，混用容易在后续排查时产生歧义，单独一个配置块更清晰。</p>
+    <p><b>调研发现一个关键点（本次实际接入才暴露）：</b>「午虎科技」这个企业本身已经在 <code>extra_callbacks</code> 里配置过，main.py 启动时已经为它创建了一份独立的 <code>ContactsManager</code>（用 <code>external_secret</code> 换取 access_token），并通过 <code>web/api.py::register_extra_contacts(corpid, contacts)</code> 注册进模块内的 <code>_contacts_map</code>。<b>event_callback 不应该用自己的 secret 重新建一份 ContactsManager</b>，而是应该按 <code>event_callback.corpid</code> 去 <code>_contacts_map</code> 里找已经注册好的那一份复用——这样 <code>event_callback</code> 配置块里就不需要重复存一遍 secret（避免以后密钥轮换时两处配置不同步）。<code>web/api.py</code> 目前只有 <code>register_extra_contacts</code>，没有对外的 getter，需要新增一个 <code>get_contacts_for_corp(corpid)</code> 小函数供 <code>event_callback.py</code> 调用。</p>
+  </div>
+
+  <!-- 8. 前置依赖 -->
+  <div class="section">
+    <h2><span class="num">8</span>前置依赖（需要在企业微信管理后台操作，非代码层面）</h2>
+    <div class="callout action">
+      <b>⚠ 这部分需要你在企业微信管理后台手动完成，无法通过写代码实现：</b>
+      <ol style="margin-top:8px;">
+        <li>为「客户联系」应用单独开启<b>事件回调</b>订阅（客户群变更 change_external_chat）</li>
+        <li>获取该应用独立的 <code>Token</code> + <code>EncodingAESKey</code></li>
+        <li>配置回调 URL 为 <code>https://你的域名/callback/event</code>，企业微信会先发 GET 请求做 URL 验证</li>
+        <li>确认服务器出口/该路径的可信域名校验能通过（与现有 <code>/callback</code> 保持同一域名下即可，无需额外备案）</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- 9. 兼容性说明 -->
+  <div class="section">
+    <h2><span class="num">9</span>兼容性与兜底</h2>
+    <ul>
+      <li>不改动 <code>task_group_sync.py</code> / <code>task_contact_sync.py</code> 现有轮询逻辑，事件回调是「实时补充」而非替代；<code>task_group_sync.py</code> 只在 <code>name_changed</code> 分支内追加一次函数调用，不改变原有轮询周期和写库逻辑。</li>
+      <li>该功能依赖企业微信客户联系应用相关配置，与 <code>callback/server.py</code> 现有回调同属服务器（Linux）专属能力，<b>不需要同步到 <code class="file-path">run_ocr.py</code></b>（本地开发入口本就不含微信 SDK / 事件回调相关模块，<code>task_group_sync.py</code> 也是独立进程脚本，不在 <code>run_ocr.py</code> 范围内）。</li>
+      <li><code>insurance/auto_monitor_match.py</code>、<code>get_enterprise_by_no</code>、<code>list_monitor_configs_by_enterprise</code> 均为纯新增函数，不改动任何现有函数签名，不影响现有识别群配置的增删改前端页面逻辑。</li>
+      <li>本期不建 <code>wecom_change_history</code> 审计表，若后续需要补上客户变更事件/历史留痕，可在本方案的事件回调蓝图基础上直接扩展 <code>change_external_contact</code> 分支，无需重新搭骨架。</li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>
