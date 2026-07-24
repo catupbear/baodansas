@@ -134,8 +134,11 @@ def get_me():
         try:
             _ent = get_enterprise_by_id(_db, user["parent_id"])
             user["seal_tracking_enabled"] = int((_ent or {}).get("seal_tracking_enabled") or 0)
+            # 企业级「续保管理」开关（控制入口显示；账号级 users.renewal_enabled 仍控制是否收提醒）
+            user["ent_renewal_enabled"] = int((_ent or {}).get("renewal_enabled") or 0)
         except Exception:
             user["seal_tracking_enabled"] = 0
+            user["ent_renewal_enabled"] = 0
     return jsonify({"code": 0, "data": user})
 
 

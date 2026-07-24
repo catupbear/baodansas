@@ -373,6 +373,7 @@
                                         <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled ? 'amber' : 'green']">{{ ent.enabled ? '禁用' : '启用' }}</button>
                                         <button @click="toggleMerge(ent)" :class="['op-btn', ent.merge_by_plate ? 'orange on' : 'gray']" title="开启后该企业识别记录默认按车牌合并显示">车牌合并{{ ent.merge_by_plate ? '✓' : '' }}</button>
                                         <button @click="toggleSeal(ent)" :class="['op-btn', ent.seal_tracking_enabled ? 'orange on' : 'gray']" title="开启后该企业可使用「公户车盖章跟进」功能">公户盖章{{ ent.seal_tracking_enabled ? '✓' : '' }}</button>
+                                        <button @click="toggleRenewal(ent)" :class="['op-btn', ent.renewal_enabled ? 'orange on' : 'gray']" title="开启后该企业才显示「续保管理」入口">续保管理{{ ent.renewal_enabled ? '✓' : '' }}</button>
                                                                             </div>
                                 </td>
                             </tr>
@@ -428,6 +429,7 @@
                                 <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled?'amber':'green']">{{ ent.enabled?'禁用':'启用' }}</button>
                                 <button @click="toggleMerge(ent)" :class="['op-btn', ent.merge_by_plate?'orange on':'gray']">车牌合并{{ ent.merge_by_plate?'✓':'' }}</button>
                                 <button @click="toggleSeal(ent)" :class="['op-btn', ent.seal_tracking_enabled?'orange on':'gray']">公户盖章{{ ent.seal_tracking_enabled?'✓':'' }}</button>
+                                <button @click="toggleRenewal(ent)" :class="['op-btn', ent.renewal_enabled?'orange on':'gray']">续保管理{{ ent.renewal_enabled?'✓':'' }}</button>
                                                             </div>
                         </div>
                     </div>
@@ -1421,6 +1423,23 @@ createApp({
             } catch (e) { showToast('操作失败', 'error'); }
         }
 
+        async function toggleRenewal(ent) {
+            const nv = ent.renewal_enabled ? 0 : 1;
+            try {
+                const resp = await authFetch('/api/auth/enterprises/' + ent.id, {
+                    method: 'PUT',
+                    body: JSON.stringify({ renewal_enabled: nv }),
+                });
+                const data = await resp.json();
+                if (data.code === 0) {
+                    ent.renewal_enabled = nv;
+                    showToast((nv ? '已开启' : '已关闭') + '「' + ent.name + '」续保管理');
+                } else {
+                    showToast(data.msg || '操作失败', 'error');
+                }
+            } catch (e) { showToast('操作失败', 'error'); }
+        }
+
         async function toggleMerge(ent) {
             const nv = ent.merge_by_plate ? 0 : 1;
             try {
@@ -1517,7 +1536,7 @@ createApp({
             showPlanModal, planEditEnt, planForm, planFormError, planSubmitting, planCurrentExpiry,
             openPlanModal, closePlanModal, submitPlanForm,
             showBoostModal, boostEnt, boostPacks, boostBalance, boostSubmitting, openBoostModal, addBoostPack, removeBoostPack,
-            toggleEnabled, toggleMerge, toggleSeal, logout, toast, formatTime, gotoMembers, gotoMonitor,
+            toggleEnabled, toggleMerge, toggleSeal, toggleRenewal, logout, toast, formatTime, gotoMembers, gotoMonitor,
             showPushModal, pushEnt, pushRoomOptions, pushSelectedIds, pushRoomSearch, pushSaving, filteredPushRooms, openPushModal, savePushRooms,
             showReportModal, reportTarget, reportRange, reportStart, reportEnd, reportSubmitting,
             reportLink, reportCopied, copyReportLink,
