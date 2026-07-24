@@ -12704,8 +12704,11 @@ const _app = createApp({
             const _syncRecTableHeight = () => {
                 const card = document.getElementById('recTableCard');
                 if (!card || card.offsetParent === null) return; // 该 tab 未显示时跳过
-                const top = card.getBoundingClientRect().top;   // 容器距视口顶部（含导航+工具栏实际高度）
-                const h = window.innerHeight - top - 14;         // 底部留 14px 呼吸
+                // 卡片高度 = 视口高 − 固定导航栏高（不减上方工具栏），让卡片接近整屏大；
+                // 上方工具栏留在文档流中，用户下滑时随页面滚出、卡片上移贴住导航 → 整个窗口都是识别记录
+                const nav = document.querySelector('.nav-header');
+                const navH = nav ? nav.offsetHeight : 56;
+                const h = window.innerHeight - navH - 12;
                 card.style.height = Math.max(360, h) + 'px';
             };
             const _syncLayout = () => { _syncNavHeaderHeight(); _syncRecTableHeight(); };
