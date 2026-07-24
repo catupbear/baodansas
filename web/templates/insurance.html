@@ -2768,7 +2768,7 @@
                             </td>
                         </tr>
                         </template>
-                        <tr v-if="!sealTasks.length"><td colspan="6" class="px-4 py-10 text-center text-gray-300 text-sm">{{ isSuperAdmin && !sealFilter.enterprise_id ? '请先在上方选择要查看的企业' : '暂无公户车保单' }}</td></tr>
+                        <tr v-if="!sealTasks.length"><td colspan="6" class="px-4 py-10 text-center text-gray-300 text-sm">暂无公户车保单</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -6455,14 +6455,6 @@ const _app = createApp({
         let _sealReqSeq = 0;
         async function loadSealTasks(page) {
             if (page) sealPagination.page = page;
-            // 超管未选企业：不发全库大查询，清空并提示先选企业（避免慢的全库响应覆盖过滤结果）
-            if (isSuperAdmin.value && !sealFilter.enterprise_id) {
-                _sealReqSeq++; // 让在途的过期响应作废
-                sealTasks.value = [];
-                Object.assign(sealStats, { unpaid: 0, paid: 0 });
-                sealPagination.total = 0; sealPagination.pages = 1; sealPagination.page = 1;
-                return;
-            }
             const seq = ++_sealReqSeq;
             try {
                 const params = new URLSearchParams({ page: sealPagination.page, page_size: 20 });
