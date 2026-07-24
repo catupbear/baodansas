@@ -2229,7 +2229,7 @@ def get_dashboard():
         from datetime import datetime as _dt7, timedelta as _td7
         wh7, wp7 = _where(prefix="r.", with_enterprise=False)
         cursor.execute(f"""
-            SELECT e.name AS enterprise, DATE(r.created_at) AS day, COUNT(*) AS total
+            SELECT e.name AS enterprise, e.enterprise_no AS ent_no, DATE(r.created_at) AS day, COUNT(*) AS total
             FROM insurance_records r
             JOIN enterprises e ON e.id = r.enterprise_id
             WHERE {wh7} AND DATE(r.created_at) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
@@ -2242,12 +2242,14 @@ def get_dashboard():
         for _r in _rows7:
             _en = _r["enterprise"] or "未知"
             _d = _r["day"].strftime("%Y-%m-%d") if hasattr(_r.get("day"), "strftime") else str(_r.get("day"))
-            _ent7.setdefault(_en, {})[_d] = int(_r["total"] or 0)
+            _e = _ent7.setdefault(_en, {"no": _r.get("ent_no") or "", "days": {}})
+            _e["days"][_d] = int(_r["total"] or 0)
         enterprise_trend_7d = []
-        for _en, _dm in _ent7.items():
-            _series = [{"day": _d, "label": _d[5:], "total": _dm.get(_d, 0)} for _d in _days7]
+        for _en, _e in _ent7.items():
+            _series = [{"day": _d, "label": _d[5:], "total": _e["days"].get(_d, 0)} for _d in _days7]
             enterprise_trend_7d.append({
                 "enterprise": _en,
+                "enterprise_no": _e["no"],
                 "total": sum(x["total"] for x in _series),
                 "days": _series,
             })
