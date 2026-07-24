@@ -7851,8 +7851,8 @@ def sales_dashboard_fields():
     return jsonify({"code": 0, "data": {
         "fields": all_fields,
         "formula_fields": formula_fields,
-        # 建议的分组维度（前端下拉优先展示）
-        "dimensions": ["保险公司", "险种", "发送人", "业务员", "跟单人", "转介绍人"],
+        # 分组维度：取该企业页面列（含企业自定义列），再补上「发送人/业务员」两个常用维度
+        "dimensions": all_fields + [d for d in ["发送人", "业务员"] if d not in all_fields],
     }})
 
 
