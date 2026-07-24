@@ -659,10 +659,11 @@
                         </button>
                         <!-- overflow:visible 覆盖基类的 hidden，否则定位在容器外的三级面板会被裁剪 -->
                         <div v-if="workbenchOpen" class="nav-more-dropdown" @click.stop style="min-width:170px;overflow:visible;">
-                            <button @click="openRenewalTab(); workbenchOpen = false" class="nav-more-item">
+                            <button v-if="isSuperAdmin || currentUser.ent_renewal_enabled" @click="openRenewalTab(); workbenchOpen = false" class="nav-more-item">
                                 🔄 续保管理
                                 <span v-if="renewalBadgeCount > 0" style="margin-left:auto;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#dc2626;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">{{ renewalBadgeCount > 99 ? '99+' : renewalBadgeCount }}</span>
                             </button>
+                            <div v-else class="nav-more-item" style="color:#d1d5db;cursor:not-allowed;white-space:nowrap;" title="功能未开通，请联系客服">🔄 续保管理 🔒</div>
                             <div style="position:relative;" @mouseenter="wbSealEnter" @mouseleave="wbSealLeave">
                                 <button @click.stop="wbSealOpen = !wbSealOpen" class="nav-more-item" style="width:100%;">
                                     📋 保单跟进<span style="margin-left:auto;color:#9ca3af;">▸</span>
@@ -896,7 +897,7 @@
                 <!-- 企业工作台：对客户开放（超管/企业/员工） -->
                 <template v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role)">
                     <div style="padding:10px 12px 2px;font-size:12px;color:#9ca3af;font-weight:700;">企业工作台<span style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;border-radius:999px;background:#fef08a;color:#92400e;vertical-align:middle;">限时免费</span></div>
-                    <button @click="openRenewalTab();mobileMenuOpen=false"
+                    <button v-if="isSuperAdmin || currentUser.ent_renewal_enabled" @click="openRenewalTab();mobileMenuOpen=false"
                             style="display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;padding:9px 12px 9px 22px;border-radius:8px;font-size:14px;font-weight:500;border:none;cursor:pointer;"
                             :style="pageTab==='renewal'?'background:#fff7ed;color:#ea580c;':'background:none;color:#374151;'">
                         <span>🔄 续保管理</span>
@@ -6058,7 +6059,7 @@
             </svg>
             <span style="font-size:10px;font-weight:500;">业绩看板</span>
         </button>
-        <button v-if="currentUser && ['super_admin','enterprise','employee'].includes(currentUser.role) && !notActivated" @click="openRenewalTab()"
+        <button v-if="(isSuperAdmin || currentUser.ent_renewal_enabled) && !notActivated" @click="openRenewalTab()"
                 style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding:0;position:relative;"
                 :style="pageTab==='renewal'?'color:#ea580c;':'color:#9ca3af;'">
             <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
