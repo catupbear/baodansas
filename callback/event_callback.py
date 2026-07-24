@@ -3,8 +3,10 @@
 
 职责（最小实现）：
   - URL 验证（GET）
-  - 接收 change_external_chat(create/update) 事件 → 拉群详情 → 刷新 wecom_groups
+  - 接收 change_external_chat 事件 → 拉群详情 → 刷新 wecom_groups
     → 群名变化时触发识别群自动匹配（insurance.auto_monitor_match）
+    仅处理 create（新建群）与 update+UpdateDetail=change_name（群名修改），
+    其余 update 明细（加/退成员、改群主、改公告）不触发，减少详情接口调用
 
 本期不处理 change_external_contact（客户变更）等其他事件，未识别事件一律返回 success
 （避免企业微信侧持续重试）。设计详见
@@ -96,11 +98,19 @@ def create_event_callback_blueprint(path: str):
             event = (tree.findtext("InfoType") or tree.findtext("Event") or "").strip()
             change_type = (tree.findtext("ChangeType") or "").strip()
             chat_id = (tree.findtext("ChatId") or "").strip()
-            logger.info("[企业微信回调] 事件: type=%s, ChangeType=%s, ChatId=%s",
-                        event, change_type, chat_id)
+            # update 事件才带 UpdateDetail：change_name/change_notice/add_member/del_member/change_owner
+            update_detail = (tree.findtext("UpdateDetail") or "").strip()
+            logger.info("[企业微信回调] 事件: type=%s, ChangeType=%s, ChatId=%s, UpdateDetail=%s",
+                        event, change_type, chat_id, update_detail)
 
-            # 只处理群变更（新建/信息更新），在独立线程里拉详情+落库，避免阻塞回调响应
-            if event == "change_external_chat" and change_type in ("create", "update") and chat_id:
+            # 只在两种情况下拉群详情（在独立线程里执行，避免阻塞回调响应）：
+            #   1) create        —— 新建客户群（无 UpdateDetail），需拉详情建群
+            #   2) update+change_name —— 群名被修改，其余明细(加/退成员、改群主、改公告)不触发，
+            #      避免无谓的「获取客户群详情」接口调用（该接口有频率限制）
+            if event == "change_external_chat" and chat_id and (
+                change_type == "create"
+                or (change_type == "update" and update_detail == "change_name")
+            ):
                 threading.Thread(
                     target=_handle_group_change, args=(chat_id,), daemon=True
                 ).start()
