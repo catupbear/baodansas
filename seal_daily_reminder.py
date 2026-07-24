@@ -151,7 +151,7 @@ def main():
 
         # 汇总文案
         lines = ["🏢 公户车盖章跟进 · 每日提醒", ""]
-        lines.append(f"截至今天，还有 {len(unpaid)} 单公户车保单待跟进付费：")
+        lines.append(f"截至今天，还有 {len(unpaid)} 单公户车保单待盖章：")
         for r in unpaid[:10]:
             plate = r.get("plate_no") or "未知车牌"
             insured = (r.get("insured") or "").strip()
@@ -159,7 +159,7 @@ def main():
         if len(unpaid) > 10:
             lines.append(f"…… 等共 {len(unpaid)} 单")
         lines.append("")
-        lines.append(f"👉 点击查看并标记付费：{link}")
+        lines.append(f"👉 点击查看并标记盖章：{link}")
         message = "\n".join(lines)
 
         for pr in push_rooms:

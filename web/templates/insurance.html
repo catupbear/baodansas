@@ -2697,7 +2697,7 @@
         <!-- 筛选行 -->
         <div class="card p-3 flex items-center gap-2 flex-wrap">
             <div class="flex items-center gap-1">
-                <button v-for="opt in [{v:'0',l:'未付'},{v:'1',l:'已付'},{v:'',l:'全部'}]" :key="opt.v"
+                <button v-for="opt in [{v:'0',l:'未盖章'},{v:'1',l:'已盖章'},{v:'',l:'全部'}]" :key="opt.v"
                         @click="sealFilter.paid=opt.v; loadSealTasks(1)"
                         class="text-xs px-3 py-1.5 rounded-full cursor-pointer"
                         :style="sealFilter.paid===opt.v ? 'background:#fff7ed;border:1px solid #fb923c;color:#ea580c;font-weight:600;' : 'background:#fff;border:1px solid #e5e7eb;color:#6b7280;'">
