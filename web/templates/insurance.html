@@ -1793,7 +1793,7 @@
                                 <div class="flex-1">
                                     <div class="flex items-end" style="height:40px;">
                                         <div v-for="d in ent.days" :key="d.day" style="flex:1;display:flex;align-items:flex-end;justify-content:center;height:100%;">
-                                            <div class="ent-bar" style="width:9px;background:#fb923c;border-radius:4px 4px 0 0;transition:height .3s,background .15s;" :style="{height: entBarH(ent, d)}" :title="d.label + '：' + d.total"></div>
+                                            <div class="ent-bar" style="width:60%;max-width:16px;min-width:12px;background:#fb923c;border-radius:4px 4px 0 0;transition:height .3s,background .15s;" :style="{height: entBarH(ent, d)}" :title="d.label + '：' + d.total"></div>
                                         </div>
                                     </div>
                                     <div class="flex" style="margin-top:2px;">
