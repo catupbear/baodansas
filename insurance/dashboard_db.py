@@ -45,14 +45,14 @@ DEFAULT_CONFIG = {
         {"type": "bar", "title": "险种保费分布", "dimension": "险种",
          "metric": {"agg": "sum", "field": "保费"}},
     ],
-    "ranking": {
+    "rankings": [{
         "title": "发送人业绩排行", "dimension": "发送人", "sort_by": "保费",
         "columns": [
             {"title": "保费", "agg": "sum", "field": "保费"},
             {"title": "保单量", "agg": "count"},
         ],
         "target_columns": [],
-    },
+    }],
 }
 
 
@@ -605,10 +605,16 @@ def get_dashboard_data(db, enterprise_id: int, date_start: str, date_end: str,
                        + f"\n计算公式：完成率 = 实际值 ÷ 目标值 {t['target_value']}",
         })
 
-    # ---- 业务员排行（含员工目标完成率列） ----
-    ranking = _build_ranking(db, config, records, all_targets, enterprise_id,
-                             date_start, date_end, time_field, user_config,
-                             apply_config_fn, today)
+    # ---- 业务员排行（支持多个；每个含员工目标完成率列） ----
+    # 兼容旧配置：只有单个 ranking 时包成一个元素的 rankings
+    _rankings_cfg = config.get("rankings")
+    if not _rankings_cfg:
+        _single = config.get("ranking")
+        _rankings_cfg = [_single] if _single else []
+    rankings = [_build_ranking(db, _rcfg, records, all_targets, enterprise_id,
+                               date_start, date_end, time_field, user_config,
+                               apply_config_fn, today)
+                for _rcfg in _rankings_cfg if _rcfg]
 
     return {
         "time_field": time_field,
@@ -616,7 +622,9 @@ def get_dashboard_data(db, enterprise_id: int, date_start: str, date_end: str,
         "record_count": len(records),
         "config_source": resolved["source"],
         "enabled": resolved["enabled"],
-        "cards": cards, "charts": charts, "targets": goal_list, "ranking": ranking,
+        "cards": cards, "charts": charts, "targets": goal_list,
+        "ranking": rankings[0] if rankings else None,  # 兼容旧前端（单个）
+        "rankings": rankings,
     }
 
 
@@ -712,7 +720,7 @@ def _build_group_chart(ch: dict, records: list, date_start: str, date_end: str,
     merge_map = _DIMENSION_MERGE.get(dimension, {})
     groups = {}
     for r in records:
-        key = str(r.get(dimension) or "").strip() or "未知"
+        key = str(r.get(dimension) or "").strip() or "未归属"
         key = merge_map.get(key, key)
         groups.setdefault(key, []).append(r)
     items = [{"name": k, "value": _aggregate(v, agg, field), "count": len(v)}
@@ -737,18 +745,18 @@ def _build_group_chart(ch: dict, records: list, date_start: str, date_end: str,
     }
 
 
-def _build_ranking(db, config: dict, records: list, all_targets: list, enterprise_id: int,
+def _build_ranking(db, rk: dict, records: list, all_targets: list, enterprise_id: int,
                    date_start: str, date_end: str, time_field: str, user_config: dict,
                    apply_config_fn, today: date) -> dict:
-    """业务员排行：页面时间范围内按维度分组聚合各列 + 员工目标项完成率列"""
-    rk = config.get("ranking") or {}
+    """单个排行：页面时间范围内按维度分组聚合各列 + 员工目标项完成率列。rk 为单个排行的配置。"""
+    rk = rk or {}
     dimension = rk.get("dimension") or "发送人"
     columns = rk.get("columns") or []
     sort_by = rk.get("sort_by") or (columns[0].get("title") if columns else "")
 
     groups = {}
     for r in records:
-        key = str(r.get(dimension) or "").strip() or "未知"
+        key = str(r.get(dimension) or "").strip() or "未归属"
         groups.setdefault(key, []).append(r)
 
     # 员工目标项：name → {unified, persons: {员工名: value}, meta}
@@ -782,7 +790,7 @@ def _build_ranking(db, config: dict, records: list, all_targets: list, enterpris
                                      user_config, apply_config_fn)
         person_rows = {}
         for r in t_records:
-            key = str(r.get(dimension) or "").strip() or "未知"
+            key = str(r.get(dimension) or "").strip() or "未归属"
             person_rows.setdefault(key, []).append(r)
         target_col_data.append({
             "name": name, "item": item, "meta": meta,

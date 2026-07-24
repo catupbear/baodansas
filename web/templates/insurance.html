@@ -241,6 +241,9 @@
         .sd-qi:hover .sd-qtip { display: block; }
         .sd-qi.qright .sd-qtip { left: auto; right: -10px; transform: none; }
         .sd-qi.qright .sd-qtip::after { left: auto; right: 14px; transform: none; }
+        /* 排行表头问号：向下弹出，避免顶部黑色分隔线遮挡 */
+        .sd-qi.tip-down .sd-qtip { top: 22px; bottom: auto; }
+        .sd-qi.tip-down .sd-qtip::after { top: auto; bottom: 100%; border-top-color: transparent; border-bottom-color: rgba(28,20,16,0.94); }
         /* 贴近屏幕边缘时的位置修正（JS 检测溢出后加类），窄屏限宽防两侧同时溢出 */
         .sd-qi .sd-qtip { max-width: calc(100vw - 24px); }
         .sd-qi .sd-qtip.tip-left { left: -8px; transform: none; }
@@ -333,7 +336,7 @@
         .records-table th, .records-table td {
             border-bottom: 1px solid var(--border-light);
             border-right: 1px solid var(--border-light);
-            padding: 6px 12px;
+            padding: 4px 10px;
         }
         .records-table th:last-child, .records-table td:last-child { border-right: none; }
         .records-table th { white-space: nowrap; }
@@ -760,10 +763,11 @@
                 </button>
             </div>
             <!-- 汉堡按钮（仅移动端） -->
-            <button @click="mobileMenuOpen = !mobileMenuOpen" class="nav-hamburger" style="width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.25);cursor:pointer;">
-                <svg style="width:20px;height:20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button @click="mobileMenuOpen = !mobileMenuOpen" class="nav-hamburger" style="height:36px;padding:0 12px;gap:6px;border-radius:8px;background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.25);cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;">
+                <svg style="width:18px;height:18px;flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
                 </svg>
+                更多
             </button>
         </div>
     </header>
@@ -2002,28 +2006,28 @@
                 </div>
             </div>
 
-            <!-- 发送人排行 -->
-            <div v-if="salesData.ranking" class="sd-card">
-                <div class="sd-h2"><span class="bar"></span>{{ salesData.ranking.title }}
-                    <span class="mini">按{{ salesData.ranking.dimension }}分组 · 排序依据：{{ salesData.ranking.sort_by }}</span>
+            <!-- 发送人排行（支持多个，依次排列） -->
+            <div v-for="(rk, rki) in (salesData.rankings || (salesData.ranking ? [salesData.ranking] : []))" :key="rki" class="sd-card" :style="rki>0 ? 'margin-top:28px;border-top:3px solid #1f2937;padding-top:22px;' : ''">
+                <div class="sd-h2"><span class="bar"></span>{{ sdDispName(rk.title) }}
+                    <span class="mini">按{{ sdDispName(rk.dimension) }}分组 · 排序依据：{{ rk.sort_by }}</span>
                 </div>
                 <div style="overflow-x:auto">
                     <table class="sd-rank">
                         <thead><tr>
-                            <th>排名</th><th>{{ salesData.ranking.dimension }}</th>
-                            <th v-for="col in salesData.ranking.columns" :key="col">{{ col }}
-                                <span class="sd-qi qright">?<span class="sd-qtip">{{ salesData.ranking.col_explains[col] }}</span></span>
+                            <th>排名</th><th>{{ sdDispName(rk.dimension) }}</th>
+                            <th v-for="col in rk.columns" :key="col">{{ sdDispName(col) }}
+                                <span class="sd-qi qright tip-down">!<span class="sd-qtip">{{ rk.col_explains[col] }}</span></span>
                             </th>
-                            <th v-for="tn in salesData.ranking.target_columns" :key="tn">{{ tn }}·完成率
-                                <span class="sd-qi qright">?<span class="sd-qtip">{{ salesData.ranking.col_explains[tn+'·完成率'] }}</span></span>
+                            <th v-for="tn in rk.target_columns" :key="tn">{{ sdDispName(tn) }}·完成率
+                                <span class="sd-qi qright tip-down">!<span class="sd-qtip">{{ rk.col_explains[tn+'·完成率'] }}</span></span>
                             </th>
                         </tr></thead>
                         <tbody>
-                            <tr v-for="(row, ri) in salesData.ranking.rows" :key="row.name">
+                            <tr v-for="(row, ri) in rk.rows" :key="row.name">
                                 <td><span class="sd-rk" :class="ri<3?('r'+(ri+1)):''">{{ ri+1 }}</span></td>
                                 <td class="font-medium">{{ row.name }}</td>
-                                <td v-for="col in salesData.ranking.columns" :key="col">{{ sdMoney(row.values[col], col.includes('量')) }}</td>
-                                <td v-for="tn in salesData.ranking.target_columns" :key="tn">
+                                <td v-for="col in rk.columns" :key="col">{{ sdMoney(row.values[col], col.includes('量')) }}</td>
+                                <td v-for="tn in rk.target_columns" :key="tn">
                                     <span v-if="!row.targets[tn]" class="text-gray-300">未设置</span>
                                     <span v-else class="sd-cellbar">
                                         <span class="sd-lb">{{ sdMoney(row.targets[tn].target, false) }}<template v-if="row.targets[tn].personal">（单独）</template></span>
@@ -2032,7 +2036,7 @@
                                     </span>
                                 </td>
                             </tr>
-                            <tr v-if="!salesData.ranking.rows.length"><td :colspan="2+salesData.ranking.columns.length+salesData.ranking.target_columns.length" class="text-center text-gray-300 py-8">暂无数据</td></tr>
+                            <tr v-if="!rk.rows.length"><td :colspan="2+rk.columns.length+rk.target_columns.length" class="text-center text-gray-300 py-8">暂无数据</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -2062,9 +2066,9 @@
                     <div v-for="(c, i) in salesConfig.cards" :key="i" class="sd-cfg-row">
                         <input type="text" v-model="c.title" style="width:110px" placeholder="名称">
                         <select v-model="c.agg"><option value="sum">求和</option><option value="count">计数</option><option value="avg">平均</option></select>
-                        <select v-if="c.agg!=='count'" v-model="c.field" style="max-width:150px"><option v-for="f in salesFields" :key="f" :value="f">{{ f }}</option></select>
+                        <select v-if="c.agg!=='count'" v-model="c.field" style="max-width:150px"><option v-for="f in salesFields" :key="f" :value="f">{{ sdDispName(f) }}</option></select>
                         <template v-for="(f, fi) in (c.filters||[])" :key="fi">
-                            <select v-model="f.field" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ d }}</option></select>
+                            <select v-model="f.field" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ sdDispName(d) }}</option></select>
                             <select v-model="f.op" style="width:76px"><option value="contains">包含</option><option value="not_contains">不包含</option><option value="eq">等于</option><option value="ne">不等于</option></select>
                             <input type="text" v-model="f.value" style="width:90px" placeholder="值">
                             <span class="sd-del" @click="c.filters.splice(fi,1)">✕</span>
@@ -2090,17 +2094,17 @@
                             <select v-model="ch.granularity"><option value="auto">自动（跟随时间范围）</option><option value="month">按月</option><option value="week">按周</option><option value="day">按日</option></select>
                             <span class="sd-lb">指标：</span>
                             <template v-for="(m, mi) in ch.metrics" :key="mi">
-                                <select v-model="m.field" style="max-width:120px" @change="m.label=m.field"><option v-for="f in salesFields" :key="f" :value="f">{{ f }}</option></select>
+                                <select v-model="m.field" style="max-width:120px" @change="m.label=m.field"><option v-for="f in salesFields" :key="f" :value="f">{{ sdDispName(f) }}</option></select>
                                 <span class="sd-del" v-if="ch.metrics.length>1" @click="ch.metrics.splice(mi,1)">✕</span>
                             </template>
                             <span class="sd-addlink" v-if="ch.metrics.length<3" @click="ch.metrics.push({label:'保费',agg:'sum',field:'保费'})">+ 指标</span>
                         </template>
                         <template v-else>
                             <span class="sd-lb">维度：</span>
-                            <select v-model="ch.dimension" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ d }}</option></select>
+                            <select v-model="ch.dimension" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ sdDispName(d) }}</option></select>
                             <span class="sd-lb">指标：</span>
                             <select :value="ch.metric.agg+'|'+(ch.metric.field||'')" @change="sdSetChartMetric(ch, $event.target.value)">
-                                <option v-for="f in salesFields" :key="f" :value="'sum|'+f">{{ f }}·求和</option>
+                                <option v-for="f in salesFields" :key="f" :value="'sum|'+f">{{ sdDispName(f) }}·求和</option>
                                 <option value="count|">保单量·计数</option>
                             </select>
                             <template v-if="ch.type==='donut'"><span class="sd-lb">Top：</span>
@@ -2109,35 +2113,43 @@
                     </div>
                 </div>
 
-                <!-- 排行配置 -->
+                <!-- 排行配置（可多个，最多5个） -->
                 <div class="sd-card">
-                    <div class="sd-h2"><span class="bar"></span>排行配置</div>
-                    <div class="sd-cfg-row">
-                        <span class="sd-lb">分组维度：</span>
-                        <select v-model="salesConfig.ranking.dimension" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ d }}</option></select>
-                        <span class="sd-lb">排序依据：</span>
-                        <select v-model="salesConfig.ranking.sort_by"><option v-for="col in salesConfig.ranking.columns" :key="col.title" :value="col.title">{{ col.title }}</option></select>
-                    </div>
-                    <div class="sd-cfg-row" style="align-items:flex-start">
-                        <span class="sd-lb" style="margin-top:6px">统计列：</span>
-                        <div class="flex flex-wrap gap-2" style="flex:1">
-                            <template v-for="(col, i) in salesConfig.ranking.columns" :key="i">
-                                <span class="sd-fchip">{{ col.title }}（{{ col.agg==='count'?'计数':col.field }}）<span class="x" @click="salesConfig.ranking.columns.splice(i,1)">✕</span></span>
-                            </template>
-                            <select @change="sdAddRankCol($event)" style="border:1px dashed #fdba74;border-radius:6px;padding:3px 8px;font-size:12px;color:#ea580c;background:#fff">
-                                <option value="">+ 添加列...</option>
-                                <option v-for="f in salesFields" :key="f" :value="'sum|'+f">{{ f }}·求和</option>
-                                <option value="count|保单量">保单量·计数</option>
-                            </select>
+                    <div class="sd-h2"><span class="bar"></span>排行配置<span class="mini">最多 5 个，业绩看板从上到下依次展示</span></div>
+                    <div v-for="(rk, rki) in salesConfig.rankings" :key="rki" style="border:1px solid #f0e6d8;border-radius:10px;padding:10px 14px;margin-bottom:12px;">
+                        <div class="sd-cfg-row">
+                            <span class="sd-lb">排行标题：</span>
+                            <input v-model="rk.title" placeholder="排行标题" style="border:1px solid #e8e8e8;border-radius:6px;padding:4px 10px;font-size:13px;max-width:200px;outline:none;">
+                            <span v-if="salesConfig.rankings.length > 1" style="margin-left:auto;cursor:pointer;color:#dc2626;font-size:12px;" @click="salesConfig.rankings.splice(rki,1)">✕ 删除此排行</span>
+                        </div>
+                        <div class="sd-cfg-row">
+                            <span class="sd-lb">分组维度：</span>
+                            <select v-model="rk.dimension" @change="rk.title = sdDispName(rk.dimension) + '业绩排行'" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ sdDispName(d) }}</option></select>
+                            <span class="sd-lb">排序依据：</span>
+                            <select v-model="rk.sort_by"><option v-for="col in rk.columns" :key="col.title" :value="col.title">{{ col.title }}</option></select>
+                        </div>
+                        <div class="sd-cfg-row" style="align-items:flex-start">
+                            <span class="sd-lb" style="margin-top:6px">统计列：</span>
+                            <div class="flex flex-wrap gap-2" style="flex:1">
+                                <template v-for="(col, i) in rk.columns" :key="i">
+                                    <span class="sd-fchip">{{ sdDispName(col.title) }}（{{ col.agg==='count'?'计数':sdDispName(col.field) }}）<span class="x" @click="rk.columns.splice(i,1)">✕</span></span>
+                                </template>
+                                <select @change="sdAddRankCol($event, rki)" style="border:1px dashed #fdba74;border-radius:6px;padding:3px 8px;font-size:12px;color:#ea580c;background:#fff">
+                                    <option value="">+ 添加列...</option>
+                                    <option v-for="f in salesFields" :key="f" :value="'sum|'+f">{{ sdDispName(f) }}·求和</option>
+                                    <option value="count|保单量">保单量·计数</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="sd-cfg-row">
+                            <span class="sd-lb">目标完成率列：</span>
+                            <label v-for="name in sdEmpItemNames" :key="name" class="text-sm flex items-center gap-1">
+                                <input type="checkbox" :checked="(rk.target_columns||[]).includes(name)" @change="sdToggleTargetCol(name, $event.target.checked, rki)"> {{ name }}
+                            </label>
+                            <span v-if="!sdEmpItemNames.length" class="sd-lb">暂无员工目标项，请先在「目标管理」中创建</span>
                         </div>
                     </div>
-                    <div class="sd-cfg-row">
-                        <span class="sd-lb">目标完成率列：</span>
-                        <label v-for="name in sdEmpItemNames" :key="name" class="text-sm flex items-center gap-1">
-                            <input type="checkbox" :checked="(salesConfig.ranking.target_columns||[]).includes(name)" @change="sdToggleTargetCol(name, $event.target.checked)"> {{ name }}
-                        </label>
-                        <span v-if="!sdEmpItemNames.length" class="sd-lb">暂无员工目标项，请先在「目标管理」中创建</span>
-                    </div>
+                    <button v-if="salesConfig.rankings.length < 5" @click="sdAddRanking()" style="border:1px dashed #fb923c;border-radius:8px;padding:7px 16px;font-size:13px;color:#ea580c;background:#fff;cursor:pointer;">+ 添加排行</button>
                 </div>
             </div>
             <div v-else class="flex items-center justify-center py-24 text-gray-400 text-sm">加载中...</div>
@@ -2157,7 +2169,7 @@
                             <tbody>
                                 <tr v-for="t in sdEntTargets" :key="t.id">
                                     <td style="text-align:left" class="font-medium">{{ t.name }}</td>
-                                    <td style="text-align:left">{{ t.metric_agg==='count'?'保单量·计数':(t.metric_field+'·求和') }}</td>
+                                    <td style="text-align:left">{{ t.metric_agg==='count'?'保单量·计数':(sdDispName(t.metric_field)+'·求和') }}</td>
                                     <td style="text-align:left"><span v-if="!t.filters.length" class="text-gray-300">无（全部保单）</span><span v-else class="sd-fchip">{{ sdFiltersText(t.filters) }}</span></td>
                                     <td style="text-align:left"><span class="sd-ptag" :class="{m:t.period_type==='month',q:t.period_type==='quarter',y:t.period_type==='year',c:t.period_type==='custom'}">{{ t.period_type==='custom' ? (t.period_start+' ~ '+t.period_end) : ({month:'当月',quarter:'当季度',year:'今年'})[t.period_type] }}</span></td>
                                     <td>{{ sdMoney(t.target_value, t.metric_agg==='count') }}</td>
@@ -2184,7 +2196,7 @@
                     </div>
                     <template v-if="sdEmpCurrent">
                         <div class="sd-cfg-row" style="background:#faf9f7;border-radius:10px;padding:10px 12px;border-bottom:none">
-                            <span class="sd-lb">口径：{{ sdEmpCurrent.meta.metric_agg==='count'?'保单量·计数':(sdEmpCurrent.meta.metric_field+'·求和') }}</span>
+                            <span class="sd-lb">口径：{{ sdEmpCurrent.meta.metric_agg==='count'?'保单量·计数':(sdDispName(sdEmpCurrent.meta.metric_field)+'·求和') }}</span>
                             <span class="sd-lb">条件：{{ sdFiltersText(sdEmpCurrent.meta.filters) || '无' }}</span>
                             <span class="sd-lb">周期：{{ sdEmpCurrent.meta.period_type==='custom' ? (sdEmpCurrent.meta.period_start+' ~ '+sdEmpCurrent.meta.period_end) : ({month:'当月',quarter:'当季度',year:'今年'})[sdEmpCurrent.meta.period_type] }}</span>
                             <span style="flex:1"></span>
@@ -2245,10 +2257,10 @@
                     <div class="sd-frow"><span class="fl">统计方式</span>
                         <select v-model="sdCardForm.agg"><option value="sum">求和</option><option value="count">计数</option><option value="avg">平均</option></select>
                         <template v-if="sdCardForm.agg!=='count'"><span class="fl" style="width:auto">字段</span>
-                        <select v-model="sdCardForm.field" style="max-width:150px"><option v-for="f in salesFields" :key="f" :value="f">{{ f }}</option></select></template>
+                        <select v-model="sdCardForm.field" style="max-width:150px"><option v-for="f in salesFields" :key="f" :value="f">{{ sdDispName(f) }}</option></select></template>
                     </div>
                     <div class="sd-frow" v-for="(f, fi) in sdCardForm.filters" :key="fi"><span class="fl">{{ fi===0?'筛选条件':'' }}</span>
-                        <select v-model="f.field" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ d }}</option></select>
+                        <select v-model="f.field" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ sdDispName(d) }}</option></select>
                         <select v-model="f.op"><option value="contains">包含</option><option value="not_contains">不包含</option><option value="eq">等于</option><option value="ne">不等于</option></select>
                         <input type="text" v-model="f.value" placeholder="值，如：车险" style="width:110px">
                         <span class="sd-del" @click="sdCardForm.filters.splice(fi,1)">✕</span>
@@ -2275,12 +2287,12 @@
                     <div class="sd-frow"><span class="fl">目标名称</span><input type="text" v-model="sdTargetForm.name" :disabled="!!sdTargetForm.id" placeholder="如：平安产险季度保费目标" style="width:230px"></div>
                     <div class="sd-frow"><span class="fl">统计口径</span>
                         <select v-model="sdTargetForm.metric">
-                            <option v-for="f in salesFields" :key="f" :value="'sum|'+f">{{ f }} · 求和</option>
+                            <option v-for="f in salesFields" :key="f" :value="'sum|'+f">{{ sdDispName(f) }} · 求和</option>
                             <option value="count|">保单量 · 计数</option>
                         </select>
                     </div>
                     <div class="sd-frow" v-for="(f, fi) in sdTargetForm.filters" :key="fi"><span class="fl">{{ fi===0?'筛选条件':'' }}</span>
-                        <select v-model="f.field" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ d }}</option></select>
+                        <select v-model="f.field" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ sdDispName(d) }}</option></select>
                         <select v-model="f.op"><option value="eq">等于</option><option value="contains">包含</option><option value="not_contains">不包含</option><option value="ne">不等于</option></select>
                         <input type="text" v-model="f.value" placeholder="值，如：平安产险" style="width:120px">
                         <span class="sd-del" @click="sdTargetForm.filters.splice(fi,1)">✕</span>
@@ -2315,12 +2327,12 @@
                     <div class="sd-frow"><span class="fl">目标项名称</span><input type="text" v-model="sdEmpForm.name" placeholder="如：车险保费目标" style="width:200px"></div>
                     <div class="sd-frow"><span class="fl">统计口径</span>
                         <select v-model="sdEmpForm.metric">
-                            <option v-for="f in salesFields" :key="f" :value="'sum|'+f">{{ f }} · 求和</option>
+                            <option v-for="f in salesFields" :key="f" :value="'sum|'+f">{{ sdDispName(f) }} · 求和</option>
                             <option value="count|">保单量 · 计数</option>
                         </select>
                     </div>
                     <div class="sd-frow" v-for="(f, fi) in sdEmpForm.filters" :key="fi"><span class="fl">{{ fi===0?'筛选条件':'' }}</span>
-                        <select v-model="f.field" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ d }}</option></select>
+                        <select v-model="f.field" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ sdDispName(d) }}</option></select>
                         <select v-model="f.op"><option value="contains">包含</option><option value="eq">等于</option><option value="not_contains">不包含</option><option value="ne">不等于</option></select>
                         <input type="text" v-model="f.value" placeholder="值，如：车险" style="width:110px">
                         <span class="sd-del" @click="sdEmpForm.filters.splice(fi,1)">✕</span>
@@ -3436,7 +3448,7 @@
                                               style="-webkit-user-select:none;user-select:none;"
                                               @click="startListEdit(record, col.key)"
                                               :title="(record.display_fields || {})[col.key] || '点击编辑'">
-                                            <span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;vertical-align:middle;word-break:break-all;">{{ (record.display_fields || {})[col.key] || '' }}</span>
+                                            <span style="display:-webkit-inline-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;vertical-align:middle;word-break:break-all;max-width:100%;">{{ (record.display_fields || {})[col.key] || '' }}</span>
                                             <span style="display:inline-flex;align-items:center;gap:2px;color:#f97316;white-space:nowrap;border:1px solid #fdba74;border-radius:4px;padding:2px 5px;margin-left:4px;vertical-align:middle;">
                                                 <svg style="width:11px;height:11px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                                 <span style="font-size:11px;line-height:1;">{{ (record.display_fields || {})[col.key] ? '修改' : '填写' }}</span>
@@ -12761,6 +12773,8 @@ const _app = createApp({
             if (salesPeriod.value === 'year') return [now.getFullYear() + '-01-01', sdFmtDate(now)];
             return [sdFmtDate(new Date(now.getFullYear(), now.getMonth(), 1)), sdFmtDate(now)];  // month
         }
+        // 显示字段名时去掉自定义字段的「#数字」后缀（如「业务员#2」→「业务员」）；值不变，仅显示
+        function sdDispName(name) { return String(name || '').replace(/#\d+/g, ''); }
         function sdMoney(v, isCount) {
             if (v == null) return '—';
             const n = Number(v);
@@ -12844,7 +12858,12 @@ const _app = createApp({
                     // 补齐结构默认值，避免模板绑定报错
                     cfg.cards = cfg.cards || [];
                     cfg.charts = (cfg.charts || []).map(ch => ({ top: 0, metrics: [], metric: { agg: 'sum', field: '保费' }, granularity: 'auto', ...ch }));
-                    cfg.ranking = Object.assign({ dimension: '业务员', sort_by: '保费', columns: [], target_columns: [] }, cfg.ranking || {});
+                    // 兼容旧配置：只有单个 ranking → 包成 rankings 数组；每项补齐默认
+                    if (!cfg.rankings || !cfg.rankings.length) {
+                        cfg.rankings = cfg.ranking ? [cfg.ranking] : [{ title: '发送人业绩排行', dimension: '发送人', sort_by: '保费', columns: [{title:'保费',agg:'sum',field:'保费'},{title:'保单量',agg:'count'}], target_columns: [] }];
+                    }
+                    cfg.rankings = cfg.rankings.map(rk => Object.assign({ title: '排行', dimension: '业务员', sort_by: '保费', columns: [], target_columns: [] }, rk || {}));
+                    delete cfg.ranking;
                     salesConfig.value = cfg;
                     salesConfigSource.value = j.data.source;
                 }
@@ -12893,20 +12912,27 @@ const _app = createApp({
             const [agg, field] = val.split('|');
             ch.metric = { agg: agg, field: field || undefined };
         }
-        function sdAddRankCol(ev) {
+        function sdAddRankCol(ev, rki) {
             const val = ev.target.value;
             ev.target.value = '';
             if (!val) return;
+            const rk = salesConfig.value.rankings[rki];
             const [agg, field] = val.split('|');
             const title = agg === 'count' ? '保单量' : field;
-            if (salesConfig.value.ranking.columns.some(c => c.title === title)) return;
-            salesConfig.value.ranking.columns.push({ title: title, agg: agg, field: agg === 'count' ? undefined : field });
+            if (rk.columns.some(c => c.title === title)) return;
+            rk.columns.push({ title: title, agg: agg, field: agg === 'count' ? undefined : field });
         }
-        function sdToggleTargetCol(name, checked) {
-            const list = salesConfig.value.ranking.target_columns = salesConfig.value.ranking.target_columns || [];
+        function sdToggleTargetCol(name, checked, rki) {
+            const rk = salesConfig.value.rankings[rki];
+            const list = rk.target_columns = rk.target_columns || [];
             const idx = list.indexOf(name);
             if (checked && idx < 0) list.push(name);
             if (!checked && idx >= 0) list.splice(idx, 1);
+        }
+        function sdAddRanking() {
+            if (!salesConfig.value.rankings) salesConfig.value.rankings = [];
+            if (salesConfig.value.rankings.length >= 5) return;
+            salesConfig.value.rankings.push({ title: '排行' + (salesConfig.value.rankings.length + 1), dimension: '发送人', sort_by: '保费', columns: [{title:'保费',agg:'sum',field:'保费'},{title:'保单量',agg:'count'}], target_columns: [] });
         }
 
         // ---- 目标管理 ----
@@ -13288,8 +13314,8 @@ const _app = createApp({
             salesTab, salesLoading, salesData, salesEnterprise, salesPeriod, salesDateStart, salesDateEnd,
             salesConfig, salesConfigSource, salesSaving, salesFields, salesPeriodOptions, sdFilterFields,
             loadSalesDash, onSalesEnterpriseChange, openSalesConfig, openSalesTargets,
-            saveSalesConfig, resetSalesConfig, sdMoney, sdFiltersText, sdVisibleCharts,
-            sdModal, sdCardForm, sdOpenCardModal, sdAddCard, sdSetChartMetric, sdAddRankCol, sdToggleTargetCol,
+            saveSalesConfig, resetSalesConfig, sdMoney, sdDispName, sdFiltersText, sdVisibleCharts,
+            sdModal, sdCardForm, sdOpenCardModal, sdAddCard, sdSetChartMetric, sdAddRankCol, sdToggleTargetCol, sdAddRanking,
             sdEntTargets, sdEmpItemNames, sdEmpCurrent, sdEmpItem, sdEmpUnified, sdEmpEdit, sdEmpPersons,
             sdSelectEmpItem, sdApplyUnified, sdSavePerson, sdRestoreUnified,
             sdOpenEmpModal, sdEmpForm, sdSaveEmpItem, sdDeleteEmpItem,
