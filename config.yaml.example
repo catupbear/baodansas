@@ -22,6 +22,8 @@ event_callback:
   agent_id: 0
   token: "your_event_callback_token"
   encoding_aes_key: "your_event_callback_encoding_aes_key"
+  # 拉群详情用的 Secret（如通讯录同步应用 Secret，与验签 token/aes_key 不同）；不配则回退复用已注册通讯录
+  secret: ""
 
 sdk:
   # C SDK库文件路径

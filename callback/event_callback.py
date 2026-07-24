@@ -27,24 +27,36 @@ logger = logging.getLogger(__name__)
 _crypto: WXBizMsgCrypt = None
 _db = None
 _corpid = ""
-_get_contacts = None   # callable(corpid) -> ContactsManager
+_get_contacts = None     # callable(corpid) -> ContactsManager（未配 secret 时回退用）
+_event_contacts = None   # 事件回调专用 ContactsManager（用配置的 secret 拉群详情）
 
 
-def init_event_callback(crypto, db, corpid, get_contacts):
+def init_event_callback(crypto, db, corpid, get_contacts, secret=""):
     """初始化事件回调模块。
 
     Args:
-        crypto:       该企业「客户联系」应用专属的 WXBizMsgCrypt（独立 token/aes_key）
+        crypto:       该企业事件回调专属的 WXBizMsgCrypt（独立 token/aes_key）
         db:           Database 实例
         corpid:       事件回调归属企业 corpid
-        get_contacts: 传入 web.api.get_contacts_for_corp，按 corpid 复用已注册的
-                      ContactsManager（不重复创建实例、不重复存 secret）
+        get_contacts: 传入 web.api.get_contacts_for_corp，未配 secret 时按 corpid
+                      回退到已注册的 ContactsManager
+        secret:       事件回调专用 Secret（如通讯录同步应用的 Secret），配置后用它
+                      建独立 ContactsManager 拉群详情；不配则回退 get_contacts
     """
-    global _crypto, _db, _corpid, _get_contacts
+    global _crypto, _db, _corpid, _get_contacts, _event_contacts
     _crypto = crypto
     _db = db
     _corpid = corpid
     _get_contacts = get_contacts
+    if secret:
+        from core.contacts import ContactsManager
+        _event_contacts = ContactsManager(
+            corpid=corpid, secret="", db=db,
+            external_secret=secret, enterprise_name="事件回调",
+        )
+        # 用 corpid 前缀隔离缓存，避免污染其他企业通讯录缓存
+        _event_contacts.set_cache_prefix(corpid)
+        logger.info("事件回调已配置专用 Secret（拉群详情用），corpid=%s", corpid)
 
 
 def create_event_callback_blueprint(path: str):
@@ -104,7 +116,8 @@ def create_event_callback_blueprint(path: str):
 def _handle_group_change(chat_id: str):
     """拉群详情 → 刷新 wecom_groups → 群名变化时触发识别群自动匹配。"""
     try:
-        contacts = _get_contacts(_corpid) if _get_contacts else None
+        # 优先用事件回调专用 ContactsManager（配了专用 secret），否则回退到已注册的
+        contacts = _event_contacts or (_get_contacts(_corpid) if _get_contacts else None)
         if contacts is None:
             logger.warning("[企业微信回调] 无可用通讯录，跳过群 %s", chat_id)
             return

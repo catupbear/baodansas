@@ -484,7 +484,8 @@ def create_app(config: dict) -> Flask:
                 encoding_aes_key=ev_cfg["encoding_aes_key"],
                 corp_id=ev_corpid,
             )
-            init_event_callback(ev_crypto, db, ev_corpid, get_contacts_for_corp)
+            init_event_callback(ev_crypto, db, ev_corpid, get_contacts_for_corp,
+                                secret=ev_cfg.get("secret", ""))
             app.register_blueprint(create_event_callback_blueprint(ev_path))
             logger.info("客户联系事件回调已注册: %s (corpid=%s)", ev_path, ev_corpid)
 
