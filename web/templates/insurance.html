@@ -7304,7 +7304,7 @@ const _app = createApp({
         // 冻结列样式：所有标记 frozen 的列依次堆叠到左侧
         const frozenColStyles = computed(() => {
             const styles = {};
-            let left = 40 + 280; // 复选框列宽度(40) + 操作列宽度(280，紧跟在复选框后面固定显示)
+            let left = 40; // 复选框列宽度(40)；操作列已并入「文件名」列下方，不再单独占位
             const cols = visibleListColumns.value;
             const frozenKeys = [];
             for (const col of cols) {
