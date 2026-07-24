@@ -287,6 +287,11 @@ def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False,
                 else:
                     logger.info("[%d/%d] 同步成功: %s 「%s」(%s)",
                                 done, total, g["roomid"], detail["name"], corp.name)
+                    # 全量刷新时，群名未变也对识别群做一次幂等补齐：
+                    # 兜住「自动匹配功能上线前就已存在、之后群名再没变过」的存量识别群
+                    # （check_and_sync_group 内部判重且吞异常，重复调用安全、不中断循环）
+                    if full:
+                        check_and_sync_group(db, g["roomid"], detail["name"], corp.corpid)
             elif detail and detail.get("permanent"):
                 update_group_failure(db, g["roomid"], permanent=True)
                 failed += 1
