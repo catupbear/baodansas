@@ -265,6 +265,13 @@ def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False,
         total = len(groups)
         logger.info("%s开始: 本轮待同步 %d 个群", label, total)
         ok = failed = changed = done = 0
+        # 识别群补齐统计（本轮对 check_and_sync_group 的调用结果汇总，供结束时打印）
+        match = {"added": 0, "already": 0, "error": 0}
+
+        def _tally(status):
+            if status in match:
+                match[status] += 1
+
         for g in groups:
             done += 1
             corp, detail = resolve_group(corps, g["roomid"], g.get("corpid", ""), api_delay)
@@ -283,7 +290,7 @@ def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False,
                                 g.get("name") or "(空)", detail["name"], corp.name)
                     # 群名变化时检查是否命中「识别群+TZ编号」规则，自动加入监控配置
                     # （内部已吞异常，不会中断同步循环）
-                    check_and_sync_group(db, g["roomid"], detail["name"], corp.corpid)
+                    _tally(check_and_sync_group(db, g["roomid"], detail["name"], corp.corpid))
                 else:
                     logger.info("[%d/%d] 同步成功: %s 「%s」(%s)",
                                 done, total, g["roomid"], detail["name"], corp.name)
@@ -291,7 +298,7 @@ def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False,
                     # 兜住「自动匹配功能上线前就已存在、之后群名再没变过」的存量识别群
                     # （check_and_sync_group 内部判重且吞异常，重复调用安全、不中断循环）
                     if full:
-                        check_and_sync_group(db, g["roomid"], detail["name"], corp.corpid)
+                        _tally(check_and_sync_group(db, g["roomid"], detail["name"], corp.corpid))
             elif detail and detail.get("permanent"):
                 update_group_failure(db, g["roomid"], permanent=True)
                 failed += 1
@@ -306,6 +313,11 @@ def run_sync(db, corps: list, full: bool, api_delay: float, force: bool = False,
 
         logger.info("%s完成: 共 %d 个群, 成功 %d, 失败 %d, 群名变化 %d | 总体状态: %s",
                     label, len(groups), ok, failed, changed, get_sync_stats(db))
+        # 识别群补齐汇总：本轮命中识别群规则的处理结果（新增=本次加入配置，已在=判重跳过）
+        matched = match["added"] + match["already"] + match["error"]
+        if matched:
+            logger.info("%s识别群补齐: 命中 %d | 新增 %d, 已在配置 %d, 异常 %d",
+                        label, matched, match["added"], match["already"], match["error"])
     except Exception:
         logger.exception("%s执行异常", label)
     finally:

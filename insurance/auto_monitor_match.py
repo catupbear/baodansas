@@ -32,11 +32,18 @@ def check_and_sync_group(db, roomid, name, corpid=""):
 
     幂等：该群已在企业名下任意配置中则跳过。
     任何异常都在内部吞掉并记日志，绝不影响调用方（定时任务/事件回调）主流程。
+
+    返回状态字符串，供调用方统计汇总：
+      None      非识别群（群名不含「识别群」或无 TZ 编号，未处理）
+      "already" 命中规则但已在监控配置，跳过
+      "added"   命中规则且本次新加入监控配置（含新建配置 / 建占位企业后加入）
+      "error"   处理过程中异常
     """
     try:
-        _do_check_and_sync(db, roomid, name or "", corpid or "")
+        return _do_check_and_sync(db, roomid, name or "", corpid or "")
     except Exception:
         logger.exception("识别群自动匹配失败: roomid=%s name=%s", roomid, name)
+        return "error"
 
 
 def _do_check_and_sync(db, roomid, name, corpid):
@@ -49,12 +56,12 @@ def _do_check_and_sync(db, roomid, name, corpid):
     )
     from core.notify import notify_new_enterprise_placeholder
 
-    # 1. 关键词 + 编号规则，缺一不满足直接跳过
+    # 1. 关键词 + 编号规则，缺一不满足直接跳过（非识别群）
     if _RECOGNIZE_KEYWORD not in name:
-        return
+        return None
     m = _TZ_PATTERN.search(name)
     if not m:
-        return
+        return None
     # 数字补齐 3 位，保证 TZ50 / TZ050 归一到同一编号（与既有 TZ008 约定一致）
     norm_digits = m.group(1).zfill(3)
     tz_key = "TZ" + norm_digits           # 查询用归一化编号，如 TZ050
@@ -79,7 +86,7 @@ def _do_check_and_sync(db, roomid, name, corpid):
     for c in configs:
         room_ids = {r.get("id") for r in (c.get("rooms") or []) if isinstance(r, dict)}
         if roomid in room_ids:
-            return
+            return "already"
 
     # 4. 选目标配置：enabled=1 且 id 最大（最新）；没有则新建一条
     enabled = [c for c in configs if c.get("enabled")]
@@ -98,3 +105,4 @@ def _do_check_and_sync(db, roomid, name, corpid):
         })
         logger.info("识别群自动匹配: 群「%s」(%s) 新建企业 %s 的监控配置 id=%s",
                     name, roomid, enterprise["name"], new_id)
+    return "added"
