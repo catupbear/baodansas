@@ -87,6 +87,7 @@
             font-size: 14px; font-weight: 500;
             transition: all 0.2s ease; cursor: pointer;
             border: none; outline: none;
+            white-space: nowrap; flex-shrink: 0;
         }
         .btn:focus-visible { box-shadow: 0 0 0 3px rgba(234,88,12,0.3); }
         .btn-primary { background: var(--primary); color: #fff; }
@@ -3123,7 +3124,7 @@
                     过滤非保单
                 </label>
                 <!-- 操作按钮 -->
-                <div class="ml-auto flex items-center gap-2 record-actions">
+                <div class="ml-auto flex flex-wrap items-center gap-2 record-actions" style="justify-content:flex-end;">
                     <button @click="pageTab = 'upload'" class="btn btn-primary" style="padding:6px 14px;font-size:13px;" title="手动上传">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
