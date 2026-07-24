@@ -1786,7 +1786,7 @@
                             <div class="text-xs text-gray-400">柱高=每天识别量（按各企业自身峰值） · 右侧为7天合计</div>
                         </div>
                         <div>
-                            <div v-for="(ent, idx) in (dashboardData.enterprise_trend_7d || [])" :key="ent.enterprise" class="flex items-center gap-3 py-2.5 border-t border-gray-50 first:border-0">
+                            <div v-for="(ent, idx) in (dashboardData.enterprise_trend_7d || [])" :key="ent.enterprise" class="flex items-center gap-3 py-2.5 border-t border-gray-200 first:border-0">
                                 <span class="text-xs w-5 text-center font-bold shrink-0" :class="idx < 3 ? 'text-blue-500' : 'text-gray-300'">{{ idx+1 }}</span>
                                 <span class="text-xs text-gray-400 w-14 shrink-0 truncate">{{ ent.enterprise_no || '-' }}</span>
                                 <span class="text-xs text-gray-700 w-24 shrink-0 truncate">{{ ent.enterprise }}</span>
@@ -2722,7 +2722,7 @@
                 <table class="w-full text-sm" style="min-width:900px;">
                     <thead>
                         <tr class="text-left text-gray-500 text-xs" style="background:#fafaf9;">
-                            <th class="px-3 py-2.5">车牌号</th><th>被保险人</th><th>承保公司</th><th>保费</th><th>操作</th>
+                            <th class="px-3 py-2.5">车牌号</th><th>被保险人</th><th>承保公司</th><th>保费</th><th>是否已盖章</th><th>操作</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2734,6 +2734,10 @@
                             <td class="text-gray-700">{{ t.insured || '—' }}</td>
                             <td class="whitespace-nowrap">{{ t.company_short || '—' }}</td>
                             <td class="whitespace-nowrap">{{ t.total_premium || '—' }}<span v-if="t.policy_count > 1" class="text-xs text-gray-300">（合计）</span></td>
+                            <td>
+                                <span v-if="t.seal_paid" class="text-xs px-2 py-0.5 rounded-full" style="background:#f0fdf4;color:#16a34a;" :title="(t.seal_paid_by ? t.seal_paid_by + ' ' : '') + (t.seal_paid_at || '')">已盖章</span>
+                                <span v-else class="text-xs px-2 py-0.5 rounded-full" style="background:#fff7ed;color:#ea580c;">未盖章</span>
+                            </td>
                             <td class="py-2">
                                 <button v-if="!t.seal_paid" @click="markSealPaid(t, 1)" class="btn btn-primary" style="padding:3px 10px;font-size:11px;margin-right:4px;">标记已盖章</button>
                                 <button v-else @click="markSealPaid(t, 0)" class="btn btn-outline" style="padding:3px 10px;font-size:11px;margin-right:4px;">取消盖章</button>
@@ -2742,7 +2746,7 @@
                         </tr>
                         <!-- 合并组展开：逐条保单明细 -->
                         <tr v-if="t.policy_count > 1 && t._expanded" :key="t.record_id + '_detail'" style="background:#fafaf9;">
-                            <td colspan="5" class="px-3 py-2">
+                            <td colspan="6" class="px-3 py-2">
                                 <table class="w-full text-xs" style="border-collapse:collapse;">
                                     <thead>
                                         <tr class="text-left text-gray-400">
@@ -2764,7 +2768,7 @@
                             </td>
                         </tr>
                         </template>
-                        <tr v-if="!sealTasks.length"><td colspan="5" class="px-4 py-10 text-center text-gray-300 text-sm">{{ isSuperAdmin && !sealFilter.enterprise_id ? '请先在上方选择要查看的企业' : '暂无公户车保单' }}</td></tr>
+                        <tr v-if="!sealTasks.length"><td colspan="6" class="px-4 py-10 text-center text-gray-300 text-sm">{{ isSuperAdmin && !sealFilter.enterprise_id ? '请先在上方选择要查看的企业' : '暂无公户车保单' }}</td></tr>
                     </tbody>
                 </table>
             </div>
