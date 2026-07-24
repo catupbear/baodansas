@@ -1702,7 +1702,10 @@ def _extract_policy_no(text: str, fields: dict, company_short: str, policy_type:
         if m:
             val = m.group(1).strip().lstrip("：:")
             # 过滤明显不是保单号的内容（排除英文单词如"Policy"）
-            if val and not re.match(r'^[若如]', val) and not re.match(r'^[A-Za-z]+$', val) and len(val) > 3:
+            # 真保单号必以字母/数字开头；若捕获到中文开头（如国寿组合单"各险种保险单号\n
+            # 分别为:...组合后保单号为"里的说明文字），说明是 \s 误吃换行匹配到了正文，跳过——
+            # 否则会占坑导致后面"组合后保单号"兜底规则不执行，最终清理时又被删成空。
+            if val and re.match(r'^[A-Za-z0-9]', val) and not re.match(r'^[A-Za-z]+$', val) and len(val) > 3:
                 # 如果值以"Policy"等英文开头，跳过（华泰混合格式由上方专用规则处理）
                 if re.match(r'^Policy', val, re.IGNORECASE):
                     continue
