@@ -1252,6 +1252,16 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
                           lambda m: m.group(1) + m.group(2) + m.group(3), _addr_pc)
         fields["保司地址"] = _addr_pc.rstrip('、，, ')
 
+    # 人保等竖排版式：竖排"保险人"三字 + 水印(如INDIGO)插入地址、尾部还吞了联系电话/网址/邮编。
+    # 仅当地址里确实混入这些尾巴时才清洗（截到联系电话/网址/邮编前 + 去水印），避免误伤正常地址。
+    _addr2 = fields.get("保司地址", "")
+    if _addr2 and re.search(r'联系电话|网址|邮\s*政?\s*编', _addr2):
+        _addr2 = _addr2.replace('INDIGO', '')
+        _addr2 = re.split(r'[保险人]{0,2}\s*(?:联系电话|网址|邮\s*政?\s*编\s*码?)', _addr2)[0]
+        _addr2 = _addr2.strip().rstrip('、，, 险保人')
+        if len(_addr2) >= 6:
+            fields["保司地址"] = _addr2
+
     # 合并文本把地址与下一行(公司名残段/竖排水印/电话)粘连时(如人寿"…B座6楼圳市分公司罗湖支公司保险95519")：
     # 若非合并原文能给出以强终止词(楼/号/室/座…)结尾、且是当前值前缀的更短地址，优先用它（不影响真正跨行地址）
     _addr_m = fields.get("保司地址", "")
