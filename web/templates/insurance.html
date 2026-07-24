@@ -725,6 +725,10 @@
                     </svg>
                     使用手册
                 </a>
+                <!-- 功能手册（仅内部超管：按功能模块的完整参考手册） -->
+                <a v-if="isSuperAdmin" href="/help?doc=feature"
+                   class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 12px;font-size:12px;text-decoration:none;"
+                   title="功能手册（内部）">📘 功能手册</a>
                 <!-- 系统设置（未激活隐藏） -->
                 <a v-if="!notActivated" href="/insurance/settings"
                    class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 12px;font-size:12px;text-decoration:none;"

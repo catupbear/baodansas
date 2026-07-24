@@ -2319,6 +2319,15 @@ _DEFAULT_MANUAL_SECTIONS = [
     },
 ]
 
+# 功能手册默认内容（按功能模块说明系统能力；内部超管可在页面编辑覆盖）
+_DEFAULT_FEATURE_SECTIONS = [
+    {
+        "id": "intro",
+        "title": "功能手册",
+        "content": "<p>本手册按功能模块说明系统能力。内部超级管理员可点击右上角「编辑」修改本内容。</p>",
+    },
+]
+
 # 客服跟进手册默认内容（新客户跟进流程 SOP，内部超管可在页面编辑覆盖）
 _DEFAULT_CS_FOLLOWUP_SECTIONS = [
     {
@@ -2419,6 +2428,7 @@ _DEFAULT_CS_FOLLOWUP_SECTIONS = [
 _MANUAL_DOC_MAP = {
     "help": ("help_manual_sections", _DEFAULT_MANUAL_SECTIONS),
     "cs_followup": ("cs_followup_sections", _DEFAULT_CS_FOLLOWUP_SECTIONS),
+    "feature": ("feature_manual_sections", _DEFAULT_FEATURE_SECTIONS),
 }
 
 
