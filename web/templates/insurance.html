@@ -336,7 +336,7 @@
         .records-table th, .records-table td {
             border-bottom: 1px solid var(--border-light);
             border-right: 1px solid var(--border-light);
-            padding: 6px 12px;
+            padding: 4px 10px;
         }
         .records-table th:last-child, .records-table td:last-child { border-right: none; }
         .records-table th { white-space: nowrap; }
@@ -3448,7 +3448,7 @@
                                               style="-webkit-user-select:none;user-select:none;"
                                               @click="startListEdit(record, col.key)"
                                               :title="(record.display_fields || {})[col.key] || '点击编辑'">
-                                            <span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;vertical-align:middle;word-break:break-all;">{{ (record.display_fields || {})[col.key] || '' }}</span>
+                                            <span style="display:-webkit-inline-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;vertical-align:middle;word-break:break-all;max-width:100%;">{{ (record.display_fields || {})[col.key] || '' }}</span>
                                             <span style="display:inline-flex;align-items:center;gap:2px;color:#f97316;white-space:nowrap;border:1px solid #fdba74;border-radius:4px;padding:2px 5px;margin-left:4px;vertical-align:middle;">
                                                 <svg style="width:11px;height:11px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                                 <span style="font-size:11px;line-height:1;">{{ (record.display_fields || {})[col.key] ? '修改' : '填写' }}</span>
@@ -7366,19 +7366,8 @@ const _app = createApp({
                 style.width = col.width + 'px';
                 style.minWidth = col.width + 'px';
                 style.maxWidth = col.width + 'px';
-            } else {
-                // 铺满容器时，短文本列封顶避免被均摊拉宽；「保单号」作为弹性列吸收剩余宽度
-                const FLEX = ['保单号'];                       // 弹性列（不封顶）
-                const MINW = { '创建时间': 150, '识别时间': 150, '群名': 100 };
-                const CAP  = { '承保公司': 100, '险种': 90, '车牌': 120, '车牌号': 120,
-                               '所属企业': 100, '签单日期': 120, '保险起期': 120, '保险止期': 120,
-                               '创建时间': 170, '识别时间': 170, '群名': 130 };
-                if (FLEX.includes(col.key)) {
-                    style.minWidth = '160px';
-                } else {
-                    style.minWidth = (MINW[col.key] || 80) + 'px';
-                    style.maxWidth = (CAP[col.key] || 140) + 'px';
-                }
+            } else if (!isTd) {
+                style.minWidth = (col.key === '创建时间' || col.key === '识别时间') ? '150px' : col.key === '群名' ? '100px' : '80px';
             }
             return style;
         }
