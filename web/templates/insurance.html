@@ -3116,6 +3116,7 @@
                           :class="recordActiveTab === tab.key ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-500'">
                         {{ tab.count }}
                     </span>
+                    <span :title="tab.desc" @click.stop style="font-size:10px;color:#c0c4cc;margin-left:2px;vertical-align:super;cursor:help;">ⓘ</span>
                 </button>
                 <!-- 全部 Tab：过滤非保单勾选项（默认勾选，排除已识别为非保单类型的记录） -->
                 <label v-if="recordActiveTab === 'all'" class="flex items-center gap-1.5 ml-3 text-xs text-gray-600 cursor-pointer flex-shrink-0 select-none"
@@ -9571,11 +9572,11 @@ const _app = createApp({
         const exportFilterNonPolicy = ref(true);
         // Tab 统计数来自服务端，不再依赖前端 parsed_fields 计算
         const recordTabs = computed(() => [
-            { key: 'all', label: '全部', count: recordStats.total },
-            { key: 'done', label: '成功', count: recordStats.done - recordStats.abnormal - recordStats.nonpolicy },
-            { key: 'abnormal', label: '需人工补充', count: recordStats.abnormal },
-            { key: 'nonpolicy', label: '非保单', count: recordStats.nonpolicy },
-            { key: 'failed', label: '失败', count: recordStats.failed },
+            { key: 'all', label: '全部', count: recordStats.total, desc: '所有已识别完成的记录（可勾选“过滤非保单”排除非保单文档）' },
+            { key: 'done', label: '成功', count: recordStats.done - recordStats.abnormal - recordStats.nonpolicy, desc: '识别成功、必填字段完整、无需人工处理的保单' },
+            { key: 'abnormal', label: '需人工补充', count: recordStats.abnormal, desc: '识别成功但缺少必填字段（如投保人、车牌、保费、日期等），需人工补全后才算完整' },
+            { key: 'nonpolicy', label: '非保单', count: recordStats.nonpolicy, desc: '识别为非保单文档，如电子标志、发票、缴款通知单等' },
+            { key: 'failed', label: '失败', count: recordStats.failed, desc: '文件无法解析识别（如文件损坏、非PDF、内容无法读取）' },
         ]);
 
         // 前端过滤（需人工补充/非保单 Tab 需要从 done 记录中二次筛选）
