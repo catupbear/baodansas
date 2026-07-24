@@ -1789,11 +1789,10 @@
                                 <span class="text-xs text-gray-400 w-14 shrink-0 truncate">{{ ent.enterprise_no || '-' }}</span>
                                 <span class="text-xs text-gray-700 w-24 shrink-0 truncate">{{ ent.enterprise }}</span>
                                 <div class="flex-1">
-                                    <div style="height:30px;">
-                                        <svg viewBox="0 0 100 34" preserveAspectRatio="none" style="width:100%;height:100%;display:block;">
-                                            <polygon :points="sparkArea(ent)" fill="#fdba74" opacity="0.35"></polygon>
-                                            <polyline :points="sparkLine(ent)" fill="none" stroke="#f97316" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"></polyline>
-                                        </svg>
+                                    <div class="flex items-end" style="height:36px;">
+                                        <div v-for="d in ent.days" :key="d.day" style="flex:1;display:flex;align-items:flex-end;justify-content:center;height:100%;">
+                                            <div style="width:56%;max-width:18px;min-height:2px;background:linear-gradient(to top,#f97316,#fdba74);border-radius:3px 3px 0 0;transition:height .3s;" :style="{height: entBarH(ent, d)}" :title="d.label + '：' + d.total"></div>
+                                        </div>
                                     </div>
                                     <div class="flex" style="margin-top:2px;">
                                         <span v-for="d in ent.days" :key="d.day" style="flex:1;text-align:center;line-height:1.25;">
@@ -6563,21 +6562,10 @@ const _app = createApp({
             return Math.min(100, val / max * 100).toFixed(1) + '%';
         }
         // 企业近7天迷你折线图：按该企业自身7天峰值归一，输出 SVG 折线/面积点（viewBox 0 0 100 34）
-        function sparkLine(ent) {
+        function entBarH(ent, d) {
             const arr = (ent && ent.days) || [];
-            if (!arr.length) return '';
             const max = Math.max(1, ...arr.map(x => Number(x.total) || 0));
-            const n = arr.length;
-            return arr.map((d, i) => {
-                const x = n > 1 ? (i / (n - 1) * 100) : 50;
-                const y = 32 - (Number(d.total) || 0) / max * 30;
-                return x.toFixed(1) + ',' + y.toFixed(1);
-            }).join(' ');
-        }
-        function sparkArea(ent) {
-            const line = sparkLine(ent);
-            if (!line) return '';
-            return '0,34 ' + line + ' 100,34';
+            return Math.round((Number(d.total) || 0) / max * 100) + '%';
         }
 
         const trendTooltip = Vue.ref(null);
@@ -12621,6 +12609,10 @@ const _app = createApp({
             if (new URLSearchParams(window.location.search).get('tab') === 'renewal') {
                 openRenewalTab();
             }
+            // 公户车盖章每日汇总推送链接：?tab=seal 直接跳转到公户车盖章跟进页
+            if (new URLSearchParams(window.location.search).get('tab') === 'seal') {
+                openSealTab();
+            }
             // 先拉取列配置里的默认排序（决定列表初始排序），再触发首次加载
             await loadDefaultSorts();
             // 默认筛选今天（同步，无 IO）+ 同步触发统计数（与 loadRecords 并行）
@@ -13273,7 +13265,7 @@ const _app = createApp({
             // 页面Tab
             pageTab,
             // 数据看板
-            dashboardData, dashboardLoading, dashboardDays, dashboardPeriod, periodOptions, periodLabel, loadDashboard, sourceDist, trendCanvas, trendTooltip, onChartMouseMove, onChartMouseLeave, barPct, sparkLine, sparkArea,
+            dashboardData, dashboardLoading, dashboardDays, dashboardPeriod, periodOptions, periodLabel, loadDashboard, sourceDist, trendCanvas, trendTooltip, onChartMouseMove, onChartMouseLeave, barPct, entBarH,
             dashboardEnterprise, dashboardCompany, dashboardEnterprises, dashboardCompanies,
             // 销售看板
             salesTab, salesLoading, salesData, salesEnterprise, salesPeriod, salesDateStart, salesDateEnd,
