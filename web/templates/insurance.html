@@ -241,6 +241,9 @@
         .sd-qi:hover .sd-qtip { display: block; }
         .sd-qi.qright .sd-qtip { left: auto; right: -10px; transform: none; }
         .sd-qi.qright .sd-qtip::after { left: auto; right: 14px; transform: none; }
+        /* 排行表头问号：向下弹出，避免顶部黑色分隔线遮挡 */
+        .sd-qi.tip-down .sd-qtip { top: 22px; bottom: auto; }
+        .sd-qi.tip-down .sd-qtip::after { top: auto; bottom: 100%; border-top-color: transparent; border-bottom-color: rgba(28,20,16,0.94); }
         /* 贴近屏幕边缘时的位置修正（JS 检测溢出后加类），窄屏限宽防两侧同时溢出 */
         .sd-qi .sd-qtip { max-width: calc(100vw - 24px); }
         .sd-qi .sd-qtip.tip-left { left: -8px; transform: none; }
@@ -2013,10 +2016,10 @@
                         <thead><tr>
                             <th>排名</th><th>{{ sdDispName(rk.dimension) }}</th>
                             <th v-for="col in rk.columns" :key="col">{{ sdDispName(col) }}
-                                <span class="sd-qi qright">?<span class="sd-qtip">{{ rk.col_explains[col] }}</span></span>
+                                <span class="sd-qi qright tip-down">?<span class="sd-qtip">{{ rk.col_explains[col] }}</span></span>
                             </th>
                             <th v-for="tn in rk.target_columns" :key="tn">{{ sdDispName(tn) }}·完成率
-                                <span class="sd-qi qright">?<span class="sd-qtip">{{ rk.col_explains[tn+'·完成率'] }}</span></span>
+                                <span class="sd-qi qright tip-down">?<span class="sd-qtip">{{ rk.col_explains[tn+'·完成率'] }}</span></span>
                             </th>
                         </tr></thead>
                         <tbody>
