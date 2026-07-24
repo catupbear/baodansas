@@ -257,6 +257,20 @@ def update_group_failure(db, roomid: str, permanent: bool = False):
         conn.close()
 
 
+def get_group(db, roomid: str) -> dict | None:
+    """取单个群的完整记录，不存在返回 None。
+    事件回调刷新群名时用它保留已有的 owner/member_count，避免被清零。"""
+    if not roomid:
+        return None
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT * FROM wecom_groups WHERE roomid = %s", (roomid,))
+        return cursor.fetchone()
+    finally:
+        conn.close()
+
+
 def get_group_name_map(db, roomids: list) -> dict:
     """批量取群名，返回 {roomid: name}（只含有名字的群）。"""
     ids = [r for r in set(roomids or []) if r]

@@ -214,6 +214,25 @@ def get_enabled_monitor_configs(db) -> list:
         conn.close()
 
 
+def list_monitor_configs_by_enterprise(db, enterprise_id) -> list:
+    """按企业查其名下全部监控配置（不限 enabled），按 id 降序排列。
+    供识别群自动匹配判重/选目标配置使用。enterprise_id 为空返回空列表。
+    """
+    if enterprise_id is None:
+        return []
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT * FROM monitor_configs WHERE enterprise_id = %s ORDER BY id DESC",
+            (enterprise_id,)
+        )
+        rows = cursor.fetchall()
+        return [_deserialize_json(row) for row in rows]
+    finally:
+        conn.close()
+
+
 def migrate_from_watch_list(db):
     """
     一次性迁移：将旧 insurance_config 中的 watch_list + dingtalk_targets 迁移到 monitor_configs 表。

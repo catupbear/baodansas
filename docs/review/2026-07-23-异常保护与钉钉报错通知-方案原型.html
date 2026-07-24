@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>台账系统 · 异常保护与钉钉报错通知 · 方案（待确认）</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 24px 80px;
+    background: #F7F8FA;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #1E293B;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+
+  /* 顶部标题区 */
+  .doc-header { margin-bottom: 32px; }
+  .doc-header .tag { display:inline-block; background:#FEF3C7; color:#92400E; font-size:12px; font-weight:600; padding:3px 10px; border-radius:20px; margin-bottom:12px; }
+  .doc-header h1 { font-size: 26px; font-weight: 800; margin: 0 0 8px; color:#0F172A; letter-spacing:-.02em; }
+  .doc-header .sub { font-size: 14px; color:#64748B; }
+
+  /* 区块 */
+  .section { background:#fff; border:1px solid #E2E8F0; border-radius:16px; padding:24px 28px; margin-bottom:20px; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+  .section h2 { font-size:17px; font-weight:700; color:#0F172A; margin:0 0 14px; display:flex; align-items:center; gap:8px; }
+  .section h2 .num { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:7px; background:#EEF2FF; color:#4338CA; font-size:13px; font-weight:800; }
+  .section p { font-size:13.5px; line-height:1.8; color:#334155; margin:6px 0; }
+  .section ul, .section ol { margin:8px 0; padding-left:20px; }
+  .section li { font-size:13.5px; line-height:1.85; color:#334155; margin-bottom:4px; }
+  code { background:#F1F5F9; border-radius:4px; padding:1px 6px; font-size:12.5px; color:#BE185D; font-family:"SF Mono",Menlo,Consolas,monospace; }
+  .file-path { color:#0369A1; }
+
+  /* 决策清单 */
+  .decision-list { display:flex; flex-direction:column; gap:8px; }
+  .decision-item { display:flex; gap:10px; align-items:flex-start; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:10px; padding:10px 14px; }
+  .decision-item .check { color:#16A34A; font-weight:800; font-size:14px; flex-shrink:0; }
+  .decision-item .txt { font-size:13.5px; color:#166534; line-height:1.7; }
+  .decision-item .txt b { color:#14532D; }
+
+  /* 流程图（纯CSS，无外部依赖） */
+  .flow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:18px 0; }
+  .flow .box { background:#F8FAFC; border:1.5px solid #CBD5E1; border-radius:10px; padding:10px 14px; font-size:12.5px; color:#334155; text-align:center; line-height:1.5; min-width:110px; }
+  .flow .box.accent { background:#EEF2FF; border-color:#A5B4FC; color:#3730A3; font-weight:600; }
+  .flow .box.warn { background:#FFF7ED; border-color:#FDBA74; color:#9A3412; font-weight:600; }
+  .flow .box.new { background:#ECFDF5; border-color:#6EE7B7; color:#065F46; font-weight:600; }
+  .flow .arrow { color:#94A3B8; font-size:16px; }
+  .flow-branch { display:flex; flex-direction:column; gap:8px; margin-left:6px; }
+
+  .fallback-note { display:flex; gap:10px; align-items:center; background:#F8FAFC; border:1px dashed #CBD5E1; border-radius:10px; padding:10px 14px; margin-top:12px; font-size:12.5px; color:#64748B; }
+
+  /* 表格 */
+  table.spec { width:100%; border-collapse:collapse; font-size:12.5px; margin:10px 0; }
+  table.spec th { background:#F8FAFC; color:#475569; font-weight:600; text-align:left; padding:8px 10px; border-bottom:1.5px solid #E2E8F0; }
+  table.spec td { padding:8px 10px; border-bottom:1px solid #F1F5F9; color:#334155; vertical-align:top; }
+  table.spec tr:last-child td { border-bottom:none; }
+  .badge { display:inline-block; font-size:11px; font-weight:600; padding:1px 7px; border-radius:5px; white-space:nowrap; }
+  .badge.reuse { background:#DBEAFE; color:#1D4ED8; }
+  .badge.new { background:#FEF3C7; color:#92400E; }
+  .badge.del { background:#FEE2E2; color:#B91C1C; }
+
+  /* 代码块 */
+  pre { background:#0F172A; color:#E2E8F0; border-radius:10px; padding:16px 18px; font-size:12px; line-height:1.7; overflow-x:auto; margin:10px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:inherit; }
+  .cmt { color:#64748B; }
+  .kw { color:#F472B6; }
+  .str { color:#86EFAC; }
+
+  /* 钉钉消息预览 */
+  .dt-preview { background:#F1F5F9; border:1px solid #E2E8F0; border-radius:12px; padding:14px 16px; margin:12px 0; font-size:12.5px; }
+  .dt-preview .dt-title { font-weight:700; color:#0F172A; margin-bottom:8px; font-size:13.5px; }
+  .dt-preview .dt-line { color:#334155; line-height:1.9; }
+  .dt-preview .dt-line b { color:#0F172A; }
+  .dt-preview pre { margin-top:8px; }
+
+  /* 强调提示框 */
+  .callout { border-radius:12px; padding:14px 18px; margin:14px 0; font-size:13px; line-height:1.8; }
+  .callout.action { background:#FEF2F2; border:1px solid #FECACA; color:#991B1B; }
+  .callout.action b { color:#7F1D1D; }
+  .callout.info { background:#EFF6FF; border:1px solid #BFDBFE; color:#1E40AF; }
+  .callout.info b { color:#1E3A8A; }
+
+  @media (max-width:768px){ .section{padding:18px;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="doc-header">
+    <span class="tag">📋 待确认方案 · docs/review</span>
+    <h1>台账系统 · 异常保护与钉钉报错通知方案</h1>
+    <div class="sub">系统方法/API 加异常保护，报错时钉钉通知（含完整 traceback，文案标注"台账系统"）· 2026-07-23</div>
+  </div>
+
+  <!-- 1. 现状调研结论 -->
+  <div class="section">
+    <h2><span class="num">1</span>现状调研结论</h2>
+    <ul>
+      <li><code class="file-path">core/notify.py</code> 已有完整的钉钉群机器人 webhook 推送封装（<code>DingTalkNotifier</code> + <code>notify_error()</code>），全项目约 <b>15 处</b>已手动调用，均在 <code>except</code> 块内、以字符串形式传入 <code>error</code>。</li>
+      <li>全项目<b>未发现</b> <code>import traceback</code> 用法，当前无任何地方记录/发送完整堆栈。</li>
+      <li><code class="file-path">insurance/api.py:479-482</code> 已有一个 <code>@insurance_bp.app_errorhandler(500)</code>，因非 blueprint-scoped 实际对整个 Flask app 全局生效，但不含 traceback，且 <code class="file-path">web/api.py</code>、<code class="file-path">callback/server.py</code> 未见等效兜底。</li>
+      <li>API 响应约定统一为 <code>{"code": xxx, "msg": "..."}</code>（jsonify）。</li>
+      <li>全项目共 <b>8 处</b>长期运行的常驻 daemon 线程/循环（消息拉取、通讯录同步、保单/AI核对/报价三个队列、超时匹配、补录扫描、看门狗），未见统一定时任务框架，定时任务靠外部 crontab 调用独立脚本。</li>
+      <li>项目规模约 44 个 .py 文件、<b>700+ 函数</b>（insurance/ 目录占 547 个）——逐个包裹所有内部函数不现实，且会掩盖需要向上传播、由调用方感知的异常。</li>
+    </ul>
+  </div>
+
+  <!-- 2. 总体方案 -->
+  <div class="section">
+    <h2><span class="num">2</span>总体方案：三层防护</h2>
+    <p>不做"给每个函数加 try"的字面式改造，改为三层防护，异常最终都收敛到同一个增强后的 <code>notify_error()</code>：</p>
+    <div class="decision-list">
+      <div class="decision-item"><span class="check">①</span><span class="txt"><b>API 层全局兜底</b>——Flask 全局 errorhandler，覆盖 <code>web/api.py</code>、<code>insurance/api.py</code>、<code>callback/server.py</code> 全部路由，不用给每个路由函数加装饰器。</span></div>
+      <div class="decision-item"><span class="check">②</span><span class="txt"><b>后台常驻循环逐个保护</b>——8 处长期运行的队列消费者/循环体，每轮/每个任务 try/except，防止一次异常导致整个线程退出。</span></div>
+      <div class="decision-item"><span class="check">③</span><span class="txt"><b>定时脚本顶层保护</b>——4 个 crontab 独立脚本的 <code>main()</code> 顶层加保护，避免脚本崩溃后无人知晓。</span></div>
+    </div>
+    <p style="margin-top:14px;"><b>关键设计取舍：</b>内部函数（如 <code>policy_parser.py</code> 里 50+ 保司的字段提取函数）<b>不做</b>逐个包裹——异常被吞掉会导致调用方拿到不完整数据而不自知，风险比"偶尔崩一次"更大。三层防护只在"最终兜不住"的最外层补网，不改变已有的局部 try/except 和业务降级逻辑（如百度 OCR 兜底、SDK 重试）。</p>
+  </div>
+
+  <!-- 3. 整体数据流 -->
+  <div class="section">
+    <h2><span class="num">3</span>整体数据流</h2>
+    <div class="flow">
+      <div class="box warn">任意受保护位置<br>发生未预期异常</div>
+      <div class="arrow">→</div>
+      <div class="box">except 捕获<br>logger.error(exc_info=True)</div>
+      <div class="arrow">→</div>
+      <div class="box accent">notify_error(module, method,<br>error, detail)　签名不变</div>
+      <div class="arrow">→</div>
+      <div class="box new">自动采集 traceback<br>截断最后40行</div>
+      <div class="arrow">→</div>
+      <div class="box">拼装 Markdown<br>标注"台账系统"</div>
+      <div class="arrow">→</div>
+      <div class="box">钉钉群机器人<br>（15分钟同标题去重）</div>
+    </div>
+    <div class="fallback-note">🔁 <b style="color:#475569;">三条出口并存：</b>&nbsp;API 层同时向前端返回统一 JSON 错误响应；后台循环 continue 继续下一轮；定时脚本记录后 <code>sys.exit(1)</code>——都共用同一个 <code>notify_error()</code> 出口。</div>
+  </div>
+
+  <!-- 4. notify_error 增强 -->
+  <div class="section">
+    <h2><span class="num">4</span>核心改造：<code>core/notify.py</code> · <code>notify_error()</code> 增强</h2>
+    <p>函数签名<b>不变</b>：<code>notify_error(module: str, method: str, error: str, detail: str = "")</code>，全项目 15 处现有调用<b>完全向后兼容，不用改一行调用代码</b>——只要本来就在 <code>except</code> 块里调用（已确认全部如此），增强后自动带上 traceback。</p>
+    <pre><code><span class="cmt"># core/notify.py（新增部分）</span>
+<span class="kw">import</span> sys, traceback
+
+tb_text = <span class="str">""</span>
+<span class="kw">if</span> sys.exc_info()[<span class="kw">0</span>] <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span>:          <span class="cmt"># 仅在 except 块内调用时才有堆栈</span>
+    tb = traceback.format_exc()
+    lines_tb = tb.strip().splitlines()
+    <span class="kw">if</span> <span class="kw">len</span>(lines_tb) > <span class="kw">40</span>:                  <span class="cmt"># 截断保护，避免钉钉消息过长</span>
+        lines_tb = [<span class="str">"... (已截断，仅显示最后40行) ..."</span>] + lines_tb[-<span class="kw">40</span>:]
+    tb_text = <span class="str">"\n"</span>.join(lines_tb)</code></pre>
+    <p><b>钉钉通知效果预览：</b></p>
+    <div class="dt-preview">
+      <div class="dt-title">⚠ 台账系统 - 消息拉取 异常</div>
+      <div class="dt-line"><b>系统</b>: 台账系统</div>
+      <div class="dt-line"><b>时间</b>: 2026-07-23 15:30:00</div>
+      <div class="dt-line"><b>模块</b>: 消息拉取</div>
+      <div class="dt-line"><b>方法</b>: <code>_do_fetch</code></div>
+      <div class="dt-line"><b>错误</b>: SDK拉取消息失败, 错误码: -1 (已重试3次)</div>
+      <div class="dt-line"><b>详情</b>: 企业: 午虎科技, seq=123456</div>
+      <div class="dt-line" style="margin-top:6px;"><b>堆栈信息</b>:</div>
+      <pre><code>Traceback (most recent call last):
+  File "core/fetcher.py", line 71, in _do_fetch
+    ret = self.sdk.get_chat_data(seq, limit)
+  File "sdk/finance_sdk.py", line 88, in get_chat_data
+    raise RuntimeError(f"SDK返回错误码: {ret}")
+RuntimeError: SDK返回错误码: -1</code></pre>
+    </div>
+    <p>去重规则不变：沿用 <code>title</code>（不含 traceback）15 分钟内去重，避免同一错误反复刷屏但仍能触发通知。</p>
+  </div>
+
+  <!-- 5. API层全局兜底 -->
+  <div class="section">
+    <h2><span class="num">5</span>API 层全局异常兜底</h2>
+    <pre><code><span class="cmt"># main.py 新增</span>
+<span class="kw">@app.errorhandler</span>(Exception)
+<span class="kw">def</span> _handle_uncaught_exception(error):
+    logger.error(<span class="str">"未捕获异常: %s"</span>, error, exc_info=<span class="kw">True</span>)
+    notify_error(<span class="str">"Web服务"</span>, request.path, <span class="kw">str</span>(error), <span class="kw">f"</span>method={request.method}<span class="kw">"</span>)
+    <span class="kw">return</span> jsonify({<span class="str">"code"</span>: <span class="kw">500</span>, <span class="str">"msg"</span>: <span class="str">"服务器内部错误"</span>}), <span class="kw">500</span></code></pre>
+    <ul>
+      <li>覆盖 <code class="file-path">web/api.py</code>、<code class="file-path">insurance/api.py</code>、<code class="file-path">callback/server.py</code> 所有蓝图路由，返回格式与现有 <code>{"code": xxx, "msg": "..."}</code> 约定一致。</li>
+      <li>删除 <code class="file-path">insurance/api.py:479-482</code> 现有重复的 <code>@insurance_bp.app_errorhandler(500)</code>，避免同一异常触发两次通知。</li>
+      <li>各路由函数内部已有的局部 try/except <b>保持不变</b>，不受影响——兜底只捕获路由函数内部没接住、意外冒出来的异常。</li>
+    </ul>
+  </div>
+
+  <!-- 6. 后台常驻循环保护 -->
+  <div class="section">
+    <h2><span class="num">6</span>后台常驻循环保护（8 处）</h2>
+    <p>给以下循环体补上"每轮/每个任务 try/except 包裹，异常时记录 + notify_error + continue，不让线程退出"（若已有等效保护则跳过，实现阶段逐个确认现状再决定是否需要改动）：</p>
+    <table class="spec">
+      <tr><th>文件</th><th>函数</th><th>说明</th></tr>
+      <tr><td><code>core/fetcher.py</code></td><td><code>_worker</code> / 主循环</td><td>消息拉取</td></tr>
+      <tr><td><code>main.py</code></td><td><code>_stuck_processing_watchdog</code></td><td>卡死自愈看门狗</td></tr>
+      <tr><td><code>core/contacts.py</code></td><td><code>_worker</code></td><td>通讯录同步</td></tr>
+      <tr><td><code>insurance/handler.py</code></td><td><code>_consume</code></td><td>保单识别队列</td></tr>
+      <tr><td><code>insurance/ai_checker.py</code></td><td><code>_consume</code></td><td>AI核对队列</td></tr>
+      <tr><td><code>quote/handler.py</code></td><td><code>_consume</code></td><td>报价队列</td></tr>
+      <tr><td><code>quote/matcher.py</code></td><td><code>_timeout_loop</code></td><td>超时匹配循环</td></tr>
+      <tr><td><code>insurance/fill_pending.py</code></td><td><code>_scan_loop</code></td><td>补录扫描循环</td></tr>
+    </table>
+    <p style="color:#64748B;">一次性任务线程（<code>do_fetch</code>、批量下载、数据回填等）不在本次强制范围内——通常已有局部 try/except，且一次性失败不会导致常驻服务整体挂掉。</p>
+  </div>
+
+  <!-- 7. 定时脚本保护 -->
+  <div class="section">
+    <h2><span class="num">7</span>定时脚本保护（4 个）</h2>
+    <p><code>renewal_task_scan.py</code>、<code>policy_expiry_reminder.py</code>、<code>task_group_sync.py</code>、<code>task_contact_sync.py</code> 的 <code>main()</code> 顶层加：</p>
+    <pre><code><span class="kw">if</span> __name__ == <span class="str">"__main__"</span>:
+    <span class="kw">try</span>:
+        main()
+    <span class="kw">except</span> <span class="kw">Exception</span> <span class="kw">as</span> e:
+        logger.error(<span class="str">"脚本执行异常: %s"</span>, e, exc_info=<span class="kw">True</span>)
+        notify_error(<span class="str">"定时任务"</span>, <span class="str">"脚本名.main"</span>, <span class="kw">str</span>(e))
+        sys.exit(<span class="kw">1</span>)</code></pre>
+  </div>
+
+  <!-- 8. 组件变更清单 -->
+  <div class="section">
+    <h2><span class="num">8</span>组件变更清单</h2>
+    <table class="spec">
+      <tr><th>组件</th><th>说明</th><th></th></tr>
+      <tr><td><code>core/notify.py</code> → <code>notify_error()</code></td><td>内部增加 traceback 自动采集+截断+"台账系统"标识，签名不变</td><td><span class="badge new">改动</span></td></tr>
+      <tr><td><code>main.py</code> → <code>_handle_uncaught_exception</code></td><td>新增全局 <code>@app.errorhandler(Exception)</code></td><td><span class="badge new">新增</span></td></tr>
+      <tr><td><code>insurance/api.py:479-482</code></td><td>删除重复的 <code>@insurance_bp.app_errorhandler(500)</code></td><td><span class="badge del">删除</span></td></tr>
+      <tr><td>8 处后台循环/队列消费者</td><td>逐个补 try/except（见第6节表格），仅在缺失保护时改动</td><td><span class="badge new">改动</span></td></tr>
+      <tr><td>4 个定时脚本 <code>main()</code></td><td>顶层加 try/except + notify_error + sys.exit(1)</td><td><span class="badge new">改动</span></td></tr>
+      <tr><td>全项目 15 处现有 <code>notify_error(...)</code> 调用</td><td>不改动，签名兼容，自动获得 traceback</td><td><span class="badge reuse">复用</span></td></tr>
+    </table>
+  </div>
+
+  <!-- 9. 测试计划 -->
+  <div class="section">
+    <h2><span class="num">9</span>测试计划</h2>
+    <ul>
+      <li>单元验证：手动触发 <code>notify_error()</code> 在 except 块内/块外两种场景，确认 traceback 是否正确附加/为空。</li>
+      <li>API 层：本地起服务，构造一个会抛异常的路由，确认全局 errorhandler 捕获、返回 JSON、钉钉收到含 traceback 的通知。</li>
+      <li>后台循环：本地 mock 一次异常，确认线程不退出、下一轮正常执行、钉钉收到通知。</li>
+      <li>回归：确认现有 15 处 <code>notify_error</code> 调用点行为不变（仅多了 traceback 字段），15 分钟去重仍生效。</li>
+      <li><code class="file-path">run_ocr.py</code> 同步检查：<code>main.py</code> 新增的 errorhandler 需同步确认 <code>run_ocr.py</code>（本地开发入口，无 SDK 但仍有 Flask 路由）是否也需要注册。</li>
+    </ul>
+  </div>
+
+  <!-- 10. 兼容性与边界 -->
+  <div class="section">
+    <h2><span class="num">10</span>兼容性与边界</h2>
+    <div class="callout info">
+      <b>不改变：</b>已有的局部 try/except 逻辑和业务侧错误处理/降级逻辑（百度 OCR 兜底、SDK 重试等），三层防护只在"最终兜不住时"的最外层补一道网；不对 <code>insurance/policy_parser.py</code> 等内部字段提取函数逐个包裹，避免异常被吞掉导致调用方拿到不完整数据而不自知。
+    </div>
+    <div class="callout action">
+      <b>需注意：</b>gunicorn 多 worker 场景下，每个 worker 会各自运行常驻线程，异常通知可能来自不同 worker，属正常现象，沿用现有进程内去重即可，不做跨 worker 去重。
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

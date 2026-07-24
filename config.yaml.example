@@ -14,6 +14,15 @@ callback:
   # 回调消息加解密用的EncodingAESKey（43位字符）
   encoding_aes_key: "your_encoding_aes_key"
 
+# 客户联系事件回调（可选；群名称/客户变更事件，用于识别群自动匹配等）
+event_callback:
+  enabled: false
+  path: "/callback/event"
+  corpid: "your_corp_id"
+  agent_id: 0
+  token: "your_event_callback_token"
+  encoding_aes_key: "your_event_callback_encoding_aes_key"
+
 sdk:
   # C SDK库文件路径
   lib_path: "./sdk/libWeWorkFinanceSdk_C.so"
