@@ -2001,8 +2001,8 @@
                 </div>
             </div>
 
-            <!-- 发送人排行：暂时隐藏——发送人名取的是企微同步的微信名而非绑定名，数据源修正后再放开 -->
-            <div v-if="false && salesData.ranking" class="sd-card">
+            <!-- 发送人排行 -->
+            <div v-if="salesData.ranking" class="sd-card">
                 <div class="sd-h2"><span class="bar"></span>{{ salesData.ranking.title }}
                     <span class="mini">按{{ salesData.ranking.dimension }}分组 · 排序依据：{{ salesData.ranking.sort_by }}</span>
                 </div>
