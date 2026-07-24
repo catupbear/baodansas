@@ -1102,6 +1102,21 @@ def _extract_insurer_info(text: str, text_merged: str, fields: dict):
     """提取保险人公司名称和地址（保单底部"保险人"信息区域）"""
     lines = text.split('\n')
 
+    # 国任等"承保机构名称：/承保机构地址："格式（公路货物运输定额保险/货运险等）——优先于通用规则，
+    # 否则保司公司名称因标签不同(非"公司名称")而漏抽、保司地址被下方投保人/被保险人的"地址："段误抓
+    if "承保机构名称" in text and "保司公司名称" not in fields:
+        _m = re.search(r'承保机构名称[：:]\s*([^\n]+?)(?:\s{2,}|\n|$)', text)
+        if _m:
+            _val = _m.group(1).strip()
+            if len(_val) >= 4 and '公司' in _val:
+                fields["保司公司名称"] = _val
+    if "承保机构地址" in text and "保司地址" not in fields:
+        _m = re.search(r'承保机构地址[：:]\s*([^\n]+?)(?:\s*承保机构|\s{2,}|\n|$)', text)
+        if _m:
+            _val = _m.group(1).strip()
+            if len(_val) >= 4 and re.search(r'[市区县].*?(?:路|街|号|大道)', _val):
+                fields["保司地址"] = _val
+
     # 太平洋非车险格式："签单公司信息 中国太平洋财产保险股份有限公司深圳分公司"
     # 优先提取，避免被"总公司地址"等干扰
     for src in [text, text_merged]:
