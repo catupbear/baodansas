@@ -3181,7 +3181,7 @@
         </div>
 
         <!-- 记录表格 -->
-        <div class="card table-card" style="display:flex;flex-direction:column;height:calc(100vh - 175px);min-height:420px;">
+        <div id="recTableCard" class="card table-card" style="display:flex;flex-direction:column;min-height:360px;">
             <!-- 加载中 / 空数据提示（独立于表格，不受列宽影响） -->
             <div v-if="isLoadingRecords" class="text-center py-12 text-gray-400">
                 <svg class="w-6 h-6 animate-spin mx-auto mb-2 text-orange-400" fill="none" viewBox="0 0 24 24">
@@ -12699,12 +12699,24 @@ const _app = createApp({
                 const el = document.querySelector('.nav-header');
                 if (el) document.documentElement.style.setProperty('--nav-header-h', el.offsetHeight + 'px');
             };
-            _syncNavHeaderHeight();
-            window.addEventListener('resize', _syncNavHeaderHeight);
+            // 识别记录表格高度：读取窗口实际高度动态计算（替代写死的 calc(100vh-175px)），
+            // 让表格容器精确撑满视口剩余空间——内部滚动区 flex:1 自动，表头吸顶、分页固定底部、页面本身不再溢出滚动
+            const _syncRecTableHeight = () => {
+                const card = document.getElementById('recTableCard');
+                if (!card || card.offsetParent === null) return; // 该 tab 未显示时跳过
+                const top = card.getBoundingClientRect().top;   // 容器距视口顶部（含导航+工具栏实际高度）
+                const h = window.innerHeight - top - 14;         // 底部留 14px 呼吸
+                card.style.height = Math.max(360, h) + 'px';
+            };
+            const _syncLayout = () => { _syncNavHeaderHeight(); _syncRecTableHeight(); };
+            _syncLayout();
+            window.addEventListener('resize', _syncLayout);
             if (window.ResizeObserver) {
                 const _navHeaderEl = document.querySelector('.nav-header');
-                if (_navHeaderEl) new ResizeObserver(_syncNavHeaderHeight).observe(_navHeaderEl);
+                if (_navHeaderEl) new ResizeObserver(_syncLayout).observe(_navHeaderEl);
             }
+            // 切换回「台账记录」页时容器重新显示，需重算高度
+            Vue.watch(pageTab, () => nextTick(() => setTimeout(_syncRecTableHeight, 60)));
         });
 
         // ============================================================
