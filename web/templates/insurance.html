@@ -3617,7 +3617,7 @@
                             </button>
                         </template>
                         <template v-else>
-                            <button v-else-if="record.status === 'failed' && record.cos_url" class="mrc-btn mrc-btn-primary" :disabled="record._reocring" @click="reocrRecord(record)">{{ record._reocring ? '识别中...' : '重新识别' }}</button>
+                            <button v-if="record.status === 'failed' && record.cos_url" class="mrc-btn mrc-btn-primary" :disabled="record._reocring" @click="reocrRecord(record)">{{ record._reocring ? '识别中...' : '重新识别' }}</button>
                             <button v-else-if="record.cos_url" class="mrc-btn mrc-btn-view" @click="previewRecord(record)">预览</button>
                             <label v-if="record.status === 'failed' && !record.cos_url" class="mrc-btn mrc-btn-primary" style="cursor:pointer;">
                                 {{ record._reuploading ? '上传中...' : '重新上传' }}
