@@ -3318,15 +3318,15 @@
                                             预览
                                         </button>
                                     </div>
-                                    <span v-else class="text-gray-600 text-sm truncate block" style="max-width:180px;" :title="record.filename">
+                                    <span v-else class="text-gray-600 text-sm truncate" :class="record._merged ? 'inline-block align-middle' : 'block'" style="max-width:180px;" :title="record.filename">
                                         {{ record.filename || '—' }}
                                     </span>
                                     <span v-if="record.policy_count > 1" class="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">多保单 {{ record.policy_index }}/{{ record.policy_count }}</span>
                                     <span v-if="record.page_range" class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">第{{ record.page_range }}页</span>
                                     <span v-if="record.hint" class="text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">{{ record.hint }}</span>
                                     <span v-if="getFailHint(record)" class="text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">{{ getFailHint(record) }}</span>
-                                    <!-- 操作按钮组：原独立「操作」列已并入此处，统一放在文件名下方（预览由上方文件名旁按钮承担） -->
-                                    <div class="flex items-center gap-1.5 flex-wrap mt-1.5">
+                                    <!-- 操作按钮组：原独立「操作」列已并入此处，统一放在文件名下方（预览由上方文件名旁按钮承担）；合并行时与「X条」同行 -->
+                                    <div class="flex items-center gap-1.5 flex-wrap" :class="record._merged ? '' : 'mt-1.5'" :style="record._merged ? 'display:inline-flex;margin-left:6px;vertical-align:middle;' : ''">
                                         <!-- 合并行：展开/收起该车牌明细 -->
                                         <button v-if="record._merged" @click="record._expanded = !record._expanded"
                                                 class="btn btn-outline" style="padding:3px 8px;font-size:11px;">
