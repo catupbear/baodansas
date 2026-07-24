@@ -2120,7 +2120,7 @@
                         </div>
                         <div class="sd-cfg-row">
                             <span class="sd-lb">分组维度：</span>
-                            <select v-model="rk.dimension" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ d }}</option></select>
+                            <select v-model="rk.dimension" @change="rk.title = rk.dimension + '业绩排行'" style="max-width:110px"><option v-for="d in sdFilterFields" :key="d" :value="d">{{ d }}</option></select>
                             <span class="sd-lb">排序依据：</span>
                             <select v-model="rk.sort_by"><option v-for="col in rk.columns" :key="col.title" :value="col.title">{{ col.title }}</option></select>
                         </div>
