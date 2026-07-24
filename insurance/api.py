@@ -2225,6 +2225,16 @@ def get_dashboard():
         """, (wp + tp) if (wp or tp) else None)
         enterprise_rank = cursor.fetchall() or []
 
+        # 7b. 各企业「近7天」使用量 Top10（固定近7天，独立于上方时间范围，用于看板左侧列）
+        cursor.execute(f"""
+            SELECT e.name AS enterprise, COUNT(*) AS total, SUM(r.status='done') AS done
+            FROM insurance_records r
+            JOIN enterprises e ON e.id = r.enterprise_id
+            WHERE {wh} AND DATE(r.created_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+            GROUP BY r.enterprise_id ORDER BY total DESC LIMIT 10
+        """, wp if wp else None)
+        enterprise_rank_7d = cursor.fetchall() or []
+
         conn.close()
         result = {
             "overview": overview,
@@ -2235,6 +2245,7 @@ def get_dashboard():
             "ocr_dist": ocr_dist,
             "source_dist": source_dist,
             "enterprise_rank": enterprise_rank,
+            "enterprise_rank_7d": enterprise_rank_7d,
             "period": period,
         }
         # 写入缓存（today/yesterday 缓存 30 秒，其他 2 分钟）
