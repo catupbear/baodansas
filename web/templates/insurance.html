@@ -7270,13 +7270,24 @@ const _app = createApp({
         const listColumnConfig = ref([]);
         // 计算实际显示的列（按 order 排序，只取 visible 的）
         const visibleListColumns = computed(() => {
+            let cols;
             if (!listColumnConfig.value.length) {
-                return outputColumns.value.map(col => ({ key: col, display_name: col, frozen: false }));
+                cols = outputColumns.value.map(col => ({ key: col, display_name: col, frozen: false }));
+            } else {
+                cols = listColumnConfig.value
+                    .filter(c => c.visible !== false)
+                    .sort((a, b) => (a.order || 0) - (b.order || 0))
+                    .map(c => ({ key: c.key, display_name: c.display_name || c.key, frozen: !!c.frozen, width: c.width || null, is_mobile: c.is_mobile !== false, is_sum: c.is_sum === true }));
             }
-            return listColumnConfig.value
-                .filter(c => c.visible !== false)
-                .sort((a, b) => (a.order || 0) - (b.order || 0))
-                .map(c => ({ key: c.key, display_name: c.display_name || c.key, frozen: !!c.frozen, width: c.width || null, is_mobile: c.is_mobile !== false, is_sum: c.is_sum === true }));
+            // 内部账号查看某企业时：强制「文件名」列放最前且冻结——保证能定位文件，
+            // 且操作按钮/合并展开（并入「文件名」列下方渲染）不会因企业模板缺文件名列而丢失
+            if (isSuperAdmin.value && recordEnterpriseFilter.value) {
+                let fnCol = cols.find(c => c.key === '文件名');
+                cols = cols.filter(c => c.key !== '文件名');
+                fnCol = fnCol ? { ...fnCol, frozen: true } : { key: '文件名', display_name: '文件名', frozen: true, width: 180, is_mobile: true, is_sum: false };
+                cols.unshift(fnCol);
+            }
+            return cols;
         });
         // 手机端识别记录卡片实际展示的字段：在页面列基础上按「手机端」勾选再筛一层
         // （is_mobile !== false 兼容还没保存过这个新配置的客户，默认跟桌面页面列一致）
