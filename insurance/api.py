@@ -2225,15 +2225,31 @@ def get_dashboard():
         """, (wp + tp) if (wp or tp) else None)
         enterprise_rank = cursor.fetchall() or []
 
-        # 7b. 各企业「近7天」使用量 Top10（固定近7天，独立于上方时间范围，用于看板左侧列）
+        # 7b. 固定「近7天」每日识别量趋势（补全空缺天，独立于上方时间范围，用于看板左侧主图）
+        from datetime import datetime as _dt7, timedelta as _td7
+        wh7, wp7 = _where()
         cursor.execute(f"""
-            SELECT e.name AS enterprise, COUNT(*) AS total, SUM(r.status='done') AS done
-            FROM insurance_records r
-            JOIN enterprises e ON e.id = r.enterprise_id
-            WHERE {wh} AND DATE(r.created_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-            GROUP BY r.enterprise_id ORDER BY total DESC LIMIT 10
-        """, wp if wp else None)
-        enterprise_rank_7d = cursor.fetchall() or []
+            SELECT DATE(created_at) AS day, COUNT(*) AS total,
+                   SUM(status='done') AS done, SUM(status='failed') AS failed
+            FROM insurance_records
+            WHERE {wh7} AND DATE(created_at) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+            GROUP BY day ORDER BY day ASC
+        """, wp7 if wp7 else None)
+        _raw7 = {}
+        for _r in (cursor.fetchall() or []):
+            _d = _r["day"].strftime("%Y-%m-%d") if hasattr(_r.get("day"), "strftime") else str(_r.get("day"))
+            _raw7[_d] = _r
+        trend_7d = []
+        _today7 = _dt7.now().date()
+        for _i in range(6, -1, -1):
+            _ds = (_today7 - _td7(days=_i)).strftime("%Y-%m-%d")
+            _rr = _raw7.get(_ds)
+            trend_7d.append({
+                "day": _ds, "label": _ds[5:],
+                "total": int(_rr["total"]) if _rr and _rr.get("total") else 0,
+                "done": int(_rr["done"]) if _rr and _rr.get("done") else 0,
+                "failed": int(_rr["failed"]) if _rr and _rr.get("failed") else 0,
+            })
 
         conn.close()
         result = {
@@ -2245,7 +2261,7 @@ def get_dashboard():
             "ocr_dist": ocr_dist,
             "source_dist": source_dist,
             "enterprise_rank": enterprise_rank,
-            "enterprise_rank_7d": enterprise_rank_7d,
+            "trend_7d": trend_7d,
             "period": period,
         }
         # 写入缓存（today/yesterday 缓存 30 秒，其他 2 分钟）
