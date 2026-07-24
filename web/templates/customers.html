@@ -196,6 +196,9 @@
                 </div>
 
                 <div class="onboard-content">
+                <!-- 跟进手册：占位入口，内容待定 -->
+                <div v-if="activeGroup === 'manual'" style="padding:48px 24px;text-align:center;color:#9ca3af;font-size:14px;">📖 跟进手册功能建设中，敬请期待</div>
+                <template v-else>
                 <!-- 桌面表格 -->
                 <div class="cust-table-wrap bg-white rounded-2xl border border-gray-100 overflow-x-auto">
                     <table class="data-table">
@@ -297,6 +300,7 @@
                         </div>
                     </div>
                 </div>
+                </template>
                 </div>
             </div>
             </template>
@@ -473,7 +477,8 @@ const ONBOARD_GROUPS = [
     { key: 'week1', label: '接入第一周', test: d => d >= 0 && d < 7 },
     { key: 'week2', label: '接入第二周', test: d => d >= 7 && d < 14 },
     { key: 'week3to6', label: '接入3-6周', test: d => d >= 14 && d < 42 },
-    { key: 'trialEnded', label: '试用结束', test: d => d >= 42 },
+    { key: 'week6trial', label: '接入第六周-试用结束', test: d => d >= 42 && d < 49 },  // 第6周整周(42-48天)
+    { key: 'trialEnded', label: '试用结束', test: d => d >= 49 },                       // 第7周起，试用期彻底结束
 ];
 function daysSinceOnboard(onboardedAt) {
     if (!onboardedAt) return null;
@@ -511,21 +516,30 @@ createApp({
 
         const groupedCustomers = Vue.computed(() => {
             const groups = ONBOARD_GROUPS.map(g => ({ ...g, items: [] }));
-            const prepGroup = { key: 'prep', label: '暂未接入', items: [] };
+            const prepQunGroup = { key: 'prepQun', label: '预备群', items: [] };   // 客户名以「预备群」开头
+            const notOnboardGroup = { key: 'prep', label: '暂未接入', items: [] };
             filteredCustomers.value.forEach(c => {
-                if (c.follow_status !== '正常使用') { prepGroup.items.push(c); return; }
+                // 预备群优先：客户名以「预备群」开头的单独成组，不参与其它分组
+                if ((c.name || '').startsWith('预备群')) { prepQunGroup.items.push(c); return; }
+                if (c.follow_status !== '正常使用') { notOnboardGroup.items.push(c); return; }
                 const d = daysSinceOnboard(c.onboarded_at);
                 if (d === null) return;
                 const g = groups.find(g => g.test(d));
                 if (g) g.items.push(c);
             });
-            groups.push(prepGroup);
+            // 顺序：各接入周分组 → 预备群 → 暂未接入
+            groups.push(prepQunGroup);
+            groups.push(notOnboardGroup);
             return groups;
         });
 
         const sidebarGroups = Vue.computed(() => {
             const list = [{ key: 'all', label: '全部', count: filteredCustomers.value.length }];
-            groupedCustomers.value.forEach(g => list.push({ key: g.key, label: g.label, count: g.items.length }));
+            groupedCustomers.value.forEach(g => {
+                // 在「暂未接入」之前插入「跟进手册」占位入口（暂不筛选客户，内容以后再定）
+                if (g.key === 'prep') list.push({ key: 'manual', label: '跟进手册', count: '' });
+                list.push({ key: g.key, label: g.label, count: g.items.length });
+            });
             return list;
         });
 
