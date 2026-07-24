@@ -457,6 +457,12 @@
             /* 移动端表格不按视口封顶（避免底部被固定导航盖住/100vh 含浏览器栏），改为整页滚动 */
             .table-card { max-height: none !important; }
         }
+        /* 中等宽度（平板 / 缩小的桌面窗口）：状态Tab与操作按钮一行放不下时，
+           让按钮组整体换到下一行、占满整行横排右对齐，避免被挤成竖排 */
+        @media (min-width: 641px) and (max-width: 1280px) {
+            .record-tab-row { flex-wrap: wrap; }
+            .record-tab-row .record-actions { width: 100%; margin-left: 0; justify-content: flex-end; padding-top: 6px; }
+        }
     /* ========== 购买套餐弹窗（系统橙色主题） ========== */
     .pm-overlay{position:fixed;inset:0;z-index:300;background:rgba(17,24,39,0.5);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 16px;
       --pm-orange:#ea580c;--pm-orange2:#fb923c;--pm-green:#16a34a;--pm-text:#111827;--pm-text2:#6b7280;--pm-text3:#9ca3af;--pm-surface2:#f9fafb;--pm-border:#eceef1;--pm-border2:#e5e7eb;}
