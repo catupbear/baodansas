@@ -331,7 +331,7 @@
             padding: 8px 12px;
         }
         .records-table th { white-space: nowrap; }
-        .records-table td { white-space: normal; word-break: break-all; }
+        .records-table td { white-space: normal; word-break: break-word; max-width: 240px; }
         .records-table th {
             position: sticky; top: 0; z-index: 12;
             background: var(--surface-secondary);
@@ -7154,7 +7154,7 @@ const _app = createApp({
         const fieldHelp = ref({
             "tab_all": "所有已识别完成的记录（可勾选“过滤非保单”排除非保单文档）",
             "tab_done": "识别成功、必填字段完整、无需人工处理的保单",
-            "tab_abnormal": "保单原件上本身就没有这些必填信息（如投保人、车牌、保费、日期等），并非系统未识别到；需人工补录后这条记录才算完整",
+            "tab_abnormal": "保单原件本身就缺这些信息（如投保人、车牌、日期等），非系统漏识别，需人工补录",
             "tab_nonpolicy": "识别为非保单文档，如电子标志、发票、缴款通知单等",
             "tab_failed": "文件无法解析识别（如文件损坏、非PDF、内容无法读取）",
             "文件名": "保单文件本身的名称（文件上传时的原始文件名）",
