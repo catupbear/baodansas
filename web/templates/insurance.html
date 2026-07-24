@@ -2564,12 +2564,12 @@
     </main>
 
     <!-- ========== 续保提醒 Tab ========== -->
-    <main v-if="pageTab === 'renewal' && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5">
+    <main v-if="pageTab === 'renewal' && !notActivated" class="mx-auto px-4 sm:px-6 lg:px-10 pt-3 pb-6 space-y-5" style="display:flex;flex-direction:column;min-height:calc(100vh - var(--nav-header-h, 56px));">
         <!-- 续保设置按钮已移除（扫描窗口固定，二维码由平台统一配置）；引导入口仍在 renewalPromoVisible 弹窗 -->
 
         <!-- 未显示完整信息时，整个统计/筛选/列表区域磨砂遮罩，只有顶部的开关按钮可正常操作 -->
         <div :style="(renewalInfoRevealed || isSuperAdmin) ? '' : 'filter: blur(6px); pointer-events: none; user-select: none;'"
-             style="transition: filter 0.15s;" class="space-y-5">
+             style="transition: filter 0.15s; flex:1; display:flex; flex-direction:column; min-height:0;" class="space-y-5">
         <!-- 统计卡片 -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div class="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
@@ -2636,8 +2636,8 @@
             </div>
         </div>
 
-        <!-- 任务列表 -->
-        <div class="card table-card" style="display:flex;flex-direction:column;max-height:calc(100vh - 340px);">
+        <!-- 任务列表：flex:1 填满 main 剩余高度，避免内容少时下方留白（不再依赖 340px 魔法数） -->
+        <div class="card table-card" style="display:flex;flex-direction:column;flex:1;min-height:0;">
             <div v-if="renewalLoading" class="text-center py-12 text-gray-400">加载中...</div>
             <div v-else-if="!renewalTasks.length" class="text-center py-12 text-gray-400">暂无续保任务</div>
             <div v-else class="table-scroll-wrapper" style="flex:1;min-height:0;overflow-y:auto;">
