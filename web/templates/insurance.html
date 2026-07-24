@@ -725,10 +725,6 @@
                     </svg>
                     使用手册
                 </a>
-                <!-- 功能手册（仅内部超管：按功能模块的完整参考手册） -->
-                <a v-if="isSuperAdmin" href="/help?doc=feature"
-                   class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 12px;font-size:12px;text-decoration:none;"
-                   title="功能手册（内部）">📘 功能手册</a>
                 <!-- 系统设置（未激活隐藏） -->
                 <a v-if="!notActivated" href="/insurance/settings"
                    class="btn btn-outline" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.25);padding:6px 12px;font-size:12px;text-decoration:none;"
@@ -1127,6 +1123,19 @@
                         </button>
                     </div>
                 </div>
+
+                <!-- 系统手册（仅内部超管，点击打开手册页） -->
+                <a v-if="isSuperAdmin" href="/help?doc=feature" target="_blank" style="display:block;text-decoration:none;border-bottom:1px solid #f5f5f5;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;cursor:pointer;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <div style="width:32px;height:32px;border-radius:8px;background:#fff7ed;display:flex;align-items:center;justify-content:center;">
+                                <svg width="16" height="16" fill="none" stroke="#f07c3e" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+                            </div>
+                            <span style="font-size:14px;color:#1a1a1a;font-weight:500;">系统手册</span>
+                        </div>
+                        <svg style="width:16px;height:16px;color:#bbb" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                    </div>
+                </a>
 
                 <!-- 我的钱包（暂时隐藏） -->
                 <div v-if="false" style="border-bottom:1px solid #f5f5f5;">
