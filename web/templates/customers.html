@@ -845,6 +845,8 @@ createApp({
         }
         async function saveProfile() {
             if (!profileTarget.value) return;
+            // 用户在输入框填了内容但没点「+添加」就直接点保存 → 自动并入，避免跟进记录丢失（保存成空 []）
+            if (newFollowupContent.value.trim()) addFollowup();
             profileSaving.value = true;
             const remarkJson = JSON.stringify(profileFollowups.value);
             try {
