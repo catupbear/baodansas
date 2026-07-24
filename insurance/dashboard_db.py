@@ -720,7 +720,7 @@ def _build_group_chart(ch: dict, records: list, date_start: str, date_end: str,
     merge_map = _DIMENSION_MERGE.get(dimension, {})
     groups = {}
     for r in records:
-        key = str(r.get(dimension) or "").strip() or "未知"
+        key = str(r.get(dimension) or "").strip() or "未归属"
         key = merge_map.get(key, key)
         groups.setdefault(key, []).append(r)
     items = [{"name": k, "value": _aggregate(v, agg, field), "count": len(v)}
@@ -756,7 +756,7 @@ def _build_ranking(db, rk: dict, records: list, all_targets: list, enterprise_id
 
     groups = {}
     for r in records:
-        key = str(r.get(dimension) or "").strip() or "未知"
+        key = str(r.get(dimension) or "").strip() or "未归属"
         groups.setdefault(key, []).append(r)
 
     # 员工目标项：name → {unified, persons: {员工名: value}, meta}
@@ -790,7 +790,7 @@ def _build_ranking(db, rk: dict, records: list, all_targets: list, enterprise_id
                                      user_config, apply_config_fn)
         person_rows = {}
         for r in t_records:
-            key = str(r.get(dimension) or "").strip() or "未知"
+            key = str(r.get(dimension) or "").strip() or "未归属"
             person_rows.setdefault(key, []).append(r)
         target_col_data.append({
             "name": name, "item": item, "meta": meta,
