@@ -7915,6 +7915,10 @@ def seal_tasks_list():
     if eid is not None:
         conds.append("r.enterprise_id = %s")
         params.append(eid)
+    # 员工只看自己上传的公户车保单（与识别记录页一致）；企业管理员/超管看本企业/全部
+    if g.current_user.get("role") == ROLE_EMPLOYEE:
+        conds.append("r.user_id = %s")
+        params.append(g.current_user["user_id"])
     if keyword:
         conds.append("(pf.plate_no LIKE %s OR pf.insured LIKE %s OR pf.policy_no LIKE %s)")
         kw = f"%{keyword}%"
