@@ -2651,7 +2651,7 @@
                                 <input v-if="isSuperAdmin || currentUser.role === 'enterprise'" type="checkbox" :value="t.id" v-model="renewalSelectedIds" class="cursor-pointer">
                                 <span class="font-extrabold text-gray-800" style="font-size:18px;letter-spacing:0.5px;">{{ (renewalInfoRevealed || isSuperAdmin) ? (t.plate_no || t.vin || '—') : (maskPlateNo(t.plate_no || t.vin) || '—') }}</span>
                                 <span v-if="t.policy_type" class="text-xs text-gray-500">{{ t.policy_type }}</span>
-                                <span class="text-xs px-1.5 py-0.5 rounded-full font-semibold" :style="renewalDaysBadgeStyle(t)">{{ renewalDaysLeftText(t) }} · 请提醒</span>
+                                <span class="text-xs px-1.5 py-0.5 rounded-full font-semibold" :style="(t.status === 'renew_pending' || t.status === 'transfer_pending') ? renewalStatusStyle(t.status) : renewalDaysBadgeStyle(t)">{{ t.status === 'renew_pending' ? '疑似续保，请确认' : (t.status === 'transfer_pending' ? '疑似转保，请确认' : renewalDaysLeftText(t) + ' · 请提醒') }}</span>
                                 <span v-if="t.status === 'renew_pending' || t.status === 'transfer_pending'" class="text-xs px-1.5 py-0.5 rounded-full" :style="renewalStatusStyle(t.status)">🔔 {{ renewalStatusLabel(t.status) }}</span>
                             </div>
                             <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5 mt-2 text-xs" style="max-width:760px;">
@@ -3194,7 +3194,8 @@
                             <th class="sticky-col-check" style="min-width:40px;">
                                 <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" class="cursor-pointer">
                             </th>
-                            <th class="action-col-sticky" :class="{'action-col-narrow': pageMergeByPlate}">操作</th>
+                            <!-- 「操作」列已并入「文件名」列下方，此独立列隐藏 -->
+                            <th v-if="false" class="action-col-sticky" :class="{'action-col-narrow': pageMergeByPlate}">操作</th>
                             <template v-for="(col, colIdx) in visibleListColumns" :key="col.key">
                                 <!-- 所属企业（仅超管可见，置于承保公司列前） -->
                                 <th v-if="isSuperAdmin && col.key === '承保公司'" class="text-gray-600 font-medium" style="min-width:90px;">所属企业<span v-if="fieldHelp['所属企业']" class="field-help-icon"
@@ -3228,8 +3229,8 @@
                             <td class="sticky-col-check">
                                 <input type="checkbox" :value="record.id" v-model="selectedRecordIds" class="cursor-pointer">
                             </td>
-                            <!-- 操作 -->
-                            <td class="action-col-sticky" :class="{'action-col-narrow': pageMergeByPlate}">
+                            <!-- 操作（此独立列已隐藏，按钮组见「文件名」列下方） -->
+                            <td v-if="false" class="action-col-sticky" :class="{'action-col-narrow': pageMergeByPlate}">
                                 <div class="flex items-center gap-1.5 flex-wrap">
                                     <!-- 合并行：展开/收起该车牌明细 -->
                                     <button v-if="record._merged" @click="record._expanded = !record._expanded"
@@ -3332,7 +3333,51 @@
                                     <span v-if="record.page_range" class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">第{{ record.page_range }}页</span>
                                     <span v-if="record.hint" class="text-xs text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">{{ record.hint }}</span>
                                     <span v-if="getFailHint(record)" class="text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">{{ getFailHint(record) }}</span>
-                                    <span v-if="record.abnormal_override_reason" class="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">已标记正常: {{ record.abnormal_override_reason }}</span>
+                                    <!-- 操作按钮组：原独立「操作」列已并入此处，统一放在文件名下方（预览由上方文件名旁按钮承担） -->
+                                    <div class="flex items-center gap-1.5 flex-wrap mt-1.5">
+                                        <!-- 合并行：展开/收起该车牌明细 -->
+                                        <button v-if="record._merged" @click="record._expanded = !record._expanded"
+                                                class="btn btn-outline" style="padding:3px 8px;font-size:11px;">
+                                            {{ record._expanded ? '收起' : '展开' }} {{ record._children ? record._children.length : 0 }} 条
+                                        </button>
+                                        <template v-if="!record._merged">
+                                        <!-- 重新识别（已完成或失败的记录） -->
+                                        <button v-if="record.status === 'done' || record.status === 'success' || record.status === 'failed'"
+                                                @click="reocrRecord(record)" :disabled="record._reocring"
+                                                class="btn btn-primary" style="padding:3px 8px;font-size:11px;">
+                                            {{ record._reocring ? '识别中...' : '重新识别' }}
+                                        </button>
+                                        <!-- AI质检（仅超管，有原件才显示） -->
+                                        <button v-if="isSuperAdmin && record.cos_url"
+                                                @click="openRecordAiCheck(record)"
+                                                class="btn" style="padding:3px 8px;font-size:11px;background:#f5f3ff;border:1px solid #ddd6fe;color:#6d28d9;">
+                                            {{ aiCheckedDone(record) ? 'AI质检结果' : 'AI质检' }}
+                                        </button>
+                                        <!-- 重新上传保单（失败且无COS URL） -->
+                                        <label v-if="record.status === 'failed' && !record.cos_url"
+                                               class="btn" style="padding:3px 8px;font-size:11px;background:#f97316;color:#fff;border:1px solid #ea580c;cursor:pointer;">
+                                            {{ record._reuploading ? '上传中...' : '重新上传' }}
+                                            <input type="file" accept=".pdf" style="display:none;" @change="reuploadRecord(record, $event)" :disabled="record._reuploading">
+                                        </label>
+                                        <!-- 已标记正常，显示撤销 -->
+                                        <span v-if="record.abnormal_override_reason"
+                                              class="inline-flex items-center gap-1 text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+                                            已标记正常
+                                            <button @click="undoMarkNormal(record)" class="text-gray-400 hover:text-red-500 cursor-pointer" title="撤销标记">&times;</button>
+                                        </span>
+                                        <!-- 删除（仅超级管理员） -->
+                                        <button v-if="isSuperAdmin"
+                                                @click="openDeleteRecord(record)"
+                                                class="btn" style="padding:3px 8px;font-size:11px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;">
+                                            删除
+                                        </button>
+                                        <!-- 报错 -->
+                                        <button @click="openErrorReport(record)"
+                                                class="btn" style="padding:3px 8px;font-size:11px;background:#fef9c3;border:1px solid #fde047;color:#854d0e;">
+                                            报错
+                                        </button>
+                                        </template>
+                                    </div>
                                 </template>
                                 <!-- 文档类型 -->
                                 <template v-else-if="col.key === '文档类型'">
