@@ -338,15 +338,23 @@ def text_msg_notify_enabled() -> bool:
 
 def _group_msg_meta(sender_name: str, enterprise: str, msg_time: str) -> str:
     """
-    群消息转发通知的元信息行（发送人 · 时间 · 企业），弱化展示在正文下方。
+    群消息转发通知的元信息行（发送人 · 时间），展示在正文上方。
     时间去掉秒数（HH:MM:SS → HH:MM），转发通知不需要精确到秒。
+
+    enterprise 参数保留（调用方仍在传）但不再拼接展示——同一个机器人只服务一个
+    企业群，企业名属冗余信息。
     """
     display_time = msg_time or time.strftime("%m-%d %H:%M:%S")
     display_time = re.sub(r"(\d{1,2}:\d{2}):\d{2}\b", r"\1", display_time)
-    meta = f"**{sender_name or '未知'}** · {display_time}"
-    if enterprise:
-        meta += f" · {enterprise}"
-    return meta
+    return f"**{sender_name or '未知'}** · {display_time}"
+
+
+def _join_blocks(blocks: list) -> str:
+    """
+    拼接钉钉 Markdown 各内容块：块尾补两个空格 + 空行，双保险确保换行生效
+    （钉钉对单纯的空行分段并不总是生效，行尾两空格才是硬换行）。
+    """
+    return "  \n\n".join(b for b in blocks if b)
 
 
 def notify_group_text(room_name: str, sender_name: str, text: str,
@@ -372,11 +380,11 @@ def notify_group_text(room_name: str, sender_name: str, text: str,
     # 正文用引用块突出；多行文本每行都要带引用前缀，否则钉钉只引用第一行
     quoted = "> " + text[:1000].replace("\n", "  \n> ")
     meta = _group_msg_meta(sender_name, enterprise, msg_time)
-    # 内容优先：标题 → 正文（重点）→ 元信息（弱化）→ 链接，各块用空行分隔避免粘连
-    lines = [f"#### 💬 {room_name}", "", quoted, "", meta]
+    # 顺序：群名 → 发送人+时间 → 正文 → 链接，各块之间空行分隔
+    blocks = [f"#### 💬 {room_name}", meta, quoted]
     if detail_url:
-        lines += ["", f"[查看会话记录 →]({detail_url})"]
-    content = "\n".join(lines)
+        blocks.append(f"[查看会话记录 →]({detail_url})")
+    content = _join_blocks(blocks)
 
     threading.Thread(
         target=_text_msg_notifier.send, args=(title, content),
@@ -398,11 +406,11 @@ def notify_group_image(room_name: str, sender_name: str, image_url: str,
 
     title = f"🖼 {room_name}"
     meta = _group_msg_meta(sender_name, enterprise, msg_time)
-    # 内容优先：标题 → 图片（重点）→ 元信息（弱化）→ 链接，各块用空行分隔避免粘连
-    lines = [f"#### 🖼 {room_name}", "", f"![图片]({image_url})", "", meta]
+    # 顺序：群名 → 发送人+时间 → 图片 → 链接，各块之间空行分隔
+    blocks = [f"#### 🖼 {room_name}", meta, f"![图片]({image_url})"]
     if detail_url:
-        lines += ["", f"[查看会话记录 →]({detail_url})"]
-    content = "\n".join(lines)
+        blocks.append(f"[查看会话记录 →]({detail_url})")
+    content = _join_blocks(blocks)
 
     threading.Thread(
         target=_text_msg_notifier.send, args=(title, content),
