@@ -1457,13 +1457,7 @@
                     </div>
                     <button class="btn btn-outline btn-sm" @click="addRatioBranch">＋ 添加分支</button>
                     <datalist id="ratioCondFieldOptions">
-                        <option value="保费"></option>
-                        <option value="承保险种"></option>
-                        <option value="使用性质"></option>
-                        <option value="车牌号"></option>
-                        <option value="投保人"></option>
-                        <option value="车辆种类"></option>
-                        <option v-for="f in allFields" :value="f"></option>
+                        <option v-for="f in ratioCondFields" :value="f"></option>
                     </datalist>
                 </template>
                 <div v-if="ratioFormError" style="margin-top:12px; font-size:13px; color:var(--danger);">{{ ratioFormError }}</div>
@@ -2637,6 +2631,15 @@ createApp({
         const ratioFieldOps = ['等于', '不等于', '包含', '不包含', '大于', '大于等于', '小于', '小于等于', '为空', '不为空'];
 
         const ratioCompanies = computed(() => [...new Set(ratioRules.value.map(r => r.company))]);
+        // 条件字段候选：常用条件字段 + 页面列 + 导出列 的并集（系统所有字段均可作为条件）
+        const ratioCondFields = computed(() => {
+            const keys = ['保费', '承保险种', '使用性质', '车牌号', '投保人', '车辆种类'];
+            const push = k => { if (k && !keys.includes(k)) keys.push(k); };
+            (listColItems.value || []).forEach(c => push(c.key));
+            (exportColItems.value || []).forEach(c => push(c.key));
+            ['车船税', '商业险保费', '交强险保费', '非车险保费'].forEach(push);
+            return keys;
+        });
         const ratioCondText = (br) => {
             return (br.conditions || []).map(c => {
                 if (c.type === 'related') return `同${c.match_by}${c.days}天内${c.op === 'exists' ? '存在' : '不存在'}${c.policy_type}`;
@@ -3698,7 +3701,7 @@ createApp({
             insertField, insertOp, openFormulaModal, saveFormula, deleteRule,
             // 比例规则
             ratioRules, ratioSearch, ratioCompanyFilter, ratioCompanies, filteredRatioRules,
-            ratioCondText, fmtPct, fmtRuleVal, ratioFieldOps,
+            ratioCondText, fmtPct, fmtRuleVal, ratioFieldOps, ratioCondFields,
             showRatioModal, editingRatioIdx, ratioForm, ratioFormError,
             openRatioModal, editRatioRule, deleteRatioRule, saveRatioRule, createRatioField,
             addRatioCond, addRatioBranch, moveRatioBranch,
