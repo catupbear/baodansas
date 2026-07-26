@@ -1877,6 +1877,8 @@ def _split_fee_context(fields: dict) -> dict:
 # value 结构：
 #   固定比例：{"value": 0.22}
 #   条件分支：{"branches": [{"conditions": [...], "value": 0.22, "note": "带驾乘险出单"}], "default": 0.20}
+#   固定值（文本）：加 "vtype": "text"，value/branches.value/default 存原样文本（如"深圳前海"），
+#                  不做任何数值/百分比换算，命中后原样写入字段；default 为空表示不写入
 # 条件类型：
 #   字段条件：  {"type": "field", "field": "保费", "op": "大于", "value": "5000"}
 #   关联单条件：{"type": "related", "match_by": "车牌号", "policy_type": "驾乘险", "op": "exists", "days": 7}
@@ -1916,6 +1918,14 @@ def _ratio_num(v):
         return num / 100.0 if pct else num
     except (ValueError, TypeError):
         return None
+
+
+def _text_val(v):
+    """固定值（文本）规则取值：原样返回去首尾空格的文本，空值返回 None（表示不写入）。"""
+    if v is None:
+        return None
+    txt = str(v).strip()
+    return txt or None
 
 
 def _cond_num(v):
@@ -2091,11 +2101,13 @@ def match_ratio_rules(config: dict, fields: dict) -> list:
 def resolve_ratio_value(value_obj: dict, fields: dict, related_ctx=None, self_record_id=None):
     """
     解析一条比例规则的最终取值：分支自上而下首个命中者生效，都不命中走 default。
-    返回 (比例小数值 float 或 None, 命中备注 str)。
+    返回 (取值, 命中备注 str)：比例规则为小数 float，固定值（vtype=text）规则为原样文本 str，未命中为 None。
     """
     try:
+        # 固定值（文本）规则：不做数值/百分比换算，原样取文本
+        conv = _text_val if value_obj.get("vtype") == "text" else _ratio_num
         if "branches" not in value_obj:
-            return _ratio_num(value_obj.get("value")), ""
+            return conv(value_obj.get("value")), ""
         for br in value_obj.get("branches") or []:
             try:
                 conds = br.get("conditions") or []
@@ -2115,10 +2127,10 @@ def resolve_ratio_value(value_obj: dict, fields: dict, related_ctx=None, self_re
                             ok = False
                             break
                 if ok:
-                    return _ratio_num(br.get("value")), str(br.get("note") or "")
+                    return conv(br.get("value")), str(br.get("note") or "")
             except Exception:
                 continue
-        return _ratio_num(value_obj.get("default")), "默认"
+        return conv(value_obj.get("default")), "默认"
     except Exception:
         return None, ""
 
@@ -2144,8 +2156,12 @@ def apply_ratio_rules(config: dict, result: dict, manual_fields=None) -> list:
                 val, _note = resolve_ratio_value(value_obj, result, related_ctx, self_id)
                 if val is None:
                     continue
-                result[target_field] = f"{val:g}"
-                injected.append(target_field)
+                if isinstance(val, str):
+                    # 固定值（文本）规则：原样写入，不进 injected（该列表只用于末尾"率"字段的百分比显示转换）
+                    result[target_field] = val
+                else:
+                    result[target_field] = f"{val:g}"
+                    injected.append(target_field)
             except Exception:
                 continue
     except Exception:

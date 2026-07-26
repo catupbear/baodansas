@@ -712,7 +712,7 @@
                     </div>
                 </div>
                 <div style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">
-                    按条件算出比例后写入指定字段（如 应付费率），公式照常引用该字段（如 应付费用 = 保费 × 应付费率）。比例写入字段需先在「导出列配置」中添加为自定义列。
+                    按条件算出比例后写入指定字段（如 应付费率），公式照常引用该字段（如 应付费用 = 保费 × 应付费率）。也支持「设置固定值」：命中条件后把文本原样写入字段（如 出单渠道 = 深圳前海），不做百分比换算。写入字段需先在「导出列配置」中添加为自定义列。
                 </div>
                 <div class="rule-table-wrap" style="overflow-x:auto;">
                 <table class="rule-table" style="min-width:640px;">
@@ -732,18 +732,18 @@
                             <td>{{ item.policyType }}</td>
                             <td>
                                 <div v-if="item.mode === 'fixed'" style="padding:2px 0;">
-                                    <span style="color:var(--text-muted); font-size:12px;">固定比例</span>
-                                    <strong style="margin-left:8px; color:var(--primary);">{{ fmtPct(item.fixedPct) }}</strong>
+                                    <span style="color:var(--text-muted); font-size:12px;">{{ item.vtype === 'text' ? '固定值' : '固定比例' }}</span>
+                                    <strong style="margin-left:8px; color:var(--primary);">{{ fmtRuleVal(item, item.fixedPct, item.fixedVal) }}</strong>
                                 </div>
                                 <template v-else>
                                     <div v-for="(br, bi) in item.branches" :key="bi" style="padding:2px 0; font-size:13px;">
                                         <span style="background:#eff4ff; color:#2563eb; border-radius:4px; padding:1px 8px; font-size:12px;">{{ br.note || ratioCondText(br) }}</span>
                                         <span v-if="br.note" style="color:var(--text-muted); font-size:12px; margin-left:6px;">{{ ratioCondText(br) }}</span>
-                                        <strong style="margin-left:8px; color:var(--primary);">{{ fmtPct(br.pct) }}</strong>
+                                        <strong style="margin-left:8px; color:var(--primary);">{{ fmtRuleVal(item, br.pct, br.val) }}</strong>
                                     </div>
                                     <div style="padding:2px 0; font-size:13px;">
                                         <span style="background:#f1f5f9; color:#64748b; border-radius:4px; padding:1px 8px; font-size:12px;">默认</span>
-                                        <strong style="margin-left:8px; color:var(--primary);">{{ fmtPct(item.defaultPct) }}</strong>
+                                        <strong style="margin-left:8px; color:var(--primary);">{{ fmtRuleVal(item, item.defaultPct, item.defaultVal) }}</strong>
                                     </div>
                                 </template>
                             </td>
@@ -1323,8 +1323,8 @@
             <div style="padding:24px; max-height:65vh; overflow-y:auto;">
                 <div class="formula-grid" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:16px;">
                     <div>
-                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">比例写入字段 <span style="color:#dc2626;">*</span></label>
-                        <search-select v-model="ratioForm.field" :options="formulaFields" placeholder="如：应付费率"
+                        <label style="font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:6px;">{{ ratioForm.vtype==='text' ? '写入字段' : '比例写入字段' }} <span style="color:#dc2626;">*</span></label>
+                        <search-select v-model="ratioForm.field" :options="formulaFields" :placeholder="ratioForm.vtype==='text' ? '如：出单渠道' : '如：应付费率'"
                                        empty-hint="暂无自定义字段，输入新字段名可直接新建"
                                        create-label="添加为导出列自定义字段" @create="createRatioField"></search-select>
                     </div>
@@ -1338,23 +1338,42 @@
                     </div>
                 </div>
 
+                <div style="margin-bottom:16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <span style="font-size:13px; font-weight:500; color:var(--text-secondary);">规则类型</span>
+                    <div style="display:inline-flex; border:1px solid var(--border-light); border-radius:6px; overflow:hidden;">
+                        <button :style="ratioForm.vtype!=='text' ? 'background:var(--primary);color:#fff;' : 'background:#f8fafc;color:#475569;'"
+                                style="font-size:13px; padding:6px 16px; border:none; cursor:pointer; font-weight:600;"
+                                @click="ratioForm.vtype='ratio'">设置比例</button>
+                        <button :style="ratioForm.vtype==='text' ? 'background:var(--primary);color:#fff;' : 'background:#f8fafc;color:#475569;'"
+                                style="font-size:13px; padding:6px 16px; border:none; cursor:pointer; font-weight:600;"
+                                @click="ratioForm.vtype='text'">设置固定值</button>
+                    </div>
+                    <span v-if="ratioForm.vtype==='text'" style="font-size:12px; color:var(--text-muted);">固定值原样写入字段（如"深圳前海"），不做百分比换算</span>
+                </div>
+
                 <div style="margin-bottom:16px; display:flex; align-items:center; gap:10px;">
                     <span style="font-size:13px; font-weight:500; color:var(--text-secondary);">取值方式</span>
                     <div style="display:inline-flex; border:1px solid var(--border-light); border-radius:6px; overflow:hidden;">
                         <button :style="ratioForm.mode==='fixed' ? 'background:var(--primary);color:#fff;' : 'background:#f8fafc;color:#475569;'"
                                 style="font-size:13px; padding:6px 16px; border:none; cursor:pointer; font-weight:600;"
-                                @click="ratioForm.mode='fixed'">固定比例</button>
+                                @click="ratioForm.mode='fixed'">{{ ratioForm.vtype==='text' ? '固定值' : '固定比例' }}</button>
                         <button :style="ratioForm.mode==='branch' ? 'background:var(--primary);color:#fff;' : 'background:#f8fafc;color:#475569;'"
                                 style="font-size:13px; padding:6px 16px; border:none; cursor:pointer; font-weight:600;"
                                 @click="ratioForm.mode='branch'">条件分支</button>
                     </div>
                 </div>
 
-                <!-- 固定比例 -->
+                <!-- 固定比例 / 固定值 -->
                 <div v-if="ratioForm.mode==='fixed'" style="margin-bottom:16px; display:flex; align-items:center; gap:8px;">
-                    <span style="font-size:13px; color:var(--text-secondary);">比例 =</span>
-                    <input type="number" step="0.01" v-model="ratioForm.fixedPct" style="width:100px; padding:6px 10px; border:1px solid var(--border-light); border-radius:4px; text-align:right; font-weight:600;">
-                    <span>%</span>
+                    <template v-if="ratioForm.vtype==='text'">
+                        <span style="font-size:13px; color:var(--text-secondary);">固定值 =</span>
+                        <input v-model="ratioForm.fixedVal" placeholder="如：深圳前海" style="width:200px; padding:6px 10px; border:1px solid var(--border-light); border-radius:4px; font-weight:600;">
+                    </template>
+                    <template v-else>
+                        <span style="font-size:13px; color:var(--text-secondary);">比例 =</span>
+                        <input type="number" step="0.01" v-model="ratioForm.fixedPct" style="width:100px; padding:6px 10px; border:1px solid var(--border-light); border-radius:4px; text-align:right; font-weight:600;">
+                        <span>%</span>
+                    </template>
                 </div>
 
                 <!-- 条件分支 -->
@@ -1408,10 +1427,16 @@
                             <button class="btn btn-sm btn-outline" title="看本条保单自己的字段值，如：保费 大于 5000" @click="addRatioCond(br, 'field')">＋字段条件</button>
                             <button class="btn btn-sm btn-outline" title="看是否存在另一张关联保单，如：同车牌 7 天内存在驾乘险" @click="addRatioCond(br, 'related')">＋关联单条件</button>
                         </div>
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <span style="font-size:13px; color:var(--text-secondary);">则比例 =</span>
-                            <input type="number" step="0.01" v-model="br.pct" style="width:90px; padding:5px 8px; border:1px solid var(--border-light); border-radius:4px; text-align:right; font-weight:600;">
-                            <span>%</span>
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <template v-if="ratioForm.vtype==='text'">
+                                <span style="font-size:13px; color:var(--text-secondary);">则值 =</span>
+                                <input v-model="br.val" placeholder="如：深圳前海" style="width:160px; padding:5px 8px; border:1px solid var(--border-light); border-radius:4px; font-weight:600;">
+                            </template>
+                            <template v-else>
+                                <span style="font-size:13px; color:var(--text-secondary);">则比例 =</span>
+                                <input type="number" step="0.01" v-model="br.pct" style="width:90px; padding:5px 8px; border:1px solid var(--border-light); border-radius:4px; text-align:right; font-weight:600;">
+                                <span>%</span>
+                            </template>
                             <span style="font-size:13px; color:var(--text-secondary); margin-left:8px;">备注</span>
                             <input v-model="br.note" placeholder="如：带驾乘险出单" style="width:140px; padding:5px 8px; border:1px solid var(--border-light); border-radius:4px;">
                         </div>
@@ -1419,9 +1444,15 @@
                     <div style="border:1px solid var(--border-light); border-radius:8px; padding:12px 14px; margin-bottom:12px; background:#f8fafc;">
                         <div style="font-weight:600; color:#64748b; font-size:13px; margin-bottom:8px;">默认（以上条件都不满足时）</div>
                         <div style="display:flex; align-items:center; gap:8px;">
-                            <span style="font-size:13px; color:var(--text-secondary);">比例 =</span>
-                            <input type="number" step="0.01" v-model="ratioForm.defaultPct" style="width:90px; padding:5px 8px; border:1px solid var(--border-light); border-radius:4px; text-align:right; font-weight:600;">
-                            <span>%</span>
+                            <template v-if="ratioForm.vtype==='text'">
+                                <span style="font-size:13px; color:var(--text-secondary);">默认值 =</span>
+                                <input v-model="ratioForm.defaultVal" placeholder="留空 = 不写入该字段" style="width:200px; padding:5px 8px; border:1px solid var(--border-light); border-radius:4px; font-weight:600;">
+                            </template>
+                            <template v-else>
+                                <span style="font-size:13px; color:var(--text-secondary);">比例 =</span>
+                                <input type="number" step="0.01" v-model="ratioForm.defaultPct" style="width:90px; padding:5px 8px; border:1px solid var(--border-light); border-radius:4px; text-align:right; font-weight:600;">
+                                <span>%</span>
+                            </template>
                         </div>
                     </div>
                     <button class="btn btn-outline btn-sm" @click="addRatioBranch">＋ 添加分支</button>
@@ -2596,8 +2627,10 @@ createApp({
         };
 
         // ========== 比例规则（按条件取值） ==========
-        // 数据模型：{field, company, policyType, mode:'fixed'|'branch', fixedPct, branches:[{conditions, pct, note}], defaultPct}
-        // 存储时比例转小数（22% → 0.22），加载时转回百分数展示
+        // 数据模型：{field, company, policyType, vtype:'ratio'|'text', mode:'fixed'|'branch',
+        //           fixedPct, fixedVal, branches:[{conditions, pct, val, note}], defaultPct, defaultVal}
+        // vtype='ratio'（默认）：存储时比例转小数（22% → 0.22），加载时转回百分数展示
+        // vtype='text'（固定值）：fixedVal/val/defaultVal 存原样文本（如"深圳前海"），不做任何换算；默认值留空 = 不写入
         const ratioRules = ref([]);
         const ratioSearch = ref('');
         const ratioCompanyFilter = ref('');
@@ -2615,14 +2648,19 @@ createApp({
             if (isNaN(n)) return '-';
             return (Math.round(n * 100) / 100) + '%';
         };
+        // 规则取值展示：固定值规则显示原样文本，比例规则显示百分数
+        const fmtRuleVal = (rule, pct, txt) => {
+            if (rule.vtype === 'text') return String(txt ?? '').trim() || '（不写入）';
+            return fmtPct(pct);
+        };
         const filteredRatioRules = computed(() => {
             const q = ratioSearch.value.trim().toLowerCase();
             return ratioRules.value.filter(r => {
                 if (ratioCompanyFilter.value && r.company !== ratioCompanyFilter.value) return false;
                 if (!q) return true;
                 const text = [r.field, r.company, r.policyType,
-                    ...(r.branches || []).map(b => (b.note || '') + ratioCondText(b) + b.pct),
-                    r.mode === 'fixed' ? r.fixedPct : r.defaultPct].join(' ').toLowerCase();
+                    ...(r.branches || []).map(b => (b.note || '') + ratioCondText(b) + b.pct + (b.val || '')),
+                    r.mode === 'fixed' ? (r.fixedPct + ' ' + (r.fixedVal || '')) : (r.defaultPct + ' ' + (r.defaultVal || ''))].join(' ').toLowerCase();
                 return text.includes(q);
             });
         });
@@ -2630,7 +2668,7 @@ createApp({
         // ---- 编辑弹窗 ----
         const showRatioModal = ref(false);
         const editingRatioIdx = ref(null);
-        const ratioForm = ref({ field: '', company: '', policyType: '', mode: 'branch', fixedPct: 20, branches: [], defaultPct: 20 });
+        const ratioForm = ref({ field: '', company: '', policyType: '', vtype: 'ratio', mode: 'branch', fixedPct: 20, fixedVal: '', branches: [], defaultPct: 20, defaultVal: '' });
         const ratioFormError = ref('');
 
         // 比例写入字段下拉里的「新建」引导：把输入的名称新建为自定义列（列表列+导出列）并直接选中
@@ -2646,7 +2684,7 @@ createApp({
             : { type: 'field', field: '保费', op: '大于', value: '' };
         const addRatioCond = (br, type) => { br.conditions.push(newRatioCond(type)); };
         const addRatioBranch = () => {
-            ratioForm.value.branches.push({ conditions: [newRatioCond('related')], pct: 22, note: '' });
+            ratioForm.value.branches.push({ conditions: [newRatioCond('related')], pct: 22, val: '', note: '' });
         };
         const moveRatioBranch = (bi, d) => {
             const arr = ratioForm.value.branches;
@@ -2658,10 +2696,16 @@ createApp({
             ratioFormError.value = '';
             editingRatioIdx.value = idx;
             if (idx !== null && ratioRules.value[idx]) {
-                ratioForm.value = JSON.parse(JSON.stringify(ratioRules.value[idx]));
+                // 兼容旧数据：补齐 vtype / 固定值相关字段
+                const copy = JSON.parse(JSON.stringify(ratioRules.value[idx]));
+                copy.vtype = copy.vtype || 'ratio';
+                copy.fixedVal = copy.fixedVal ?? '';
+                copy.defaultVal = copy.defaultVal ?? '';
+                (copy.branches || []).forEach(b => { b.val = b.val ?? ''; });
+                ratioForm.value = copy;
             } else {
-                ratioForm.value = { field: '', company: '', policyType: '', mode: 'branch', fixedPct: 20,
-                    branches: [{ conditions: [newRatioCond('related')], pct: 22, note: '带驾乘险出单' }], defaultPct: 20 };
+                ratioForm.value = { field: '', company: '', policyType: '', vtype: 'ratio', mode: 'branch', fixedPct: 20, fixedVal: '',
+                    branches: [{ conditions: [newRatioCond('related')], pct: 22, val: '', note: '带驾乘险出单' }], defaultPct: 20, defaultVal: '' };
             }
             showRatioModal.value = true;
         };
@@ -2676,23 +2720,29 @@ createApp({
         const saveRatioRule = () => {
             const f = ratioForm.value;
             ratioFormError.value = '';
-            if (!f.field || !f.field.trim()) { ratioFormError.value = '请填写比例写入字段（如：应付费率）'; return; }
+            const isText = f.vtype === 'text';
+            if (!f.field || !f.field.trim()) { ratioFormError.value = isText ? '请填写写入字段（如：出单渠道）' : '请填写比例写入字段（如：应付费率）'; return; }
             if (!f.company || !f.company.trim()) { ratioFormError.value = '请填写保司（或"全部"）'; return; }
             if (!f.policyType || !f.policyType.trim()) { ratioFormError.value = '请填写险种（或"全部"）'; return; }
             if (f.mode === 'fixed') {
-                if (isNaN(parseFloat(f.fixedPct))) { ratioFormError.value = '请填写固定比例'; return; }
+                if (isText) {
+                    if (!(f.fixedVal || '').trim()) { ratioFormError.value = '请填写固定值'; return; }
+                } else if (isNaN(parseFloat(f.fixedPct))) { ratioFormError.value = '请填写固定比例'; return; }
             } else {
                 if (!f.branches.length) { ratioFormError.value = '条件分支模式至少需要一个分支'; return; }
                 for (let i = 0; i < f.branches.length; i++) {
                     const br = f.branches[i];
                     if (!br.conditions.length) { ratioFormError.value = `分支 ${i + 1} 未添加条件`; return; }
-                    if (isNaN(parseFloat(br.pct))) { ratioFormError.value = `分支 ${i + 1} 未填写比例`; return; }
+                    if (isText) {
+                        if (!(br.val || '').trim()) { ratioFormError.value = `分支 ${i + 1} 未填写值`; return; }
+                    } else if (isNaN(parseFloat(br.pct))) { ratioFormError.value = `分支 ${i + 1} 未填写比例`; return; }
                     for (const c of br.conditions) {
                         if (c.type === 'related' && !(c.policy_type || '').trim()) { ratioFormError.value = `分支 ${i + 1} 的关联单条件未填写险种`; return; }
                         if (c.type !== 'related' && !(c.field || '').trim()) { ratioFormError.value = `分支 ${i + 1} 的字段条件未填写字段名`; return; }
                     }
                 }
-                if (isNaN(parseFloat(f.defaultPct))) { ratioFormError.value = '请填写默认比例'; return; }
+                // 固定值规则的默认值允许留空（= 不写入），比例规则默认比例必填
+                if (!isText && isNaN(parseFloat(f.defaultPct))) { ratioFormError.value = '请填写默认比例'; return; }
             }
             const rule = JSON.parse(JSON.stringify(f));
             rule.field = rule.field.trim();
@@ -2809,17 +2859,25 @@ createApp({
                         const [field, company, policyType] = parts;
                         const val = item.value;
                         if (!val || typeof val !== 'object') return;
+                        const isText = val.vtype === 'text';
+                        const vtype = isText ? 'text' : 'ratio';
                         if (val.branches) {
                             rules.push({
-                                field, company, policyType, mode: 'branch', fixedPct: 20,
+                                field, company, policyType, vtype, mode: 'branch', fixedPct: 20, fixedVal: '',
                                 branches: (val.branches || []).map(b => ({
                                     conditions: (b.conditions || []).map(c => ({ ...c })),
-                                    pct: decToPct(b.value), note: b.note || '',
+                                    pct: isText ? 22 : decToPct(b.value),
+                                    val: isText ? String(b.value ?? '') : '',
+                                    note: b.note || '',
                                 })),
-                                defaultPct: decToPct(val.default),
+                                defaultPct: isText ? 20 : decToPct(val.default),
+                                defaultVal: isText ? String(val.default ?? '') : '',
                             });
                         } else {
-                            rules.push({ field, company, policyType, mode: 'fixed', fixedPct: decToPct(val.value), branches: [], defaultPct: 20 });
+                            rules.push({ field, company, policyType, vtype, mode: 'fixed',
+                                fixedPct: isText ? 20 : decToPct(val.value),
+                                fixedVal: isText ? String(val.value ?? '') : '',
+                                branches: [], defaultPct: 20, defaultVal: '' });
                         }
                     } catch (e) { /* 单条规则异常跳过 */ }
                 });
@@ -2833,20 +2891,24 @@ createApp({
             for (const r of ratioRules.value) {
                 try {
                     const key = `${r.field}:${r.company}:${r.policyType}`;
+                    const isText = r.vtype === 'text';
                     if (r.mode === 'fixed') {
-                        items.push({ key, value: { value: pctToDec(r.fixedPct) } });
+                        items.push({ key, value: isText
+                            ? { vtype: 'text', value: (r.fixedVal || '').trim() }
+                            : { value: pctToDec(r.fixedPct) } });
                     } else {
                         items.push({
                             key,
                             value: {
+                                ...(isText ? { vtype: 'text' } : {}),
                                 branches: (r.branches || []).map(b => ({
                                     conditions: (b.conditions || []).map(c => c.type === 'related'
                                         ? { type: 'related', match_by: c.match_by, policy_type: c.policy_type, op: c.op, days: parseInt(c.days) || 7 }
                                         : { type: 'field', field: c.field, op: c.op, ...(['为空', '不为空'].includes(c.op) ? {} : { value: c.value ?? '' }) }),
-                                    value: pctToDec(b.pct),
+                                    value: isText ? (b.val || '').trim() : pctToDec(b.pct),
                                     ...(b.note ? { note: b.note } : {}),
                                 })),
-                                default: pctToDec(r.defaultPct),
+                                default: isText ? (r.defaultVal || '').trim() : pctToDec(r.defaultPct),
                             },
                         });
                     }
@@ -3636,7 +3698,7 @@ createApp({
             insertField, insertOp, openFormulaModal, saveFormula, deleteRule,
             // 比例规则
             ratioRules, ratioSearch, ratioCompanyFilter, ratioCompanies, filteredRatioRules,
-            ratioCondText, fmtPct, ratioFieldOps,
+            ratioCondText, fmtPct, fmtRuleVal, ratioFieldOps,
             showRatioModal, editingRatioIdx, ratioForm, ratioFormError,
             openRatioModal, editRatioRule, deleteRatioRule, saveRatioRule, createRatioField,
             addRatioCond, addRatioBranch, moveRatioBranch,
