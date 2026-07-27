@@ -249,16 +249,8 @@ def main():
             if soon_lines:
                 lines.append("🟠 即将到期：")
                 lines.extend(soon_lines)
-            # 免登录直达链接：带这个跟单人自己账号的登录token，点开直接进续保管理系统页面
-            _uid = plist[0].get("user_id")
-            if _uid:
-                try:
-                    _u = get_user_by_id(db, _uid)
-                    if _u:
-                        _tk = generate_token(_uid, _u.get("phone", ""), _u.get("role", ""))
-                        lines.append(f"👉 点击查看续保详情：{BASE_URL}/insurance?tab=renewal&token={_tk}")
-                except Exception as e:
-                    logger.warning("生成续保免登录链接失败, sender=%s: %s", sender, e)
+            # 续保详情链接（普通链接，客户点开需登录后进入续保管理页；不再走免登录 token）
+            lines.append(f"👉 点击查看续保详情：{BASE_URL}/insurance?tab=renewal")
             lines.append("")
 
         message = "\n".join(lines).rstrip()
