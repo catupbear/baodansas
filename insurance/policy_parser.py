@@ -910,10 +910,15 @@ def _fix_yongan_compulsory_layered(text: str, fields: dict):
                         fields["厂牌型号"] = prev
                     break
             # 发动机号行：VIN 下一非空行 "K581305 5 0千克"
+            # 服务器版 pdfplumber 会吞掉表格单元格间的空格，同一行变成 "K58130550千克"（2026-07-27 线上实测），
+            # 先按有空格版匹配，失败再按粘连版拆：发动机号贪婪取最长，核定载客限 1-2 位且不以 0 开头，
+            # 核定载质量限 0 或 ≥3 位真实重量（回溯后唯一解 K581305|5|0）
             for j in range(k + 1, len(window)):
                 nxt = window[j]
                 if nxt:
                     m2 = re.match(r'^([A-Z0-9\-]{4,20})\s+(\d{1,3})\s+([\d.]+)\s*千克$', nxt)
+                    if not m2:
+                        m2 = re.match(r'^([A-Z0-9\-]{5,20})([1-9]\d?)(0|[1-9]\d{2,4})千克$', nxt)
                     if m2:
                         fields["发动机号"] = m2.group(1)
                         fields["核定载客"] = m2.group(2)
@@ -934,12 +939,18 @@ def _fix_yongan_compulsory_layered(text: str, fields: dict):
             fields["争议解决方式"] = ln
             break
 
-    # ===== 车船税合计："叁佰陆拾元整 360.00"（大写金额+唯一一个数字；保费行后跟多个数字不会误中） =====
+    # ===== 车船税合计："叁佰陆拾元整 360.00" =====
+    # 数值块里"大写金额+数字"行共两条：保费行在前、车船税行在后；服务器版 pdfplumber 会把金额
+    # 与后续文字粘连（"叁佰陆拾元整 360.001.本保单销售渠道…"），不能用行尾锚点，改为：
+    # 收集所有候选，剔除与保费合计相同的金额，取最后一条（车船税行固定在保费行之后）
+    _tax_cands = []
     for ln in lines:
-        m = re.match(r'^[壹贰叁肆伍陆柒捌玖拾佰仟万亿元角分整零]{2,}\s+(\d[\d,]*\.\d{2})$', ln)
+        m = re.match(r'^[壹贰叁肆伍陆柒捌玖拾佰仟万亿元角分整零]{2,}\s+(\d{1,3}(?:,\d{3})*\.\d{2})', ln)
         if m:
-            fields["车船税"] = m.group(1)
-            break
+            _tax_cands.append(m.group(1))
+    _tax_cands = [v for v in _tax_cands if v != fields.get("保费合计")]
+    if _tax_cands:
+        fields["车船税"] = _tax_cands[-1]
 
     # ===== 保司名称/地址：落款"永安财产保险股份有限公司xx分公司"行 + 下一行地址 =====
     for i, ln in enumerate(lines):
