@@ -59,7 +59,8 @@ def ensure_reminder_log_table(db):
 def fetch_expiring_records(db):
     """
     查逾期 REMIND_WINDOW_DAYS 天内 ~ 未来 REMIND_WINDOW_DAYS 天内到期、今天还没提醒过的保单，
-    并排除 renewal_tasks 中已闭环(续保/停保/暂不考虑)的任务对应保单（只保留 pending 或尚无任务的）。
+    并排除 renewal_tasks 中已闭环(续保成功/转保成功/停保/暂不考虑)的任务对应保单（保留
+    待跟进 pending、续保待确认 renew_pending、转保待确认 transfer_pending，以及尚无任务的）。
     同一 policy_no 只保留 record_id 最大(最新，覆盖"重新识别"产生的旧记录)的一条；
     空 policy_no 各自独立，不参与去重（与台账去重口径一致）。
     只推送 users.renewal_enabled=1 的账号跟单(insurance_records.user_id)的保单——续保提醒
@@ -71,7 +72,7 @@ def fetch_expiring_records(db):
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute("""
             SELECT r.id AS record_id, r.enterprise_id, r.roomid, r.sender, r.sender_name, r.user_id,
-                   pf.plate_no, pf.policy_no, pf.policy_type, pf.end_date_iso
+                   pf.plate_no, pf.policy_no, pf.policy_type, pf.end_date_iso, rt.status AS task_status
             FROM insurance_records r
             JOIN insurance_policy_fields pf ON r.id = pf.record_id
             JOIN users u ON u.id = r.user_id
@@ -85,7 +86,7 @@ def fetch_expiring_records(db):
               AND u.renewal_enabled = 1
               AND pf.end_date_iso IS NOT NULL
               AND pf.end_date_iso BETWEEN DATE_SUB(CURDATE(), INTERVAL %s DAY) AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
-              AND (rt.id IS NULL OR rt.status = 'pending')
+              AND (rt.id IS NULL OR rt.status IN ('pending', 'renew_pending', 'transfer_pending'))
               AND NOT EXISTS (
                   SELECT 1 FROM insurance_reminder_log rl
                   WHERE rl.record_id = r.id AND rl.remind_date = CURDATE()
@@ -224,21 +225,27 @@ def main():
         for r in items:
             by_sender.setdefault(r["sender"], []).append(r)
 
-        lines = ["【今日续保提醒】以下保单需尽快跟进续保：", ""]
+        lines = ["【今日续保提醒】以下保单请及时跟进：", ""]
         at_names = []
         for sender, plist in by_sender.items():
             plist.sort(key=lambda x: x["end_date_iso"])
             sender_name = _resolve_sender_name(contacts_instances, sender, plist[0].get("sender_name") or "")
             at_names.append(sender_name)
             lines.append(f"@{sender_name}")
-            # 按逾期🔴 / 即将到期🟠 分组展示
-            overdue_lines, soon_lines = [], []
+            # 待跟进(pending/无任务)按逾期🔴 / 即将到期🟠 分组；
+            # 续保待确认🔵 / 转保待确认🟣(系统已检测到接续新单)单独成节，提示去确认。
+            overdue_lines, soon_lines, renew_lines, transfer_lines = [], [], [], []
             for r in plist:
                 days_left = (r["end_date_iso"] - today).days
                 plate = r.get("plate_no") or "未知车牌"
                 ptype = r.get("policy_type") or "保单"
                 end_str = r["end_date_iso"].strftime("%Y-%m-%d")
-                if days_left < 0:
+                st = r.get("task_status")
+                if st == "renew_pending":
+                    renew_lines.append(f"· {plate} {ptype} —— 到期({end_str})")
+                elif st == "transfer_pending":
+                    transfer_lines.append(f"· {plate} {ptype} —— 到期({end_str})")
+                elif days_left < 0:
                     overdue_lines.append(f"· {plate} {ptype} —— 已逾期{-days_left}天({end_str})")
                 else:
                     due_str = "今天到期" if days_left == 0 else f"还剩{days_left}天到期"
@@ -249,6 +256,12 @@ def main():
             if soon_lines:
                 lines.append("🟠 即将到期：")
                 lines.extend(soon_lines)
+            if renew_lines:
+                lines.append("🔵 续保待确认（系统检测到新单，请确认）：")
+                lines.extend(renew_lines)
+            if transfer_lines:
+                lines.append("🟣 转保待确认（疑似转保，请确认）：")
+                lines.extend(transfer_lines)
             # 续保详情链接（普通链接，客户点开需登录后进入续保管理页；不再走免登录 token）
             lines.append(f"👉 点击查看续保详情：{BASE_URL}/insurance?tab=renewal")
             lines.append("")
@@ -270,9 +283,8 @@ def main():
             total_sent_record_ids.extend([r["record_id"] for r in items])
 
     mark_reminded(db, total_sent_record_ids)
-    logger.info("本次到期提醒完成，共%d个群命中，成功发送%d个群，%d条保单",
-                len(by_room), len({r["roomid"] for r in records if r["record_id"] in total_sent_record_ids}),
-                len(total_sent_record_ids))
+    logger.info("本次到期提醒完成，共%d个企业命中，成功发送%d条保单",
+                len(by_enterprise), len(total_sent_record_ids))
 
 
 if __name__ == "__main__":
