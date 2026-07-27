@@ -1526,7 +1526,6 @@
                             <th v-for="col in outputColumns" :key="col"
                                 class="px-3 py-2 text-gray-600 font-medium">{{ col }}</th>
                             <th v-if="isSuperAdmin" class="px-3 py-2 text-gray-600 font-medium" style="min-width:70px;">识别方式</th>
-                            <th v-if="isSuperAdmin" class="px-3 py-2 text-gray-600 font-medium">置信度</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1555,15 +1554,6 @@
                                         {{ r.ocr_engine === 'baidu' ? '百度OCR' : r.ocr_engine === 'volc' ? '火山引擎' : r.ocr_engine === 'pdfplumber+ocr' ? 'PDF+OCR' : 'PDF提取' }}
                                     </span>
                                 </td>
-                                <td v-if="isSuperAdmin" class="px-3 py-2">
-                                    <span v-if="r.invoices && r.invoices[0]"
-                                          class="badge text-xs"
-                                          :class="r.invoices[0].confidence >= 0.75 ? 'badge-success'
-                                                : r.invoices[0].confidence >= 0.5 ? 'badge-warning'
-                                                : 'badge-danger'">
-                                        {{ (r.invoices[0].confidence * 100).toFixed(0) }}%
-                                    </span>
-                                </td>
                             </tr>
                         </template>
                     </tbody>
@@ -1584,7 +1574,6 @@
                             <th v-for="col in outputColumns" :key="col"
                                 class="px-3 py-2 text-orange-700 font-medium">{{ col }}</th>
                             <th v-if="isSuperAdmin" class="px-3 py-2 text-orange-700 font-medium" style="min-width:70px;">识别方式</th>
-                            <th v-if="isSuperAdmin" class="px-3 py-2 text-orange-700 font-medium">置信度</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1610,15 +1599,6 @@
                                 <span class="badge text-xs"
                                       :class="r.ocr_engine === 'baidu' ? 'badge-info' : r.ocr_engine === 'volc' ? 'badge-warning' : r.ocr_engine === 'pdfplumber+ocr' ? 'badge-accent' : 'badge-success'">
                                     {{ r.ocr_engine === 'baidu' ? '百度OCR' : r.ocr_engine === 'volc' ? '火山引擎' : r.ocr_engine === 'pdfplumber+ocr' ? 'PDF+OCR' : 'PDF提取' }}
-                                </span>
-                            </td>
-                            <td v-if="isSuperAdmin" class="px-3 py-2">
-                                <span v-if="r.invoices && r.invoices[0]"
-                                      class="badge text-xs"
-                                      :class="r.invoices[0].confidence >= 0.75 ? 'badge-success'
-                                            : r.invoices[0].confidence >= 0.5 ? 'badge-warning'
-                                            : 'badge-danger'">
-                                    {{ (r.invoices[0].confidence * 100).toFixed(0) }}%
                                 </span>
                             </td>
                         </tr>
@@ -3232,7 +3212,6 @@
                                 </th>
                             </template>
                             <th v-if="isSuperAdmin" style="min-width:70px;">识别方式</th>
-                            <th v-if="isSuperAdmin" style="min-width:60px;">置信度</th>
                             <th v-if="isSuperAdmin" style="min-width:80px;">质检状态</th>
                             <th v-if="isSuperAdmin" style="min-width:220px;">内部备注</th>
                         </tr>
@@ -3477,15 +3456,6 @@
                                 </span>
                                 <span v-else class="text-gray-400 text-sm">—</span>
                             </td>
-                            <!-- 置信度（仅超管可见） -->
-                            <td v-if="isSuperAdmin">
-                                <span v-if="record.confidence" class="badge text-xs"
-                                      :class="record.confidence >= 0.75 ? 'badge-success'
-                                            : record.confidence >= 0.5 ? 'badge-warning' : 'badge-danger'">
-                                    {{ (record.confidence * 100).toFixed(0) }}%
-                                </span>
-                                <span v-else class="text-gray-400 text-sm">—</span>
-                            </td>
                             <!-- AI质检状态（仅超管可见） -->
                             <td v-if="isSuperAdmin">
                                 <span v-if="record.ai_check_status === 'pass'" class="badge text-xs" style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;">✓ 通过</span>
@@ -3646,7 +3616,6 @@
                             <div class="mrc-sec-grid">
                                 <div class="mrc-kv"><span class="k">所属企业</span><span class="v" :class="{ empty: !record.enterprise_name }">{{ record.enterprise_name || '—' }}</span></div>
                                 <div class="mrc-kv"><span class="k">识别方式</span><span class="v" :class="{ empty: !record.ocr_engine }">{{ record.ocr_engine === 'baidu' ? '百度OCR' : record.ocr_engine === 'volc' ? '火山引擎' : record.ocr_engine === 'pdfplumber+ocr' ? 'PDF+OCR' : record.ocr_engine ? 'PDF提取' : '—' }}</span></div>
-                                <div class="mrc-kv"><span class="k">置信度</span><span class="v" :class="{ empty: !record.confidence }">{{ record.confidence ? (record.confidence * 100).toFixed(0) + '%' : '—' }}</span></div>
                                 <div class="mrc-kv full"><span class="k">内部备注</span>
                                     <span class="v" style="color:#1d4ed8;" @click="openInternalNotes(record)">
                                         {{ (record.internal_note && record.internal_note.latest) || '备注/日志' }}{{ (record.internal_note && record.internal_note.count) ? ' (' + record.internal_note.count + ')' : '' }}
