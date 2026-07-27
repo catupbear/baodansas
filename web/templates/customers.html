@@ -213,10 +213,10 @@
                                 <th>企业ID</th>
                                 <th>企业名称</th>
                                 <th>套餐到期</th>
-                                <th>账号密码</th>
                                 <th>客户信息</th>
                                 <th>最新更新日期</th>
                                 <th>操作</th>
+                                <th>账号密码</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -239,13 +239,6 @@
                                     </template>
                                 </td>
                                 <td>
-                                    <template v-if="c.admin_password">
-                                        <div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;font-weight:600;color:#1c1410;letter-spacing:0.5px;user-select:all;">{{ c.admin_password }}</div>
-                                        <div style="font-size:11px;color:#9ca3af;margin-top:2px;">账号 {{ c.admin_account }}</div>
-                                    </template>
-                                    <span v-else style="font-size:12px;color:#d1d5db;" title="该账号未存明文密码，覆盖为随机密码后即显示">—</span>
-                                </td>
-                                <td>
                                     <button class="op-btn" @click="openProfile(c)">客户档案</button>
                                 </td>
                                 <td class="text-gray-400" style="font-size:12px;white-space:nowrap;">{{ c.profile_updated_at ? formatTime(c.profile_updated_at) : '—' }}</td>
@@ -253,6 +246,13 @@
                                     <button class="op-btn orange" @click="gotoManage(c)">客户系统配置</button>
                                     <button class="op-btn" @click="openEditModal(c)">编辑</button>
                                     <button class="op-btn" style="background:#fef2f2;color:#dc2626;" @click="confirmDelete(c)">删除</button>
+                                </td>
+                                <td>
+                                    <template v-if="c.admin_password">
+                                        <div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;font-weight:600;color:#1c1410;letter-spacing:0.5px;user-select:all;">{{ c.admin_password }}</div>
+                                        <div style="font-size:11px;color:#9ca3af;margin-top:2px;">账号 {{ c.admin_account }}</div>
+                                    </template>
+                                    <span v-else style="font-size:12px;color:#d1d5db;" title="该账号未存明文密码，覆盖为随机密码后即显示">—</span>
                                 </td>
                             </tr>
                         </tbody>
@@ -274,6 +274,7 @@
                                 </template>
                                 <span v-else style="color:#d1d5db;">未设置</span>
                             </div></div>
+                            <div class="cc-item"><div class="k">最新更新日期</div><div class="vv">{{ c.profile_updated_at ? formatTime(c.profile_updated_at) : '—' }}</div></div>
                             <div class="cc-item"><div class="k">账号密码</div><div class="vv">
                                 <template v-if="c.admin_password">
                                     <span style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600;color:#1c1410;letter-spacing:0.5px;user-select:all;">{{ c.admin_password }}</span>
@@ -281,7 +282,6 @@
                                 </template>
                                 <span v-else style="color:#d1d5db;">—</span>
                             </div></div>
-                            <div class="cc-item"><div class="k">最新更新日期</div><div class="vv">{{ c.profile_updated_at ? formatTime(c.profile_updated_at) : '—' }}</div></div>
                         </div>
                         <div class="cc-ops">
                             <button class="op-btn orange" @click="gotoManage(c)">客户系统配置</button>
