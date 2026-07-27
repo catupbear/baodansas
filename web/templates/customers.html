@@ -34,8 +34,8 @@
         .data-table th:nth-child(3), .data-table td:nth-child(3) { width: 13%; }  /* 套餐到期 */
         .data-table th:nth-child(4), .data-table td:nth-child(4) { width: 9%; }   /* 客户信息 */
         .data-table th:nth-child(5), .data-table td:nth-child(5) { width: 14%; }  /* 最新更新日期 */
-        .data-table th:nth-child(6), .data-table td:nth-child(6) { width: 26%; }  /* 操作 */
-        .data-table th:nth-child(7), .data-table td:nth-child(7) { width: 12%; }  /* 账号密码 */
+        .data-table th:nth-child(6), .data-table td:nth-child(6) { width: 12%; }  /* 账号密码 */
+        .data-table th:nth-child(7), .data-table td:nth-child(7) { width: 26%; }  /* 操作 */
         .data-table th {
             background: #faf8f5; color: #78716c; font-weight: 600;
             text-align: left; padding: 10px 8px;
@@ -220,8 +220,8 @@
                                 <th>套餐到期</th>
                                 <th>客户信息</th>
                                 <th>最新更新日期</th>
-                                <th>操作</th>
                                 <th>账号密码</th>
+                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -248,16 +248,16 @@
                                 </td>
                                 <td class="text-gray-400" style="font-size:12px;white-space:nowrap;">{{ c.profile_updated_at ? formatTime(c.profile_updated_at) : '—' }}</td>
                                 <td>
-                                    <button class="op-btn orange" @click="gotoManage(c)">客户系统配置</button>
-                                    <button class="op-btn" @click="openEditModal(c)">编辑</button>
-                                    <button class="op-btn" style="background:#fef2f2;color:#dc2626;" @click="confirmDelete(c)">删除</button>
-                                </td>
-                                <td>
                                     <template v-if="c.admin_password">
                                         <div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;font-weight:600;color:#1c1410;letter-spacing:0.5px;user-select:all;">{{ c.admin_password }}</div>
                                         <div style="font-size:11px;color:#9ca3af;margin-top:2px;">账号 {{ c.admin_account }}</div>
                                     </template>
                                     <span v-else style="font-size:12px;color:#d1d5db;" title="该账号未存明文密码，覆盖为随机密码后即显示">—</span>
+                                </td>
+                                <td>
+                                    <button class="op-btn orange" @click="gotoManage(c)">客户系统配置</button>
+                                    <button class="op-btn" @click="openEditModal(c)">编辑</button>
+                                    <button class="op-btn" style="background:#fef2f2;color:#dc2626;" @click="confirmDelete(c)">删除</button>
                                 </td>
                             </tr>
                         </tbody>
