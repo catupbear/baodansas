@@ -26,9 +26,16 @@
         body { background: #faf5f0; }
         [v-cloak] { display: none; }
 
-        /* 表格按内容宽度自适应(不强行满宽)：所有列紧贴内容、列间距统一(左右各8px内边距)，
-           不会出现某一列被撑得很宽、内容与下一列之间空一大段的情况。 */
-        .data-table { font-size: 13px; border-collapse: collapse; }
+        /* 满宽 + 固定布局：各列按比例分配、铺满卡片(右侧不留白)，列宽固定不随内容忽宽忽窄、
+           无大空隙。min-width 保证窄屏(820~880px)改横向滚动而不是把列挤变形。 */
+        .data-table { font-size: 13px; border-collapse: collapse; width: 100%; table-layout: fixed; min-width: 880px; }
+        .data-table th:nth-child(1), .data-table td:nth-child(1) { width: 8%; }   /* 企业ID */
+        .data-table th:nth-child(2), .data-table td:nth-child(2) { width: 18%; overflow: hidden; text-overflow: ellipsis; }  /* 企业名称 */
+        .data-table th:nth-child(3), .data-table td:nth-child(3) { width: 13%; }  /* 套餐到期 */
+        .data-table th:nth-child(4), .data-table td:nth-child(4) { width: 9%; }   /* 客户信息 */
+        .data-table th:nth-child(5), .data-table td:nth-child(5) { width: 14%; }  /* 最新更新日期 */
+        .data-table th:nth-child(6), .data-table td:nth-child(6) { width: 26%; }  /* 操作 */
+        .data-table th:nth-child(7), .data-table td:nth-child(7) { width: 12%; }  /* 账号密码 */
         .data-table th {
             background: #faf8f5; color: #78716c; font-weight: 600;
             text-align: left; padding: 10px 8px;
