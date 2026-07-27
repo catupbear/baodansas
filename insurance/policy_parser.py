@@ -1988,6 +1988,15 @@ def _extract_insured(text: str, text_merged: str, fields: dict, company_short: s
     # ===== 通用提取逻辑 =====
     _extract_insured_common(text, text_merged, fields)
 
+    # 北部湾兜底：pdfplumber 字间空格"被保险人：陈 俊华"——通用逻辑抽不到时再取一次，去字间空格。
+    # 放最后 + 带冒号：避免误伤驾乘险"被保险人为驾驶或乘坐..."(无冒号)与公司名等已被正常逻辑处理的情况。
+    if company_short == "北部湾" and "被保险人" not in fields:
+        m = re.search(r"被\s*保\s*险\s*人[：:]\s*([一-鿿][一-鿿\s]{1,28}?)\s*(?:手\s*机|证\s*件|身\s*份|电\s*话|地\s*址|投\s*保)", text)
+        if m:
+            val = _clean_person_name(m.group(1))
+            if _is_valid_person(val):
+                fields["被保险人"] = val
+
 
 def _extract_insured_pingan(text: str, text_merged: str, fields: dict):
     """平安保单被保险人提取"""
@@ -2531,6 +2540,16 @@ def _extract_insured_common(text: str, text_merged: str, fields: dict):
 def _extract_proposer(text: str, text_merged: str, fields: dict, company_short: str):
     """提取投保人"""
 
+    # 北部湾 pdfplumber 字间空格："投保人：陈 俊华"——值带字间空格，常规正则抽不全，单独去空格处理。
+    # 必须带冒号，避免误匹配条款正文"投保人已向保险人提出投保申请"里的"已向"。
+    if company_short == "北部湾" and "投保人" not in fields:
+        # 值以"非中文非空格"(下一字段标点/换行等)为右边界；[一-鿿 ]只含中文和空格，不会跨行、也不会被字间空格截断
+        m = re.search(r"投\s*保\s*人[：:]\s*([一-鿿][一-鿿 ]{1,28}?)(?=[^一-鿿 ]|$)", text)
+        if m:
+            val = _clean_person_name(m.group(1))
+            if _is_valid_person(val):
+                fields["投保人"] = val
+
     # 平安车主尊享：表头"投保人姓名 证件类型 证件号码..."后竖排OCR错乱，证件类型(港澳居民来往内地通行证/
     # 港澳台居民...)被拆成单独一行，真实姓名在其下一行行首("陈志云 往内地通行...")。优先取姓名避免误取证件类型
     if "投保人" not in fields:
@@ -2932,6 +2951,15 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str, from_ocr:
                 fields["车牌号"] = plate
                 break
 
+    # 北部湾 pdfplumber 字间空格："号牌号码：桂 A2RY92"——常规正则的 \S+ 断在省份后的空格前抽不到，
+    # 单独用容忍空格的正则匹配号牌值、再去掉空格。
+    if "车牌号" not in fields and company_short == "北部湾":
+        m = re.search(rf"号\s*牌\s*号\s*码[：:\s]*([{PROVINCE_CHARS}][A-Z0-9\s]{{4,9}}?)\s*(?:厂\s*牌|车\s*辆|发\s*动|使\s*用|机\s*动|核\s*定|VIN|车\s*架)", text)
+        if m:
+            _bbw_plate = re.sub(r'\s', '', m.group(1)).upper()
+            if 6 <= len(_bbw_plate) <= 8:
+                fields["车牌号"] = _bbw_plate
+
     # 平安个意险：车牌嵌入在"其他信息"字段中，如 "车牌号码:粤B-CK9833" 或 "车牌号：粤BCK9833"
     if "车牌号" not in fields:
         m = re.search(rf"车牌号[码]?[：:]\s*([{PROVINCE_CHARS}][A-Z][-]?[A-Z0-9]{{4,6}})", text)
@@ -3023,6 +3051,12 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str, from_ocr:
             fields["车架号VIN"] = m.group(1)
             break
 
+    # 北部湾 pdfplumber 字间空格："VIN码/车架号：L FV3A24K8S3071684"——VIN首字母与后16位被空格分开
+    if "车架号VIN" not in fields and company_short == "北部湾":
+        m = re.search(r"(?:VIN码?/?车架号|车架号)[：:\s]*([A-Z])\s+([A-Z0-9]{16})", text)
+        if m:
+            fields["车架号VIN"] = m.group(1) + m.group(2)
+
     # 车架号兜底：处理水印干扰、空格断开、跨行等特殊格式
     # 兜底1：识别代码(车架号) + 水印数字粘连（人保交强险）
     if "车架号VIN" not in fields:
@@ -3108,6 +3142,14 @@ def _extract_vehicle_info(text: str, fields: dict, company_short: str, from_ocr:
             if not re.search(r'识别代码|车架号', _val):
                 fields["发动机号"] = _val
                 break
+
+    # 北部湾 pdfplumber 字间空格："发动机号：E 20106"——首字符与后段被空格分开，常规只抽到"E"，去空格重取
+    if company_short == "北部湾" and len(fields.get("发动机号") or "") <= 2:
+        m = re.search(r"发\s*动\s*机\s*号[码]?[：:\s]*([A-Za-z0-9][A-Za-z0-9 ]{3,18}?)\s*(?:初\s*次|登\s*记|VIN|车\s*架|使\s*用|核\s*定|厂\s*牌|号\s*牌)", text)
+        if m:
+            _bbw_eng = re.sub(r'\s', '', m.group(1))
+            if 4 <= len(_bbw_eng) <= 20:
+                fields["发动机号"] = _bbw_eng
 
     # 紫金/PICC等竖排错位：发动机号+车架号的值整段落在"发动机号码 识别代码（车架号）"标签的
     # 上一行，中间用空格分隔（如"274822E LGBH92E00MY754688\n发动机号码 识别代码（车架号）"）
