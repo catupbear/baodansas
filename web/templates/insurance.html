@@ -13202,7 +13202,11 @@ const _app = createApp({
             // 窄屏（手机）改上下布局：圆环居中在上、图例单列在下，画布高度按条目数撑开
             const narrow = c0.clientWidth < 480;
             const lhN = 22, donutH = 168;
-            c0.setAttribute('height', narrow ? donutH + 16 + ch.items.length * lhN + 8 : 250);
+            // 宽屏画布高度按图例条目数撑开：保司多时全部显示、不再截断（原来写死 250px，
+            // 超过约16家就画到画布外被裁掉）。圆环半径已 cap 在 84，画布变高只增加图例空间，
+            // 圆环不会跟着变大；条目少时仍保持 250px 不变。
+            const wideH = Math.max(250, ch.items.length * 19 + 28);
+            c0.setAttribute('height', narrow ? donutH + 16 + ch.items.length * lhN + 8 : wideH);
             const env = sdCanvasCtx(id);
             if (!env) return;
             const { x, w, h } = env;
