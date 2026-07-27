@@ -830,7 +830,131 @@ def _extract_common_fields(text: str, company_short: str, policy_type: str = "",
     # ===== 保司公司名称 / 保司地址（保险人信息区域） =====
     _extract_insurer_info(text, text_merged, fields)
 
+    # ===== 永安交强险层分离版式修正（标签层与数值层分离，通用规则全部错位） =====
+    if company_short == "永安" and "强制" in (policy_type or ""):
+        _fix_yongan_compulsory_layered(text, fields)
+
     return fields
+
+
+def _fix_yongan_compulsory_layered(text: str, fields: dict):
+    """永安交强险电子保单：模板标签层与数值层分离的版式修正。
+
+    该版式下 pdfplumber 抽出的文本里，表格标签连排且旁边无值（如"发动机号码 核定载客"），
+    真实值集中在"保险单号：xxx"之后的数值块中逐行出现，导致按标签就近取值的通用规则
+    全部错位：发动机号抓到相邻标签"核定载客"、保司地址抓到"国家金融监督管理总局监制…"
+    印制文案、争议解决方式抓到竖排的"代"字，被保险人/车架号/厂牌型号等整体漏抽。
+    这里按数值块的强锚点（保险单号行→姓名/身份证行、VIN 行、车牌行等特征行）重抽并覆盖。
+    数值块结构（2026-07 实测）：
+        保险单号：345012603010024878
+        陈日泉                          ← 被保险人
+        440804199011110590              ← 身份证号
+        广东省…花果村47号 136****9649    ← 地址 电话
+        桂A8A5D7 六座以下客车 非营业个人  ← 号牌 机动车种类 使用性质
+        丰田GTM7120LPCE轿车              ← 厂牌型号
+        LVGBP87E4JG184384               ← 车架号VIN
+        K581305 5 0千克                 ← 发动机号 核定载客 核定载质量
+        1197毫升 85.0KW 2018-07-27      ← 排量 功率 登记日期
+    """
+    # 仅处理层分离版式：标签"发动机号码"与"核定载客"直接相邻说明标签旁没有值
+    if not re.search(r"发动机号码\s+核定载客", text):
+        return
+
+    lines = [ln.strip() for ln in text.split('\n')]
+
+    # ===== 数值块起点：保险单号行 =====
+    start = -1
+    for i, ln in enumerate(lines):
+        if re.match(r'^保险单号[：:]\s*[A-Za-z0-9]{10,}$', ln):
+            start = i
+            break
+    if start >= 0:
+        window = lines[start + 1: start + 16]
+
+        # 被保险人：保险单号行下第一个非空行（人名或公司名）
+        for ln in window:
+            if not ln:
+                continue
+            if re.match(r'^[一-鿿·]{2,10}$', ln) or re.match(r'^[一-鿿（）()A-Za-z0-9·]{4,30}公司$', ln):
+                if ln not in ("诉讼", "仲裁"):
+                    fields["被保险人"] = ln
+            break
+
+        # 身份证号 / 统一社会信用代码：独占一行
+        for ln in window:
+            m = re.match(r'^(\d{17}[\dXx]|[0-9A-Z]{2}\d{6}[0-9A-Z]{10})$', ln)
+            if m:
+                fields["被保险人身份证号码"] = m.group(1)
+                break
+
+        # 号牌 机动车种类 使用性质 同行："桂A8A5D7 六座以下客车 非营业个人"
+        for ln in window:
+            m = re.match(r'^([一-鿿][A-Z][A-Z0-9挂学警港澳]{5,6})\s+(\S{2,10}车)\s+(\S{2,10})$', ln)
+            if m:
+                fields["车牌号"] = m.group(1)
+                fields["机动车种类"] = m.group(2)
+                fields["使用性质"] = m.group(3)
+                break
+
+        # 车架号VIN 独占一行；上一非空行为厂牌型号，下一行为"发动机号 核定载客 核定载质量"
+        for k, ln in enumerate(window):
+            m = re.match(r'^([A-HJ-NPR-Z0-9]{17})$', ln)
+            if not m:
+                continue
+            fields["车架号VIN"] = m.group(1)
+            # 厂牌型号：VIN 上一非空行，含中文的车型串（排除"号牌 种类 性质"多列行）
+            for j in range(k - 1, -1, -1):
+                prev = window[j]
+                if prev:
+                    if re.match(r'^\S{3,30}$', prev) and re.search(r'[一-鿿]', prev):
+                        fields["厂牌型号"] = prev
+                    break
+            # 发动机号行：VIN 下一非空行 "K581305 5 0千克"
+            for j in range(k + 1, len(window)):
+                nxt = window[j]
+                if nxt:
+                    m2 = re.match(r'^([A-Z0-9\-]{4,20})\s+(\d{1,3})\s+([\d.]+)\s*千克$', nxt)
+                    if m2:
+                        fields["发动机号"] = m2.group(1)
+                        fields["核定载客"] = m2.group(2)
+                        fields["核定载质量"] = m2.group(3) + "千克"
+                    break
+            break
+
+        # 排量 功率 登记日期 同行："1197毫升 85.0KW 2018-07-27"
+        for ln in window:
+            m = re.match(r'^\d+毫升\s+[\d.]+\s*KW\s+(\d{4}-\d{1,2}-\d{1,2})$', ln, re.IGNORECASE)
+            if m:
+                fields["初次登记日期"] = m.group(1)
+                break
+
+    # ===== 争议解决方式：数值层里独占一行的"诉讼/仲裁"（通用规则会错抓竖排"代"字） =====
+    for ln in lines:
+        if ln in ("诉讼", "仲裁"):
+            fields["争议解决方式"] = ln
+            break
+
+    # ===== 车船税合计："叁佰陆拾元整 360.00"（大写金额+唯一一个数字；保费行后跟多个数字不会误中） =====
+    for ln in lines:
+        m = re.match(r'^[壹贰叁肆伍陆柒捌玖拾佰仟万亿元角分整零]{2,}\s+(\d[\d,]*\.\d{2})$', ln)
+        if m:
+            fields["车船税"] = m.group(1)
+            break
+
+    # ===== 保司名称/地址：落款"永安财产保险股份有限公司xx分公司"行 + 下一行地址 =====
+    for i, ln in enumerate(lines):
+        if re.match(r'^永安财产保险股份有限公司[一-鿿]{0,10}$', ln):
+            fields["保司公司名称"] = ln
+            if i + 1 < len(lines):
+                addr = lines[i + 1]
+                if len(addr) >= 8 and re.search(r'[路街号楼区道]', addr) and '签章' not in addr:
+                    fields["保司地址"] = addr
+            break
+
+    # ===== 投保人：交强险单仅载被保险人，投保人与其为同一主体 =====
+    if fields.get("被保险人") and not fields.get("投保人"):
+        fields["投保人"] = fields["被保险人"]
+    _fill_same_party_id_number(fields)
 
 
 # ============================================================
