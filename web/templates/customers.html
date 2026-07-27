@@ -210,6 +210,8 @@
                                 <th>企业名称</th>
                                 <th>套餐到期</th>
                                 <th>账号密码</th>
+                                <th>客户信息</th>
+                                <th>最新更新日期</th>
                                 <th>操作</th>
                             </tr>
                         </thead>
@@ -240,8 +242,11 @@
                                     <span v-else style="font-size:12px;color:#d1d5db;" title="该账号未存明文密码，覆盖为随机密码后即显示">—</span>
                                 </td>
                                 <td>
-                                    <button class="op-btn orange" @click="gotoManage(c)">客户系统配置</button>
                                     <button class="op-btn" @click="openProfile(c)">客户档案</button>
+                                </td>
+                                <td class="text-gray-400" style="font-size:12px;white-space:nowrap;">{{ c.profile_updated_at ? formatTime(c.profile_updated_at) : '—' }}</td>
+                                <td>
+                                    <button class="op-btn orange" @click="gotoManage(c)">客户系统配置</button>
                                     <button class="op-btn" @click="openEditModal(c)">编辑</button>
                                     <button class="op-btn" style="background:#fef2f2;color:#dc2626;" @click="confirmDelete(c)">删除</button>
                                 </td>
@@ -272,6 +277,7 @@
                                 </template>
                                 <span v-else style="color:#d1d5db;">—</span>
                             </div></div>
+                            <div class="cc-item"><div class="k">最新更新日期</div><div class="vv">{{ c.profile_updated_at ? formatTime(c.profile_updated_at) : '—' }}</div></div>
                         </div>
                         <div class="cc-ops">
                             <button class="op-btn orange" @click="gotoManage(c)">客户系统配置</button>
@@ -621,8 +627,9 @@ createApp({
                 if (data.code !== 0) {
                     c.follow_status = old;
                     alert(data.msg || '保存失败');
-                } else if (data.data && data.data.onboarded_at) {
-                    c.onboarded_at = data.data.onboarded_at;
+                } else {
+                    if (data.data && data.data.onboarded_at) c.onboarded_at = data.data.onboarded_at;
+                    if (data.data && data.data.profile_updated_at) c.profile_updated_at = data.data.profile_updated_at;
                 }
             } catch (e) {
                 c.follow_status = old;
@@ -709,6 +716,7 @@ createApp({
                 Object.assign(editTarget.value, body, {
                     referrer_id: editReferrerSelected.value ? editReferrerSelected.value.id : null,
                     referrer_name: editReferrerSelected.value ? (editReferrerSelected.value.name || editReferrerSelected.value.phone) : '',
+                    profile_updated_at: (data.data && data.data.profile_updated_at) || editTarget.value.profile_updated_at,
                 });
                 closeEditModal();
             } catch (e) {
@@ -844,6 +852,7 @@ createApp({
                 const data = await resp.json();
                 if (data.code === 0) {
                     profileTarget.value.remark = remarkJson;
+                    if (data.data && data.data.profile_updated_at) profileTarget.value.profile_updated_at = data.data.profile_updated_at;
                     closeProfile();
                 } else {
                     alert(data.msg || '保存失败');

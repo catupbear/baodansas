@@ -708,6 +708,8 @@ def api_update_enterprise(eid):
         resp_data = {}
         if updated_fields and "onboarded_at" in updated_fields:
             resp_data["onboarded_at"] = updated_fields["onboarded_at"]
+        if updated_fields and "profile_updated_at" in updated_fields:
+            resp_data["profile_updated_at"] = updated_fields["profile_updated_at"]
         return jsonify({"code": 0, "data": resp_data})
     except Exception as e:
         logger.exception("更新企业 %d 失败", eid)

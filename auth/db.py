@@ -316,7 +316,7 @@ def list_enterprises(db, enabled: int = None) -> list:
         cursor.execute(sql, params)
         rows = cursor.fetchall()
         for row in rows:
-            for f in ("created_at", "updated_at", "plan_start_at", "next_plan_start_at", "onboarded_at"):
+            for f in ("created_at", "updated_at", "plan_start_at", "next_plan_start_at", "onboarded_at", "profile_updated_at"):
                 if row.get(f) and not isinstance(row[f], str):
                     row[f] = str(row[f])
         return rows
@@ -332,7 +332,7 @@ def get_enterprise_by_id(db, enterprise_id: int) -> dict | None:
         cursor.execute("SELECT * FROM enterprises WHERE id = %s", (enterprise_id,))
         row = cursor.fetchone()
         if row:
-            for f in ("created_at", "updated_at", "plan_start_at", "next_plan_start_at", "onboarded_at"):
+            for f in ("created_at", "updated_at", "plan_start_at", "next_plan_start_at", "onboarded_at", "profile_updated_at"):
                 if row.get(f) and not isinstance(row[f], str):
                     row[f] = str(row[f])
         return row
@@ -356,7 +356,7 @@ def get_enterprise_by_no(db, enterprise_no: str) -> dict | None:
         for row in cursor.fetchall():
             norm = re.sub(r"[^A-Za-z0-9]", "", (row.get("enterprise_no") or "")).upper()
             if norm == target:
-                for f in ("created_at", "updated_at", "plan_start_at", "next_plan_start_at", "onboarded_at"):
+                for f in ("created_at", "updated_at", "plan_start_at", "next_plan_start_at", "onboarded_at", "profile_updated_at"):
                     if row.get(f) and not isinstance(row[f], str):
                         row[f] = str(row[f])
                 return row
@@ -421,6 +421,12 @@ def update_enterprise(db, enterprise_id: int, data: dict):
         # 跟进状态改为"正常使用"时，接入时间实时刷新为当前时间
         if fields.get("follow_status") == "正常使用":
             fields["onboarded_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # 客户档案编辑（跟进状态/跟进记录/联系资料/接入时间/推荐人）刷新「档案最后编辑时间」；
+        # 套餐、各类开关(renewal/seal/merge)、启用状态等非档案字段的改动不刷新
+        _PROFILE_FIELDS = {"name", "enterprise_no", "contact_person", "contact_phone",
+                           "follow_status", "remark", "onboarded_at", "referrer_id"}
+        if any(k in _PROFILE_FIELDS for k in fields):
+            fields["profile_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         set_clause = ", ".join(f"{k} = %s" for k in fields)
         values = list(fields.values()) + [enterprise_id]
         cursor.execute(f"UPDATE enterprises SET {set_clause} WHERE id = %s", values)
@@ -923,6 +929,7 @@ def init_enterprise_plan_column(db):
             ("enterprise_no", "VARCHAR(50) DEFAULT '' COMMENT '企业编号（可编辑业务编号）'"),
             ("survey_token", "VARCHAR(64) DEFAULT '' COMMENT '企业信息收集表专属链接token'"),
             ("survey_data", "TEXT COMMENT '企业信息收集表提交内容(JSON)'"),
+            ("profile_updated_at", "DATETIME DEFAULT NULL COMMENT '客户档案最后编辑时间(仅档案字段编辑刷新)'"),
         ]:
             try:
                 cursor.execute(f"ALTER TABLE enterprises ADD COLUMN {col} {definition}")
