@@ -26,11 +26,9 @@
         body { background: #faf5f0; }
         [v-cloak] { display: none; }
 
-        .data-table { font-size: 13px; border-collapse: collapse; width: 100%; }
-        /* 原来满宽表格把多余宽度分摊给每一列，列被撑宽而内容左对齐，相邻列之间出现
-           大空隙、看着间距不匀。改为让「企业名称」列(第2列)独吸收多余宽度，其余列
-           按内容收紧，列间距一致，表格仍铺满卡片。 */
-        .data-table th:nth-child(2), .data-table td:nth-child(2) { width: 100%; }
+        /* 表格按内容宽度自适应(不强行满宽)：所有列紧贴内容、列间距统一(左右各8px内边距)，
+           不会出现某一列被撑得很宽、内容与下一列之间空一大段的情况。 */
+        .data-table { font-size: 13px; border-collapse: collapse; }
         .data-table th {
             background: #faf8f5; color: #78716c; font-weight: 600;
             text-align: left; padding: 10px 8px;
