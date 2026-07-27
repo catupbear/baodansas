@@ -246,7 +246,7 @@
                                 <td>
                                     <button class="op-btn" @click="openProfile(c)">客户档案</button>
                                 </td>
-                                <td class="text-gray-400" style="font-size:12px;white-space:nowrap;">{{ c.profile_updated_at ? formatTime(c.profile_updated_at) : '—' }}</td>
+                                <td class="text-gray-400" style="font-size:12px;white-space:nowrap;">{{ latestFollowupDate(c) || '—' }}</td>
                                 <td>
                                     <template v-if="c.admin_password">
                                         <div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;font-weight:600;color:#1c1410;letter-spacing:0.5px;user-select:all;">{{ c.admin_password }}</div>
@@ -279,7 +279,7 @@
                                 </template>
                                 <span v-else style="color:#d1d5db;">未设置</span>
                             </div></div>
-                            <div class="cc-item"><div class="k">最新更新日期</div><div class="vv">{{ c.profile_updated_at ? formatTime(c.profile_updated_at) : '—' }}</div></div>
+                            <div class="cc-item"><div class="k">最新更新日期</div><div class="vv">{{ latestFollowupDate(c) || '—' }}</div></div>
                             <div class="cc-item"><div class="k">账号密码</div><div class="vv">
                                 <template v-if="c.admin_password">
                                     <span style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600;color:#1c1410;letter-spacing:0.5px;user-select:all;">{{ c.admin_password }}</span>
@@ -579,6 +579,19 @@ createApp({
         function formatTime(t) {
             if (!t) return '-';
             return t.replace('T', ' ').substring(0, 16);
+        }
+
+        // 「最新更新日期」= 跟进记录里最新的日期（取 remark 里所有跟进条目的最大日期）。
+        // 只有添加了新的跟进记录才会变；改跟进状态、联系人等其它档案改动不算。
+        function latestFollowupDate(c) {
+            try {
+                const list = c.remark ? JSON.parse(c.remark) : [];
+                if (Array.isArray(list) && list.length) {
+                    const dates = list.map(x => x && x.date).filter(Boolean).sort();
+                    if (dates.length) return dates[dates.length - 1];
+                }
+            } catch (e) {}
+            return '';
         }
 
         // 套餐到期计算（与企业管理页 admin_enterprises.html 逻辑一致）
@@ -886,7 +899,7 @@ createApp({
             ready, noPermission, currentUser, loading, customers, custSearch, filteredCustomers,
             activeGroup, groupedCustomers, sidebarGroups, displayedCustomers,
             mobileMenuOpen,
-            formatTime, planExpiryStr, planDaysLeft, nextPlanExpiryStr, updateStatus, gotoManage, logout,
+            formatTime, latestFollowupDate, planExpiryStr, planDaysLeft, nextPlanExpiryStr, updateStatus, gotoManage, logout,
             profileTarget, profileFollowups, newFollowupDate, newFollowupContent, profileSaving,
             openProfile, closeProfile, saveProfile, addFollowup,
             deleteTarget, deleting, confirmDelete, doDelete,
