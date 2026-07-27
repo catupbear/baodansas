@@ -2056,7 +2056,15 @@ def query_insurance_records(
             conditions.append("pf.insured LIKE %s")
             params.append(f"%{search_insured}%")
         if search_salesperson:
-            conditions.append("pf.salesperson LIKE %s")
+            # 业务员搜索同时命中：标准 salesperson 列 + 自定义字段「业务员#2」。
+            # 「业务员#2」是客户手填的自定义字段（前端去掉 #2 后缀显示为「业务员」），
+            # 不映射到关联表列，仅存于 r.display_fields JSON，故需 JSON 匹配。
+            # NULLIF 把空串转 NULL 避免 JSON_EXTRACT 对非法/空 JSON 报错。
+            conditions.append(
+                "(pf.salesperson LIKE %s OR "
+                "JSON_UNQUOTE(JSON_EXTRACT(NULLIF(r.display_fields, ''), '$.\"业务员#2\"')) LIKE %s)"
+            )
+            params.append(f"%{search_salesperson}%")
             params.append(f"%{search_salesperson}%")
         # 关联表日期范围筛选（使用 ISO 日期列，可命中索引）
         for iso_col, val_start, val_end in [
@@ -2860,7 +2868,13 @@ def get_insurance_stats(db, filters: dict = None) -> dict:
                 where_parts.append("pf.insured LIKE %s")
                 params.append(f"%{filters['search_insured']}%")
             if filters.get("search_salesperson"):
-                where_parts.append("pf.salesperson LIKE %s")
+                # 与列表查询保持一致：同时命中标准 salesperson 列 + 自定义字段「业务员#2」。
+                # search_salesperson 会触发 need_join → col_prefix 为 "r."，可取到 display_fields。
+                where_parts.append(
+                    f"(pf.salesperson LIKE %s OR "
+                    f"JSON_UNQUOTE(JSON_EXTRACT(NULLIF({col_prefix}display_fields, ''), '$.\"业务员#2\"')) LIKE %s)"
+                )
+                params.append(f"%{filters['search_salesperson']}%")
                 params.append(f"%{filters['search_salesperson']}%")
             for iso_col, key_start, key_end in [
                 ("pf.sign_date_iso", "sign_date_start", "sign_date_end"),
