@@ -3930,6 +3930,10 @@ def _extract_premium(text: str, fields: dict, company_short: str):
                     # 渤海等格式：无右括号 "(¥:1186.15"
                     if not m:
                         m = re.search(r'[（(][￥¥][：:]\s*([\d,]+\.\d{2})', next_cleaned)
+                    # 紫金驾乘险等格式：无括号也无右括号，"人民币（大写）贰佰伍拾伍元整小写：CNY255.00"
+                    # （与同行判断用同一套"小写/CNY/￥"识别，只是金额落在下一行而不是本行）
+                    if not m:
+                        m = re.search(r'(?:小写|CNY|[￥¥])[：:]*(\d{1,10}\.\d{2})', next_cleaned)
                     if m:
                         val = m.group(1).replace(",", "")
                         if float(val) > 0:
