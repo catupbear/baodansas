@@ -196,7 +196,10 @@ def main():
         lines = ["🏢 公户车盖章跟进 · 每日提醒", ""]
         lines.append(f"截至今天，还有 {len(unpaid)} 单公户车保单待盖章：")
         for r in unpaid[:10]:
-            plate = r.get("plate_no") or "未知车牌"
+            plate = (r.get("plate_no") or "").strip()
+            if not plate or plate == "新车":
+                vin = (r.get("vin") or "").strip()
+                plate = f"车架号{vin}" if vin else "未知车牌"
             insured = (r.get("insured") or "").strip()
             lines.append(f"· {plate}　{insured}")
         if len(unpaid) > 10:
