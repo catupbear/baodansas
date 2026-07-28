@@ -93,14 +93,34 @@ def fetch_seal_enterprises(db):
         conn.close()
 
 
+def _is_merge_enterprise(db, eid) -> bool:
+    conn = db.pool.connection()
+    try:
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT merge_by_plate FROM enterprises WHERE id = %s", (eid,))
+        row = cursor.fetchone()
+        return bool(row and row.get("merge_by_plate"))
+    finally:
+        conn.close()
+
+
 def fetch_unpaid_seal(db, eid):
-    """某企业待跟进付费(seal_paid=0)的公户车保单（被保险人为公司）。"""
+    """
+    某企业待跟进付费的公户车保单（被保险人为公司），按分组去重后返回每组一条。
+
+    分组口径与盖章跟进页 /api/insurance/seal-tasks 保持一致（insurance/api.py
+    seal_tasks_list）：企业开启「按车牌合并」时，同车牌（或无车牌用车架号）+
+    同签单日期的多条识别记录合并为一组；未开合并的企业每条记录独立成组。
+    一组内只要有一条未标记盖章，整组就算"待盖章"（与页面 all_paid 语义一致）。
+    不按此口径合并的话，测试/重复识别同一份保单会在群消息里逐条重复出现。
+    """
     conn = db.pool.connection()
     try:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         cursor.execute(
             """
-            SELECT r.id AS record_id, pf.plate_no, pf.insured, pf.company_short, pf.policy_type
+            SELECT r.id AS record_id, r.seal_paid, pf.plate_no, pf.vin, pf.insured,
+                   pf.company_short, pf.policy_type, pf.sign_date
             FROM insurance_records r
             JOIN insurance_policy_fields pf ON pf.record_id = r.id
             WHERE r.enterprise_id = %s
@@ -108,14 +128,37 @@ def fetch_unpaid_seal(db, eid):
               AND r.status = 'done'
               AND (r.doc_category = '保单' OR r.doc_category = '' OR r.doc_category IS NULL)
               AND pf.insured REGEXP %s
-              AND (r.seal_paid IS NULL OR r.seal_paid = 0)
             ORDER BY r.id DESC
             """,
             (eid, _CORP_INSURED_REGEXP),
         )
-        return cursor.fetchall() or []
+        rows = cursor.fetchall() or []
     finally:
         conn.close()
+
+    merge_enabled = _is_merge_enterprise(db, eid)
+    groups = {}
+    order = []
+    for r in rows:
+        plate = (r.get("plate_no") or "").strip()
+        vin = (r.get("vin") or "").strip()
+        merge_id = plate if (plate and plate != "新车") else (("VIN:" + vin) if vin else "")
+        if merge_enabled and merge_id:
+            key = (merge_id, (r.get("sign_date") or "").strip())
+        else:
+            key = ("__rec__", r["record_id"])
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(r)
+
+    unpaid = []
+    for key in order:
+        items = groups[key]
+        if all(it.get("seal_paid") for it in items):
+            continue
+        unpaid.append(items[0])
+    return unpaid
 
 
 def main():
