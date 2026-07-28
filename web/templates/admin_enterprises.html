@@ -50,12 +50,12 @@
             font-size: 12px; letter-spacing: 0.02em; white-space: nowrap;
         }
         .data-table td {
-            padding: 12px 10px;
+            padding: 12px 8px;
             border-bottom: 1px solid #f5f0eb;
             vertical-align: middle;
         }
-        .data-table th:first-child, .data-table td:first-child { padding-left: 18px; }
-        .data-table th:last-child, .data-table td:last-child { padding-right: 18px; }
+        .data-table th:first-child, .data-table td:first-child { padding-left: 16px; }
+        .data-table th:last-child, .data-table td:last-child { padding-right: 16px; }
         .data-table .btn-sm { padding: 4px 8px; }
         .data-table tbody tr:nth-child(even) { background: #fdfbf9; }
         .data-table tbody tr:hover { background: #fff7ed; }
@@ -141,11 +141,6 @@
         .scope-company-tag { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; background: #f5f3ff; color: #7c3aed; border-radius: 999px; font-size: 12px; font-weight: 600; }
         .scope-company-tag button { background: none; border: none; color: #a78bda; cursor: pointer; font-size: 13px; line-height: 1; padding: 0; }
         .scope-company-tag button:hover { color: #7c3aed; }
-        /* 配置列：链接式入口（标签橙色可点，右侧灰色计数） */
-        .cfg-link { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 2px 0; font-size: 12.5px; color: #ea580c; font-weight: 600; cursor: pointer; white-space: nowrap; line-height: 1.4; }
-        .cfg-link:hover { color: #c2410c; text-decoration: underline; }
-        .cfg-link .cnt { color: #9ca3af; font-weight: 400; font-size: 12px; }
-        .cfg-link .cnt.empty { color: #d1d5db; }
         /* 功能开关芯片：圆点指示 + 开启态橙色描边 */
         .feat-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; font-size: 11.5px; border-radius: 999px; border: 1px solid #e7e0d8; background: #fff; color: #9ca3af; cursor: pointer; transition: all 0.15s ease; white-space: nowrap; line-height: 1; }
         .feat-chip::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #d1d5db; transition: background 0.15s; }
@@ -250,13 +245,15 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th style="min-width:140px;">企业</th>
+                                <th style="min-width:120px;">企业</th>
                                 <th style="min-width:100px;">套餐</th>
-                                <th style="min-width:130px;">本月识别量</th>
-                                <th style="min-width:130px;">配置</th>
-                                <th style="min-width:175px;">AI质检</th>
+                                <th style="min-width:110px;">本月识别量</th>
+                                <th style="min-width:105px;text-align:center;">人员管理</th>
+                                <th style="min-width:105px;text-align:center;">监控设置</th>
+                                <th style="min-width:105px;text-align:center;">续保推送群</th>
+                                <th style="min-width:165px;">AI质检</th>
                                 <th style="min-width:80px;text-align:center;">状态</th>
-                                <th style="min-width:230px;">操作</th>
+                                <th style="min-width:210px;">操作</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -282,7 +279,7 @@
                                     </div>
                                     <!-- 下一个套餐（叠加续费）：仅显示类型+时长，到期日已移至客户管理页展示 -->
                                     <template v-if="ent.next_plan_type">
-                                        <div style="display:flex;align-items:center;gap:4px;margin-top:4px;">
+                                        <div style="display:flex;align-items:center;gap:4px;margin-top:4px;white-space:nowrap;">
                                             <span style="font-size:10px;color:#9ca3af;">续费:</span>
                                             <span class="badge" style="font-size:10px;padding:1px 6px;"
                                                 :class="ent.next_plan_type==='enterprise' ? 'badge-blue' : ent.next_plan_type==='enterprise_trial' ? 'badge-purple' : 'badge-green'">
@@ -316,14 +313,26 @@
                                     </template>
                                 </td>
 
-                                <!-- 配置（人员 / 监控 / 续保推送群） -->
-                                <td style="vertical-align:middle;">
-                                    <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;">
-                                        <button @click="gotoMembers(ent)" class="cfg-link">人员管理 <span class="cnt">{{ ent.member_count || 0 }} 人</span></button>
-                                        <button @click="gotoMonitor(ent)" class="cfg-link">监控设置 <span class="cnt">{{ ent.monitor_count || 0 }} 个群</span></button>
-                                        <button @click="openPushModal(ent)" class="cfg-link" :title="(ent.renewal_push_rooms||[]).join('、')">推送群绑定
-                                            <span class="cnt" :class="{empty: !ent.renewal_push_count}">{{ ent.renewal_push_count ? '已绑 ' + ent.renewal_push_count + ' 群' : '未绑定' }}</span>
-                                        </button>
+                                <!-- 人员管理 -->
+                                <td style="vertical-align:middle;text-align:center;">
+                                    <div style="display:inline-flex;align-items:center;gap:6px;">
+                                        <button @click="gotoMembers(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#ea580c;border-color:#fed7aa;font-weight:600;white-space:nowrap;">人员管理</button>
+                                        <span style="font-size:12px;color:#9ca3af;white-space:nowrap;">{{ ent.member_count || 0 }} 人</span>
+                                    </div>
+                                </td>
+                                <!-- 监控设置 -->
+                                <td style="vertical-align:middle;text-align:center;">
+                                    <div style="display:inline-flex;align-items:center;gap:6px;">
+                                        <button @click="gotoMonitor(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#ea580c;border-color:#fed7aa;font-weight:600;white-space:nowrap;">监控设置</button>
+                                        <span style="font-size:12px;color:#9ca3af;white-space:nowrap;">{{ ent.monitor_count || 0 }} 个群</span>
+                                    </div>
+                                </td>
+                                <!-- 续保推送群 -->
+                                <td style="vertical-align:middle;text-align:center;">
+                                    <div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;max-width:210px;">
+                                        <button @click="openPushModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#2563eb;border-color:#bfdbfe;font-weight:600;white-space:nowrap;">推送群绑定</button>
+                                        <span v-if="ent.renewal_push_count" style="font-size:11px;color:#6b7280;line-height:1.45;" :title="(ent.renewal_push_rooms||[]).join('、')">{{ (ent.renewal_push_rooms||[]).join('、') }}</span>
+                                        <span v-else style="font-size:12px;color:#d1d5db;">未绑定</span>
                                     </div>
                                 </td>
 
@@ -357,12 +366,12 @@
                                     <span class="badge" :class="ent.enabled ? 'badge-green' : 'badge-gray'">
                                         {{ ent.enabled ? '启用' : '禁用' }}
                                     </span>
-                                    <div style="color:#a8a29e;font-size:11px;margin-top:5px;white-space:nowrap;" :title="ent.created_at">{{ formatTime(ent.created_at) }}</div>
+                                    <div style="color:#a8a29e;font-size:11px;margin-top:5px;max-width:90px;margin-left:auto;margin-right:auto;line-height:1.5;" :title="ent.created_at">{{ formatTime(ent.created_at) }}</div>
                                 </td>
 
                                 <!-- 操作 -->
                                 <td>
-                                    <div style="display:flex;flex-direction:column;gap:7px;max-width:250px;">
+                                    <div style="display:flex;flex-direction:column;gap:7px;max-width:220px;">
                                         <!-- 动作类 -->
                                         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;row-gap:6px;">
                                             <button @click="openReportModal(ent)" class="op-btn blue">导出报告</button>
