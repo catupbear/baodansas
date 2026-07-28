@@ -50,10 +50,12 @@
             font-size: 12px; letter-spacing: 0.02em; white-space: nowrap;
         }
         .data-table td {
-            padding: 10px 8px;
+            padding: 12px 10px;
             border-bottom: 1px solid #f5f0eb;
             vertical-align: middle;
         }
+        .data-table th:first-child, .data-table td:first-child { padding-left: 18px; }
+        .data-table th:last-child, .data-table td:last-child { padding-right: 18px; }
         .data-table .btn-sm { padding: 4px 8px; }
         .data-table tbody tr:nth-child(even) { background: #fdfbf9; }
         .data-table tbody tr:hover { background: #fff7ed; }
@@ -139,6 +141,17 @@
         .scope-company-tag { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; background: #f5f3ff; color: #7c3aed; border-radius: 999px; font-size: 12px; font-weight: 600; }
         .scope-company-tag button { background: none; border: none; color: #a78bda; cursor: pointer; font-size: 13px; line-height: 1; padding: 0; }
         .scope-company-tag button:hover { color: #7c3aed; }
+        /* 配置列：链接式入口（标签橙色可点，右侧灰色计数） */
+        .cfg-link { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 2px 0; font-size: 12.5px; color: #ea580c; font-weight: 600; cursor: pointer; white-space: nowrap; line-height: 1.4; }
+        .cfg-link:hover { color: #c2410c; text-decoration: underline; }
+        .cfg-link .cnt { color: #9ca3af; font-weight: 400; font-size: 12px; }
+        .cfg-link .cnt.empty { color: #d1d5db; }
+        /* 功能开关芯片：圆点指示 + 开启态橙色描边 */
+        .feat-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; font-size: 11.5px; border-radius: 999px; border: 1px solid #e7e0d8; background: #fff; color: #9ca3af; cursor: pointer; transition: all 0.15s ease; white-space: nowrap; line-height: 1; }
+        .feat-chip::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #d1d5db; transition: background 0.15s; }
+        .feat-chip:hover { border-color: #d6cec4; color: #6b7280; }
+        .feat-chip.on { border-color: #fed7aa; background: #fff7ed; color: #c2410c; font-weight: 600; }
+        .feat-chip.on::before { background: #ea580c; }
         /* 移动端企业卡片视图（窄屏替代横滑表格） */
         .ent-cards { display: none; }
         @media (max-width: 820px) {
@@ -237,25 +250,22 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th style="min-width:55px;text-align:center;">企业编号</th>
-                                <th style="min-width:120px;">企业名称</th>
-                                <th style="min-width:95px;">套餐</th>
-                                <th style="min-width:110px;text-align:center;">本月识别量</th>
-                                <th style="min-width:105px;text-align:center;">人员管理</th>
-                                <th style="min-width:105px;text-align:center;">监控设置</th>
-                                <th style="min-width:105px;text-align:center;">续保推送群</th>
-                                <th style="min-width:170px;">AI质检</th>
-                                                                <th style="min-width:50px;">状态</th>
-                                <th style="min-width:90px;">创建时间</th>
-                                <th style="min-width:150px;">操作</th>
+                                <th style="min-width:140px;">企业</th>
+                                <th style="min-width:100px;">套餐</th>
+                                <th style="min-width:130px;">本月识别量</th>
+                                <th style="min-width:130px;">配置</th>
+                                <th style="min-width:175px;">AI质检</th>
+                                <th style="min-width:80px;text-align:center;">状态</th>
+                                <th style="min-width:230px;">操作</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="ent in filteredEnterprises" :key="ent.id">
-                                <!-- 企业编号 -->
-                                <td style="text-align:center;color:#9ca3af;font-weight:600;">{{ ent.enterprise_no || '-' }}</td>
-                                <!-- 企业名称 -->
-                                <td style="font-weight:600;color:#1c1410;">{{ ent.name }}</td>
+                                <!-- 企业（名称 + 编号） -->
+                                <td>
+                                    <div style="font-weight:600;color:#1c1410;line-height:1.4;">{{ ent.name }}</div>
+                                    <div style="font-size:11px;color:#a8a29e;margin-top:2px;letter-spacing:0.03em;">{{ ent.enterprise_no || '-' }}</div>
+                                </td>
 
                                 <!-- 套餐（类型 + 时长 + 到期） -->
                                 <td>
@@ -284,14 +294,15 @@
                                 </td>
 
                                 <!-- 本月识别量 -->
-                                <td style="text-align:center;vertical-align:middle;">
+                                <td style="vertical-align:middle;">
                                     <span v-if="!ent.plan_type" style="font-size:12px;color:#9ca3af;">暂未开通套餐</span>
                                     <template v-else-if="ent.plan_type==='enterprise' || ent.plan_type==='enterprise_trial'">
-                                        <span style="font-size:12px;color:#374151;">本月 {{ ent.monthly_pdf_usage }} 次</span>
+                                        <span style="font-size:14px;color:#1c1410;font-weight:600;">{{ ent.monthly_pdf_usage }}</span>
+                                        <span style="font-size:11px;color:#9ca3af;margin-left:3px;">次</span>
                                     </template>
                                     <template v-else>
-                                        <div style="display:flex;align-items:center;gap:8px;justify-content:center;">
-                                            <div style="width:90px;">
+                                        <div style="display:flex;align-items:center;gap:8px;">
+                                            <div style="width:70px;">
                                                 <div style="height:5px;background:#f0f0f0;border-radius:4px;overflow:hidden;">
                                                     <div :style="{
                                                         height:'100%', borderRadius:'4px',
@@ -305,32 +316,20 @@
                                     </template>
                                 </td>
 
-                                <!-- 人员管理 -->
-                                <td style="vertical-align:middle;text-align:center;">
-                                    <div style="display:inline-flex;align-items:center;gap:6px;">
-                                        <button @click="gotoMembers(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#ea580c;border-color:#fed7aa;font-weight:600;white-space:nowrap;">人员管理</button>
-                                        <span style="font-size:12px;color:#9ca3af;white-space:nowrap;">{{ ent.member_count || 0 }} 人</span>
-                                    </div>
-                                </td>
-                                <!-- 监控设置 -->
-                                <td style="vertical-align:middle;text-align:center;">
-                                    <div style="display:inline-flex;align-items:center;gap:6px;">
-                                        <button @click="gotoMonitor(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#ea580c;border-color:#fed7aa;font-weight:600;white-space:nowrap;">监控设置</button>
-                                        <span style="font-size:12px;color:#9ca3af;white-space:nowrap;">{{ ent.monitor_count || 0 }} 个群</span>
-                                    </div>
-                                </td>
-                                <!-- 续保推送群 -->
-                                <td style="vertical-align:middle;text-align:center;">
-                                    <div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;max-width:210px;">
-                                        <button @click="openPushModal(ent)" class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:12px;color:#2563eb;border-color:#bfdbfe;font-weight:600;white-space:nowrap;">推送群绑定</button>
-                                        <span v-if="ent.renewal_push_count" style="font-size:11px;color:#6b7280;line-height:1.45;" :title="(ent.renewal_push_rooms||[]).join('、')">{{ (ent.renewal_push_rooms||[]).join('、') }}</span>
-                                        <span v-else style="font-size:12px;color:#d1d5db;">未绑定</span>
+                                <!-- 配置（人员 / 监控 / 续保推送群） -->
+                                <td style="vertical-align:middle;">
+                                    <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;">
+                                        <button @click="gotoMembers(ent)" class="cfg-link">人员管理 <span class="cnt">{{ ent.member_count || 0 }} 人</span></button>
+                                        <button @click="gotoMonitor(ent)" class="cfg-link">监控设置 <span class="cnt">{{ ent.monitor_count || 0 }} 个群</span></button>
+                                        <button @click="openPushModal(ent)" class="cfg-link" :title="(ent.renewal_push_rooms||[]).join('、')">推送群绑定
+                                            <span class="cnt" :class="{empty: !ent.renewal_push_count}">{{ ent.renewal_push_count ? '已绑 ' + ent.renewal_push_count + ' 群' : '未绑定' }}</span>
+                                        </button>
                                     </div>
                                 </td>
 
                                 <!-- AI质检（仅超管；本页整体已限超管访问） -->
                                 <td style="vertical-align:middle;">
-                                    <div style="display:flex;flex-direction:column;gap:5px;min-width:160px;">
+                                    <div style="display:flex;flex-direction:column;gap:7px;min-width:165px;">
                                         <!-- 开关行：AI质检 / AI直接覆盖 -->
                                         <div style="display:flex;align-items:center;gap:12px;">
                                             <span style="display:inline-flex;align-items:center;gap:5px;" title="开启后该企业识别记录将自动送AI质检">
@@ -342,39 +341,42 @@
                                                 <span style="font-size:11px;color:#6b7280;">直接覆盖</span>
                                             </span>
                                         </div>
-                                        <!-- 质检范围徽标 + 配置 -->
+                                        <!-- 范围徽标 + 配置 + 今日质检数（合并一行） -->
                                         <div style="display:flex;align-items:center;gap:6px;">
                                             <span class="badge" :class="aiOf(ent).config.scope.mode==='all' ? 'badge-blue' : 'badge-purple'" style="font-size:10px;padding:2px 8px;white-space:nowrap;">
                                                 {{ aiOf(ent).config.scope.mode==='all' ? '全部' : '自定义·'+scopeCondCount(aiOf(ent).config.scope)+'条件' }}
                                             </span>
                                             <button @click="openScopeModal(ent)" class="op-btn gray" style="padding:2px 9px;font-size:11px;">配置</button>
+                                            <span style="font-size:11px;color:#9ca3af;white-space:nowrap;">今日 {{ aiOf(ent).today_checked || 0 }} 单</span>
                                         </div>
-                                        <!-- 今日质检数 -->
-                                        <div style="font-size:11px;color:#9ca3af;white-space:nowrap;">今日质检 {{ aiOf(ent).today_checked || 0 }} 单</div>
                                     </div>
                                 </td>
 
-                                <!-- 状态 -->
-                                <td>
+                                <!-- 状态 + 创建时间 -->
+                                <td style="text-align:center;">
                                     <span class="badge" :class="ent.enabled ? 'badge-green' : 'badge-gray'">
                                         {{ ent.enabled ? '启用' : '禁用' }}
                                     </span>
+                                    <div style="color:#a8a29e;font-size:11px;margin-top:5px;white-space:nowrap;" :title="ent.created_at">{{ formatTime(ent.created_at) }}</div>
                                 </td>
-
-                                <!-- 创建时间 -->
-                                <td style="color:#a8a29e;font-size:12px;">{{ formatTime(ent.created_at) }}</td>
 
                                 <!-- 操作 -->
                                 <td>
-                                    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;row-gap:6px;max-width:210px;">
-                                        <button @click="openReportModal(ent)" class="op-btn blue">导出报告</button>
-                                        <button @click="openPlanModal(ent)" class="op-btn orange">开通</button>
-                                        <button @click="openBoostModal(ent)" class="op-btn amber" title="识别加油包：99元/1200次/3个月，可叠加">⛽ 加油包</button>
-                                        <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled ? 'amber' : 'green']">{{ ent.enabled ? '禁用' : '启用' }}</button>
-                                        <button @click="toggleMerge(ent)" :class="['op-btn', ent.merge_by_plate ? 'orange on' : 'gray']" title="开启后该企业识别记录默认按车牌合并显示">车牌合并{{ ent.merge_by_plate ? '✓' : '' }}</button>
-                                        <button @click="toggleSeal(ent)" :class="['op-btn', ent.seal_tracking_enabled ? 'orange on' : 'gray']" title="开启后该企业可使用「公户车盖章跟进」功能">公户盖章{{ ent.seal_tracking_enabled ? '✓' : '' }}</button>
-                                        <button @click="toggleRenewal(ent)" :class="['op-btn', ent.renewal_enabled ? 'orange on' : 'gray']" title="开启后该企业才显示「续保管理」入口">续保管理{{ ent.renewal_enabled ? '✓' : '' }}</button>
-                                                                            </div>
+                                    <div style="display:flex;flex-direction:column;gap:7px;max-width:250px;">
+                                        <!-- 动作类 -->
+                                        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;row-gap:6px;">
+                                            <button @click="openReportModal(ent)" class="op-btn blue">导出报告</button>
+                                            <button @click="openPlanModal(ent)" class="op-btn orange">开通</button>
+                                            <button @click="openBoostModal(ent)" class="op-btn amber" title="识别加油包：99元/1200次/3个月，可叠加">加油包</button>
+                                            <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled ? 'red' : 'green']">{{ ent.enabled ? '禁用' : '启用' }}</button>
+                                        </div>
+                                        <!-- 功能开关类 -->
+                                        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;row-gap:6px;">
+                                            <button @click="toggleMerge(ent)" :class="['feat-chip', ent.merge_by_plate ? 'on' : '']" title="开启后该企业识别记录默认按车牌合并显示">车牌合并</button>
+                                            <button @click="toggleSeal(ent)" :class="['feat-chip', ent.seal_tracking_enabled ? 'on' : '']" title="开启后该企业可使用「公户车盖章跟进」功能">公户盖章</button>
+                                            <button @click="toggleRenewal(ent)" :class="['feat-chip', ent.renewal_enabled ? 'on' : '']" title="开启后该企业才显示「续保管理」入口">续保管理</button>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
@@ -425,11 +427,11 @@
                                 <button @click="openPushModal(ent)" class="op-btn blue">续保推送群</button>
                                 <button @click="openReportModal(ent)" class="op-btn blue">导出报告</button>
                                 <button @click="openPlanModal(ent)" class="op-btn orange">开通</button>
-                                <button @click="openBoostModal(ent)" class="op-btn amber" title="识别加油包：99元/1200次/3个月，可叠加">⛽ 加油包</button>
-                                <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled?'amber':'green']">{{ ent.enabled?'禁用':'启用' }}</button>
-                                <button @click="toggleMerge(ent)" :class="['op-btn', ent.merge_by_plate?'orange on':'gray']">车牌合并{{ ent.merge_by_plate?'✓':'' }}</button>
-                                <button @click="toggleSeal(ent)" :class="['op-btn', ent.seal_tracking_enabled?'orange on':'gray']">公户盖章{{ ent.seal_tracking_enabled?'✓':'' }}</button>
-                                <button @click="toggleRenewal(ent)" :class="['op-btn', ent.renewal_enabled?'orange on':'gray']">续保管理{{ ent.renewal_enabled?'✓':'' }}</button>
+                                <button @click="openBoostModal(ent)" class="op-btn amber" title="识别加油包：99元/1200次/3个月，可叠加">加油包</button>
+                                <button @click="toggleEnabled(ent)" :class="['op-btn', ent.enabled?'red':'green']">{{ ent.enabled?'禁用':'启用' }}</button>
+                                <button @click="toggleMerge(ent)" :class="['feat-chip', ent.merge_by_plate?'on':'']">车牌合并</button>
+                                <button @click="toggleSeal(ent)" :class="['feat-chip', ent.seal_tracking_enabled?'on':'']">公户盖章</button>
+                                <button @click="toggleRenewal(ent)" :class="['feat-chip', ent.renewal_enabled?'on':'']">续保管理</button>
                                                             </div>
                         </div>
                     </div>
