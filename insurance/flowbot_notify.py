@@ -112,7 +112,13 @@ def send_flowbot_group_message(group_name: str, wechat_name, message: str, robot
 
     Args:
         group_name:  目标群名称（FlowBot 按名称模糊定位群）
-        wechat_name: 要 @ 的成员微信名；单人传字符串，多人传列表（空/None 则不 @）
+        wechat_name: 要 @ 的成员微信名；单人传字符串，多人传列表（空/None 则不 @）。
+                     @全员传中文"所有人"（微信 @ 面板的原生快捷项，命中微信自身"所有人"
+                     候选，而非按昵称查找某个真实成员）——传英文"@all"不是任何成员的
+                     昵称，FlowBot 找不到匹配项，会静默不 @ 任何人（消息仍会正常发出，
+                     2026-07-28 踩过）。另外，微信平台层面只有群主/管理员账号才能真正
+                     触发 @所有人，机器人账号若不是对应群的群主/管理员，即使传对了
+                     "所有人"也不会生效，需要在群里确认机器人的身份。
         message:     消息正文
         robot_id:    FlowBot 机器人 ID（台账专用，不同于报价系统）
 

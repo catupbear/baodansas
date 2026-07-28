@@ -210,7 +210,7 @@ def main():
 
         for pr in push_rooms:
             room_name = _resolve_room_name(contacts_instances, pr["roomid"]) or pr.get("room_name") or pr["roomid"]
-            ok = send_flowbot_group_message(room_name, ["@all"], message, robot_id)
+            ok = send_flowbot_group_message(room_name, ["所有人"], message, robot_id)
             if ok:
                 logger.info("盖章汇总已发送 企业=%s room=%s(%s) 待付费=%d",
                             eid, room_name, pr["roomid"], len(unpaid))

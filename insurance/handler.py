@@ -403,7 +403,7 @@ class InsuranceHandler:
             from insurance.flowbot_notify import send_flowbot_group_message
             msg = (f"🏢 公户车保单提醒\n车牌：{plate}\n被保险人：{insured}\n"
                    f"该车为公户车保单，请及时盖章")
-            send_flowbot_group_message(room_name, ["@all"], msg, robot_id)
+            send_flowbot_group_message(room_name, ["所有人"], msg, robot_id)
             logger.info("公户车提醒已发送 群=%s 车牌=%s 企业=%s", room_name, plate, enterprise_id)
         except Exception as e:
             logger.warning("公户车盖章群提醒发送失败（不影响主流程）: %s", e)

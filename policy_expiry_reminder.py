@@ -271,7 +271,7 @@ def main():
         sent_any = False
         for pr in push_rooms:
             room_name = _resolve_room_name(contacts_instances, pr["roomid"]) or pr.get("room_name") or pr["roomid"]
-            ok = send_flowbot_group_message(room_name, ["@all"], message, robot_id)
+            ok = send_flowbot_group_message(room_name, ["所有人"], message, robot_id)
             if ok:
                 sent_any = True
                 logger.info("续保提醒已发送 企业=%s room=%s(%s) 涉及%d条 @%s",
